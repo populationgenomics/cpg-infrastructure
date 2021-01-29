@@ -1,3 +1,5 @@
+"""Copies Hail tokens from Kubernetes to the Google Secret Manager."""
+
 import json
 from kubernetes import client, config
 from google.cloud import secretmanager
@@ -22,7 +24,7 @@ secret_manager = secretmanager.SecretManagerServiceClient()
 payload = json.dumps(tokens).encode('UTF-8')
 parent = secret_manager.secret_path(GCP_PROJECT, SECRET_MANAGER_SECRET_NAME)
 response = secret_manager.add_secret_version(
-    request={"parent": parent, "payload": {"data": payload}}
+    request={'parent': parent, 'payload': {'data': payload}}
 )
 
 print(f'Added secret version: {response.name}')
