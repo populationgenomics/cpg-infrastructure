@@ -21,10 +21,10 @@ for project in PROJECTS:
     tokens[project] = secret.data['tokens.json']
 
 secret_manager = secretmanager.SecretManagerServiceClient()
+PARENT = secret_manager.secret_path(GCP_PROJECT, SECRET_MANAGER_SECRET_NAME)
 payload = json.dumps(tokens).encode('UTF-8')
-parent = secret_manager.secret_path(GCP_PROJECT, SECRET_MANAGER_SECRET_NAME)
 response = secret_manager.add_secret_version(
-    request={'parent': parent, 'payload': {'data': payload}}
+    request={'parent': PARENT, 'payload': {'data': payload}}
 )
 
 print(f'Added secret version: {response.name}')
