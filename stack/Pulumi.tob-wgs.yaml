@@ -1,0 +1,9 @@
+encryptionsalt: v1:Fqx5NHuwjAg=:v1:h0vU5VjoszHXllH7:tUAorwiljPS1C1Ft18iHzaO0c+HOpg==
+config:
+  datasets:archive_age: "365"
+  datasets:customer_id: C010ys3gt
+  datasets:enable_release: "false"
+  datasets:hail_service_account: tob-wgs-960@hail-295901.iam.gserviceaccount.com
+  gcp:billing_project: tob-wgs
+  gcp:project: tob-wgs
+  gcp:user_project_override: "true"

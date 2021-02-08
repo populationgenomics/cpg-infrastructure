@@ -1,0 +1,6 @@
+name: datasets
+runtime:
+  name: python
+  options:
+    virtualenv: venv
+description: A hierarchy of GCP buckets for genomic data.
