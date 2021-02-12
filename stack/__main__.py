@@ -10,7 +10,7 @@ CUSTOMER_ID = 'C010ys3gt'
 REGION = 'australia-southeast1'
 ANALYSIS_RUNNER_PROJECT = 'analysis-runner'
 ANALYSIS_RUNNER_IMAGE = (
-    'australia-southeast1-docker.pkg.dev/analysis-runner/images/server:650b5c0505c6'
+    'australia-southeast1-docker.pkg.dev/analysis-runner/images/server:cd4776e14898'
 )
 
 # Fetch configuration.
