@@ -8,6 +8,7 @@ import pulumi_gcp as gcp
 DOMAIN = 'populationgenomics.org.au'
 CUSTOMER_ID = 'C010ys3gt'
 REGION = 'australia-southeast1'
+ANALYSIS_RUNNER_PROJECT = 'analysis-runner'
 
 # Fetch configuration.
 config = pulumi.Config()
@@ -287,7 +288,7 @@ for secret_name in 'hail-token', 'allowed-repos':
 # the "analysis-runner" project's Artifact Registry repository.
 analysis_runner_repo = gcp.artifactregistry.RepositoryIamMember(
     'analysis-runner-repo',
-    project='analysis-runner',
+    project=ANALYSIS_RUNNER_PROJECT,
     location=REGION,
     repository='images',
     role='roles/artifactregistry.reader',
@@ -300,7 +301,7 @@ analysis_runner_repo = gcp.artifactregistry.RepositoryIamMember(
 
 gcp.artifactregistry.RepositoryIamMember(
     'hail-service-account-repo',
-    project='analysis-runner',
+    project=ANALYSIS_RUNNER_PROJECT,
     location=REGION,
     repository='images',
     role='roles/artifactregistry.reader',
@@ -321,7 +322,7 @@ analysis_runner_server = gcp.cloudrun.Service(
                     ],
                     image=(
                         f'australia-southeast1-docker.pkg.dev/analysis-runner/'
-                        f'images/server:78d20393125b'
+                        f'images/server:650b5c0505c6'
                     ),
                 )
             ],
@@ -332,6 +333,17 @@ analysis_runner_server = gcp.cloudrun.Service(
 )
 
 pulumi.export('analysis-runner-server URL', analysis_runner_server.statuses[0].url)
+
+# Allow the analysis-runner to publish runs to Pub/Sub.
+gcp.pubsub.TopicIAMMember(
+    'publish-permissions',
+    project=ANALYSIS_RUNNER_PROJECT,
+    topic='projects/analysis-runner/topics/submissions',
+    role='roles/pubsub.publisher',
+    member=pulumi.Output.concat(
+        'serviceAccount:', analysis_runner_service_account.email
+    ),
+)
 
 # Restrict Cloud Run invokers to the restricted access group.
 gcp.cloudrun.IamMember(
