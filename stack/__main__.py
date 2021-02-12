@@ -9,6 +9,9 @@ DOMAIN = 'populationgenomics.org.au'
 CUSTOMER_ID = 'C010ys3gt'
 REGION = 'australia-southeast1'
 ANALYSIS_RUNNER_PROJECT = 'analysis-runner'
+ANALYSIS_RUNNER_IMAGE = (
+    'australia-southeast1-docker.pkg.dev/analysis-runner/images/server:650b5c0505c6'
+)
 
 # Fetch configuration.
 config = pulumi.Config()
@@ -320,10 +323,7 @@ analysis_runner_server = gcp.cloudrun.Service(
                         {'name': 'GCP_PROJECT', 'value': project_id},
                         {'name': 'DATASET', 'value': dataset},
                     ],
-                    image=(
-                        f'australia-southeast1-docker.pkg.dev/analysis-runner/'
-                        f'images/server:650b5c0505c6'
-                    ),
+                    image=ANALYSIS_RUNNER_IMAGE,
                 )
             ],
             service_account_name=analysis_runner_service_account.email,
