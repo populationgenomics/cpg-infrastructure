@@ -9,8 +9,8 @@ DOMAIN = 'populationgenomics.org.au'
 CUSTOMER_ID = 'C010ys3gt'
 REGION = 'australia-southeast1'
 ANALYSIS_RUNNER_PROJECT = 'analysis-runner'
-ANALYSIS_RUNNER_IMAGE = (
-    'australia-southeast1-docker.pkg.dev/analysis-runner/images/server:cd4776e14898'
+ANALYSIS_RUNNER_SERVICE_ACCOUNT = (
+    'analysis-runner-server@analysis-runner.iam.gserviceaccount.com'
 )
 
 # Fetch configuration.
@@ -19,6 +19,7 @@ enable_release = config.get_bool('enable_release')
 archive_age = config.get_int('archive_age') or 30
 # The GSA email address associated with the Hail service account.
 hail_service_account = config.require('hail_service_account')
+hail_extended_service_account = config.require('hail_extended_service_account')
 dataset = pulumi.get_stack()
 
 project_id = gcp.organizations.get_project().project_id
@@ -181,36 +182,6 @@ add_bucket_permissions(
     'roles/storage.objectAdmin',
 )
 
-extended_access_group = create_group(group_mail('extended-access'))
-
-add_bucket_permissions(
-    'extended-access-main-admin',
-    extended_access_group,
-    main_bucket,
-    'roles/storage.objectAdmin',
-)
-
-add_bucket_permissions(
-    'extended-access-analysis-admin',
-    extended_access_group,
-    analysis_bucket,
-    'roles/storage.objectAdmin',
-)
-
-add_bucket_permissions(
-    'extended-access-test-admin',
-    extended_access_group,
-    test_bucket,
-    'roles/storage.objectAdmin',
-)
-
-add_bucket_permissions(
-    'extended-access-temporary-admin',
-    extended_access_group,
-    temporary_bucket,
-    'roles/storage.objectAdmin',
-)
-
 if enable_release:
     release_bucket = create_bucket(
         bucket_name('release-requester-pays'),
@@ -225,13 +196,6 @@ if enable_release:
         'roles/storage.objectViewer',
     )
 
-    add_bucket_permissions(
-        'extended-access-release-viewer',
-        extended_access_group,
-        release_bucket,
-        'roles/storage.objectAdmin',
-    )
-
     release_access_group = create_group(group_mail('release-access'))
 
     add_bucket_permissions(
@@ -241,67 +205,31 @@ if enable_release:
         'roles/storage.objectViewer',
     )
 
-# Cloud Run is used for the server component of the analysis-runner.
-cloudrun = gcp.projects.Service(
-    'cloudrun-service', service='run.googleapis.com', disable_on_destroy=False
-)
 
-analysis_runner_service_account = gcp.serviceaccount.Account(
-    'analysis-runner-service-account',
-    account_id='analysis-runner-server',
-    display_name='analysis-runner service account',
-    opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
-)
-
-secretmanager = gcp.projects.Service(
-    'secretmanager-service',
-    service='secretmanager.googleapis.com',
-    disable_on_destroy=False,
-)
-
-# The analysis-runner needs access to two secrets: a list of allowed
-# repositories and a Hail Batch service account token.
-for secret_name in 'hail-token', 'allowed-repos':
-    secret = gcp.secretmanager.Secret(
-        f'{secret_name}-secret',
-        replication=gcp.secretmanager.SecretReplicationArgs(
-            user_managed=gcp.secretmanager.SecretReplicationUserManagedArgs(
-                replicas=[
-                    gcp.secretmanager.SecretReplicationUserManagedReplicaArgs(
-                        location=REGION
-                    ),
-                ],
-            ),
-        ),
-        secret_id=secret_name,
-        opts=pulumi.resource.ResourceOptions(depends_on=[secretmanager]),
-    )
-
-    gcp.secretmanager.SecretIamMember(
-        f'{secret_name}-secret-reader',
-        secret_id=secret.id,
-        role='roles/secretmanager.secretAccessor',
-        member=pulumi.Output.concat(
-            'serviceAccount:', analysis_runner_service_account.email
-        ),
-    )
-
-# Allow the Cloud Run Service Agent and the Hail service account to pull images. Note
-# that the global project will refer to the dataset, but the Docker image is stored in
-# the "analysis-runner" project's Artifact Registry repository.
-analysis_runner_repo = gcp.artifactregistry.RepositoryIamMember(
-    'analysis-runner-repo',
-    project=ANALYSIS_RUNNER_PROJECT,
-    location=REGION,
-    repository='images',
-    role='roles/artifactregistry.reader',
-    member=(
-        f'serviceAccount:service-{project_number}'
-        f'@serverless-robot-prod.iam.gserviceaccount.com'
+# Allow the analysis-runner to check memberships.
+gcp.cloudidentity.GroupMembership(
+    'analysis-runner-restricted-member',
+    group=restricted_access_group.id,
+    preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
+        id=ANALYSIS_RUNNER_SERVICE_ACCOUNT
     ),
-    opts=pulumi.resource.ResourceOptions(depends_on=[cloudrun]),
+    roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
 )
 
+extended_access_group = create_group(group_mail('extended-access'))
+
+gcp.cloudidentity.GroupMembership(
+    'analysis-runner-extended-member',
+    group=extended_access_group.id,
+    preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
+        id=ANALYSIS_RUNNER_SERVICE_ACCOUNT
+    ),
+    roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
+)
+
+# Allow the Hail service account to pull images. Note that the global project will
+# refer to the dataset, but the Docker image is stored in the "analysis-runner"
+# project's Artifact Registry repository.
 gcp.artifactregistry.RepositoryIamMember(
     'hail-service-account-repo',
     project=ANALYSIS_RUNNER_PROJECT,
@@ -311,47 +239,13 @@ gcp.artifactregistry.RepositoryIamMember(
     member=f'serviceAccount:{hail_service_account}',
 )
 
-analysis_runner_server = gcp.cloudrun.Service(
-    'analysis-runner-server',
-    location=REGION,
-    autogenerate_revision_name=True,
-    template=gcp.cloudrun.ServiceTemplateArgs(
-        spec=gcp.cloudrun.ServiceTemplateSpecArgs(
-            containers=[
-                gcp.cloudrun.ServiceTemplateSpecContainerArgs(
-                    envs=[
-                        {'name': 'GCP_PROJECT', 'value': project_id},
-                        {'name': 'DATASET', 'value': dataset},
-                    ],
-                    image=ANALYSIS_RUNNER_IMAGE,
-                )
-            ],
-            service_account_name=analysis_runner_service_account.email,
-        ),
-    ),
-    opts=pulumi.resource.ResourceOptions(depends_on=[analysis_runner_repo]),
-)
-
-pulumi.export('analysis-runner-server URL', analysis_runner_server.statuses[0].url)
-
-# Allow the analysis-runner to publish runs to Pub/Sub.
-gcp.pubsub.TopicIAMMember(
-    'publish-permissions',
+gcp.artifactregistry.RepositoryIamMember(
+    'hail-extended-service-account-repo',
     project=ANALYSIS_RUNNER_PROJECT,
-    topic='projects/analysis-runner/topics/submissions',
-    role='roles/pubsub.publisher',
-    member=pulumi.Output.concat(
-        'serviceAccount:', analysis_runner_service_account.email
-    ),
-)
-
-# Restrict Cloud Run invokers to the restricted access group.
-gcp.cloudrun.IamMember(
-    'analysis-runner-invoker',
-    service=analysis_runner_server.name,
     location=REGION,
-    role='roles/run.invoker',
-    member=pulumi.Output.concat('group:', restricted_access_group.group_key.id),
+    repository='images',
+    role='roles/artifactregistry.reader',
+    member=f'serviceAccount:{hail_extended_service_account}',
 )
 
 # The bucket used for Hail Batch pipelines.
@@ -364,13 +258,27 @@ gcp.storage.BucketIAMMember(
     member=pulumi.Output.concat('serviceAccount:', hail_service_account),
 )
 
-# The Hail service account has creator permissions for all buckets.
-# Archive and upload buckets are handled by the upload processor.
+gcp.storage.BucketIAMMember(
+    'hail-extended-bucket-permissions',
+    bucket=hail_bucket.name,
+    role='roles/storage.objectAdmin',
+    member=pulumi.Output.concat('serviceAccount:', hail_extended_service_account),
+)
+
+# The standard Hail service account has creator permissions for all buckets.
+# The extended Hail service account has admin permissions for all buckets.
 gcp.storage.BucketIAMMember(
     'hail-main-creator',
     bucket=main_bucket.name,
     role='roles/storage.objectCreator',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account),
+)
+
+gcp.storage.BucketIAMMember(
+    'hail-main-extended',
+    bucket=main_bucket.name,
+    role='roles/storage.objectAdmin',
+    member=pulumi.Output.concat('serviceAccount:', hail_extended_service_account),
 )
 
 gcp.storage.BucketIAMMember(
@@ -381,10 +289,24 @@ gcp.storage.BucketIAMMember(
 )
 
 gcp.storage.BucketIAMMember(
+    'hail-analysis-extended',
+    bucket=analysis_bucket.name,
+    role='roles/storage.objectAdmin',
+    member=pulumi.Output.concat('serviceAccount:', hail_extended_service_account),
+)
+
+gcp.storage.BucketIAMMember(
     'hail-test-creator',
     bucket=test_bucket.name,
     role='roles/storage.objectCreator',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account),
+)
+
+gcp.storage.BucketIAMMember(
+    'hail-test-extended',
+    bucket=test_bucket.name,
+    role='roles/storage.objectAdmin',
+    member=pulumi.Output.concat('serviceAccount:', hail_extended_service_account),
 )
 
 gcp.storage.BucketIAMMember(
@@ -394,10 +316,38 @@ gcp.storage.BucketIAMMember(
     member=pulumi.Output.concat('serviceAccount:', hail_service_account),
 )
 
+gcp.storage.BucketIAMMember(
+    'hail-temporary-extended',
+    bucket=temporary_bucket.name,
+    role='roles/storage.objectAdmin',
+    member=pulumi.Output.concat('serviceAccount:', hail_extended_service_account),
+)
+
+gcp.storage.BucketIAMMember(
+    'hail-upload-extended',
+    bucket=upload_bucket.name,
+    role='roles/storage.objectAdmin',
+    member=pulumi.Output.concat('serviceAccount:', hail_extended_service_account),
+)
+
+gcp.storage.BucketIAMMember(
+    'hail-archive-extended',
+    bucket=archive_bucket.name,
+    role='roles/storage.objectAdmin',
+    member=pulumi.Output.concat('serviceAccount:', hail_extended_service_account),
+)
+
 if enable_release:
     gcp.storage.BucketIAMMember(
         'hail-release-creator',
         bucket=release_bucket.name,
         role='roles/storage.objectCreator',
         member=pulumi.Output.concat('serviceAccount:', hail_service_account),
+    )
+
+    gcp.storage.BucketIAMMember(
+        'hail-release-extended',
+        bucket=release_bucket.name,
+        role='roles/storage.objectAdmin',
+        member=pulumi.Output.concat('serviceAccount:', hail_extended_service_account),
     )
