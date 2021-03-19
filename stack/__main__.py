@@ -37,6 +37,7 @@ def create_bucket(name: str, **kwargs) -> gcp.storage.Bucket:
         name,
         name=name,
         location=REGION,
+        uniform_bucket_level_access=True,
         versioning=gcp.storage.BucketVersioningArgs(enabled=True),
         labels={'bucket': name},
         **kwargs,
