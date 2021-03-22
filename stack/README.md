@@ -9,8 +9,8 @@ can be brought up using Pulumi.
    - See this [issue](https://github.com/hashicorp/terraform-provider-google/issues/7477)
      regarding the use of the `user_project_override` and `billing_project`
      options below.
-   - Retrieve the Hail service account email from the Kubernetes secret:
-     `kubectl get secret $PROJECT-gsa-key -o json | jq '.data | map_values(@base64d)'`
+   - Retrieve the Hail service account emails from the Kubernetes secret:
+     `kubectl get secret $USERNAME-gsa-key -o json | jq '.data | map_values(@base64d)'`
 
    ```shell
    cd stack
@@ -20,7 +20,9 @@ can be brought up using Pulumi.
    pulumi config set gcp:project $PROJECT
    pulumi config set gcp:billing_project $PROJECT
    pulumi config set gcp:user_project_override true
-   pulumi config set hail_service_account $HAIL_SERVICE_ACCOUNT
+   pulumi config set hail_service_account_test $HAIL_SERVICE_ACCOUNT_TEST
+   pulumi config set hail_service_account_standard $HAIL_SERVICE_ACCOUNT_STANDARD
+   pulumi config set hail_service_account_full $HAIL_SERVICE_ACCOUNT_FULL
    ```
 
    - If you want to create a release bucket and access group:

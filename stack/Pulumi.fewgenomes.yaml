@@ -2,8 +2,9 @@ encryptionsalt: v1:SPQXlVggjxw=:v1:X1sTpViNuyK+Wcom:3GANI8gZOKtk0gG7BklsyHeNU5uV
 config:
   datasets:customer_id: C010ys3gt
   datasets:enable_release: "false"
-  datasets:hail_service_account: fewgenomes-911@hail-295901.iam.gserviceaccount.com
-  datasets:hail_extended_service_account: fewgenomes-extended-778@hail-295901.iam.gserviceaccount.com
+  datasets:hail_service_account_test: fewgenomes-test-126@hail-295901.iam.gserviceaccount.com
+  datasets:hail_service_account_standard: fewgenomes-standard-737@hail-295901.iam.gserviceaccount.com
+  datasets:hail_service_account_full: fewgenomes-full-915@hail-295901.iam.gserviceaccount.com
   gcp:billing_project: fewgenomes
   gcp:project: fewgenomes
   gcp:user_project_override: "true"
