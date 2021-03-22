@@ -9,7 +9,7 @@ from google.cloud import secretmanager
 
 ALLOWED_REPOS = {
     'tob-wgs': ['analysis-runner'],
-    'fewgenomes': ['analysis-runner'],
+    'fewgenomes': ['analysis-runner', 'ancestry'],
 }
 
 GCP_PROJECT = 'analysis-runner'
@@ -41,10 +41,8 @@ def get_token(hail_user: str):
 
 config = {}
 for dataset, allowed_repos in ALLOWED_REPOS.items():
-    config[dataset] = {
-        'allowedRepos': allowed_repos,
-        'token': get_token(dataset),
-        'extendedToken': get_token(f'{dataset}-extended'),
-    }
+    config[dataset] = {'allowedRepos': allowed_repos}
+    for access_level in 'test', 'standard', 'full':
+        config[dataset][f'{access_level}Token'] = get_token(f'{dataset}-{access_level}')
 
 add_secret('server-config', json.dumps(config))
