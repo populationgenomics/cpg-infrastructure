@@ -161,7 +161,7 @@ add_bucket_permissions(
     'access-group-temporary-bucket-admin',
     access_group,
     temporary_bucket,
-    'roles/storage.objectAdmin',
+    'roles/storage.admin',
 )
 
 add_bucket_permissions(
@@ -261,21 +261,21 @@ hail_bucket = create_bucket(bucket_name('hail'), lifecycle_rules=[undelete_rule]
 gcp.storage.BucketIAMMember(
     'hail-service-account-test-hail-bucket-admin',
     bucket=hail_bucket.name,
-    role='roles/storage.objectAdmin',
+    role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_test),
 )
 
 gcp.storage.BucketIAMMember(
     'hail-service-account-standard-hail-bucket-admin',
     bucket=hail_bucket.name,
-    role='roles/storage.objectAdmin',
+    role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_standard),
 )
 
 gcp.storage.BucketIAMMember(
     'hail-service-account-full-hail-bucket-admin',
     bucket=hail_bucket.name,
-    role='roles/storage.objectAdmin',
+    role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_full),
 )
 
@@ -324,7 +324,7 @@ gcp.storage.BucketIAMMember(
 gcp.storage.BucketIAMMember(
     'hail-service-account-full-test-bucket-admin',
     bucket=test_bucket.name,
-    role='roles/storage.objectAdmin',
+    role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_full),
 )
 
@@ -332,21 +332,21 @@ gcp.storage.BucketIAMMember(
 gcp.storage.BucketIAMMember(
     'hail-service-account-test-temporary-bucket-admin',
     bucket=temporary_bucket.name,
-    role='roles/storage.objectAdmin',
+    role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_test),
 )
 
 gcp.storage.BucketIAMMember(
     'hail-service-account-standard-temporary-bucket-admin',
     bucket=temporary_bucket.name,
-    role='roles/storage.objectAdmin',
+    role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_standard),
 )
 
 gcp.storage.BucketIAMMember(
     'hail-service-account-full-temporary-bucket-admin',
     bucket=temporary_bucket.name,
-    role='roles/storage.objectAdmin',
+    role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_full),
 )
 
@@ -361,7 +361,7 @@ gcp.storage.BucketIAMMember(
 gcp.storage.BucketIAMMember(
     'hail-service-account-full-main-bucket-admin',
     bucket=main_bucket.name,
-    role='roles/storage.objectAdmin',
+    role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_full),
 )
 
@@ -383,7 +383,7 @@ gcp.storage.BucketIAMMember(
 gcp.storage.BucketIAMMember(
     'hail-service-account-full-analysis-bucket-admin',
     bucket=analysis_bucket.name,
-    role='roles/storage.objectAdmin',
+    role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_full),
 )
 
@@ -391,7 +391,7 @@ gcp.storage.BucketIAMMember(
 gcp.storage.BucketIAMMember(
     'hail-service-account-full-upload-bucket-admin',
     bucket=upload_bucket.name,
-    role='roles/storage.objectAdmin',
+    role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_full),
 )
 
@@ -399,7 +399,7 @@ gcp.storage.BucketIAMMember(
 gcp.storage.BucketIAMMember(
     'hail-service-account-full-archive-bucket-admin',
     bucket=archive_bucket.name,
-    role='roles/storage.objectAdmin',
+    role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_full),
 )
 
@@ -407,6 +407,6 @@ if enable_release:
     gcp.storage.BucketIAMMember(
         'hail-service-account-full-release-bucket-admin',
         bucket=release_bucket.name,
-        role='roles/storage.objectAdmin',
+        role='roles/storage.admin',
         member=pulumi.Output.concat('serviceAccount:', hail_service_account_full),
     )
