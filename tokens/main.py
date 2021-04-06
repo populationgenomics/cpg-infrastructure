@@ -8,7 +8,7 @@ from google.cloud import secretmanager
 
 
 ALLOWED_REPOS = {
-    'tob-wgs': ['analysis-runner'],
+    'tob-wgs': ['analysis-runner', 'tob-wgs'],
     'fewgenomes': ['analysis-runner', 'ancestry', 'fewgenomes'],
 }
 
