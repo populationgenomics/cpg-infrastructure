@@ -53,11 +53,19 @@ undelete_rule = gcp.storage.BucketLifecycleRuleArgs(
 
 upload_bucket = create_bucket(bucket_name('upload'), lifecycle_rules=[undelete_rule])
 
+# The Cloud Resource Manager API is required for the Cloud Identity API.
+cloudresourcemanager = gcp.projects.Service(
+    'cloudresourcemanager-service',
+    service='cloudresourcemanager.googleapis.com',
+    disable_on_destroy=False,
+)
+
 # The Cloud Identity API is required for creating access groups.
 cloudidentity = gcp.projects.Service(
     'cloudidentity-service',
     service='cloudidentity.googleapis.com',
     disable_on_destroy=False,
+    opts=pulumi.resource.ResourceOptions(depends_on=[cloudresourcemanager]),
 )
 
 upload_account = gcp.serviceaccount.Account(
