@@ -8,8 +8,9 @@ from google.cloud import secretmanager
 
 
 ALLOWED_REPOS = {
-    'tob-wgs': ['analysis-runner', 'tob-wgs'],
-    'fewgenomes': ['analysis-runner', 'ancestry', 'fewgenomes'],
+    'ancestry': ['ancestry'],
+    'tob-wgs': ['tob-wgs'],
+    'fewgenomes': ['analysis-runner', 'fewgenomes'],
 }
 
 GCP_PROJECT = 'analysis-runner'
