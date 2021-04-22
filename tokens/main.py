@@ -11,6 +11,7 @@ ALLOWED_REPOS = {
     'ancestry': ['ancestry'],
     'tob-wgs': ['tob-wgs'],
     'fewgenomes': ['analysis-runner', 'fewgenomes', 'joint-calling'],
+    'seqr': ['hail-elasticsearch-pipelines'],
 }
 
 GCP_PROJECT = 'analysis-runner'
