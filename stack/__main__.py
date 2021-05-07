@@ -7,6 +7,7 @@ DOMAIN = 'populationgenomics.org.au'
 CUSTOMER_ID = 'C010ys3gt'
 REGION = 'australia-southeast1'
 ANALYSIS_RUNNER_PROJECT = 'analysis-runner'
+CPG_COMMON_PROJECT = 'cpg-common'
 ANALYSIS_RUNNER_SERVICE_ACCOUNT = (
     'analysis-runner-server@analysis-runner.iam.gserviceaccount.com'
 )
@@ -234,34 +235,22 @@ gcp.cloudidentity.GroupMembership(
 )
 
 # Allow the Hail service accounts to pull images. Note that the global project will
-# refer to the dataset, but the Docker image is stored in the "analysis-runner"
-# project's Artifact Registry repository.
-gcp.artifactregistry.RepositoryIamMember(
-    'hail-service-account-test-images-reader',
-    project=ANALYSIS_RUNNER_PROJECT,
-    location=REGION,
-    repository='images',
-    role='roles/artifactregistry.reader',
-    member=f'serviceAccount:{hail_service_account_test}',
-)
-
-gcp.artifactregistry.RepositoryIamMember(
-    'hail-service-account-standard-images-reader',
-    project=ANALYSIS_RUNNER_PROJECT,
-    location=REGION,
-    repository='images',
-    role='roles/artifactregistry.reader',
-    member=f'serviceAccount:{hail_service_account_standard}',
-)
-
-gcp.artifactregistry.RepositoryIamMember(
-    'hail-service-account-full-images-reader',
-    project=ANALYSIS_RUNNER_PROJECT,
-    location=REGION,
-    repository='images',
-    role='roles/artifactregistry.reader',
-    member=f'serviceAccount:{hail_service_account_full}',
-)
+# refer to the dataset, but the Docker images are stored in the "analysis-runner"
+# and "cpg-common" projects' Artifact Registry repositories.
+for access_level, service_account in [
+    ('test', hail_service_account_test),
+    ('standard', hail_service_account_standard),
+    ('full', hail_service_account_full),
+]:
+    for project in [ANALYSIS_RUNNER_PROJECT, CPG_COMMON_PROJECT]:
+        gcp.artifactregistry.RepositoryIamMember(
+            f'hail-service-account-{access_level}-images-reader-in-{project}',
+            project=project,
+            location=REGION,
+            repository='images',
+            role='roles/artifactregistry.reader',
+            member=f'serviceAccount:{service_account}',
+        )
 
 # The bucket used for Hail Batch pipelines.
 hail_bucket = create_bucket(bucket_name('hail'), lifecycle_rules=[undelete_rule])
