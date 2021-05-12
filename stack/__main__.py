@@ -11,6 +11,7 @@ CPG_COMMON_PROJECT = 'cpg-common'
 ANALYSIS_RUNNER_SERVICE_ACCOUNT = (
     'analysis-runner-server@analysis-runner.iam.gserviceaccount.com'
 )
+WEB_SERVER_SERVICE_ACCOUNT = 'web-server@analysis-runner.iam.gserviceaccount.com'
 REFERENCE_BUCKET_NAME = 'cpg-reference'
 
 # Fetch configuration.
@@ -52,8 +53,6 @@ undelete_rule = gcp.storage.BucketLifecycleRuleArgs(
     ),
 )
 
-upload_bucket = create_bucket(bucket_name('upload'), lifecycle_rules=[undelete_rule])
-
 # The Cloud Resource Manager API is required for the Cloud Identity API.
 cloudresourcemanager = gcp.projects.Service(
     'cloudresourcemanager-service',
@@ -75,6 +74,8 @@ upload_account = gcp.serviceaccount.Account(
     display_name='upload',
     opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
 )
+
+upload_bucket = create_bucket(bucket_name('upload'), lifecycle_rules=[undelete_rule])
 
 gcp.storage.BucketIAMMember(
     'upload-service-account-upload-bucket-creator',
@@ -116,6 +117,8 @@ temporary_bucket = create_bucket(
         undelete_rule,
     ],
 )
+
+web_bucket = create_bucket(bucket_name('web'), lifecycle_rules=[undelete_rule])
 
 
 def group_mail(kind: str) -> str:
@@ -171,6 +174,20 @@ add_bucket_permissions(
     access_group,
     temporary_bucket,
     'roles/storage.admin',
+)
+
+add_bucket_permissions(
+    'access-group-web-bucket-viewer',
+    access_group,
+    web_bucket,
+    'roles/storage.objectViewer',
+)
+
+gcp.storage.BucketIAMMember(
+    'web-server-bucket-viewer',
+    bucket=web_bucket.name,
+    role='roles/storage.objectViewer',
+    member=pulumi.Output.concat('serviceAccount:', WEB_SERVER_SERVICE_ACCOUNT),
 )
 
 add_bucket_permissions(
@@ -230,6 +247,16 @@ gcp.cloudidentity.GroupMembership(
     group=access_group.id,
     preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
         id=ANALYSIS_RUNNER_SERVICE_ACCOUNT
+    ),
+    roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
+)
+
+# Allow the web server to check memberships.
+gcp.cloudidentity.GroupMembership(
+    'web-server-restricted-member',
+    group=access_group.id,
+    preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
+        id=WEB_SERVER_SERVICE_ACCOUNT
     ),
     roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
 )
@@ -299,7 +326,7 @@ gcp.storage.BucketIAMMember(
 )
 
 # Permissions increase by access level:
-# - test: read test, write temporary
+# - test: read test, write temporary and web
 # - standard: read main, write analysis
 # - full: write anywhere
 
@@ -343,6 +370,42 @@ gcp.storage.BucketIAMMember(
 gcp.storage.BucketIAMMember(
     'hail-service-account-full-temporary-bucket-admin',
     bucket=temporary_bucket.name,
+    role='roles/storage.admin',
+    member=pulumi.Output.concat('serviceAccount:', hail_service_account_full),
+)
+
+# web bucket
+gcp.storage.BucketIAMMember(
+    'hail-service-account-test-web-bucket-viewer',
+    bucket=web_bucket.name,
+    role='roles/storage.objectViewer',
+    member=pulumi.Output.concat('serviceAccount:', hail_service_account_test),
+)
+
+gcp.storage.BucketIAMMember(
+    'hail-service-account-test-web-bucket-creator',
+    bucket=web_bucket.name,
+    role='roles/storage.objectCreator',
+    member=pulumi.Output.concat('serviceAccount:', hail_service_account_test),
+)
+
+gcp.storage.BucketIAMMember(
+    'hail-service-account-standard-web-bucket-viewer',
+    bucket=web_bucket.name,
+    role='roles/storage.objectViewer',
+    member=pulumi.Output.concat('serviceAccount:', hail_service_account_standard),
+)
+
+gcp.storage.BucketIAMMember(
+    'hail-service-account-standard-web-bucket-creator',
+    bucket=web_bucket.name,
+    role='roles/storage.objectCreator',
+    member=pulumi.Output.concat('serviceAccount:', hail_service_account_standard),
+)
+
+gcp.storage.BucketIAMMember(
+    'hail-service-account-full-web-bucket-admin',
+    bucket=web_bucket.name,
     role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_full),
 )
