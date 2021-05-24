@@ -13,6 +13,7 @@ ANALYSIS_RUNNER_SERVICE_ACCOUNT = (
 )
 WEB_SERVER_SERVICE_ACCOUNT = 'web-server@analysis-runner.iam.gserviceaccount.com'
 REFERENCE_BUCKET_NAME = 'cpg-reference'
+NOTEBOOKS_PROJECT = 'notebooks-314505'
 
 # Fetch configuration.
 config = pulumi.Config()
@@ -470,3 +471,40 @@ if enable_release:
         role='roles/storage.admin',
         member=pulumi.Output.concat('serviceAccount:', hail_service_account_full),
     )
+
+# Notebook permissions
+notebook_account = gcp.serviceaccount.Account(
+    'notebook-account',
+    project=NOTEBOOKS_PROJECT,
+    account_id=f'notebook-{dataset}',
+    display_name=f'Notebook service account for dataset {dataset}',
+    opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
+)
+
+gcp.projects.IAMBinding(
+    'notebook-account-compute-admin',
+    project=NOTEBOOKS_PROJECT,
+    role='roles/compute.admin',
+    members=[pulumi.Output.concat('serviceAccount:', notebook_account.email)],
+)
+
+gcp.serviceaccount.IAMBinding(
+    'notebook-account-users',
+    service_account_id=notebook_account,
+    role='roles/iam.serviceAccountUser',
+    members=[pulumi.Output.concat('group:', access_group.group_key.id)],
+)
+
+gcp.storage.BucketIAMMember(
+    'notebook-service-account-test-bucket-viewer',
+    bucket=test_bucket.name,
+    role='roles/storage.objectViewer',
+    member=pulumi.Output.concat('serviceAccount:', notebook_account.email),
+)
+
+gcp.storage.BucketIAMMember(
+    'notebook-service-account-temporary-bucket-admin',
+    bucket=temporary_bucket.name,
+    role='roles/storage.admin',
+    member=pulumi.Output.concat('serviceAccount:', notebook_account.email),
+)
