@@ -4,6 +4,7 @@ import base64
 import json
 import kubernetes.client
 import kubernetes.config
+import yaml
 from google.cloud import secretmanager
 
 
@@ -32,7 +33,7 @@ def add_secret(name: str, value: str) -> None:
     print(response.name)
 
 
-def get_token(hail_user: str):
+def get_token(hail_user: str) -> str:
     """Returns the Hail token for the given user."""
     kube_secret_name = f'{hail_user}-tokens'
     kube_secret = kube_client.read_namespaced_secret(kube_secret_name, 'default')
@@ -41,10 +42,33 @@ def get_token(hail_user: str):
     return hail_token
 
 
-config = {}
-for dataset, allowed_repos in ALLOWED_REPOS.items():
-    config[dataset] = {'allowedRepos': allowed_repos}
-    for access_level in 'test', 'standard', 'full':
-        config[dataset][f'{access_level}Token'] = get_token(f'{dataset}-{access_level}')
+def get_key(hail_user: str) -> str:
+    """Returns the Hail service account key for the given user."""
+    kube_secret_name = f'{hail_user}-gsa-key'
+    kube_secret = kube_client.read_namespaced_secret(kube_secret_name, 'default')
+    secret_data = kube_secret.data['key.json']
+    return base64.b64decode(secret_data).decode('utf-8')
 
-add_secret('server-config', json.dumps(config))
+
+def get_project_id(dataset: str) -> str:
+    """Returns the GCP project ID associated with the given dataset."""
+    with open(f'../stack/Pulumi.{dataset}.yaml') as f:
+        return yaml.safe_load(f)['config']['gcp:project']
+
+
+def main():
+    """Main entry point."""
+    config = {}
+    for dataset, allowed_repos in ALLOWED_REPOS.items():
+        entries = {'projectId': get_project_id(dataset), 'allowedRepos': allowed_repos}
+        for access_level in 'test', 'standard', 'full':
+            hail_user = f'{dataset}-{access_level}'
+            entries[f'{access_level}Token'] = get_token(hail_user)
+            entries[f'{access_level}Key'] = get_key(hail_user)
+        config[dataset] = entries
+
+    add_secret('server-config', json.dumps(config))
+
+
+if __name__ == '__main__':
+    main()
