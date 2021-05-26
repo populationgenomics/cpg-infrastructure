@@ -164,10 +164,10 @@ listing_role = gcp.projects.IAMCustomRole(
 )
 
 add_bucket_permissions(
-    'access-group-test-bucket-viewer',
+    'access-group-test-bucket-admin',
     access_group,
     test_bucket,
-    'roles/storage.objectViewer',
+    'roles/storage.admin',
 )
 
 add_bucket_permissions(
@@ -327,22 +327,22 @@ gcp.storage.BucketIAMMember(
 )
 
 # Permissions increase by access level:
-# - test: read test, write temporary and web
+# - test: write test, temporary, and web
 # - standard: read main, write analysis
 # - full: write anywhere
 
 # test bucket
 gcp.storage.BucketIAMMember(
-    'hail-service-account-test-test-bucket-viewer',
+    'hail-service-account-test-test-bucket-admin',
     bucket=test_bucket.name,
-    role='roles/storage.objectViewer',
+    role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_test),
 )
 
 gcp.storage.BucketIAMMember(
-    'hail-service-account-standard-test-bucket-viewer',
+    'hail-service-account-standard-test-bucket-admin',
     bucket=test_bucket.name,
-    role='roles/storage.objectViewer',
+    role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_standard),
 )
 
@@ -496,9 +496,9 @@ gcp.serviceaccount.IAMBinding(
 )
 
 gcp.storage.BucketIAMMember(
-    'notebook-service-account-test-bucket-viewer',
+    'notebook-service-account-test-bucket-admin',
     bucket=test_bucket.name,
-    role='roles/storage.objectViewer',
+    role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', notebook_account.email),
 )
 
