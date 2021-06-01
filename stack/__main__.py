@@ -47,6 +47,17 @@ def create_bucket(name: str, **kwargs) -> gcp.storage.Bucket:
     )
 
 
+def bucket_member(*args, **kwargs):
+    """Wraps gcp.storage.BucketIAMMember.
+
+    When resources are renamed, it can be useful to explicitly apply changes in two
+    phases: delete followed by create; that's opposite of the default create followed by
+    delete, which can end up with missing permissions. To implement the first phase
+    (delete), simply change this implementation to a no-op temporarily.
+    """
+    gcp.storage.BucketIAMMember(*args, **kwargs)
+
+
 undelete_rule = gcp.storage.BucketLifecycleRuleArgs(
     action=gcp.storage.BucketLifecycleRuleActionArgs(type='Delete'),
     condition=gcp.storage.BucketLifecycleRuleConditionArgs(
@@ -78,7 +89,7 @@ upload_account = gcp.serviceaccount.Account(
 
 upload_bucket = create_bucket(bucket_name('upload'), lifecycle_rules=[undelete_rule])
 
-gcp.storage.BucketIAMMember(
+bucket_member(
     'upload-service-account-upload-bucket-creator',
     bucket=upload_bucket.name,
     role='roles/storage.objectCreator',
@@ -98,16 +109,10 @@ archive_bucket = create_bucket(
     ],
 )
 
-main_bucket = create_bucket(bucket_name('main'), lifecycle_rules=[undelete_rule])
-
-analysis_bucket = create_bucket(
-    bucket_name('analysis'), lifecycle_rules=[undelete_rule]
-)
-
 test_bucket = create_bucket(bucket_name('test'), lifecycle_rules=[undelete_rule])
 
-temporary_bucket = create_bucket(
-    bucket_name('temporary'),
+test_tmp_bucket = create_bucket(
+    bucket_name('test-tmp'),
     lifecycle_rules=[
         gcp.storage.BucketLifecycleRuleArgs(
             action=gcp.storage.BucketLifecycleRuleActionArgs(type='Delete'),
@@ -119,7 +124,28 @@ temporary_bucket = create_bucket(
     ],
 )
 
-web_bucket = create_bucket(bucket_name('web'), lifecycle_rules=[undelete_rule])
+test_web_bucket = create_bucket(
+    bucket_name('test-web'), lifecycle_rules=[undelete_rule]
+)
+
+main_bucket = create_bucket(bucket_name('main'), lifecycle_rules=[undelete_rule])
+
+main_tmp_bucket = create_bucket(
+    bucket_name('main-tmp'),
+    lifecycle_rules=[
+        gcp.storage.BucketLifecycleRuleArgs(
+            action=gcp.storage.BucketLifecycleRuleActionArgs(type='Delete'),
+            condition=gcp.storage.BucketLifecycleRuleConditionArgs(
+                age=30, with_state='LIVE'
+            ),
+        ),
+        undelete_rule,
+    ],
+)
+
+main_web_bucket = create_bucket(
+    bucket_name('main-web'), lifecycle_rules=[undelete_rule]
+)
 
 
 def group_mail(kind: str) -> str:
@@ -144,7 +170,7 @@ def add_bucket_permissions(
     name: str, group: gcp.cloudidentity.Group, bucket: gcp.storage.Bucket, role: str
 ) -> gcp.storage.BucketIAMMember:
     """Returns GCS bucket permissions for the given group."""
-    return gcp.storage.BucketIAMMember(
+    return bucket_member(
         name,
         bucket=bucket.name,
         role=role,
@@ -171,24 +197,17 @@ add_bucket_permissions(
 )
 
 add_bucket_permissions(
-    'access-group-temporary-bucket-admin',
+    'access-group-test-tmp-bucket-admin',
     access_group,
-    temporary_bucket,
+    test_tmp_bucket,
     'roles/storage.admin',
 )
 
 add_bucket_permissions(
-    'access-group-web-bucket-viewer',
+    'access-group-test-web-bucket-admin',
     access_group,
-    web_bucket,
-    'roles/storage.objectViewer',
-)
-
-gcp.storage.BucketIAMMember(
-    'web-server-bucket-viewer',
-    bucket=web_bucket.name,
-    role='roles/storage.objectViewer',
-    member=pulumi.Output.concat('serviceAccount:', WEB_SERVER_SERVICE_ACCOUNT),
+    test_web_bucket,
+    'roles/storage.admin',
 )
 
 add_bucket_permissions(
@@ -199,10 +218,17 @@ add_bucket_permissions(
 )
 
 add_bucket_permissions(
-    'access-group-analysis-bucket-lister',
+    'access-group-main-tmp-bucket-lister',
     access_group,
-    analysis_bucket,
+    main_tmp_bucket,
     listing_role.name,
+)
+
+add_bucket_permissions(
+    'access-group-main-web-bucket-viewer',
+    access_group,
+    main_web_bucket,
+    'roles/storage.objectViewer',
 )
 
 add_bucket_permissions(
@@ -241,6 +267,20 @@ if enable_release:
         release_bucket,
         'roles/storage.objectViewer',
     )
+
+bucket_member(
+    'web-server-test-web-bucket-viewer',
+    bucket=test_web_bucket.name,
+    role='roles/storage.objectViewer',
+    member=pulumi.Output.concat('serviceAccount:', WEB_SERVER_SERVICE_ACCOUNT),
+)
+
+bucket_member(
+    'web-server-main-web-bucket-viewer',
+    bucket=main_web_bucket.name,
+    role='roles/storage.objectViewer',
+    member=pulumi.Output.concat('serviceAccount:', WEB_SERVER_SERVICE_ACCOUNT),
+)
 
 # Allow the analysis-runner to check memberships.
 gcp.cloudidentity.GroupMembership(
@@ -283,21 +323,21 @@ for access_level, service_account in [
 # The bucket used for Hail Batch pipelines.
 hail_bucket = create_bucket(bucket_name('hail'), lifecycle_rules=[undelete_rule])
 
-gcp.storage.BucketIAMMember(
+bucket_member(
     'hail-service-account-test-hail-bucket-admin',
     bucket=hail_bucket.name,
     role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_test),
 )
 
-gcp.storage.BucketIAMMember(
+bucket_member(
     'hail-service-account-standard-hail-bucket-admin',
     bucket=hail_bucket.name,
     role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_standard),
 )
 
-gcp.storage.BucketIAMMember(
+bucket_member(
     'hail-service-account-full-hail-bucket-admin',
     bucket=hail_bucket.name,
     role='roles/storage.admin',
@@ -305,21 +345,21 @@ gcp.storage.BucketIAMMember(
 )
 
 # Allow access to reference data.
-gcp.storage.BucketIAMMember(
+bucket_member(
     'hail-service-account-test-reference-bucket-viewer',
     bucket=REFERENCE_BUCKET_NAME,
     role='roles/storage.objectViewer',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_test),
 )
 
-gcp.storage.BucketIAMMember(
+bucket_member(
     'hail-service-account-standard-reference-bucket-viewer',
     bucket=REFERENCE_BUCKET_NAME,
     role='roles/storage.objectViewer',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_standard),
 )
 
-gcp.storage.BucketIAMMember(
+bucket_member(
     'hail-service-account-full-reference-bucket-viewer',
     bucket=REFERENCE_BUCKET_NAME,
     role='roles/storage.objectViewer',
@@ -327,129 +367,142 @@ gcp.storage.BucketIAMMember(
 )
 
 # Permissions increase by access level:
-# - test: write test, temporary, and web
-# - standard: read main, write analysis
-# - full: write anywhere
+# - test: view / create on any "test" bucket
+# - standard: view / create on any "test" or "main" bucket
+# - full: view / create / delete anywhere
+
+# For view + create permissions, we conceptually should only have to grant the
+# roles/storage.objectViewer and roles/storage.objectCreator roles. However, Hail /
+# Spark access GCS buckets in a way that also requires storage.buckets.get permissions,
+# which is typically only included in the legacy roles. We therefore create a custom
+# role here.
+view_create_role = gcp.projects.IAMCustomRole(
+    'storage-view-create-role',
+    description='Allows viewing and creation of storage objects',
+    permissions=[
+        'storage.objects.list',
+        'storage.objects.get',
+        'storage.objects.create',
+        'storage.buckets.get',
+    ],
+    role_id='storageObjectViewCreate',
+    title='Storage Object Viewer + Creator',
+    opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
+)
 
 # test bucket
-gcp.storage.BucketIAMMember(
+bucket_member(
     'hail-service-account-test-test-bucket-admin',
     bucket=test_bucket.name,
     role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_test),
 )
 
-gcp.storage.BucketIAMMember(
+bucket_member(
     'hail-service-account-standard-test-bucket-admin',
     bucket=test_bucket.name,
     role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_standard),
 )
 
-gcp.storage.BucketIAMMember(
+bucket_member(
     'hail-service-account-full-test-bucket-admin',
     bucket=test_bucket.name,
     role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_full),
 )
 
-# temporary bucket
-gcp.storage.BucketIAMMember(
-    'hail-service-account-test-temporary-bucket-admin',
-    bucket=temporary_bucket.name,
+# test-tmp bucket
+bucket_member(
+    'hail-service-account-test-test-tmp-bucket-admin',
+    bucket=test_tmp_bucket.name,
     role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_test),
 )
 
-gcp.storage.BucketIAMMember(
-    'hail-service-account-standard-temporary-bucket-admin',
-    bucket=temporary_bucket.name,
+bucket_member(
+    'hail-service-account-standard-test-tmp-bucket-admin',
+    bucket=test_tmp_bucket.name,
     role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_standard),
 )
 
-gcp.storage.BucketIAMMember(
-    'hail-service-account-full-temporary-bucket-admin',
-    bucket=temporary_bucket.name,
+bucket_member(
+    'hail-service-account-full-test-tmp-bucket-admin',
+    bucket=test_tmp_bucket.name,
     role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_full),
 )
 
-# web bucket
-gcp.storage.BucketIAMMember(
-    'hail-service-account-test-web-bucket-viewer',
-    bucket=web_bucket.name,
-    role='roles/storage.objectViewer',
+# test-web bucket
+bucket_member(
+    'hail-service-account-test-test-web-bucket-admin',
+    bucket=test_web_bucket.name,
+    role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_test),
 )
 
-gcp.storage.BucketIAMMember(
-    'hail-service-account-test-web-bucket-creator',
-    bucket=web_bucket.name,
-    role='roles/storage.objectCreator',
-    member=pulumi.Output.concat('serviceAccount:', hail_service_account_test),
-)
-
-gcp.storage.BucketIAMMember(
-    'hail-service-account-standard-web-bucket-viewer',
-    bucket=web_bucket.name,
-    role='roles/storage.objectViewer',
+bucket_member(
+    'hail-service-account-standard-test-web-bucket-admin',
+    bucket=test_web_bucket.name,
+    role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_standard),
 )
 
-gcp.storage.BucketIAMMember(
-    'hail-service-account-standard-web-bucket-creator',
-    bucket=web_bucket.name,
-    role='roles/storage.objectCreator',
-    member=pulumi.Output.concat('serviceAccount:', hail_service_account_standard),
-)
-
-gcp.storage.BucketIAMMember(
-    'hail-service-account-full-web-bucket-admin',
-    bucket=web_bucket.name,
+bucket_member(
+    'hail-service-account-full-test-web-bucket-admin',
+    bucket=test_web_bucket.name,
     role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_full),
 )
 
 # main bucket
-gcp.storage.BucketIAMMember(
-    'hail-service-account-standard-main-bucket-viewer',
+bucket_member(
+    'hail-service-account-standard-main-bucket-view-create',
     bucket=main_bucket.name,
-    role='roles/storage.objectViewer',
+    role=view_create_role.name,
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_standard),
 )
 
-gcp.storage.BucketIAMMember(
+bucket_member(
     'hail-service-account-full-main-bucket-admin',
     bucket=main_bucket.name,
     role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_full),
 )
 
-# analysis bucket
-gcp.storage.BucketIAMMember(
-    'hail-service-account-standard-analysis-bucket-viewer',
-    bucket=analysis_bucket.name,
-    role='roles/storage.objectViewer',
+# main-tmp bucket
+bucket_member(
+    'hail-service-account-standard-main-tmp-bucket-view-create',
+    bucket=main_tmp_bucket.name,
+    role=view_create_role.name,
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_standard),
 )
 
-gcp.storage.BucketIAMMember(
-    'hail-service-account-standard-analysis-bucket-creator',
-    bucket=analysis_bucket.name,
-    role='roles/storage.objectCreator',
+bucket_member(
+    'hail-service-account-full-main-tmp-bucket-admin',
+    bucket=main_tmp_bucket.name,
+    role='roles/storage.admin',
+    member=pulumi.Output.concat('serviceAccount:', hail_service_account_full),
+)
+
+# main-web bucket
+bucket_member(
+    'hail-service-account-standard-main-web-bucket-view-create',
+    bucket=main_web_bucket.name,
+    role=view_create_role.name,
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_standard),
 )
 
-gcp.storage.BucketIAMMember(
-    'hail-service-account-full-analysis-bucket-admin',
-    bucket=analysis_bucket.name,
+bucket_member(
+    'hail-service-account-full-main-web-bucket-admin',
+    bucket=main_web_bucket.name,
     role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_full),
 )
 
 # upload bucket
-gcp.storage.BucketIAMMember(
+bucket_member(
     'hail-service-account-full-upload-bucket-admin',
     bucket=upload_bucket.name,
     role='roles/storage.admin',
@@ -457,7 +510,7 @@ gcp.storage.BucketIAMMember(
 )
 
 # archive bucket
-gcp.storage.BucketIAMMember(
+bucket_member(
     'hail-service-account-full-archive-bucket-admin',
     bucket=archive_bucket.name,
     role='roles/storage.admin',
@@ -465,7 +518,7 @@ gcp.storage.BucketIAMMember(
 )
 
 if enable_release:
-    gcp.storage.BucketIAMMember(
+    bucket_member(
         'hail-service-account-full-release-bucket-admin',
         bucket=release_bucket.name,
         role='roles/storage.admin',
@@ -495,16 +548,23 @@ gcp.serviceaccount.IAMBinding(
     members=[pulumi.Output.concat('group:', access_group.group_key.id)],
 )
 
-gcp.storage.BucketIAMMember(
+bucket_member(
     'notebook-service-account-test-bucket-admin',
     bucket=test_bucket.name,
     role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', notebook_account.email),
 )
 
-gcp.storage.BucketIAMMember(
-    'notebook-service-account-temporary-bucket-admin',
-    bucket=temporary_bucket.name,
+bucket_member(
+    'notebook-service-account-test-tmp-bucket-admin',
+    bucket=test_tmp_bucket.name,
+    role='roles/storage.admin',
+    member=pulumi.Output.concat('serviceAccount:', notebook_account.email),
+)
+
+bucket_member(
+    'notebook-service-account-test-web-bucket-admin',
+    bucket=test_web_bucket.name,
     role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', notebook_account.email),
 )
