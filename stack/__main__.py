@@ -124,6 +124,10 @@ test_tmp_bucket = create_bucket(
     ],
 )
 
+test_metadata_bucket = create_bucket(
+    bucket_name('test-metadata'), lifecycle_rules=[undelete_rule]
+)
+
 test_web_bucket = create_bucket(
     bucket_name('test-web'), lifecycle_rules=[undelete_rule]
 )
@@ -141,6 +145,10 @@ main_tmp_bucket = create_bucket(
         ),
         undelete_rule,
     ],
+)
+
+main_metadata_bucket = create_bucket(
+    bucket_name('main-metadata'), lifecycle_rules=[undelete_rule]
 )
 
 main_web_bucket = create_bucket(
@@ -204,6 +212,13 @@ add_bucket_permissions(
 )
 
 add_bucket_permissions(
+    'access-group-test-metadata-bucket-admin',
+    access_group,
+    test_metadata_bucket,
+    'roles/storage.admin',
+)
+
+add_bucket_permissions(
     'access-group-test-web-bucket-admin',
     access_group,
     test_web_bucket,
@@ -222,6 +237,13 @@ add_bucket_permissions(
     access_group,
     main_tmp_bucket,
     listing_role.name,
+)
+
+add_bucket_permissions(
+    'access-group-main-metadata-bucket-viewer',
+    access_group,
+    main_metadata_bucket,
+    'roles/storage.objectViewer',
 )
 
 add_bucket_permissions(
@@ -434,6 +456,28 @@ bucket_member(
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_full),
 )
 
+# test-metadata bucket
+bucket_member(
+    'hail-service-account-test-test-metadata-bucket-admin',
+    bucket=test_metadata_bucket.name,
+    role='roles/storage.admin',
+    member=pulumi.Output.concat('serviceAccount:', hail_service_account_test),
+)
+
+bucket_member(
+    'hail-service-account-standard-test-metadata-bucket-admin',
+    bucket=test_metadata_bucket.name,
+    role='roles/storage.admin',
+    member=pulumi.Output.concat('serviceAccount:', hail_service_account_standard),
+)
+
+bucket_member(
+    'hail-service-account-full-test-metadata-bucket-admin',
+    bucket=test_metadata_bucket.name,
+    role='roles/storage.admin',
+    member=pulumi.Output.concat('serviceAccount:', hail_service_account_full),
+)
+
 # test-web bucket
 bucket_member(
     'hail-service-account-test-test-web-bucket-admin',
@@ -482,6 +526,21 @@ bucket_member(
 bucket_member(
     'hail-service-account-full-main-tmp-bucket-admin',
     bucket=main_tmp_bucket.name,
+    role='roles/storage.admin',
+    member=pulumi.Output.concat('serviceAccount:', hail_service_account_full),
+)
+
+# main-metadata bucket
+bucket_member(
+    'hail-service-account-standard-main-metadata-bucket-view-create',
+    bucket=main_metadata_bucket.name,
+    role=view_create_role.name,
+    member=pulumi.Output.concat('serviceAccount:', hail_service_account_standard),
+)
+
+bucket_member(
+    'hail-service-account-full-main-metadata-bucket-admin',
+    bucket=main_metadata_bucket.name,
     role='roles/storage.admin',
     member=pulumi.Output.concat('serviceAccount:', hail_service_account_full),
 )
@@ -548,23 +607,12 @@ gcp.serviceaccount.IAMBinding(
     members=[pulumi.Output.concat('group:', access_group.group_key.id)],
 )
 
-bucket_member(
-    'notebook-service-account-test-bucket-admin',
-    bucket=test_bucket.name,
-    role='roles/storage.admin',
-    member=pulumi.Output.concat('serviceAccount:', notebook_account.email),
-)
-
-bucket_member(
-    'notebook-service-account-test-tmp-bucket-admin',
-    bucket=test_tmp_bucket.name,
-    role='roles/storage.admin',
-    member=pulumi.Output.concat('serviceAccount:', notebook_account.email),
-)
-
-bucket_member(
-    'notebook-service-account-test-web-bucket-admin',
-    bucket=test_web_bucket.name,
-    role='roles/storage.admin',
-    member=pulumi.Output.concat('serviceAccount:', notebook_account.email),
+# Grant the notebook account the same permissions as the access group members.
+gcp.cloudidentity.GroupMembership(
+    'notebook-service-account-access-group-member',
+    group=access_group.id,
+    preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
+        id=notebook_account.email
+    ),
+    roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
 )
