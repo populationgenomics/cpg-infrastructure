@@ -14,6 +14,7 @@ ANALYSIS_RUNNER_SERVICE_ACCOUNT = (
 WEB_SERVER_SERVICE_ACCOUNT = 'web-server@analysis-runner.iam.gserviceaccount.com'
 REFERENCE_BUCKET_NAME = 'cpg-reference'
 NOTEBOOKS_PROJECT = 'notebooks-314505'
+CROMWELL_ACCESS_GROUP = 'cromwell-submission-access@populationgenomics.org.au'
 
 # Fetch configuration.
 config = pulumi.Config()
@@ -613,6 +614,34 @@ gcp.cloudidentity.GroupMembership(
     group=access_group.id,
     preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
         id=notebook_account.email
+    ),
+    roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
+)
+
+# Add Hail service accounts to Cromwell access group.
+gcp.cloudidentity.GroupMembership(
+    'hail-service-account-test-cromwell-access',
+    group=CROMWELL_ACCESS_GROUP,
+    preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
+        id=hail_service_account_test,
+    ),
+    roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
+)
+
+gcp.cloudidentity.GroupMembership(
+    'hail-service-account-standard-cromwell-access',
+    group=CROMWELL_ACCESS_GROUP,
+    preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
+        id=hail_service_account_standard,
+    ),
+    roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
+)
+
+gcp.cloudidentity.GroupMembership(
+    'hail-service-account-full-cromwell-access',
+    group=CROMWELL_ACCESS_GROUP,
+    preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
+        id=hail_service_account_full,
     ),
     roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
 )
