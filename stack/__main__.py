@@ -16,9 +16,6 @@ REFERENCE_BUCKET_NAME = 'cpg-reference'
 NOTEBOOKS_PROJECT = 'notebooks-314505'
 # cromwell-submission-access@populationgenomics.org.au
 CROMWELL_ACCESS_GROUP_ID = 'groups/03cqmetx2922fyu'
-CROMWELL_SERVER_SERVICE_ACCOUNT = (
-    'cromwell-runner@cromwell-305305.iam.gserviceaccount.com'
-)
 
 # Fetch configuration.
 config = pulumi.Config()
@@ -648,26 +645,4 @@ gcp.cloudidentity.GroupMembership(
         id=hail_service_account_full,
     ),
     roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
-)
-
-# The service account used by the Life Sciences API to launch VMs for Cromwell.
-cromwell_instance_runner_account = gcp.serviceaccount.Account(
-    'cromwell-instance-runner-account',
-    account_id=f'cromwell-instance-runner',
-    display_name=f'Used by Cromwell to launch VMs',
-    opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
-)
-
-gcp.serviceaccount.IAMBinding(
-    'cromwell-instance-runner-user',
-    service_account_id=cromwell_instance_runner_account.id,
-    role='roles/iam.serviceAccountUser',
-    members=[f'serviceAccount:{CROMWELL_SERVER_SERVICE_ACCOUNT}'],
-)
-
-# Cromwell uses the Life Sciences API for running pipelines.
-gcp.projects.Service(
-    'lifesciences-service',
-    service='lifesciences.googleapis.com',
-    disable_on_destroy=False,
 )
