@@ -199,6 +199,12 @@ listing_role = gcp.projects.IAMCustomRole(
     opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
 )
 
+gcp.projects.IAMBinding(
+    'project-buckets-lister',
+    role=listing_role,
+    members=[pulumi.Output.concat('group:', access_group.group_key.id)],
+)
+
 add_bucket_permissions(
     'access-group-test-bucket-admin',
     access_group,
@@ -228,20 +234,6 @@ add_bucket_permissions(
 )
 
 add_bucket_permissions(
-    'access-group-main-bucket-lister',
-    access_group,
-    main_bucket,
-    listing_role.name,
-)
-
-add_bucket_permissions(
-    'access-group-main-tmp-bucket-lister',
-    access_group,
-    main_tmp_bucket,
-    listing_role.name,
-)
-
-add_bucket_permissions(
     'access-group-main-metadata-bucket-viewer',
     access_group,
     main_metadata_bucket,
@@ -253,20 +245,6 @@ add_bucket_permissions(
     access_group,
     main_web_bucket,
     'roles/storage.objectViewer',
-)
-
-add_bucket_permissions(
-    'access-group-upload-bucket-lister',
-    access_group,
-    upload_bucket,
-    listing_role.name,
-)
-
-add_bucket_permissions(
-    'access-group-archive-bucket-lister',
-    access_group,
-    archive_bucket,
-    listing_role.name,
 )
 
 if enable_release:
