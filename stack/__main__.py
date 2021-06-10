@@ -193,7 +193,7 @@ access_group = create_group(group_mail('access'))
 listing_role = gcp.projects.IAMCustomRole(
     'storage-listing-role',
     description='Allows listing of storage objects',
-    permissions=['storage.objects.list'],
+    permissions=['storage.objects.list', 'storage.buckets.list', 'storage.buckets.get'],
     role_id='storageObjectLister',
     title='Storage Object Lister',
     opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
