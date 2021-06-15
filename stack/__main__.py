@@ -8,6 +8,7 @@ CUSTOMER_ID = 'C010ys3gt'
 REGION = 'australia-southeast1'
 ANALYSIS_RUNNER_PROJECT = 'analysis-runner'
 CPG_COMMON_PROJECT = 'cpg-common'
+HAIL_PROJECT = 'hail-295901'
 ANALYSIS_RUNNER_SERVICE_ACCOUNT = (
     'analysis-runner-server@analysis-runner.iam.gserviceaccount.com'
 )
@@ -16,6 +17,7 @@ REFERENCE_BUCKET_NAME = 'cpg-reference'
 NOTEBOOKS_PROJECT = 'notebooks-314505'
 # cromwell-submission-access@populationgenomics.org.au
 CROMWELL_ACCESS_GROUP_ID = 'groups/03cqmetx2922fyu'
+CROMWELL_RUNNER_ACCOUNT = 'cromwell-runner@cromwell-305305.iam.gserviceaccount.com'
 
 # Fetch configuration.
 config = pulumi.Config()
@@ -623,4 +625,39 @@ gcp.cloudidentity.GroupMembership(
         id=hail_service_account_full,
     ),
     roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
+)
+
+# Allow the Cromwell server to launch workflows.
+gcp.projects.IAMBinding(
+    'cromwell-runner-workflow-run-permissions',
+    role='roles/lifesciences.workflowsRunner',
+    members=[f'serviceAccount:{CROMWELL_RUNNER_ACCOUNT}'],
+)
+
+
+def hail_service_account_id(email: str) -> str:
+    """Returns the service account ID in the Hail project, given an email address."""
+    return f'projects/{HAIL_PROJECT}/serviceAccounts/{email}'
+
+
+# Allow the Cromwell server to run worker VMs using the Hail service accounts.
+gcp.serviceaccount.IAMBinding(
+    'cromwell-runner-hail-service-account-test-user',
+    service_account_id=hail_service_account_id(hail_service_account_test),
+    role='roles/iam.serviceAccountUser',
+    members=[f'serviceAccount:{CROMWELL_RUNNER_ACCOUNT}'],
+)
+
+gcp.serviceaccount.IAMBinding(
+    'cromwell-runner-hail-service-account-standard-user',
+    service_account_id=hail_service_account_id(hail_service_account_standard),
+    role='roles/iam.serviceAccountUser',
+    members=[f'serviceAccount:{CROMWELL_RUNNER_ACCOUNT}'],
+)
+
+gcp.serviceaccount.IAMBinding(
+    'cromwell-runner-hail-service-account-full-user',
+    service_account_id=hail_service_account_id(hail_service_account_full),
+    role='roles/iam.serviceAccountUser',
+    members=[f'serviceAccount:{CROMWELL_RUNNER_ACCOUNT}'],
 )
