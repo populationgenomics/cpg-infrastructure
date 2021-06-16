@@ -527,6 +527,45 @@ gcp.cloudidentity.GroupMembership(
     roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
 )
 
+# Allow Hail service accounts to start Dataproc clusters. That's only necessary until
+# Hail Query is feature complete.
+for access_level, service_account in [
+    ('test', hail_service_account_test),
+    ('standard', hail_service_account_standard),
+    ('full', hail_service_account_full),
+]:
+    gcp.projects.IAMBinding(
+        f'hail-service-account-{access_level}-dataproc-admin',
+        project=HAIL_PROJECT,
+        role='roles/dataproc.admin',
+        members=[pulumi.Output.concat('serviceAccount:', service_account)],
+    )
+
+    gcp.projects.IAMBinding(
+        f'hail-service-account-{access_level}-dataproc-worker',
+        project=HAIL_PROJECT,
+        role='roles/dataproc.worker',
+        members=[pulumi.Output.concat('serviceAccount:', service_account)],
+    )
+
+    # Necessary for requester-pays buckets, e.g. to use VEP.
+    gcp.projects.IAMBinding(
+        f'hail-service-account-{access_level}-serviceusage-consumer',
+        project=HAIL_PROJECT,
+        role='roles/serviceusage.serviceUsageConsumer',
+        members=[pulumi.Output.concat('serviceAccount:', service_account)],
+    )
+
+    # To start a Dataproc cluster using the same service account, the account must be
+    # allowed to act on its own behalf ;).
+    gcp.serviceaccount.IAMBinding(
+        f'hail-service-account-{access_level}-service-account-user',
+        service_account_id=f'projects/{HAIL_PROJECT}/serviceAccounts/{service_account}',
+        role='roles/iam.serviceAccountUser',
+        members=[pulumi.Output.concat('serviceAccount:', service_account)],
+    )
+
+
 for access_level, service_account in [
     ('test', hail_service_account_test),
     ('standard', hail_service_account_standard),
