@@ -209,10 +209,10 @@ listing_role = gcp.projects.IAMCustomRole(
     opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
 )
 
-gcp.projects.IAMBinding(
+gcp.projects.IAMMember(
     'project-buckets-lister',
     role=listing_role,
-    members=[pulumi.Output.concat('group:', access_group.group_key.id)],
+    member=pulumi.Output.concat('group:', access_group.group_key.id),
 )
 
 add_bucket_permissions(
@@ -498,18 +498,18 @@ notebook_account = gcp.serviceaccount.Account(
     opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
 )
 
-gcp.projects.IAMBinding(
+gcp.projects.IAMMember(
     'notebook-account-compute-admin',
     project=NOTEBOOKS_PROJECT,
     role='roles/compute.admin',
-    members=[pulumi.Output.concat('serviceAccount:', notebook_account.email)],
+    member=pulumi.Output.concat('serviceAccount:', notebook_account.email),
 )
 
-gcp.serviceaccount.IAMBinding(
+gcp.serviceaccount.IAMMember(
     'notebook-account-users',
     service_account_id=notebook_account,
     role='roles/iam.serviceAccountUser',
-    members=[pulumi.Output.concat('group:', access_group.group_key.id)],
+    member=pulumi.Output.concat('group:', access_group.group_key.id),
 )
 
 # Grant the notebook account the same permissions as the access group members.
@@ -525,35 +525,35 @@ gcp.cloudidentity.GroupMembership(
 # Allow Hail service accounts to start Dataproc clusters. That's only necessary until
 # Hail Query is feature complete.
 for access_level, service_account in hail_service_accounts.items():
-    gcp.projects.IAMBinding(
+    gcp.projects.IAMMember(
         f'hail-service-account-{access_level}-dataproc-admin',
         project=HAIL_PROJECT,
         role='roles/dataproc.admin',
-        members=[pulumi.Output.concat('serviceAccount:', service_account)],
+        member=pulumi.Output.concat('serviceAccount:', service_account),
     )
 
-    gcp.projects.IAMBinding(
+    gcp.projects.IAMMember(
         f'hail-service-account-{access_level}-dataproc-worker',
         project=HAIL_PROJECT,
         role='roles/dataproc.worker',
-        members=[pulumi.Output.concat('serviceAccount:', service_account)],
+        member=pulumi.Output.concat('serviceAccount:', service_account),
     )
 
     # Necessary for requester-pays buckets, e.g. to use VEP.
-    gcp.projects.IAMBinding(
+    gcp.projects.IAMMember(
         f'hail-service-account-{access_level}-serviceusage-consumer',
         project=HAIL_PROJECT,
         role='roles/serviceusage.serviceUsageConsumer',
-        members=[pulumi.Output.concat('serviceAccount:', service_account)],
+        member=pulumi.Output.concat('serviceAccount:', service_account),
     )
 
     # To start a Dataproc cluster using the same service account, the account must be
     # allowed to act on its own behalf ;).
-    gcp.serviceaccount.IAMBinding(
+    gcp.serviceaccount.IAMMember(
         f'hail-service-account-{access_level}-service-account-user',
         service_account_id=f'projects/{HAIL_PROJECT}/serviceAccounts/{service_account}',
         role='roles/iam.serviceAccountUser',
-        members=[pulumi.Output.concat('serviceAccount:', service_account)],
+        member=pulumi.Output.concat('serviceAccount:', service_account),
     )
 
 for access_level, service_account in hail_service_accounts.items():
@@ -568,17 +568,17 @@ for access_level, service_account in hail_service_accounts.items():
     )
 
 # Allow the Cromwell server to launch workflows.
-gcp.projects.IAMBinding(
+gcp.projects.IAMMember(
     'cromwell-runner-workflow-run-permissions',
     role='roles/lifesciences.workflowsRunner',
-    members=[f'serviceAccount:{CROMWELL_RUNNER_ACCOUNT}'],
+    member=f'serviceAccount:{CROMWELL_RUNNER_ACCOUNT}',
 )
 
 for access_level, service_account in hail_service_accounts.items():
     # Allow the Cromwell server to run worker VMs using the Hail service accounts.
-    gcp.serviceaccount.IAMBinding(
+    gcp.serviceaccount.IAMMember(
         f'cromwell-runner-hail-service-account-{access_level}-user',
         service_account_id=f'projects/{HAIL_PROJECT}/serviceAccounts/{service_account}',
         role='roles/iam.serviceAccountUser',
-        members=[f'serviceAccount:{CROMWELL_RUNNER_ACCOUNT}'],
+        member=f'serviceAccount:{CROMWELL_RUNNER_ACCOUNT}',
     )
