@@ -327,53 +327,69 @@ for access_level, service_account in [
 # The bucket used for Hail Batch pipelines.
 hail_bucket = create_bucket(bucket_name('hail'), lifecycle_rules=[undelete_rule])
 
-bucket_member(
-    'hail-service-account-test-hail-bucket-admin',
-    bucket=hail_bucket.name,
-    role='roles/storage.admin',
-    member=pulumi.Output.concat('serviceAccount:', hail_service_account_test),
-)
+for access_level, service_account in [
+    ('test', hail_service_account_test),
+    ('standard', hail_service_account_standard),
+    ('full', hail_service_account_full),
+]:
+    # Full access to the Hail Batch bucket.
+    bucket_member(
+        f'hail-service-account-{access_level}-hail-bucket-admin',
+        bucket=hail_bucket.name,
+        role='roles/storage.admin',
+        member=pulumi.Output.concat('serviceAccount:', service_account),
+    )
 
-bucket_member(
-    'hail-service-account-standard-hail-bucket-admin',
-    bucket=hail_bucket.name,
-    role='roles/storage.admin',
-    member=pulumi.Output.concat('serviceAccount:', hail_service_account_standard),
-)
-
-bucket_member(
-    'hail-service-account-full-hail-bucket-admin',
-    bucket=hail_bucket.name,
-    role='roles/storage.admin',
-    member=pulumi.Output.concat('serviceAccount:', hail_service_account_full),
-)
-
-# Allow access to reference data.
-bucket_member(
-    'hail-service-account-test-reference-bucket-viewer',
-    bucket=REFERENCE_BUCKET_NAME,
-    role='roles/storage.objectViewer',
-    member=pulumi.Output.concat('serviceAccount:', hail_service_account_test),
-)
-
-bucket_member(
-    'hail-service-account-standard-reference-bucket-viewer',
-    bucket=REFERENCE_BUCKET_NAME,
-    role='roles/storage.objectViewer',
-    member=pulumi.Output.concat('serviceAccount:', hail_service_account_standard),
-)
-
-bucket_member(
-    'hail-service-account-full-reference-bucket-viewer',
-    bucket=REFERENCE_BUCKET_NAME,
-    role='roles/storage.objectViewer',
-    member=pulumi.Output.concat('serviceAccount:', hail_service_account_full),
-)
+    # Read access to reference data.
+    bucket_member(
+        f'hail-service-account-{access_level}-reference-bucket-viewer',
+        bucket=REFERENCE_BUCKET_NAME,
+        role='roles/storage.objectViewer',
+        member=pulumi.Output.concat('serviceAccount:', service_account),
+    )
 
 # Permissions increase by access level:
 # - test: view / create on any "test" bucket
 # - standard: view / create on any "test" or "main" bucket
 # - full: view / create / delete anywhere
+
+
+for access_level, service_account in [
+    ('test', hail_service_account_test),
+    ('standard', hail_service_account_standard),
+    ('full', hail_service_account_full),
+]:
+    # test bucket
+    bucket_member(
+        f'hail-service-account-{access_level}-test-bucket-admin',
+        bucket=test_bucket.name,
+        role='roles/storage.admin',
+        member=pulumi.Output.concat('serviceAccount:', service_account),
+    )
+
+    # test-tmp bucket
+    bucket_member(
+        f'hail-service-account-{access_level}-test-tmp-bucket-admin',
+        bucket=test_tmp_bucket.name,
+        role='roles/storage.admin',
+        member=pulumi.Output.concat('serviceAccount:', service_account),
+    )
+
+    # test-metadata bucket
+    bucket_member(
+        f'hail-service-account-{access_level}-test-metadata-bucket-admin',
+        bucket=test_metadata_bucket.name,
+        role='roles/storage.admin',
+        member=pulumi.Output.concat('serviceAccount:', service_account),
+    )
+
+    # test-web bucket
+    bucket_member(
+        f'hail-service-account-{access_level}-test-web-bucket-admin',
+        bucket=test_web_bucket.name,
+        role='roles/storage.admin',
+        member=pulumi.Output.concat('serviceAccount:', service_account),
+    )
 
 # For view + create permissions, we conceptually should only have to grant the
 # roles/storage.objectViewer and roles/storage.objectCreator roles. However, Hail /
@@ -392,94 +408,6 @@ view_create_role = gcp.projects.IAMCustomRole(
     role_id='storageObjectViewCreate',
     title='Storage Object Viewer + Creator',
     opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
-)
-
-# test bucket
-bucket_member(
-    'hail-service-account-test-test-bucket-admin',
-    bucket=test_bucket.name,
-    role='roles/storage.admin',
-    member=pulumi.Output.concat('serviceAccount:', hail_service_account_test),
-)
-
-bucket_member(
-    'hail-service-account-standard-test-bucket-admin',
-    bucket=test_bucket.name,
-    role='roles/storage.admin',
-    member=pulumi.Output.concat('serviceAccount:', hail_service_account_standard),
-)
-
-bucket_member(
-    'hail-service-account-full-test-bucket-admin',
-    bucket=test_bucket.name,
-    role='roles/storage.admin',
-    member=pulumi.Output.concat('serviceAccount:', hail_service_account_full),
-)
-
-# test-tmp bucket
-bucket_member(
-    'hail-service-account-test-test-tmp-bucket-admin',
-    bucket=test_tmp_bucket.name,
-    role='roles/storage.admin',
-    member=pulumi.Output.concat('serviceAccount:', hail_service_account_test),
-)
-
-bucket_member(
-    'hail-service-account-standard-test-tmp-bucket-admin',
-    bucket=test_tmp_bucket.name,
-    role='roles/storage.admin',
-    member=pulumi.Output.concat('serviceAccount:', hail_service_account_standard),
-)
-
-bucket_member(
-    'hail-service-account-full-test-tmp-bucket-admin',
-    bucket=test_tmp_bucket.name,
-    role='roles/storage.admin',
-    member=pulumi.Output.concat('serviceAccount:', hail_service_account_full),
-)
-
-# test-metadata bucket
-bucket_member(
-    'hail-service-account-test-test-metadata-bucket-admin',
-    bucket=test_metadata_bucket.name,
-    role='roles/storage.admin',
-    member=pulumi.Output.concat('serviceAccount:', hail_service_account_test),
-)
-
-bucket_member(
-    'hail-service-account-standard-test-metadata-bucket-admin',
-    bucket=test_metadata_bucket.name,
-    role='roles/storage.admin',
-    member=pulumi.Output.concat('serviceAccount:', hail_service_account_standard),
-)
-
-bucket_member(
-    'hail-service-account-full-test-metadata-bucket-admin',
-    bucket=test_metadata_bucket.name,
-    role='roles/storage.admin',
-    member=pulumi.Output.concat('serviceAccount:', hail_service_account_full),
-)
-
-# test-web bucket
-bucket_member(
-    'hail-service-account-test-test-web-bucket-admin',
-    bucket=test_web_bucket.name,
-    role='roles/storage.admin',
-    member=pulumi.Output.concat('serviceAccount:', hail_service_account_test),
-)
-
-bucket_member(
-    'hail-service-account-standard-test-web-bucket-admin',
-    bucket=test_web_bucket.name,
-    role='roles/storage.admin',
-    member=pulumi.Output.concat('serviceAccount:', hail_service_account_standard),
-)
-
-bucket_member(
-    'hail-service-account-full-test-web-bucket-admin',
-    bucket=test_web_bucket.name,
-    role='roles/storage.admin',
-    member=pulumi.Output.concat('serviceAccount:', hail_service_account_full),
 )
 
 # main bucket
@@ -599,33 +527,20 @@ gcp.cloudidentity.GroupMembership(
     roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
 )
 
-# Add Hail service accounts to Cromwell access group.
-gcp.cloudidentity.GroupMembership(
-    'hail-service-account-test-cromwell-access',
-    group=CROMWELL_ACCESS_GROUP_ID,
-    preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
-        id=hail_service_account_test,
-    ),
-    roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
-)
-
-gcp.cloudidentity.GroupMembership(
-    'hail-service-account-standard-cromwell-access',
-    group=CROMWELL_ACCESS_GROUP_ID,
-    preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
-        id=hail_service_account_standard,
-    ),
-    roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
-)
-
-gcp.cloudidentity.GroupMembership(
-    'hail-service-account-full-cromwell-access',
-    group=CROMWELL_ACCESS_GROUP_ID,
-    preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
-        id=hail_service_account_full,
-    ),
-    roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
-)
+for access_level, service_account in [
+    ('test', hail_service_account_test),
+    ('standard', hail_service_account_standard),
+    ('full', hail_service_account_full),
+]:
+    # Add Hail service accounts to Cromwell access group.
+    gcp.cloudidentity.GroupMembership(
+        f'hail-service-account-{access_level}-cromwell-access',
+        group=CROMWELL_ACCESS_GROUP_ID,
+        preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
+            id=service_account,
+        ),
+        roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
+    )
 
 # Allow the Cromwell server to launch workflows.
 gcp.projects.IAMBinding(
@@ -634,30 +549,15 @@ gcp.projects.IAMBinding(
     members=[f'serviceAccount:{CROMWELL_RUNNER_ACCOUNT}'],
 )
 
-
-def hail_service_account_id(email: str) -> str:
-    """Returns the service account ID in the Hail project, given an email address."""
-    return f'projects/{HAIL_PROJECT}/serviceAccounts/{email}'
-
-
-# Allow the Cromwell server to run worker VMs using the Hail service accounts.
-gcp.serviceaccount.IAMBinding(
-    'cromwell-runner-hail-service-account-test-user',
-    service_account_id=hail_service_account_id(hail_service_account_test),
-    role='roles/iam.serviceAccountUser',
-    members=[f'serviceAccount:{CROMWELL_RUNNER_ACCOUNT}'],
-)
-
-gcp.serviceaccount.IAMBinding(
-    'cromwell-runner-hail-service-account-standard-user',
-    service_account_id=hail_service_account_id(hail_service_account_standard),
-    role='roles/iam.serviceAccountUser',
-    members=[f'serviceAccount:{CROMWELL_RUNNER_ACCOUNT}'],
-)
-
-gcp.serviceaccount.IAMBinding(
-    'cromwell-runner-hail-service-account-full-user',
-    service_account_id=hail_service_account_id(hail_service_account_full),
-    role='roles/iam.serviceAccountUser',
-    members=[f'serviceAccount:{CROMWELL_RUNNER_ACCOUNT}'],
-)
+for access_level, service_account in [
+    ('test', hail_service_account_test),
+    ('standard', hail_service_account_standard),
+    ('full', hail_service_account_full),
+]:
+    # Allow the Cromwell server to run worker VMs using the Hail service accounts.
+    gcp.serviceaccount.IAMBinding(
+        f'cromwell-runner-hail-service-account-{access_level}-user',
+        service_account_id=f'projects/{HAIL_PROJECT}/serviceAccounts/{service_account}',
+        role='roles/iam.serviceAccountUser',
+        members=[f'serviceAccount:{CROMWELL_RUNNER_ACCOUNT}'],
+    )
