@@ -23,10 +23,18 @@ CROMWELL_RUNNER_ACCOUNT = 'cromwell-runner@cromwell-305305.iam.gserviceaccount.c
 config = pulumi.Config()
 enable_release = config.get_bool('enable_release')
 archive_age = config.get_int('archive_age') or 30
+
 # The Hail service account email addresses associated with the three access levels.
 hail_service_account_test = config.require('hail_service_account_test')
 hail_service_account_standard = config.require('hail_service_account_standard')
 hail_service_account_full = config.require('hail_service_account_full')
+
+hail_service_accounts = {
+    'test': hail_service_account_test,
+    'standard': hail_service_account_standard,
+    'full': hail_service_account_full,
+}
+
 dataset = pulumi.get_stack()
 
 project_id = gcp.organizations.get_project().project_id
@@ -309,11 +317,7 @@ gcp.cloudidentity.GroupMembership(
 # Allow the Hail service accounts to pull images. Note that the global project will
 # refer to the dataset, but the Docker images are stored in the "analysis-runner"
 # and "cpg-common" projects' Artifact Registry repositories.
-for access_level, service_account in [
-    ('test', hail_service_account_test),
-    ('standard', hail_service_account_standard),
-    ('full', hail_service_account_full),
-]:
+for access_level, service_account in hail_service_accounts.items():
     for project in [ANALYSIS_RUNNER_PROJECT, CPG_COMMON_PROJECT]:
         gcp.artifactregistry.RepositoryIamMember(
             f'hail-service-account-{access_level}-images-reader-in-{project}',
@@ -327,11 +331,7 @@ for access_level, service_account in [
 # The bucket used for Hail Batch pipelines.
 hail_bucket = create_bucket(bucket_name('hail'), lifecycle_rules=[undelete_rule])
 
-for access_level, service_account in [
-    ('test', hail_service_account_test),
-    ('standard', hail_service_account_standard),
-    ('full', hail_service_account_full),
-]:
+for access_level, service_account in hail_service_accounts.items():
     # Full access to the Hail Batch bucket.
     bucket_member(
         f'hail-service-account-{access_level}-hail-bucket-admin',
@@ -353,12 +353,7 @@ for access_level, service_account in [
 # - standard: view / create on any "test" or "main" bucket
 # - full: view / create / delete anywhere
 
-
-for access_level, service_account in [
-    ('test', hail_service_account_test),
-    ('standard', hail_service_account_standard),
-    ('full', hail_service_account_full),
-]:
+for access_level, service_account in hail_service_accounts.items():
     # test bucket
     bucket_member(
         f'hail-service-account-{access_level}-test-bucket-admin',
@@ -529,11 +524,7 @@ gcp.cloudidentity.GroupMembership(
 
 # Allow Hail service accounts to start Dataproc clusters. That's only necessary until
 # Hail Query is feature complete.
-for access_level, service_account in [
-    ('test', hail_service_account_test),
-    ('standard', hail_service_account_standard),
-    ('full', hail_service_account_full),
-]:
+for access_level, service_account in hail_service_accounts.items():
     gcp.projects.IAMBinding(
         f'hail-service-account-{access_level}-dataproc-admin',
         project=HAIL_PROJECT,
@@ -565,12 +556,7 @@ for access_level, service_account in [
         members=[pulumi.Output.concat('serviceAccount:', service_account)],
     )
 
-
-for access_level, service_account in [
-    ('test', hail_service_account_test),
-    ('standard', hail_service_account_standard),
-    ('full', hail_service_account_full),
-]:
+for access_level, service_account in hail_service_accounts.items():
     # Add Hail service accounts to Cromwell access group.
     gcp.cloudidentity.GroupMembership(
         f'hail-service-account-{access_level}-cromwell-access',
@@ -588,11 +574,7 @@ gcp.projects.IAMBinding(
     members=[f'serviceAccount:{CROMWELL_RUNNER_ACCOUNT}'],
 )
 
-for access_level, service_account in [
-    ('test', hail_service_account_test),
-    ('standard', hail_service_account_standard),
-    ('full', hail_service_account_full),
-]:
+for access_level, service_account in hail_service_accounts.items():
     # Allow the Cromwell server to run worker VMs using the Hail service accounts.
     gcp.serviceaccount.IAMBinding(
         f'cromwell-runner-hail-service-account-{access_level}-user',
