@@ -597,13 +597,6 @@ def main():  # pylint: disable=too-many-locals
             roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
         )
 
-    # Allow the Cromwell server to launch workflows.
-    gcp.projects.IAMMember(
-        'cromwell-runner-workflow-run-permissions',
-        role='roles/lifesciences.workflowsRunner',
-        member=f'serviceAccount:{CROMWELL_RUNNER_ACCOUNT}',
-    )
-
     for access_level, service_account in cromwell_service_accounts:
         # Allow the Cromwell server to run worker VMs using the Cromwell service accounts.
         gcp.serviceaccount.IAMMember(
@@ -613,6 +606,13 @@ def main():  # pylint: disable=too-many-locals
             ),
             role='roles/iam.serviceAccountUser',
             member=f'serviceAccount:{CROMWELL_RUNNER_ACCOUNT}',
+        )
+
+        # Allow the Cromwell service accounts to run workflows.
+        gcp.projects.IAMMember(
+            f'cromwell-service-account-{access_level}-workflows-runner',
+            role='roles/lifesciences.workflowsRunner',
+            member=pulumi.Output.concat('serviceAccount:', service_account),
         )
 
 
