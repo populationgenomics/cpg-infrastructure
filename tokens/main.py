@@ -42,14 +42,6 @@ def get_token(hail_user: str) -> str:
     return hail_token
 
 
-def get_key(hail_user: str) -> str:
-    """Returns the Hail service account key for the given user."""
-    kube_secret_name = f'{hail_user}-gsa-key'
-    kube_secret = kube_client.read_namespaced_secret(kube_secret_name, 'default')
-    secret_data = kube_secret.data['key.json']
-    return base64.b64decode(secret_data).decode('utf-8')
-
-
 def get_project_id(dataset: str) -> str:
     """Returns the GCP project ID associated with the given dataset."""
     with open(f'../stack/Pulumi.{dataset}.yaml') as f:
@@ -64,7 +56,6 @@ def main():
         for access_level in 'test', 'standard', 'full':
             hail_user = f'{dataset}-{access_level}'
             entries[f'{access_level}Token'] = get_token(hail_user)
-            entries[f'{access_level}Key'] = get_key(hail_user)
         config[dataset] = entries
 
     add_secret('server-config', json.dumps(config))
