@@ -1,5 +1,6 @@
 """Pulumi stack to set up buckets and permission groups."""
 
+import base64
 import pulumi
 import pulumi_gcp as gcp
 
@@ -598,7 +599,8 @@ def main():  # pylint: disable=too-many-locals
         )
 
     for access_level, service_account in cromwell_service_accounts:
-        # Allow the Cromwell server to run worker VMs using the Cromwell service accounts.
+        # Allow the Cromwell server to run worker VMs using the Cromwell service
+        # accounts.
         gcp.serviceaccount.IAMMember(
             f'cromwell-runner-{access_level}-service-account-user',
             service_account_id=pulumi.Output.concat(
@@ -613,6 +615,44 @@ def main():  # pylint: disable=too-many-locals
             f'cromwell-service-account-{access_level}-workflows-runner',
             role='roles/lifesciences.workflowsRunner',
             member=pulumi.Output.concat('serviceAccount:', service_account),
+        )
+
+        # Store the service account key as a secret that's readable by the
+        # analysis-runner.
+        key = gcp.serviceaccount.Key(
+            f'cromwell-service-account-{access_level}-key',
+            service_account_id=service_account,
+        )
+
+        secret = gcp.secretmanager.Secret(
+            f'cromwell-service-account-{access_level}-secret',
+            secret_id=f'{dataset}-cromwell-{access_level}-key',
+            project=ANALYSIS_RUNNER_PROJECT,
+            replication=gcp.secretmanager.SecretReplicationArgs(
+                user_managed=gcp.secretmanager.SecretReplicationUserManagedArgs(
+                    replicas=[
+                        gcp.secretmanager.SecretReplicationUserManagedReplicaArgs(
+                            location='australia-southeast1',
+                        ),
+                    ],
+                ),
+            ),
+        )
+
+        gcp.secretmanager.SecretVersion(
+            f'cromwell-service-account-{access_level}-secret-version',
+            secret=secret.id,
+            secret_data=key.private_key.apply(
+                lambda s: base64.b64decode(s).decode('utf-8')
+            ),
+        )
+
+        gcp.secretmanager.SecretIamBinding(
+            f'cromwell-service-account-{access_level}-secret-accessor',
+            project=ANALYSIS_RUNNER_PROJECT,
+            secret_id=secret.id,
+            role='roles/secretmanager.secretAccessor',
+            members=[f'serviceAccount:{ANALYSIS_RUNNER_SERVICE_ACCOUNT}'],
         )
 
 
