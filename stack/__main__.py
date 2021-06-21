@@ -606,8 +606,21 @@ def main():  # pylint: disable=too-many-locals
         roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
     )
 
-    # Allow Hail service accounts to start Dataproc clusters. That's only necessary until
-    # Hail Query is feature complete.
+    for kind, access_level, service_account in service_accounts:
+        # To use a service account for VMs, accounts need to be allowed to act on their
+        # own behalf ;).
+        project = HAIL_PROJECT if kind == 'hail' else project_id
+        gcp.serviceaccount.IAMMember(
+            f'{kind}-service-account-{access_level}-service-account-user',
+            service_account_id=pulumi.Output.concat(
+                'projects/', project, '/serviceAccounts/', service_account
+            ),
+            role='roles/iam.serviceAccountUser',
+            member=pulumi.Output.concat('serviceAccount:', service_account),
+        )
+
+    # Allow Hail service accounts to start Dataproc clusters. That's only necessary
+    # until Hail Query is feature complete.
     for access_level, service_account in hail_service_accounts:
         gcp.projects.IAMMember(
             f'hail-service-account-{access_level}-dataproc-admin',
@@ -631,18 +644,6 @@ def main():  # pylint: disable=too-many-locals
             member=pulumi.Output.concat('serviceAccount:', service_account),
         )
 
-        # To start a Dataproc cluster using the same service account, the account must be
-        # allowed to act on its own behalf ;).
-        gcp.serviceaccount.IAMMember(
-            f'hail-service-account-{access_level}-service-account-user',
-            service_account_id=pulumi.Output.concat(
-                'projects/', HAIL_PROJECT, '/serviceAccounts/', service_account
-            ),
-            role='roles/iam.serviceAccountUser',
-            member=pulumi.Output.concat('serviceAccount:', service_account),
-        )
-
-    for access_level, service_account in hail_service_accounts:
         # Add Hail service accounts to Cromwell access group.
         gcp.cloudidentity.GroupMembership(
             f'hail-service-account-{access_level}-cromwell-access',
