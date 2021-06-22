@@ -366,28 +366,6 @@ def main():  # pylint: disable=too-many-locals
         member=pulumi.Output.concat('serviceAccount:', WEB_SERVER_SERVICE_ACCOUNT),
     )
 
-    # TODO(@lgruen): remove this once secrets are used for checking memberships.
-    # Allow the analysis-runner to check memberships.
-    gcp.cloudidentity.GroupMembership(
-        'analysis-runner-restricted-member',
-        group=access_group.id,
-        preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
-            id=ANALYSIS_RUNNER_SERVICE_ACCOUNT
-        ),
-        roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
-    )
-
-    # TODO(@lgruen): remove this once secrets are used for checking memberships.
-    # Allow the web server to check memberships.
-    gcp.cloudidentity.GroupMembership(
-        'web-server-restricted-member',
-        group=access_group.id,
-        preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
-            id=WEB_SERVER_SERVICE_ACCOUNT
-        ),
-        roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
-    )
-
     # Allow the access group cache to list memberships.
     gcp.cloudidentity.GroupMembership(
         'access-group-cache-membership',
