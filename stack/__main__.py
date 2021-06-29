@@ -1,6 +1,7 @@
 """Pulumi stack to set up buckets and permission groups."""
 
 import base64
+from typing import Optional
 import pulumi
 import pulumi_gcp as gcp
 
@@ -9,7 +10,6 @@ CUSTOMER_ID = 'C010ys3gt'
 REGION = 'australia-southeast1'
 ANALYSIS_RUNNER_PROJECT = 'analysis-runner'
 CPG_COMMON_PROJECT = 'cpg-common'
-HAIL_PROJECT = 'hail-295901'
 ANALYSIS_RUNNER_SERVICE_ACCOUNT = (
     'analysis-runner-server@analysis-runner.iam.gserviceaccount.com'
 )
@@ -56,30 +56,28 @@ def main():  # pylint: disable=too-many-locals
     hail_service_account_standard = config.require('hail_service_account_standard')
     hail_service_account_full = config.require('hail_service_account_full')
 
-    hail_service_accounts = [
+    service_accounts = {}
+    service_accounts['hail'] = [
         ('test', hail_service_account_test),
         ('standard', hail_service_account_standard),
         ('full', hail_service_account_full),
     ]
 
-    # Create Cromwell service accounts.
-    cromwell_service_accounts = []
-    for access_level in 'test', 'standard', 'full':
-        account = gcp.serviceaccount.Account(
-            f'cromwell-service-account-{access_level}',
-            account_id=f'cromwell-{access_level}',
-            opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
-        )
+    # Create Dataproc and Cromwell service accounts.
+    for kind in 'dataproc', 'cromwell':
+        service_accounts[kind] = []
+        for access_level in 'test', 'standard', 'full':
+            account = gcp.serviceaccount.Account(
+                f'{kind}-service-account-{access_level}',
+                account_id=f'{kind}-{access_level}',
+                opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
+            )
+            service_accounts[kind].append((access_level, account.email))
 
-        cromwell_service_accounts.append((access_level, account.email))
-
-    service_accounts = [
-        ('hail', access_level, service_account)
-        for access_level, service_account in hail_service_accounts
-    ] + [
-        ('cromwell', access_level, service_account)
-        for access_level, service_account in cromwell_service_accounts
-    ]
+    def service_accounts_gen():
+        for kind, values in service_accounts.items():
+            for access_level, service_account in values:
+                yield kind, access_level, service_account
 
     def bucket_name(kind: str) -> str:
         """Returns the bucket name for the given dataset."""
@@ -376,7 +374,7 @@ def main():  # pylint: disable=too-many-locals
         roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
     )
 
-    for kind, access_level, service_account in service_accounts:
+    for kind, access_level, service_account in service_accounts_gen():
         # Allow the service accounts to pull images. Note that the global project will
         # refer to the dataset, but the Docker images are stored in the "analysis-runner"
         # and "cpg-common" projects' Artifact Registry repositories.
@@ -401,7 +399,7 @@ def main():  # pylint: disable=too-many-locals
     # The bucket used for Hail Batch pipelines.
     hail_bucket = create_bucket(bucket_name('hail'), lifecycle_rules=[undelete_rule])
 
-    for access_level, service_account in hail_service_accounts:
+    for access_level, service_account in service_accounts['hail']:
         # Full access to the Hail Batch bucket.
         bucket_member(
             f'hail-service-account-{access_level}-hail-bucket-admin',
@@ -415,7 +413,7 @@ def main():  # pylint: disable=too-many-locals
     # - standard: view / create on any "test" or "main" bucket
     # - full: view / create / delete anywhere
 
-    for kind, access_level, service_account in service_accounts:
+    for kind, access_level, service_account in service_accounts_gen():
         # test bucket
         bucket_member(
             f'{kind}-service-account-{access_level}-test-bucket-admin',
@@ -467,7 +465,7 @@ def main():  # pylint: disable=too-many-locals
         opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
     )
 
-    for kind, access_level, service_account in service_accounts:
+    for kind, access_level, service_account in service_accounts_gen():
         if access_level == 'standard':
             # main bucket
             bucket_member(
@@ -592,41 +590,52 @@ def main():  # pylint: disable=too-many-locals
         roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
     )
 
-    for kind, access_level, service_account in service_accounts:
-        # To use a service account for VMs, accounts need to be allowed to act on their
-        # own behalf ;).
-        project = HAIL_PROJECT if kind == 'hail' else project_id
+    def find_service_account(kind: str, access_level: str) -> Optional[str]:
+        for local_access_level, service_account in service_accounts[kind]:
+            if access_level == local_access_level:
+                return service_account
+        return None
+
+    for access_level, service_account in service_accounts['dataproc']:
+        # Hail Batch service accounts need to be able to act as Dataproc service
+        # accounts to start Dataproc clusters.
         gcp.serviceaccount.IAMMember(
-            f'{kind}-service-account-{access_level}-service-account-user',
+            f'hail-service-account-{access_level}-dataproc-service-account-user',
             service_account_id=pulumi.Output.concat(
-                'projects/', project, '/serviceAccounts/', service_account
+                'projects/', project_id, '/serviceAccounts/', service_account
             ),
             role='roles/iam.serviceAccountUser',
-            member=pulumi.Output.concat('serviceAccount:', service_account),
-        )
-
-    # Allow Hail service accounts to start Dataproc clusters. That's only necessary
-    # until Hail Query is feature complete.
-    for access_level, service_account in hail_service_accounts:
-        gcp.projects.IAMMember(
-            f'hail-service-account-{access_level}-dataproc-admin',
-            project=HAIL_PROJECT,
-            role='roles/dataproc.admin',
-            member=pulumi.Output.concat('serviceAccount:', service_account),
+            member=pulumi.Output.concat(
+                'serviceAccount:', find_service_account('hail', access_level)
+            ),
         )
 
         gcp.projects.IAMMember(
-            f'hail-service-account-{access_level}-dataproc-worker',
-            project=HAIL_PROJECT,
+            f'dataproc-service-account-{access_level}-dataproc-worker',
             role='roles/dataproc.worker',
             member=pulumi.Output.concat('serviceAccount:', service_account),
         )
 
         # Necessary for requester-pays buckets, e.g. to use VEP.
         gcp.projects.IAMMember(
-            f'hail-service-account-{access_level}-serviceusage-consumer',
-            project=HAIL_PROJECT,
+            f'dataproc-service-account-{access_level}-serviceusage-consumer',
             role='roles/serviceusage.serviceUsageConsumer',
+            member=pulumi.Output.concat('serviceAccount:', service_account),
+        )
+
+    for access_level, service_account in service_accounts['hail']:
+        # The Hail service account creates the cluster, specifying the Dataproc service
+        # account as the worker.
+        gcp.projects.IAMMember(
+            f'hail-service-account-{access_level}-dataproc-admin',
+            role='roles/dataproc.admin',
+            member=pulumi.Output.concat('serviceAccount:', service_account),
+        )
+
+        # Worker permissions are necessary to submit jobs.
+        gcp.projects.IAMMember(
+            f'hail-service-account-{access_level}-dataproc-worker',
+            role='roles/dataproc.worker',
             member=pulumi.Output.concat('serviceAccount:', service_account),
         )
 
@@ -640,7 +649,7 @@ def main():  # pylint: disable=too-many-locals
             roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
         )
 
-    for access_level, service_account in cromwell_service_accounts:
+    for access_level, service_account in service_accounts['cromwell']:
         # Allow the Cromwell server to run worker VMs using the Cromwell service
         # accounts.
         gcp.serviceaccount.IAMMember(
@@ -650,6 +659,17 @@ def main():  # pylint: disable=too-many-locals
             ),
             role='roles/iam.serviceAccountUser',
             member=f'serviceAccount:{CROMWELL_RUNNER_ACCOUNT}',
+        )
+
+        # To use a service account for VMs, Cromwell accounts need to be allowed to act
+        # on their own behalf ;).
+        gcp.serviceaccount.IAMMember(
+            f'cromwell-service-account-{access_level}-service-account-user',
+            service_account_id=pulumi.Output.concat(
+                'projects/', project_id, '/serviceAccounts/', service_account
+            ),
+            role='roles/iam.serviceAccountUser',
+            member=pulumi.Output.concat('serviceAccount:', service_account),
         )
 
         # Allow the Cromwell service accounts to run workflows.
