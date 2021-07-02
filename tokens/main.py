@@ -10,8 +10,8 @@ from google.cloud import secretmanager
 
 ALLOWED_REPOS = {
     'ancestry': ['ancestry'],
-    'tob-wgs': ['ancestry', 'joint-calling', 'tob-wgs'],
-    'fewgenomes': ['analysis-runner', 'fewgenomes', 'joint-calling'],
+    'tob-wgs': ['ancestry', 'joint-calling', 'tob-wgs', 'sv-workflows'],
+    'fewgenomes': ['analysis-runner', 'fewgenomes', 'joint-calling', 'sv-workflows'],
     'seqr': ['hail-elasticsearch-pipelines'],
 }
 
