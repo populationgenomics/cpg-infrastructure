@@ -616,12 +616,14 @@ def main():  # pylint: disable=too-many-locals
             member=pulumi.Output.concat('serviceAccount:', service_account),
         )
 
-        # Necessary for requester-pays buckets, e.g. to use VEP.
-        gcp.projects.IAMMember(
-            f'dataproc-service-account-{access_level}-serviceusage-consumer',
-            role='roles/serviceusage.serviceUsageConsumer',
-            member=pulumi.Output.concat('serviceAccount:', service_account),
-        )
+    for kind in 'dataproc', 'cromwell':
+        for access_level, service_account in service_accounts[kind]:
+            # Necessary for requester-pays buckets, e.g. to use VEP,
+            gcp.projects.IAMMember(
+                f'{kind}-service-account-{access_level}-serviceusage-consumer',
+                role='roles/serviceusage.serviceUsageConsumer',
+                member=pulumi.Output.concat('serviceAccount:', service_account),
+            )
 
     for access_level, service_account in service_accounts['hail']:
         # The Hail service account creates the cluster, specifying the Dataproc service
