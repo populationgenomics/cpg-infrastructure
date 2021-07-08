@@ -396,6 +396,13 @@ def main():  # pylint: disable=too-many-locals
             member=pulumi.Output.concat('serviceAccount:', service_account),
         )
 
+        # Allow the usage of requester-pays buckets.
+        gcp.projects.IAMMember(
+            f'{kind}-service-account-{access_level}-serviceusage-consumer',
+            role='roles/serviceusage.serviceUsageConsumer',
+            member=pulumi.Output.concat('serviceAccount:', service_account),
+        )
+
     # The bucket used for Hail Batch pipelines.
     hail_bucket = create_bucket(bucket_name('hail'), lifecycle_rules=[undelete_rule])
 
@@ -615,15 +622,6 @@ def main():  # pylint: disable=too-many-locals
             role='roles/dataproc.worker',
             member=pulumi.Output.concat('serviceAccount:', service_account),
         )
-
-    for kind in 'dataproc', 'cromwell':
-        for access_level, service_account in service_accounts[kind]:
-            # Necessary for requester-pays buckets, e.g. to use VEP,
-            gcp.projects.IAMMember(
-                f'{kind}-service-account-{access_level}-serviceusage-consumer',
-                role='roles/serviceusage.serviceUsageConsumer',
-                member=pulumi.Output.concat('serviceAccount:', service_account),
-            )
 
     for access_level, service_account in service_accounts['hail']:
         # The Hail service account creates the cluster, specifying the Dataproc service
