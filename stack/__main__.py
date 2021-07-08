@@ -364,6 +364,13 @@ def main():  # pylint: disable=too-many-locals
         member=pulumi.Output.concat('serviceAccount:', WEB_SERVER_SERVICE_ACCOUNT),
     )
 
+    # Allow the usage of requester-pays buckets.
+    gcp.projects.IAMMember(
+        f'access-group-serviceusage-consumer',
+        role='roles/serviceusage.serviceUsageConsumer',
+        member=pulumi.Output.concat('group:', access_group.group_key.id),
+    )
+
     # Allow the access group cache to list memberships.
     gcp.cloudidentity.GroupMembership(
         'access-group-cache-membership',
