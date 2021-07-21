@@ -298,15 +298,6 @@ def main():  # pylint: disable=too-many-locals
         member=f'serviceAccount:{WEB_SERVER_SERVICE_ACCOUNT}',
     )
 
-    # TODO(@lgruen): remove this once the web server checks the web access group.
-    gcp.secretmanager.SecretIamMember(
-        f'web-server-access-group-cache-secret-accessor',
-        project=ANALYSIS_RUNNER_PROJECT,
-        secret_id=access_group_cache_secret.id,
-        role='roles/secretmanager.secretAccessor',
-        member=f'serviceAccount:{WEB_SERVER_SERVICE_ACCOUNT}',
-    )
-
     listing_role = gcp.projects.IAMCustomRole(
         'storage-listing-role',
         description='Allows listing of storage objects',
