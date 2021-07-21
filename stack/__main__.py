@@ -243,10 +243,10 @@ def main():  # pylint: disable=too-many-locals
     )
 
     gcp.secretmanager.SecretIamMember(
-        f'access-group-cache-secret-version-adder',
+        f'access-group-cache-secret-version-manager',
         project=ANALYSIS_RUNNER_PROJECT,
         secret_id=access_group_cache_secret.id,
-        role='roles/secretmanager.secretVersionAdder',
+        role='roles/secretmanager.secretVersionManager',
         member=f'serviceAccount:{ACCESS_GROUP_CACHE_SERVICE_ACCOUNT}',
     )
 
