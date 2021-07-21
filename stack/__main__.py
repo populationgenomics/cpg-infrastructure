@@ -314,6 +314,13 @@ def main():  # pylint: disable=too-many-locals
     )
 
     add_bucket_permissions(
+        'access-group-upload-bucket-viewer',
+        access_group,
+        upload_bucket,
+        'roles/storage.objectViewer',
+    )
+
+    add_bucket_permissions(
         'access-group-main-metadata-bucket-viewer',
         access_group,
         main_metadata_bucket,
