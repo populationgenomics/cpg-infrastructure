@@ -217,11 +217,27 @@ def main():  # pylint: disable=too-many-locals
         )
 
     access_group = create_group(group_mail('access'))
+    web_access_group = create_group(group_mail('web-access'))
 
-    # This secret is used as a fast cache for checking memberships in the above group.
+    # These secrets are used as a fast cache for checking memberships in the above groups.
     access_group_cache_secret = gcp.secretmanager.Secret(
         f'access-group-cache-secret',
         secret_id=f'{dataset}-access-members-cache',
+        project=ANALYSIS_RUNNER_PROJECT,
+        replication=gcp.secretmanager.SecretReplicationArgs(
+            user_managed=gcp.secretmanager.SecretReplicationUserManagedArgs(
+                replicas=[
+                    gcp.secretmanager.SecretReplicationUserManagedReplicaArgs(
+                        location='australia-southeast1',
+                    ),
+                ],
+            ),
+        ),
+    )
+
+    web_access_group_cache_secret = gcp.secretmanager.Secret(
+        f'web-access-group-cache-secret',
+        secret_id=f'{dataset}-web-access-members-cache',
         project=ANALYSIS_RUNNER_PROJECT,
         replication=gcp.secretmanager.SecretReplicationArgs(
             user_managed=gcp.secretmanager.SecretReplicationUserManagedArgs(
@@ -251,6 +267,22 @@ def main():  # pylint: disable=too-many-locals
     )
 
     gcp.secretmanager.SecretIamMember(
+        f'web-access-group-cache-secret-accessor',
+        project=ANALYSIS_RUNNER_PROJECT,
+        secret_id=web_access_group_cache_secret.id,
+        role='roles/secretmanager.secretAccessor',
+        member=f'serviceAccount:{ACCESS_GROUP_CACHE_SERVICE_ACCOUNT}',
+    )
+
+    gcp.secretmanager.SecretIamMember(
+        f'web-access-group-cache-secret-version-manager',
+        project=ANALYSIS_RUNNER_PROJECT,
+        secret_id=web_access_group_cache_secret.id,
+        role='roles/secretmanager.secretVersionManager',
+        member=f'serviceAccount:{ACCESS_GROUP_CACHE_SERVICE_ACCOUNT}',
+    )
+
+    gcp.secretmanager.SecretIamMember(
         f'analyis-runner-access-group-cache-secret-accessor',
         project=ANALYSIS_RUNNER_PROJECT,
         secret_id=access_group_cache_secret.id,
@@ -258,6 +290,15 @@ def main():  # pylint: disable=too-many-locals
         member=f'serviceAccount:{ANALYSIS_RUNNER_SERVICE_ACCOUNT}',
     )
 
+    gcp.secretmanager.SecretIamMember(
+        f'web-server-web-access-group-cache-secret-accessor',
+        project=ANALYSIS_RUNNER_PROJECT,
+        secret_id=web_access_group_cache_secret.id,
+        role='roles/secretmanager.secretAccessor',
+        member=f'serviceAccount:{WEB_SERVER_SERVICE_ACCOUNT}',
+    )
+
+    # TODO(@lgruen): remove this once the web server checks the web access group.
     gcp.secretmanager.SecretIamMember(
         f'web-server-access-group-cache-secret-accessor',
         project=ANALYSIS_RUNNER_PROJECT,
@@ -385,6 +426,23 @@ def main():  # pylint: disable=too-many-locals
         preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
             id=ACCESS_GROUP_CACHE_SERVICE_ACCOUNT
         ),
+        roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
+    )
+
+    gcp.cloudidentity.GroupMembership(
+        'web-access-group-cache-membership',
+        group=web_access_group.id,
+        preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
+            id=ACCESS_GROUP_CACHE_SERVICE_ACCOUNT
+        ),
+        roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
+    )
+
+    # All members of the access group have web access automatically.
+    gcp.cloudidentity.GroupMembership(
+        'web-access-group-access-group-membership',
+        group=web_access_group.id,
+        preferred_member_key=access_group.group_key,
         roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
     )
 
