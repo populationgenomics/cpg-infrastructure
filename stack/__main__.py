@@ -317,6 +317,13 @@ def main():  # pylint: disable=too-many-locals
         member=pulumi.Output.concat('group:', access_group.group_key.id),
     )
 
+    # Grant visibility to Dataproc utilization metrics etc.
+    gcp.projects.IAMMember(
+        'project-monitoring-viewer',
+        role='roles/monitoring.viewer',
+        member=pulumi.Output.concat('group:', access_group.group_key.id),
+    )
+
     add_bucket_permissions(
         'access-group-test-bucket-admin',
         access_group,
