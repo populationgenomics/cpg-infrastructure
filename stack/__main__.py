@@ -22,6 +22,7 @@ NOTEBOOKS_PROJECT = 'notebooks-314505'
 # cromwell-submission-access@populationgenomics.org.au
 CROMWELL_ACCESS_GROUP_ID = 'groups/03cqmetx2922fyu'
 CROMWELL_RUNNER_ACCOUNT = 'cromwell-runner@cromwell-305305.iam.gserviceaccount.com'
+SAMPLE_METADATA_PROJECT = 'sample-metadata'
 
 
 def main():  # pylint: disable=too-many-locals
@@ -785,6 +786,17 @@ def main():  # pylint: disable=too-many-locals
             secret_id=secret.id,
             role='roles/secretmanager.secretAccessor',
             member=f'serviceAccount:{ANALYSIS_RUNNER_SERVICE_ACCOUNT}',
+        )
+
+    for kind, access_level, service_account in service_accounts_gen():
+        # Give hail / dataproc / cromwell access to sample-metadata cloud run service
+        gcp.cloudrun.IamMember(
+            f'sample-metadata-service-account-{kind}-{access_level}-invoker',
+            location=REGION,
+            project=SAMPLE_METADATA_PROJECT,
+            service='sample-metadata-api',
+            role='roles/run.invoker',
+            member=pulumi.Output.concat('serviceAccount:', service_account),
         )
 
 
