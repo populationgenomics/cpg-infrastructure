@@ -459,6 +459,18 @@ def main():  # pylint: disable=too-many-locals
                 member=pulumi.Output.concat('serviceAccount:', service_account),
             )
 
+        # Allow non-test service accounts to write images to the "cpg-common" Artifact
+        # Registry repository.
+        if access_level != 'test':
+            gcp.artifactregistry.RepositoryIamMember(
+                f'{kind}-service-account-{access_level}-images-writer-in-cpg-common',
+                project=CPG_COMMON_PROJECT,
+                location=REGION,
+                repository='images',
+                role='roles/artifactregistry.writer',
+                member=pulumi.Output.concat('serviceAccount:', service_account),
+            )
+
         # Read access to reference data.
         bucket_member(
             f'{kind}-service-account-{access_level}-reference-bucket-viewer',
