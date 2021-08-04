@@ -426,6 +426,7 @@ def main():  # pylint: disable=too-many-locals
             id=ACCESS_GROUP_CACHE_SERVICE_ACCOUNT
         ),
         roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
+        opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
     )
 
     gcp.cloudidentity.GroupMembership(
@@ -435,6 +436,7 @@ def main():  # pylint: disable=too-many-locals
             id=ACCESS_GROUP_CACHE_SERVICE_ACCOUNT
         ),
         roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
+        opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
     )
 
     # All members of the access group have web access automatically.
@@ -443,6 +445,7 @@ def main():  # pylint: disable=too-many-locals
         group=web_access_group.id,
         preferred_member_key=access_group.group_key,
         roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
+        opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
     )
 
     for kind, access_level, service_account in service_accounts_gen():
@@ -678,6 +681,7 @@ def main():  # pylint: disable=too-many-locals
             id=notebook_account.email
         ),
         roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
+        opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
     )
 
     def find_service_account(kind: str, access_level: str) -> Optional[str]:
@@ -730,6 +734,7 @@ def main():  # pylint: disable=too-many-locals
                 id=service_account,
             ),
             roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
+            opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
         )
 
     for access_level, service_account in service_accounts['cromwell']:
