@@ -43,6 +43,16 @@ can be brought up using Pulumi.
      pulumi config set archive_age 90
      ```
 
+   - If this dataset requires access to other datasets, this can be specified through the optional `depends_on` config setting.
+
+     **Note:** Before adding a dependency, make sure that it's okay to grant everybody who has access to `<dataset>` these implicit permissions to dependent datasets.
+
+     ```shell
+     pulumi config set depends_on '["thousand-genomes", "hgdp"]'
+     ```
+
+     This will grant read permissions to the `test` / `main` buckets of those dependencies, based on the access level of the service account. This can for example be useful for joint-calling multiple datasets.
+
 1. Deploy the stack:
 
    ```shell
