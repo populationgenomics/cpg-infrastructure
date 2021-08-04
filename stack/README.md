@@ -4,19 +4,25 @@ The buckets and permission groups as described in the [storage policies](https:/
 can be brought up using Pulumi.
 
 1. Create a new GCP project for the stack, corresponding to `$PROJECT` below.
-1. Configure the Pulumi stack options:
+1. [Set a billing budget](https://github.com/populationgenomics/gcp-cost-control#add-billing-budgets) for the GCP project.
+1. Create `<dataset>-test`, `<dataset>-standard`, and `<dataset>-full` [service accounts](https://auth.hail.populationgenomics.org.au/users) in Hail Batch (check "Service Account", don't set an email address). Associate them with a new `<dataset>` Hail Batch [billing project](https://batch.hail.populationgenomics.org.au/billing_projects).
+1. Configure the Pulumi stack options, either by following the following steps or using an existing `Pulumi.<dataset>.yaml` file as a template:
 
    - See this [issue](https://github.com/hashicorp/terraform-provider-google/issues/7477)
      regarding the use of the `user_project_override` and `billing_project`
      options below.
-   - Retrieve the Hail service account emails from the Kubernetes secret:
-     `kubectl get secret $USERNAME-gsa-key -o json | jq '.data | map_values(@base64d)'`
+   - Retrieve the Hail service account emails from the Kubernetes secret (look for `client_email`):
+
+     ```bash
+     for access_level in test standard full; do kubectl get secret $DATASET-$access_level-gsa-key -o json | jq '.data | map_values(@base64d)'; done
+     ```
 
    ```shell
    cd stack
    gcloud auth application-default login
+   export PULUMI_CONFIG_PASSPHRASE=
    pulumi login gs://cpg-pulumi-state
-   pulumi stack init $STACK
+   pulumi stack init $DATASET
    pulumi config set gcp:project $PROJECT
    pulumi config set gcp:billing_project $PROJECT
    pulumi config set gcp:user_project_override true
@@ -46,3 +52,5 @@ can be brought up using Pulumi.
    pip3 install -r requirements.txt
    PULUMI_CONFIG_PASSPHRASE= pulumi up  # empty passphrase
    ```
+
+1. Add users to the `<dataset>-access@populationgenomics.org.au` Google Group to enable access through the analysis-runner. To be able to see Hail Batch logs for analysis-runner invocations, users also need to be added to the `dataset` Hail Batch billing project.
