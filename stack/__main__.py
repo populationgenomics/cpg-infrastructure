@@ -652,14 +652,16 @@ def main():  # pylint: disable=too-many-locals
 
         # Allow read access to the test / main bucket for datasets we depend on.
         for dependency in config.get_object('depends_on') or ():
-            dependency_bucket_type = 'test' if access_level == 'test' else 'main'
-            # dependency bucket
-            bucket_member(
-                f'{kind}-service-account-{access_level}-{dependency}-{dependency_bucket_type}-bucket-viewer',
-                bucket=f'cpg-{dependency}-{dependency_bucket_type}',
-                role='roles/storage.objectViewer',
-                member=pulumi.Output.concat('serviceAccount:', service_account),
+            dependency_bucket_types = (
+                ('test',) if access_level == 'test' else ('main', 'upload')
             )
+            for bucket_type in dependency_bucket_types:
+                bucket_member(
+                    f'{kind}-service-account-{access_level}-{dependency}-{bucket_type}-bucket-viewer',
+                    bucket=f'cpg-{dependency}-{bucket_type}',
+                    role='roles/storage.objectViewer',
+                    member=pulumi.Output.concat('serviceAccount:', service_account),
+                )
 
     # Notebook permissions
     notebook_account = gcp.serviceaccount.Account(
