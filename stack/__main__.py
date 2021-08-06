@@ -113,22 +113,27 @@ def main():  # pylint: disable=too-many-locals
         ),
     )
 
-    upload_account = gcp.serviceaccount.Account(
-        'upload-service-account',
-        account_id='upload',
-        display_name='upload',
+    main_upload_account = gcp.serviceaccount.Account(
+        'main-upload-service-account',
+        account_id='main-upload',
+        display_name='main-upload',
         opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
     )
 
-    upload_bucket = create_bucket(
-        bucket_name('upload'), lifecycle_rules=[undelete_rule]
+    main_upload_bucket = create_bucket(
+        bucket_name('main-upload'), lifecycle_rules=[undelete_rule]
     )
 
+    test_upload_bucket = create_bucket(
+        bucket_name('test-upload'), lifecycle_rules=[undelete_rule]
+    )
+
+    # Grant admin permissions as composite uploads need to delete temporary files.
     bucket_member(
-        'upload-service-account-upload-bucket-creator',
-        bucket=upload_bucket.name,
-        role='roles/storage.objectCreator',
-        member=pulumi.Output.concat('serviceAccount:', upload_account.email),
+        'main-upload-service-account-main-upload-bucket-creator',
+        bucket=main_upload_bucket.name,
+        role='roles/storage.admin',
+        member=pulumi.Output.concat('serviceAccount:', main_upload_account.email),
     )
 
     archive_bucket = create_bucket(
@@ -333,6 +338,13 @@ def main():  # pylint: disable=too-many-locals
     )
 
     add_bucket_permissions(
+        'access-group-test-upload-bucket-admin',
+        access_group,
+        test_upload_bucket,
+        'roles/storage.admin',
+    )
+
+    add_bucket_permissions(
         'access-group-test-tmp-bucket-admin',
         access_group,
         test_tmp_bucket,
@@ -354,9 +366,9 @@ def main():  # pylint: disable=too-many-locals
     )
 
     add_bucket_permissions(
-        'access-group-upload-bucket-viewer',
+        'access-group-main-upload-bucket-viewer',
         access_group,
-        upload_bucket,
+        main_upload_bucket,
         'roles/storage.objectViewer',
     )
 
@@ -501,16 +513,42 @@ def main():  # pylint: disable=too-many-locals
             member=pulumi.Output.concat('serviceAccount:', service_account),
         )
 
+    # For view + create permissions, we conceptually should only have to grant the
+    # roles/storage.objectViewer and roles/storage.objectCreator roles. However, Hail /
+    # Spark access GCS buckets in a way that also requires storage.buckets.get permissions,
+    # which is typically only included in the legacy roles. We therefore create a custom
+    # role here.
+    view_create_role = gcp.projects.IAMCustomRole(
+        'storage-view-create-role',
+        description='Allows viewing and creation of storage objects',
+        permissions=[
+            'storage.objects.list',
+            'storage.objects.get',
+            'storage.objects.create',
+            'storage.buckets.get',
+        ],
+        role_id='storageObjectViewCreate',
+        title='Storage Object Viewer + Creator',
+        opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
+    )
+
     # Permissions increase by access level:
     # - test: view / create on any "test" bucket
     # - standard: view / create on any "test" or "main" bucket
     # - full: view / create / delete anywhere
-
     for kind, access_level, service_account in service_accounts_gen():
         # test bucket
         bucket_member(
             f'{kind}-service-account-{access_level}-test-bucket-admin',
             bucket=test_bucket.name,
+            role='roles/storage.admin',
+            member=pulumi.Output.concat('serviceAccount:', service_account),
+        )
+
+        # test-upload bucket
+        bucket_member(
+            f'{kind}-service-account-{access_level}-test-upload-bucket-admin',
+            bucket=test_upload_bucket.name,
             role='roles/storage.admin',
             member=pulumi.Output.concat('serviceAccount:', service_account),
         )
@@ -539,32 +577,20 @@ def main():  # pylint: disable=too-many-locals
             member=pulumi.Output.concat('serviceAccount:', service_account),
         )
 
-    # For view + create permissions, we conceptually should only have to grant the
-    # roles/storage.objectViewer and roles/storage.objectCreator roles. However, Hail /
-    # Spark access GCS buckets in a way that also requires storage.buckets.get permissions,
-    # which is typically only included in the legacy roles. We therefore create a custom
-    # role here.
-    view_create_role = gcp.projects.IAMCustomRole(
-        'storage-view-create-role',
-        description='Allows viewing and creation of storage objects',
-        permissions=[
-            'storage.objects.list',
-            'storage.objects.get',
-            'storage.objects.create',
-            'storage.buckets.get',
-        ],
-        role_id='storageObjectViewCreate',
-        title='Storage Object Viewer + Creator',
-        opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
-    )
-
-    for kind, access_level, service_account in service_accounts_gen():
         if access_level == 'standard':
             # main bucket
             bucket_member(
                 f'{kind}-service-account-standard-main-bucket-view-create',
                 bucket=main_bucket.name,
                 role=view_create_role.name,
+                member=pulumi.Output.concat('serviceAccount:', service_account),
+            )
+
+            # main-upload bucket
+            bucket_member(
+                f'{kind}-service-account-standard-main-upload-bucket-viewer',
+                bucket=main_upload_bucket.name,
+                role='roles/storage.objectViewer',
                 member=pulumi.Output.concat('serviceAccount:', service_account),
             )
 
@@ -601,6 +627,14 @@ def main():  # pylint: disable=too-many-locals
                 member=pulumi.Output.concat('serviceAccount:', service_account),
             )
 
+            # main-upload bucket
+            bucket_member(
+                f'{kind}-service-account-full-main-upload-bucket-admin',
+                bucket=main_upload_bucket.name,
+                role='roles/storage.admin',
+                member=pulumi.Output.concat('serviceAccount:', service_account),
+            )
+
             # main-tmp bucket
             bucket_member(
                 f'{kind}-service-account-full-main-tmp-bucket-admin',
@@ -625,14 +659,6 @@ def main():  # pylint: disable=too-many-locals
                 member=pulumi.Output.concat('serviceAccount:', service_account),
             )
 
-            # upload bucket
-            bucket_member(
-                f'{kind}-service-account-full-upload-bucket-admin',
-                bucket=upload_bucket.name,
-                role='roles/storage.admin',
-                member=pulumi.Output.concat('serviceAccount:', service_account),
-            )
-
             # archive bucket
             bucket_member(
                 f'{kind}-service-account-full-archive-bucket-admin',
@@ -653,7 +679,9 @@ def main():  # pylint: disable=too-many-locals
         # Allow read access to the test / main bucket for datasets we depend on.
         for dependency in config.get_object('depends_on') or ():
             dependency_bucket_types = (
-                ('test',) if access_level == 'test' else ('main', 'upload')
+                ('test', 'test-upload')
+                if access_level == 'test'
+                else ('main', 'main-upload')
             )
             for bucket_type in dependency_bucket_types:
                 bucket_member(
