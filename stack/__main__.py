@@ -225,6 +225,12 @@ def main():  # pylint: disable=too-many-locals
     access_group = create_group(group_mail('access'))
     web_access_group = create_group(group_mail('web-access'))
 
+    secretmanager = gcp.projects.Service(
+        'secretmanager-service',
+        service='secretmanager.googleapis.com',
+        disable_on_destroy=False,
+    )
+
     # These secrets are used as a fast cache for checking memberships in the above groups.
     access_group_cache_secret = gcp.secretmanager.Secret(
         'access-group-cache-secret',
@@ -238,6 +244,7 @@ def main():  # pylint: disable=too-many-locals
                 ],
             ),
         ),
+        opts=pulumi.resource.ResourceOptions(depends_on=[secretmanager]),
     )
 
     web_access_group_cache_secret = gcp.secretmanager.Secret(
@@ -252,6 +259,7 @@ def main():  # pylint: disable=too-many-locals
                 ],
             ),
         ),
+        opts=pulumi.resource.ResourceOptions(depends_on=[secretmanager]),
     )
 
     gcp.secretmanager.SecretIamMember(
