@@ -226,6 +226,78 @@ def main():  # pylint: disable=too-many-locals
     web_access_group = create_group(group_mail('web-access'))
 
     # These secrets are used as a fast cache for checking memberships in the above groups.
+    access_group_cache_secret = gcp.secretmanager.Secret(
+        'access-group-cache-secret',
+        secret_id=f'{dataset}-access-members-cache',
+        replication=gcp.secretmanager.SecretReplicationArgs(
+            user_managed=gcp.secretmanager.SecretReplicationUserManagedArgs(
+                replicas=[
+                    gcp.secretmanager.SecretReplicationUserManagedReplicaArgs(
+                        location='australia-southeast1',
+                    ),
+                ],
+            ),
+        ),
+    )
+
+    web_access_group_cache_secret = gcp.secretmanager.Secret(
+        'web-access-group-cache-secret',
+        secret_id=f'{dataset}-web-access-members-cache',
+        replication=gcp.secretmanager.SecretReplicationArgs(
+            user_managed=gcp.secretmanager.SecretReplicationUserManagedArgs(
+                replicas=[
+                    gcp.secretmanager.SecretReplicationUserManagedReplicaArgs(
+                        location='australia-southeast1',
+                    ),
+                ],
+            ),
+        ),
+    )
+
+    gcp.secretmanager.SecretIamMember(
+        'access-group-cache-secret-accessor',
+        secret_id=access_group_cache_secret.id,
+        role='roles/secretmanager.secretAccessor',
+        member=f'serviceAccount:{ACCESS_GROUP_CACHE_SERVICE_ACCOUNT}',
+    )
+
+    gcp.secretmanager.SecretIamMember(
+        'access-group-cache-secret-version-manager',
+        secret_id=access_group_cache_secret.id,
+        role='roles/secretmanager.secretVersionManager',
+        member=f'serviceAccount:{ACCESS_GROUP_CACHE_SERVICE_ACCOUNT}',
+    )
+
+    gcp.secretmanager.SecretIamMember(
+        'web-access-group-cache-secret-accessor',
+        secret_id=web_access_group_cache_secret.id,
+        role='roles/secretmanager.secretAccessor',
+        member=f'serviceAccount:{ACCESS_GROUP_CACHE_SERVICE_ACCOUNT}',
+    )
+
+    gcp.secretmanager.SecretIamMember(
+        'web-access-group-cache-secret-version-manager',
+        secret_id=web_access_group_cache_secret.id,
+        role='roles/secretmanager.secretVersionManager',
+        member=f'serviceAccount:{ACCESS_GROUP_CACHE_SERVICE_ACCOUNT}',
+    )
+
+    gcp.secretmanager.SecretIamMember(
+        'analyis-runner-access-group-cache-secret-accessor',
+        secret_id=access_group_cache_secret.id,
+        role='roles/secretmanager.secretAccessor',
+        member=f'serviceAccount:{ANALYSIS_RUNNER_SERVICE_ACCOUNT}',
+    )
+
+    gcp.secretmanager.SecretIamMember(
+        'web-server-web-access-group-cache-secret-accessor',
+        secret_id=web_access_group_cache_secret.id,
+        role='roles/secretmanager.secretAccessor',
+        member=f'serviceAccount:{WEB_SERVER_SERVICE_ACCOUNT}',
+    )
+
+    # TODO(@lgruen): remove these legacy objects once services have switched over to the
+    # new secrets.
     legacy_access_group_cache_secret = (  # pylint: disable=invalid-name
         gcp.secretmanager.Secret(
             'legacy-access-group-cache-secret',
@@ -239,9 +311,6 @@ def main():  # pylint: disable=too-many-locals
                         ),
                     ],
                 ),
-            ),
-            opts=pulumi.resource.ResourceOptions(
-                aliases=[pulumi.resource.Alias(name='access-group-cache-secret')]
             ),
         )
     )
@@ -260,9 +329,6 @@ def main():  # pylint: disable=too-many-locals
                     ],
                 ),
             ),
-            opts=pulumi.resource.ResourceOptions(
-                aliases=[pulumi.resource.Alias(name='web-access-group-cache-secret')]
-            ),
         )
     )
 
@@ -272,9 +338,6 @@ def main():  # pylint: disable=too-many-locals
         secret_id=legacy_access_group_cache_secret.id,
         role='roles/secretmanager.secretAccessor',
         member=f'serviceAccount:{ACCESS_GROUP_CACHE_SERVICE_ACCOUNT}',
-        opts=pulumi.resource.ResourceOptions(
-            aliases=[pulumi.resource.Alias(name='access-group-cache-secret-accessor')]
-        ),
     )
 
     gcp.secretmanager.SecretIamMember(
@@ -283,11 +346,6 @@ def main():  # pylint: disable=too-many-locals
         secret_id=legacy_access_group_cache_secret.id,
         role='roles/secretmanager.secretVersionManager',
         member=f'serviceAccount:{ACCESS_GROUP_CACHE_SERVICE_ACCOUNT}',
-        opts=pulumi.resource.ResourceOptions(
-            aliases=[
-                pulumi.resource.Alias(name='access-group-cache-secret-version-manager')
-            ]
-        ),
     )
 
     gcp.secretmanager.SecretIamMember(
@@ -296,11 +354,6 @@ def main():  # pylint: disable=too-many-locals
         secret_id=legacy_web_access_group_cache_secret.id,
         role='roles/secretmanager.secretAccessor',
         member=f'serviceAccount:{ACCESS_GROUP_CACHE_SERVICE_ACCOUNT}',
-        opts=pulumi.resource.ResourceOptions(
-            aliases=[
-                pulumi.resource.Alias(name='web-access-group-cache-secret-accessor')
-            ]
-        ),
     )
 
     gcp.secretmanager.SecretIamMember(
@@ -309,13 +362,6 @@ def main():  # pylint: disable=too-many-locals
         secret_id=legacy_web_access_group_cache_secret.id,
         role='roles/secretmanager.secretVersionManager',
         member=f'serviceAccount:{ACCESS_GROUP_CACHE_SERVICE_ACCOUNT}',
-        opts=pulumi.resource.ResourceOptions(
-            aliases=[
-                pulumi.resource.Alias(
-                    name='web-access-group-cache-secret-version-manager'
-                )
-            ]
-        ),
     )
 
     gcp.secretmanager.SecretIamMember(
@@ -324,13 +370,6 @@ def main():  # pylint: disable=too-many-locals
         secret_id=legacy_access_group_cache_secret.id,
         role='roles/secretmanager.secretAccessor',
         member=f'serviceAccount:{ANALYSIS_RUNNER_SERVICE_ACCOUNT}',
-        opts=pulumi.resource.ResourceOptions(
-            aliases=[
-                pulumi.resource.Alias(
-                    name='analyis-runner-access-group-cache-secret-accessor'
-                )
-            ]
-        ),
     )
 
     gcp.secretmanager.SecretIamMember(
@@ -339,13 +378,6 @@ def main():  # pylint: disable=too-many-locals
         secret_id=legacy_web_access_group_cache_secret.id,
         role='roles/secretmanager.secretAccessor',
         member=f'serviceAccount:{WEB_SERVER_SERVICE_ACCOUNT}',
-        opts=pulumi.resource.ResourceOptions(
-            aliases=[
-                pulumi.resource.Alias(
-                    name='web-server-web-access-group-cache-secret-accessor'
-                )
-            ]
-        ),
     )
 
     listing_role = gcp.projects.IAMCustomRole(
