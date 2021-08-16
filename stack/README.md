@@ -65,7 +65,7 @@ can be brought up using Pulumi.
 
 1. Add users to the `<dataset>-access@populationgenomics.org.au` Google Group to enable access through the analysis-runner. To be able to see Hail Batch logs for analysis-runner invocations, users also need to be added to the `<dataset>` Hail Batch billing project.
 
-1. Follow the instructions in [tokens](../tokens) to include the new dataset in the analysis-runner server config.
+1. Add a `<dataset>` to `ALLOWED_REPOS` in [tokens](../tokens) and follow the instructions to update the analysis-runner server config.
 
 ## Updating all stacks
 
