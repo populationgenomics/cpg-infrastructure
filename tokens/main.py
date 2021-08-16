@@ -9,10 +9,12 @@ from google.cloud import secretmanager
 
 
 ALLOWED_REPOS = {
+    'acute-care': [],
     'ancestry': ['ancestry'],
-    'tob-wgs': ['ancestry', 'joint-calling', 'tob-wgs', 'sv-workflows'],
     'fewgenomes': ['analysis-runner', 'fewgenomes', 'joint-calling', 'sv-workflows'],
     'seqr': ['hail-elasticsearch-pipelines'],
+    'thousand-genomes': [],
+    'tob-wgs': ['ancestry', 'joint-calling', 'tob-wgs', 'sv-workflows'],
 }
 
 GCP_PROJECT = 'analysis-runner'
