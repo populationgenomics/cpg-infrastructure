@@ -35,7 +35,15 @@ def main():  # pylint: disable=too-many-locals
 
     dataset = pulumi.get_stack()
 
+    organization = gcp.organizations.get_organization(domain=DOMAIN)
     project_id = gcp.organizations.get_project().project_id
+
+    def org_role_id(id_suffix: str) -> str:
+        return f'{organization.id}/roles/{id_suffix}'
+
+    lister_role_id = org_role_id('StorageLister')
+    viewer_creator_role_id = org_role_id('StorageViewerAndCreator')
+    viewer_role_id = org_role_id('StorageObjectAndBucketViewer')
 
     # The Cloud Resource Manager API is required for the Cloud Identity API.
     cloudresourcemanager = gcp.projects.Service(
@@ -304,22 +312,9 @@ def main():  # pylint: disable=too-many-locals
         member=f'serviceAccount:{WEB_SERVER_SERVICE_ACCOUNT}',
     )
 
-    listing_role = gcp.projects.IAMCustomRole(
-        'storage-listing-role',
-        description='Allows listing of storage objects',
-        permissions=[
-            'storage.objects.list',
-            'storage.buckets.list',
-            'storage.buckets.get',
-        ],
-        role_id='storageObjectLister',
-        title='Storage Object Lister',
-        opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
-    )
-
     gcp.projects.IAMMember(
         'project-buckets-lister',
-        role=listing_role,
+        role=lister_role_id,
         member=pulumi.Output.concat('group:', access_group.group_key.id),
     )
 
@@ -369,21 +364,21 @@ def main():  # pylint: disable=too-many-locals
         'access-group-main-upload-bucket-viewer',
         access_group,
         main_upload_bucket,
-        'roles/storage.objectViewer',
+        viewer_role_id,
     )
 
     add_bucket_permissions(
         'access-group-main-metadata-bucket-viewer',
         access_group,
         main_metadata_bucket,
-        'roles/storage.objectViewer',
+        viewer_role_id,
     )
 
     add_bucket_permissions(
         'access-group-main-web-bucket-viewer',
         access_group,
         main_web_bucket,
-        'roles/storage.objectViewer',
+        viewer_role_id,
     )
 
     if enable_release:
@@ -397,7 +392,7 @@ def main():  # pylint: disable=too-many-locals
             'access-group-release-bucket-viewer',
             access_group,
             release_bucket,
-            'roles/storage.objectViewer',
+            viewer_role_id,
         )
 
         release_access_group = create_group(group_mail('release-access'))
@@ -406,20 +401,20 @@ def main():  # pylint: disable=too-many-locals
             'release-access-group-release-bucket-viewer',
             release_access_group,
             release_bucket,
-            'roles/storage.objectViewer',
+            viewer_role_id,
         )
 
     bucket_member(
         'web-server-test-web-bucket-viewer',
         bucket=test_web_bucket.name,
-        role='roles/storage.objectViewer',
+        role=viewer_role_id,
         member=pulumi.Output.concat('serviceAccount:', WEB_SERVER_SERVICE_ACCOUNT),
     )
 
     bucket_member(
         'web-server-main-web-bucket-viewer',
         bucket=main_web_bucket.name,
-        role='roles/storage.objectViewer',
+        role=viewer_role_id,
         member=pulumi.Output.concat('serviceAccount:', WEB_SERVER_SERVICE_ACCOUNT),
     )
 
@@ -490,7 +485,7 @@ def main():  # pylint: disable=too-many-locals
         bucket_member(
             f'{kind}-service-account-{access_level}-reference-bucket-viewer',
             bucket=REFERENCE_BUCKET_NAME,
-            role='roles/storage.objectViewer',
+            role=viewer_role_id,
             member=pulumi.Output.concat('serviceAccount:', service_account),
         )
 
@@ -512,25 +507,6 @@ def main():  # pylint: disable=too-many-locals
             role='roles/storage.admin',
             member=pulumi.Output.concat('serviceAccount:', service_account),
         )
-
-    # For view + create permissions, we conceptually should only have to grant the
-    # roles/storage.objectViewer and roles/storage.objectCreator roles. However, Hail /
-    # Spark access GCS buckets in a way that also requires storage.buckets.get permissions,
-    # which is typically only included in the legacy roles. We therefore create a custom
-    # role here.
-    view_create_role = gcp.projects.IAMCustomRole(
-        'storage-view-create-role',
-        description='Allows viewing and creation of storage objects',
-        permissions=[
-            'storage.objects.list',
-            'storage.objects.get',
-            'storage.objects.create',
-            'storage.buckets.get',
-        ],
-        role_id='storageObjectViewCreate',
-        title='Storage Object Viewer + Creator',
-        opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
-    )
 
     # Permissions increase by access level:
     # - test: view / create on any "test" bucket
@@ -582,7 +558,7 @@ def main():  # pylint: disable=too-many-locals
             bucket_member(
                 f'{kind}-service-account-standard-main-bucket-view-create',
                 bucket=main_bucket.name,
-                role=view_create_role.name,
+                role=viewer_creator_role_id,
                 member=pulumi.Output.concat('serviceAccount:', service_account),
             )
 
@@ -590,7 +566,7 @@ def main():  # pylint: disable=too-many-locals
             bucket_member(
                 f'{kind}-service-account-standard-main-upload-bucket-viewer',
                 bucket=main_upload_bucket.name,
-                role='roles/storage.objectViewer',
+                role=viewer_role_id,
                 member=pulumi.Output.concat('serviceAccount:', service_account),
             )
 
@@ -598,7 +574,7 @@ def main():  # pylint: disable=too-many-locals
             bucket_member(
                 f'{kind}-service-account-standard-main-tmp-bucket-view-create',
                 bucket=main_tmp_bucket.name,
-                role=view_create_role.name,
+                role=viewer_creator_role_id,
                 member=pulumi.Output.concat('serviceAccount:', service_account),
             )
 
@@ -606,7 +582,7 @@ def main():  # pylint: disable=too-many-locals
             bucket_member(
                 f'{kind}-service-account-standard-main-metadata-bucket-view-create',
                 bucket=main_metadata_bucket.name,
-                role=view_create_role.name,
+                role=viewer_creator_role_id,
                 member=pulumi.Output.concat('serviceAccount:', service_account),
             )
 
@@ -614,7 +590,7 @@ def main():  # pylint: disable=too-many-locals
             bucket_member(
                 f'{kind}-service-account-standard-main-web-bucket-view-create',
                 bucket=main_web_bucket.name,
-                role=view_create_role.name,
+                role=viewer_creator_role_id,
                 member=pulumi.Output.concat('serviceAccount:', service_account),
             )
 
@@ -687,22 +663,7 @@ def main():  # pylint: disable=too-many-locals
                 bucket_member(
                     f'{kind}-service-account-{access_level}-{dependency}-{bucket_type}-bucket-viewer',
                     bucket=f'cpg-{dependency}-{bucket_type}',
-                    role='roles/storage.objectViewer',
-                    member=pulumi.Output.concat('serviceAccount:', service_account),
-                )
-
-                # Spark accesses GCS buckets in a way that requires the
-                # storage.buckets.get permission. Unfortunately there are no predefined
-                # non-legacy roles that grant this permission. Usually we'd define a
-                # custom role for this (like listing_role), but the role needs to be in
-                # the bucket resource hierarchy. We don't know the project that a bucket
-                # from a dependent dataset is in, so the role becomes difficult to
-                # specify. Until we can specify custom roles at the organization level,
-                # we work around this issue by using a predefined legacy role.
-                bucket_member(
-                    f'{kind}-service-account-{access_level}-{dependency}-{bucket_type}-bucket-legacy-reader',
-                    bucket=f'cpg-{dependency}-{bucket_type}',
-                    role='roles/storage.legacyBucketReader',
+                    role=viewer_role_id,
                     member=pulumi.Output.concat('serviceAccount:', service_account),
                 )
 
