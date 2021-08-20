@@ -23,6 +23,9 @@ NOTEBOOKS_PROJECT = 'notebooks-314505'
 CROMWELL_ACCESS_GROUP_ID = 'groups/03cqmetx2922fyu'
 CROMWELL_RUNNER_ACCOUNT = 'cromwell-runner@cromwell-305305.iam.gserviceaccount.com'
 SAMPLE_METADATA_PROJECT = 'sample-metadata'
+SAMPLE_METADATA_API_SERVICE_ACCOUNT = (
+    'sample-metadata-api@sample-metadata.iam.gserviceaccount.com'
+)
 
 
 def main():  # pylint: disable=too-many-locals
@@ -295,77 +298,60 @@ def main():  # pylint: disable=too-many-locals
     )
 
     # These secrets are used as a fast cache for checking memberships in the above groups.
-    access_group_cache_secret = gcp.secretmanager.Secret(
-        'access-group-cache-secret',
-        secret_id=f'{dataset}-access-members-cache',
-        replication=gcp.secretmanager.SecretReplicationArgs(
-            user_managed=gcp.secretmanager.SecretReplicationUserManagedArgs(
-                replicas=[
-                    gcp.secretmanager.SecretReplicationUserManagedReplicaArgs(
-                        location='australia-southeast1',
-                    ),
-                ],
+    access_group_cache_secrets = {}
+    for group_prefix in 'access', 'web-access', 'test', 'standard', 'full':
+        secret = gcp.secretmanager.Secret(
+            f'{group_prefix}-group-cache-secret',
+            secret_id=f'{dataset}-{group_prefix}-members-cache',
+            replication=gcp.secretmanager.SecretReplicationArgs(
+                user_managed=gcp.secretmanager.SecretReplicationUserManagedArgs(
+                    replicas=[
+                        gcp.secretmanager.SecretReplicationUserManagedReplicaArgs(
+                            location='australia-southeast1',
+                        ),
+                    ],
+                ),
             ),
-        ),
-        opts=pulumi.resource.ResourceOptions(depends_on=[secretmanager]),
-    )
+            opts=pulumi.resource.ResourceOptions(depends_on=[secretmanager]),
+        )
 
-    web_access_group_cache_secret = gcp.secretmanager.Secret(
-        'web-access-group-cache-secret',
-        secret_id=f'{dataset}-web-access-members-cache',
-        replication=gcp.secretmanager.SecretReplicationArgs(
-            user_managed=gcp.secretmanager.SecretReplicationUserManagedArgs(
-                replicas=[
-                    gcp.secretmanager.SecretReplicationUserManagedReplicaArgs(
-                        location='australia-southeast1',
-                    ),
-                ],
-            ),
-        ),
-        opts=pulumi.resource.ResourceOptions(depends_on=[secretmanager]),
-    )
+        gcp.secretmanager.SecretIamMember(
+            f'{group_prefix}-group-cache-secret-accessor',
+            secret_id=secret.id,
+            role='roles/secretmanager.secretAccessor',
+            member=f'serviceAccount:{ACCESS_GROUP_CACHE_SERVICE_ACCOUNT}',
+        )
 
-    gcp.secretmanager.SecretIamMember(
-        'access-group-cache-secret-accessor',
-        secret_id=access_group_cache_secret.id,
-        role='roles/secretmanager.secretAccessor',
-        member=f'serviceAccount:{ACCESS_GROUP_CACHE_SERVICE_ACCOUNT}',
-    )
+        gcp.secretmanager.SecretIamMember(
+            f'{group_prefix}-group-cache-secret-version-manager',
+            secret_id=secret.id,
+            role='roles/secretmanager.secretVersionManager',
+            member=f'serviceAccount:{ACCESS_GROUP_CACHE_SERVICE_ACCOUNT}',
+        )
 
-    gcp.secretmanager.SecretIamMember(
-        'access-group-cache-secret-version-manager',
-        secret_id=access_group_cache_secret.id,
-        role='roles/secretmanager.secretVersionManager',
-        member=f'serviceAccount:{ACCESS_GROUP_CACHE_SERVICE_ACCOUNT}',
-    )
-
-    gcp.secretmanager.SecretIamMember(
-        'web-access-group-cache-secret-accessor',
-        secret_id=web_access_group_cache_secret.id,
-        role='roles/secretmanager.secretAccessor',
-        member=f'serviceAccount:{ACCESS_GROUP_CACHE_SERVICE_ACCOUNT}',
-    )
-
-    gcp.secretmanager.SecretIamMember(
-        'web-access-group-cache-secret-version-manager',
-        secret_id=web_access_group_cache_secret.id,
-        role='roles/secretmanager.secretVersionManager',
-        member=f'serviceAccount:{ACCESS_GROUP_CACHE_SERVICE_ACCOUNT}',
-    )
+        access_group_cache_secrets[group_prefix] = secret
 
     gcp.secretmanager.SecretIamMember(
         'analyis-runner-access-group-cache-secret-accessor',
-        secret_id=access_group_cache_secret.id,
+        secret_id=access_group_cache_secrets['access'].id,
         role='roles/secretmanager.secretAccessor',
         member=f'serviceAccount:{ANALYSIS_RUNNER_SERVICE_ACCOUNT}',
     )
 
     gcp.secretmanager.SecretIamMember(
         'web-server-web-access-group-cache-secret-accessor',
-        secret_id=web_access_group_cache_secret.id,
+        secret_id=access_group_cache_secrets['web-access'].id,
         role='roles/secretmanager.secretAccessor',
         member=f'serviceAccount:{WEB_SERVER_SERVICE_ACCOUNT}',
     )
+
+    for group_prefix in 'test', 'standard', 'full':
+        gcp.secretmanager.SecretIamMember(
+            f'sample-metadata-api-{group_prefix}-access-group-cache-secret-accessor',
+            secret_id=access_group_cache_secrets[group_prefix].id,
+            role='roles/secretmanager.secretAccessor',
+            member=f'serviceAccount:{SAMPLE_METADATA_API_SERVICE_ACCOUNT}',
+        )
 
     gcp.projects.IAMMember(
         'project-buckets-lister',
