@@ -38,6 +38,10 @@ def main():  # pylint: disable=too-many-locals
     organization = gcp.organizations.get_organization(domain=DOMAIN)
     project_id = gcp.organizations.get_project().project_id
 
+    dependency_stacks = {}
+    for dependency in config.get_object('depends_on') or ():
+        dependency_stacks[dependency] = pulumi.StackReference(dependency)
+
     def org_role_id(id_suffix: str) -> str:
         return f'{organization.id}/roles/{id_suffix}'
 
@@ -203,7 +207,7 @@ def main():  # pylint: disable=too-many-locals
         bucket_name('main-web'), lifecycle_rules=[undelete_rule]
     )
 
-    def group_mail(kind: str) -> str:
+    def group_mail(dataset: str, kind: str) -> str:
         """Returns the email address of a permissions group."""
         return f'{dataset}-{kind}@{DOMAIN}'
 
@@ -219,6 +223,57 @@ def main():  # pylint: disable=too-many-locals
             opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
         )
 
+    # Create groups for each access level.
+    access_level_groups = {}
+    for access_level in 'test', 'standard', 'full':
+        group = create_group(group_mail(dataset, access_level))
+        access_level_groups[access_level] = group
+
+        # The group provider ID is used by other stacks that depend on this one.
+        group_provider_id_name = f'{access_level}-access-group-id'
+        pulumi.export(group_provider_id_name, group.id)
+
+        # Allow the access group cache to list memberships.
+        gcp.cloudidentity.GroupMembership(
+            f'access-group-cache-{access_level}-access-level-group-membership',
+            group=group.id,
+            preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
+                id=ACCESS_GROUP_CACHE_SERVICE_ACCOUNT
+            ),
+            roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
+            opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
+        )
+
+        # Provide access transitively to datasets we depend on
+        for dependency in config.get_object('depends_on') or ():
+            dependency_group_id = dependency_stacks[dependency].get_output(
+                group_provider_id_name,
+            )
+
+            dependency_group = gcp.cloudidentity.Group.get(
+                f'{dependency}-{access_level}-access-level-group',
+                dependency_group_id,
+            )
+
+            gcp.cloudidentity.GroupMembership(
+                f'{dependency}-{access_level}-access-level-group-membership',
+                group=dependency_group.id,
+                preferred_member_key=group.group_key,
+                roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
+                opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
+            )
+
+    for kind, access_level, service_account in service_accounts_gen():
+        gcp.cloudidentity.GroupMembership(
+            f'{kind}-{access_level}-access-level-group-membership',
+            group=access_level_groups[access_level],
+            preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
+                id=service_account
+            ),
+            roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
+            opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
+        )
+
     def add_bucket_permissions(
         name: str, group: gcp.cloudidentity.Group, bucket: gcp.storage.Bucket, role: str
     ) -> gcp.storage.BucketIAMMember:
@@ -230,8 +285,8 @@ def main():  # pylint: disable=too-many-locals
             member=pulumi.Output.concat('group:', group.group_key.id),
         )
 
-    access_group = create_group(group_mail('access'))
-    web_access_group = create_group(group_mail('web-access'))
+    access_group = create_group(group_mail(dataset, 'access'))
+    web_access_group = create_group(group_mail(dataset, 'web-access'))
 
     secretmanager = gcp.projects.Service(
         'secretmanager-service',
@@ -395,7 +450,7 @@ def main():  # pylint: disable=too-many-locals
             viewer_role_id,
         )
 
-        release_access_group = create_group(group_mail('release-access'))
+        release_access_group = create_group(group_mail(dataset, 'release-access'))
 
         add_bucket_permissions(
             'release-access-group-release-bucket-viewer',
