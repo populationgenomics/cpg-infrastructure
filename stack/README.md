@@ -53,6 +53,8 @@ can be brought up using Pulumi.
 
      This will grant read permissions to the `test` / `main` buckets of those dependencies, based on the access level of the service account. This can for example be useful for joint-calling multiple datasets.
 
+1. Create a PR to get your new `Pulumi.<dataset>.yaml` file reviewed.
+
 1. Deploy the stack:
 
    ```shell
