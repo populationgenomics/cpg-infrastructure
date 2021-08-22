@@ -496,45 +496,45 @@ def main():  # pylint: disable=too-many-locals
         opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
     )
 
-    for kind, access_level, service_account in service_accounts_gen():
+    for access_level, group in access_level_groups.items():
         # Allow the service accounts to pull images. Note that the global project will
         # refer to the dataset, but the Docker images are stored in the "analysis-runner"
         # and "cpg-common" projects' Artifact Registry repositories.
         for project in [ANALYSIS_RUNNER_PROJECT, CPG_COMMON_PROJECT]:
             gcp.artifactregistry.RepositoryIamMember(
-                f'{kind}-service-account-{access_level}-images-reader-in-{project}',
+                f'{access_level}-images-reader-in-{project}',
                 project=project,
                 location=REGION,
                 repository='images',
                 role='roles/artifactregistry.reader',
-                member=pulumi.Output.concat('serviceAccount:', service_account),
+                member=pulumi.Output.concat('group:', group.id),
             )
 
         # Allow non-test service accounts to write images to the "cpg-common" Artifact
         # Registry repository.
         if access_level != 'test':
             gcp.artifactregistry.RepositoryIamMember(
-                f'{kind}-service-account-{access_level}-images-writer-in-cpg-common',
+                f'{access_level}-images-writer-in-cpg-common',
                 project=CPG_COMMON_PROJECT,
                 location=REGION,
                 repository='images',
                 role='roles/artifactregistry.writer',
-                member=pulumi.Output.concat('serviceAccount:', service_account),
+                member=pulumi.Output.concat('group:', group.id),
             )
 
         # Read access to reference data.
         bucket_member(
-            f'{kind}-service-account-{access_level}-reference-bucket-viewer',
+            f'{access_level}-reference-bucket-viewer',
             bucket=REFERENCE_BUCKET_NAME,
             role=viewer_role_id,
-            member=pulumi.Output.concat('serviceAccount:', service_account),
+            member=pulumi.Output.concat('group:', group.id),
         )
 
         # Allow the usage of requester-pays buckets.
         gcp.projects.IAMMember(
-            f'{kind}-service-account-{access_level}-serviceusage-consumer',
+            f'{access_level}-serviceusage-consumer',
             role='roles/serviceusage.serviceUsageConsumer',
-            member=pulumi.Output.concat('serviceAccount:', service_account),
+            member=pulumi.Output.concat('group:', group.id),
         )
 
     # The bucket used for Hail Batch pipelines.
@@ -553,159 +553,144 @@ def main():  # pylint: disable=too-many-locals
     # - test: view / create on any "test" bucket
     # - standard: view / create on any "test" or "main" bucket
     # - full: view / create / delete anywhere
-    for kind, access_level, service_account in service_accounts_gen():
+    for access_level, group in access_level_groups.items():
         # test bucket
         bucket_member(
-            f'{kind}-service-account-{access_level}-test-bucket-admin',
+            f'{access_level}-test-bucket-admin',
             bucket=test_bucket.name,
             role='roles/storage.admin',
-            member=pulumi.Output.concat('serviceAccount:', service_account),
+            member=pulumi.Output.concat('group:', group.id),
         )
 
         # test-upload bucket
         bucket_member(
-            f'{kind}-service-account-{access_level}-test-upload-bucket-admin',
+            f'{access_level}-test-upload-bucket-admin',
             bucket=test_upload_bucket.name,
             role='roles/storage.admin',
-            member=pulumi.Output.concat('serviceAccount:', service_account),
+            member=pulumi.Output.concat('group:', group.id),
         )
 
         # test-tmp bucket
         bucket_member(
-            f'{kind}-service-account-{access_level}-test-tmp-bucket-admin',
+            f'{access_level}-test-tmp-bucket-admin',
             bucket=test_tmp_bucket.name,
             role='roles/storage.admin',
-            member=pulumi.Output.concat('serviceAccount:', service_account),
+            member=pulumi.Output.concat('group:', group.id),
         )
 
         # test-metadata bucket
         bucket_member(
-            f'{kind}-service-account-{access_level}-test-metadata-bucket-admin',
+            f'{access_level}-test-metadata-bucket-admin',
             bucket=test_metadata_bucket.name,
             role='roles/storage.admin',
-            member=pulumi.Output.concat('serviceAccount:', service_account),
+            member=pulumi.Output.concat('group:', group.id),
         )
 
         # test-web bucket
         bucket_member(
-            f'{kind}-service-account-{access_level}-test-web-bucket-admin',
+            f'{access_level}-test-web-bucket-admin',
             bucket=test_web_bucket.name,
             role='roles/storage.admin',
-            member=pulumi.Output.concat('serviceAccount:', service_account),
+            member=pulumi.Output.concat('group:', group.id),
         )
 
         if access_level == 'standard':
             # main bucket
             bucket_member(
-                f'{kind}-service-account-standard-main-bucket-view-create',
+                f'standard-main-bucket-view-create',
                 bucket=main_bucket.name,
                 role=viewer_creator_role_id,
-                member=pulumi.Output.concat('serviceAccount:', service_account),
+                member=pulumi.Output.concat('group:', group.id),
             )
 
             # main-upload bucket
             bucket_member(
-                f'{kind}-service-account-standard-main-upload-bucket-viewer',
+                f'standard-main-upload-bucket-viewer',
                 bucket=main_upload_bucket.name,
                 role=viewer_role_id,
-                member=pulumi.Output.concat('serviceAccount:', service_account),
+                member=pulumi.Output.concat('group:', group.id),
             )
 
             # main-tmp bucket
             bucket_member(
-                f'{kind}-service-account-standard-main-tmp-bucket-view-create',
+                f'standard-main-tmp-bucket-view-create',
                 bucket=main_tmp_bucket.name,
                 role=viewer_creator_role_id,
-                member=pulumi.Output.concat('serviceAccount:', service_account),
+                member=pulumi.Output.concat('group:', group.id),
             )
 
             # main-metadata bucket
             bucket_member(
-                f'{kind}-service-account-standard-main-metadata-bucket-view-create',
+                f'standard-main-metadata-bucket-view-create',
                 bucket=main_metadata_bucket.name,
                 role=viewer_creator_role_id,
-                member=pulumi.Output.concat('serviceAccount:', service_account),
+                member=pulumi.Output.concat('group:', group.id),
             )
 
             # main-web bucket
             bucket_member(
-                f'{kind}-service-account-standard-main-web-bucket-view-create',
+                f'standard-main-web-bucket-view-create',
                 bucket=main_web_bucket.name,
                 role=viewer_creator_role_id,
-                member=pulumi.Output.concat('serviceAccount:', service_account),
+                member=pulumi.Output.concat('group:', group.id),
             )
 
         if access_level == 'full':
             # main bucket
             bucket_member(
-                f'{kind}-service-account-full-main-bucket-admin',
+                f'full-main-bucket-admin',
                 bucket=main_bucket.name,
                 role='roles/storage.admin',
-                member=pulumi.Output.concat('serviceAccount:', service_account),
+                member=pulumi.Output.concat('group:', group.id),
             )
 
             # main-upload bucket
             bucket_member(
-                f'{kind}-service-account-full-main-upload-bucket-admin',
+                f'full-main-upload-bucket-admin',
                 bucket=main_upload_bucket.name,
                 role='roles/storage.admin',
-                member=pulumi.Output.concat('serviceAccount:', service_account),
+                member=pulumi.Output.concat('group:', group.id),
             )
 
             # main-tmp bucket
             bucket_member(
-                f'{kind}-service-account-full-main-tmp-bucket-admin',
+                f'full-main-tmp-bucket-admin',
                 bucket=main_tmp_bucket.name,
                 role='roles/storage.admin',
-                member=pulumi.Output.concat('serviceAccount:', service_account),
+                member=pulumi.Output.concat('group:', group.id),
             )
 
             # main-metadata bucket
             bucket_member(
-                f'{kind}-service-account-full-main-metadata-bucket-admin',
+                f'full-main-metadata-bucket-admin',
                 bucket=main_metadata_bucket.name,
                 role='roles/storage.admin',
-                member=pulumi.Output.concat('serviceAccount:', service_account),
+                member=pulumi.Output.concat('group:', group.id),
             )
 
             # main-web bucket
             bucket_member(
-                f'{kind}-service-account-full-main-web-bucket-admin',
+                f'full-main-web-bucket-admin',
                 bucket=main_web_bucket.name,
                 role='roles/storage.admin',
-                member=pulumi.Output.concat('serviceAccount:', service_account),
+                member=pulumi.Output.concat('group:', group.id),
             )
 
             # archive bucket
             bucket_member(
-                f'{kind}-service-account-full-archive-bucket-admin',
+                f'full-archive-bucket-admin',
                 bucket=archive_bucket.name,
                 role='roles/storage.admin',
-                member=pulumi.Output.concat('serviceAccount:', service_account),
+                member=pulumi.Output.concat('group:', group.id),
             )
 
             # release bucket
             if enable_release:
                 bucket_member(
-                    f'{kind}-service-account-full-release-bucket-admin',
+                    f'full-release-bucket-admin',
                     bucket=release_bucket.name,
                     role='roles/storage.admin',
-                    member=pulumi.Output.concat('serviceAccount:', service_account),
-                )
-
-        # Allow read access to the test / main bucket for datasets we depend on.
-        for dependency in config.get_object('depends_on') or ():
-            dependency_bucket_types = (
-                ('test', 'test-upload')
-                if access_level == 'test'
-                else ('main', 'main-upload')
-            )
-            for bucket_type in dependency_bucket_types:
-                bucket_member(
-                    f'{kind}-service-account-{access_level}-{dependency}-{bucket_type}-bucket-viewer',
-                    bucket=f'cpg-{dependency}-{bucket_type}',
-                    role=viewer_role_id,
-                    member=pulumi.Output.concat('serviceAccount:', service_account),
+                    member=pulumi.Output.concat('group:', group.id),
                 )
 
     # Notebook permissions
@@ -863,15 +848,15 @@ def main():  # pylint: disable=too-many-locals
             member=f'serviceAccount:{ANALYSIS_RUNNER_SERVICE_ACCOUNT}',
         )
 
-    for kind, access_level, service_account in service_accounts_gen():
+    for access_level, group in access_level_groups.items():
         # Give hail / dataproc / cromwell access to sample-metadata cloud run service
         gcp.cloudrun.IamMember(
-            f'sample-metadata-service-account-{kind}-{access_level}-invoker',
+            f'sample-metadata-service-account-{access_level}-invoker',
             location=REGION,
             project=SAMPLE_METADATA_PROJECT,
             service='sample-metadata-api',
             role='roles/run.invoker',
-            member=pulumi.Output.concat('serviceAccount:', service_account),
+            member=pulumi.Output.concat('group:', group.id),
         )
 
 
