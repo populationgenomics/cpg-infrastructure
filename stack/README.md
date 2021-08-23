@@ -11,6 +11,21 @@ can be brought up using Pulumi.
    - See this [issue](https://github.com/hashicorp/terraform-provider-google/issues/7477)
      regarding the use of the `user_project_override` and `billing_project`
      options below.
+
+   - Set the following variables, they'll be useful below:
+
+     ```shell
+     export PROJECT=<gcp-project-id>
+     export DATASET=<dataset>
+     ```
+
+   - Ensure you're in the Hail project, and get the cluster endpoint:
+
+     ```shell
+     gcloud config set project hail-295901
+     gcloud container clusters get-credentials vdc
+     ```
+
    - Retrieve the Hail service account emails from the Kubernetes secret (look for `client_email`):
 
      ```bash
@@ -62,7 +77,8 @@ can be brought up using Pulumi.
    python3 -m venv venv
    source venv/bin/activate
    pip3 install -r requirements.txt
-   PULUMI_CONFIG_PASSPHRASE= pulumi up  # empty passphrase
+   export PULUMI_CONFIG_PASSPHRASE=  # empty passphrase
+   pulumi up
    ```
 
 1. Add users to the `<dataset>-access@populationgenomics.org.au` Google Group to enable access through the analysis-runner. To be able to see Hail Batch logs for analysis-runner invocations, users also need to be added to the `<dataset>` Hail Batch billing project.
