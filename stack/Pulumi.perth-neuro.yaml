@@ -1,0 +1,10 @@
+encryptionsalt: v1:SPQXlVggjxw=:v1:X1sTpViNuyK+Wcom:3GANI8gZOKtk0gG7BklsyHeNU5uVLw==
+config:
+  datasets:customer_id: C010ys3gt
+  datasets:enable_release: "false"
+  datasets:hail_service_account_full: perth-neuro-full-621@hail-295901.iam.gserviceaccount.com
+  datasets:hail_service_account_standard: perth-neuro-standard-174@hail-295901.iam.gserviceaccount.com
+  datasets:hail_service_account_test: perth-neuro-test-746@hail-295901.iam.gserviceaccount.com
+  gcp:billing_project: perth-neuro
+  gcp:project: perth-neuro
+  gcp:user_project_override: "true"

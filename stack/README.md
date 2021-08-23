@@ -58,7 +58,7 @@ can be brought up using Pulumi.
      pulumi config set archive_age 90
      ```
 
-   - If this dataset requires access to other datasets, this can be specified through the optional `depends_on` config setting.
+   - If this dataset requires access to other datasets, this can be specified through the optional `depends_on` config setting. For example, if you want the new `$DATASET` to be a _dependency_ of `seqr`, you would add the `$DATASET` to to the `depends_on` config for seqr.
 
      **Note:** Before adding a dependency, make sure that it's okay to grant everybody who has access to `<dataset>` these implicit permissions to dependent datasets.
 
