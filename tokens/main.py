@@ -46,7 +46,7 @@ def get_token(hail_user: str) -> str:
 
 def get_project_id(dataset: str) -> str:
     """Returns the GCP project ID associated with the given dataset."""
-    with open(f'../stack/Pulumi.{dataset}.yaml') as f:
+    with open(f'../stack/Pulumi.{dataset}.yaml', encoding='utf-8') as f:
         return yaml.safe_load(f)['config']['gcp:project']
 
 
