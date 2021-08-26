@@ -1,0 +1,10 @@
+encryptionsalt: v1:SPQXlVggjxw=:v1:X1sTpViNuyK+Wcom:3GANI8gZOKtk0gG7BklsyHeNU5uVLw==
+config:
+  datasets:customer_id: C010ys3gt
+  datasets:enable_release: "false"
+  datasets:hail_service_account_full: hgdp-full-137@hail-295901.iam.gserviceaccount.com
+  datasets:hail_service_account_standard: hgdp-standard-127@hail-295901.iam.gserviceaccount.com
+  datasets:hail_service_account_test: hgdp-test-558@hail-295901.iam.gserviceaccount.com
+  gcp:billing_project: hgdp-323802
+  gcp:project: hgdp-323802
+  gcp:user_project_override: "true"
