@@ -1,5 +1,6 @@
 """Pulumi stack to set up buckets and permission groups."""
 
+from collections import defaultdict
 import base64
 from typing import Optional
 import pulumi
@@ -26,6 +27,7 @@ SAMPLE_METADATA_PROJECT = 'sample-metadata'
 SAMPLE_METADATA_API_SERVICE_ACCOUNT = (
     'sample-metadata-api@sample-metadata.iam.gserviceaccount.com'
 )
+ACCESS_LEVELS = ('test', 'standard', 'full')
 
 
 def main():  # pylint: disable=too-many-locals
@@ -67,22 +69,17 @@ def main():  # pylint: disable=too-many-locals
         opts=pulumi.resource.ResourceOptions(depends_on=[cloudresourcemanager]),
     )
 
-    # The Hail service account email addresses associated with the three access levels.
-    hail_service_account_test = config.require('hail_service_account_test')
-    hail_service_account_standard = config.require('hail_service_account_standard')
-    hail_service_account_full = config.require('hail_service_account_full')
-
-    service_accounts = {}
-    service_accounts['hail'] = [
-        ('test', hail_service_account_test),
-        ('standard', hail_service_account_standard),
-        ('full', hail_service_account_full),
-    ]
+    service_accounts = defaultdict(list)
+    for kind in 'hail', 'deployment':
+        for access_level in ACCESS_LEVELS:
+            service_account = config.get(f'{kind}_service_account_{access_level}')
+            if service_account:
+                service_accounts[kind].append((access_level, service_account))
 
     # Create Dataproc and Cromwell service accounts.
     for kind in 'dataproc', 'cromwell':
         service_accounts[kind] = []
-        for access_level in 'test', 'standard', 'full':
+        for access_level in ACCESS_LEVELS:
             account = gcp.serviceaccount.Account(
                 f'{kind}-service-account-{access_level}',
                 account_id=f'{kind}-{access_level}',
@@ -228,7 +225,7 @@ def main():  # pylint: disable=too-many-locals
 
     # Create groups for each access level.
     access_level_groups = {}
-    for access_level in 'test', 'standard', 'full':
+    for access_level in ACCESS_LEVELS:
         group = create_group(group_mail(dataset, access_level))
         access_level_groups[access_level] = group
 
@@ -288,7 +285,7 @@ def main():  # pylint: disable=too-many-locals
 
     # These secrets are used as a fast cache for checking memberships in the above groups.
     access_group_cache_secrets = {}
-    for group_prefix in 'access', 'web-access', 'test', 'standard', 'full':
+    for group_prefix in ('access', 'web-access') + ACCESS_LEVELS:
         secret = gcp.secretmanager.Secret(
             f'{group_prefix}-group-cache-secret',
             secret_id=f'{dataset}-{group_prefix}-members-cache',
@@ -334,7 +331,7 @@ def main():  # pylint: disable=too-many-locals
         member=f'serviceAccount:{WEB_SERVER_SERVICE_ACCOUNT}',
     )
 
-    for group_prefix in 'test', 'standard', 'full':
+    for group_prefix in ACCESS_LEVELS:
         gcp.secretmanager.SecretIamMember(
             f'sample-metadata-api-{group_prefix}-access-group-cache-secret-accessor',
             secret_id=access_group_cache_secrets[group_prefix].id,
