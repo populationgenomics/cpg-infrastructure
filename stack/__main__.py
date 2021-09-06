@@ -182,8 +182,13 @@ def main():  # pylint: disable=too-many-locals
         ],
     )
 
+    # TODO(@lgruen): delete after `metadata` data has been moved to `analysis`.
     test_metadata_bucket = create_bucket(
         bucket_name('test-metadata'), lifecycle_rules=[undelete_rule]
+    )
+
+    test_analysis_bucket = create_bucket(
+        bucket_name('test-analysis'), lifecycle_rules=[undelete_rule]
     )
 
     test_web_bucket = create_bucket(
@@ -205,8 +210,13 @@ def main():  # pylint: disable=too-many-locals
         ],
     )
 
+    # TODO(@lgruen): delete after `metadata` data has been moved to `analysis`.
     main_metadata_bucket = create_bucket(
         bucket_name('main-metadata'), lifecycle_rules=[undelete_rule]
+    )
+
+    main_analysis_bucket = create_bucket(
+        bucket_name('main-analysis'), lifecycle_rules=[undelete_rule]
     )
 
     main_web_bucket = create_bucket(
@@ -459,6 +469,13 @@ def main():  # pylint: disable=too-many-locals
     )
 
     bucket_member(
+        'access-group-test-analysis-bucket-admin',
+        bucket=test_analysis_bucket.name,
+        role='roles/storage.admin',
+        member=pulumi.Output.concat('group:', access_group.group_key.id),
+    )
+
+    bucket_member(
         'access-group-test-web-bucket-admin',
         bucket=test_web_bucket.name,
         role='roles/storage.admin',
@@ -475,6 +492,13 @@ def main():  # pylint: disable=too-many-locals
     bucket_member(
         'access-group-main-metadata-bucket-viewer',
         bucket=main_metadata_bucket.name,
+        role=viewer_role_id,
+        member=pulumi.Output.concat('group:', access_group.group_key.id),
+    )
+
+    bucket_member(
+        'access-group-main-analysis-bucket-viewer',
+        bucket=main_analysis_bucket.name,
         role=viewer_role_id,
         member=pulumi.Output.concat('group:', access_group.group_key.id),
     )
@@ -650,6 +674,14 @@ def main():  # pylint: disable=too-many-locals
             member=pulumi.Output.concat('group:', group.group_key.id),
         )
 
+        # test-analysis bucket
+        bucket_member(
+            f'{access_level}-test-analysis-bucket-admin',
+            bucket=test_analysis_bucket.name,
+            role='roles/storage.admin',
+            member=pulumi.Output.concat('group:', group.group_key.id),
+        )
+
         # test-web bucket
         bucket_member(
             f'{access_level}-test-web-bucket-admin',
@@ -691,6 +723,14 @@ def main():  # pylint: disable=too-many-locals
                 member=pulumi.Output.concat('group:', group.group_key.id),
             )
 
+            # main-analysis bucket
+            bucket_member(
+                f'standard-main-analysis-bucket-view-create',
+                bucket=main_analysis_bucket.name,
+                role=viewer_creator_role_id,
+                member=pulumi.Output.concat('group:', group.group_key.id),
+            )
+
             # main-web bucket
             bucket_member(
                 f'standard-main-web-bucket-view-create',
@@ -728,6 +768,14 @@ def main():  # pylint: disable=too-many-locals
             bucket_member(
                 f'full-main-metadata-bucket-admin',
                 bucket=main_metadata_bucket.name,
+                role='roles/storage.admin',
+                member=pulumi.Output.concat('group:', group.group_key.id),
+            )
+
+            # main-analysis bucket
+            bucket_member(
+                f'full-main-analysis-bucket-admin',
+                bucket=main_analysis_bucket.name,
                 role='roles/storage.admin',
                 member=pulumi.Output.concat('group:', group.group_key.id),
             )
