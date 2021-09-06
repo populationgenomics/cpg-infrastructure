@@ -9,9 +9,10 @@ from google.cloud import secretmanager
 
 
 ALLOWED_REPOS = {
-    'acute-care': [],
+    'acute-care': ['sample-metadata'],
     'ancestry': ['ancestry'],
     'fewgenomes': ['analysis-runner', 'fewgenomes', 'joint-calling', 'sv-workflows'],
+    'perth-neuro': ['sample-metadata'],
     'seqr': ['hail-elasticsearch-pipelines'],
     'thousand-genomes': [],
     'tob-wgs': ['ancestry', 'joint-calling', 'tob-wgs', 'sv-workflows'],
