@@ -186,7 +186,7 @@ def main():  # pylint: disable=too-many-locals
 
     # TODO(@lgruen): delete after `metadata` data has been moved to `analysis`.
     test_metadata_bucket = create_bucket(
-        bucket_name('test-metadata'), lifecycle_rules=[undelete_rule]
+        bucket_name('test-metadata'), enable_versioning=False
     )
 
     test_analysis_bucket = create_bucket(
@@ -214,7 +214,7 @@ def main():  # pylint: disable=too-many-locals
 
     # TODO(@lgruen): delete after `metadata` data has been moved to `analysis`.
     main_metadata_bucket = create_bucket(
-        bucket_name('main-metadata'), lifecycle_rules=[undelete_rule]
+        bucket_name('main-metadata'), enable_versioning=False
     )
 
     main_analysis_bucket = create_bucket(
