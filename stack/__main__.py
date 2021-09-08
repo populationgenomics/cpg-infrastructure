@@ -28,6 +28,7 @@ SAMPLE_METADATA_API_SERVICE_ACCOUNT = (
     'sample-metadata-api@sample-metadata.iam.gserviceaccount.com'
 )
 ACCESS_LEVELS = ('test', 'standard', 'full')
+TMP_BUCKET_PERIOD_IN_DAYS = 8  # tmp content gets deleted afterwards.
 
 SampleMetadataAccessorMembership = namedtuple(
     # the member_key for a group might be group.group_key.id
@@ -179,7 +180,9 @@ def main():  # pylint: disable=too-many-locals
         lifecycle_rules=[
             gcp.storage.BucketLifecycleRuleArgs(
                 action=gcp.storage.BucketLifecycleRuleActionArgs(type='Delete'),
-                condition=gcp.storage.BucketLifecycleRuleConditionArgs(age=30),
+                condition=gcp.storage.BucketLifecycleRuleConditionArgs(
+                    age=TMP_BUCKET_PERIOD_IN_DAYS
+                ),
             )
         ],
     )
@@ -202,7 +205,9 @@ def main():  # pylint: disable=too-many-locals
         lifecycle_rules=[
             gcp.storage.BucketLifecycleRuleArgs(
                 action=gcp.storage.BucketLifecycleRuleActionArgs(type='Delete'),
-                condition=gcp.storage.BucketLifecycleRuleConditionArgs(age=30),
+                condition=gcp.storage.BucketLifecycleRuleConditionArgs(
+                    age=TMP_BUCKET_PERIOD_IN_DAYS
+                ),
             )
         ],
     )
