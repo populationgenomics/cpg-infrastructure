@@ -16,6 +16,7 @@ ALLOWED_REPOS = {
     'seqr': ['hail-elasticsearch-pipelines'],
     'thousand-genomes': [],
     'tob-wgs': ['ancestry', 'joint-calling', 'tob-wgs', 'sv-workflows'],
+    'mgrb': ['sample-metadata'],
 }
 
 GCP_PROJECT = 'analysis-runner'
