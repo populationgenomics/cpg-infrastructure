@@ -397,7 +397,7 @@ def main():  # pylint: disable=too-many-locals
         SampleMetadataAccessorMembership(
             name='test',
             member_key=access_level_groups['test'].group_key.id,
-            permissions=('test-read', 'test-write'),
+            permissions=('main-read', 'test-read', 'test-write'),
         ),
         SampleMetadataAccessorMembership(
             name='standard',
