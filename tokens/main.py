@@ -8,15 +8,36 @@ import yaml
 from google.cloud import secretmanager
 
 
+# dataset -> list of git repos
 ALLOWED_REPOS = {
     'acute-care': ['sample-metadata'],
     'ancestry': ['ancestry'],
-    'fewgenomes': ['analysis-runner', 'fewgenomes', 'joint-calling', 'sv-workflows'],
-    'perth-neuro': ['sample-metadata'],
-    'seqr': ['hail-elasticsearch-pipelines', 'sample-metadata'],
-    'thousand-genomes': [],
-    'tob-wgs': ['ancestry', 'joint-calling', 'tob-wgs', 'sv-workflows'],
+    'fewgenomes': [
+        'analysis-runner',
+        'fewgenomes',
+        'joint-calling',
+        'sv-workflows',
+        'sample-metadata',
+        'production-pipelines',
+    ],
     'mgrb': ['sample-metadata'],
+    'perth-neuro': ['sample-metadata'],
+    'seqr': ['hail-elasticsearch-pipelines', 'sample-metadata', 'production-pipelines'],
+    'thousand-genomes': [
+        'analysis-runner',
+        'thousand-genomes',
+        'joint-calling',
+        'sv-workflows',
+        'sample-metadata',
+        'production-pipelines',
+    ],
+    'tob-wgs': [
+        'ancestry',
+        'joint-calling',
+        'tob-wgs',
+        'sv-workflows',
+        'production-pipelines',
+    ],
 }
 
 GCP_PROJECT = 'analysis-runner'
