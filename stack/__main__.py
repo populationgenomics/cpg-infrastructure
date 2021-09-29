@@ -14,6 +14,9 @@ CPG_COMMON_PROJECT = 'cpg-common'
 ANALYSIS_RUNNER_SERVICE_ACCOUNT = (
     'analysis-runner-server@analysis-runner.iam.gserviceaccount.com'
 )
+ANALYSIS_RUNNER_LOGGER_SERVICE_ACCOUNT = (
+    'sample-metadata@analysis-runner.iam.gserviceaccount.com'
+)
 WEB_SERVER_SERVICE_ACCOUNT = 'web-server@analysis-runner.iam.gserviceaccount.com'
 ACCESS_GROUP_CACHE_SERVICE_ACCOUNT = (
     'access-group-cache@analysis-runner.iam.gserviceaccount.com'
@@ -355,6 +358,8 @@ def main():  # pylint: disable=too-many-locals
     )
 
     # Sample metadata access
+
+    # permissions for read / write
     #   - 4 secrets, main-read, main-write, test-read, test-write
     sm_groups = {}
     for env in ('main', 'test'):
@@ -407,6 +412,12 @@ def main():  # pylint: disable=too-many-locals
         SampleMetadataAccessorMembership(
             name='full',
             member_key=access_level_groups['full'].group_key.id,
+            permissions=sm_groups.keys(),
+        ),
+        # allow the analysis-runner logging cloud function to update the sample-metadata project
+        SampleMetadataAccessorMembership(
+            name='analysis-runner-logger',
+            member_key=ANALYSIS_RUNNER_LOGGER_SERVICE_ACCOUNT,
             permissions=sm_groups.keys(),
         ),
     ]
