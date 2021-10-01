@@ -392,6 +392,16 @@ def main():  # pylint: disable=too-many-locals
                 member=f'serviceAccount:{SAMPLE_METADATA_API_SERVICE_ACCOUNT}',
             )
 
+    # Add cloud run invoker to analysis-runner for the access-group
+    gcp.cloudrun.IamMember(
+        f'analysis-runner-access-invoker',
+        location=REGION,
+        project=ANALYSIS_RUNNER_PROJECT,
+        service='server',
+        role='roles/run.invoker',
+        member=pulumi.Output.concat('group:', access_group.group_key.id),
+    )
+
     # Declare access to sample-metadata API of format ({env}-{read,write})
     sm_access_levels: List[SampleMetadataAccessorMembership] = [
         SampleMetadataAccessorMembership(
