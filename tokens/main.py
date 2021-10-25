@@ -20,6 +20,7 @@ ALLOWED_REPOS = {
         'sample-metadata',
         'production-pipelines',
     ],
+    'hgdp': ['hgdp'],
     'mgrb': ['sample-metadata'],
     'perth-neuro': ['sample-metadata'],
     'seqr': ['hail-elasticsearch-pipelines', 'sample-metadata', 'production-pipelines'],
