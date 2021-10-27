@@ -76,6 +76,7 @@ def get_project_id(dataset: str) -> str:
 
 def main():
     """Main entry point."""
+
     config = {}
     for dataset, allowed_repos in ALLOWED_REPOS.items():
         entries = {'projectId': get_project_id(dataset), 'allowedRepos': allowed_repos}
