@@ -931,6 +931,16 @@ def main():  # pylint: disable=too-many-locals
             member=f'serviceAccount:{ANALYSIS_RUNNER_SERVICE_ACCOUNT}',
         )
 
+        # Allow the Hail service account to access its corresponding cromwell key
+        hail_service_account = find_service_account('hail', access_level)
+        gcp.secretmanager.SecretIamMember(
+            f'cromwell-service-account-{access_level}-self-accessor',
+            project=ANALYSIS_RUNNER_PROJECT,
+            secret_id=secret.id,
+            role='roles/secretmanager.secretAccessor',
+            member=f'serviceAccount:{hail_service_account}',
+        )
+
     for access_level, group in access_level_groups.items():
         # Give hail / dataproc / cromwell access to sample-metadata cloud run service
         gcp.cloudrun.IamMember(
