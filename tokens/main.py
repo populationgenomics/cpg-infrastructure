@@ -38,6 +38,7 @@ ALLOWED_REPOS = {
         'tob-wgs',
         'sv-workflows',
         'production-pipelines',
+        'sample-metadata',
     ],
 }
 
