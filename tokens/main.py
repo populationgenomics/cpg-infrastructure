@@ -22,6 +22,7 @@ ALLOWED_REPOS = {
     ],
     'hgdp': ['hgdp'],
     'mgrb': ['sample-metadata'],
+    'nagim': ['sample-metadata'],
     'perth-neuro': ['sample-metadata'],
     'seqr': ['hail-elasticsearch-pipelines', 'sample-metadata', 'production-pipelines'],
     'thousand-genomes': [
@@ -40,6 +41,7 @@ ALLOWED_REPOS = {
         'production-pipelines',
         'sample-metadata',
     ],
+    'rdnow': [],
 }
 
 GCP_PROJECT = 'analysis-runner'
