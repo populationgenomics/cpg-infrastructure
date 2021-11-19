@@ -1,0 +1,11 @@
+encryptionsalt: v1:Fqx5NHuwjAg=:v1:h0vU5VjoszHXllH7:tUAorwiljPS1C1Ft18iHzaO0c+HOpg==
+config:
+  datasets:archive_age: "365"
+  datasets:customer_id: C010ys3gt
+  datasets:enable_release: "false"
+  datasets:hail_service_account_test: ravenscroft-rd-test-004@hail-295901.iam.gserviceaccount.com
+  datasets:hail_service_account_standard: ravenscroft-rd-standard-640@hail-295901.iam.gserviceaccount.com
+  datasets:hail_service_account_full: ravenscroft-rd-full-864@hail-295901.iam.gserviceaccount.com
+  gcp:billing_project: ravenscroft-rarediseases
+  gcp:project: ravenscroft-rarediseases
+  gcp:user_project_override: "true"
