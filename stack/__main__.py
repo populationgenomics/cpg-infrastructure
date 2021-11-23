@@ -40,7 +40,7 @@ SampleMetadataAccessorMembership = namedtuple(
 )
 
 
-def main():  # pylint: disable=too-many-locals
+def main():  # pylint: disable=too-many-locals,too-many-branches
     """Main entry point."""
 
     # Fetch configuration.
@@ -144,21 +144,31 @@ def main():  # pylint: disable=too-many-locals
         opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
     )
 
-    main_upload_bucket = create_bucket(
-        bucket_name('main-upload'), lifecycle_rules=[undelete_rule]
-    )
+    main_upload_buckets = {
+        'main-upload': create_bucket(
+            bucket_name('main-upload'), lifecycle_rules=[undelete_rule]
+        )
+    }
+
+    for additional_upload_bucket in (
+        config.get_object('additional_upload_buckets') or ()
+    ):
+        main_upload_buckets[additional_upload_bucket] = create_bucket(
+            additional_upload_bucket, lifecycle_rules=[undelete_rule]
+        )
 
     test_upload_bucket = create_bucket(
         bucket_name('test-upload'), lifecycle_rules=[undelete_rule]
     )
 
     # Grant admin permissions as composite uploads need to delete temporary files.
-    bucket_member(
-        'main-upload-service-account-main-upload-bucket-creator',
-        bucket=main_upload_bucket.name,
-        role='roles/storage.admin',
-        member=pulumi.Output.concat('serviceAccount:', main_upload_account.email),
-    )
+    for bname, upload_bucket in main_upload_buckets.items():
+        bucket_member(
+            f'main-upload-service-account-{bname}-bucket-creator',
+            bucket=upload_bucket.name,
+            role='roles/storage.admin',
+            member=pulumi.Output.concat('serviceAccount:', main_upload_account.email),
+        )
 
     archive_bucket = create_bucket(
         bucket_name('archive'),
@@ -492,13 +502,13 @@ def main():  # pylint: disable=too-many-locals
         role='roles/storage.admin',
         member=pulumi.Output.concat('group:', access_group.group_key.id),
     )
-
-    bucket_member(
-        'access-group-main-upload-bucket-viewer',
-        bucket=main_upload_bucket.name,
-        role=viewer_role_id,
-        member=pulumi.Output.concat('group:', access_group.group_key.id),
-    )
+    for bname, upload_bucket in main_upload_buckets.items():
+        bucket_member(
+            f'access-group-{bname}-bucket-viewer',
+            bucket=upload_bucket.name,
+            role=viewer_role_id,
+            member=pulumi.Output.concat('group:', access_group.group_key.id),
+        )
 
     bucket_member(
         'access-group-main-analysis-bucket-viewer',
@@ -696,12 +706,13 @@ def main():  # pylint: disable=too-many-locals
             )
 
             # main-upload bucket
-            bucket_member(
-                f'standard-main-upload-bucket-viewer',
-                bucket=main_upload_bucket.name,
-                role=viewer_role_id,
-                member=pulumi.Output.concat('group:', group.group_key.id),
-            )
+            for bname, upload_bucket in main_upload_buckets.items():
+                bucket_member(
+                    f'standard-{bname}-bucket-viewer',
+                    bucket=upload_bucket.name,
+                    role=viewer_role_id,
+                    member=pulumi.Output.concat('group:', group.group_key.id),
+                )
 
             # main-tmp bucket
             bucket_member(
@@ -737,12 +748,13 @@ def main():  # pylint: disable=too-many-locals
             )
 
             # main-upload bucket
-            bucket_member(
-                f'full-main-upload-bucket-admin',
-                bucket=main_upload_bucket.name,
-                role='roles/storage.admin',
-                member=pulumi.Output.concat('group:', group.group_key.id),
-            )
+            for bname, upload_bucket in main_upload_buckets.items():
+                bucket_member(
+                    f'full-{bname}-bucket-admin',
+                    bucket=upload_bucket.name,
+                    role='roles/storage.admin',
+                    member=pulumi.Output.concat('group:', group.group_key.id),
+                )
 
             # main-tmp bucket
             bucket_member(
