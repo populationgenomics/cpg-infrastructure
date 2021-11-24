@@ -42,6 +42,9 @@ ALLOWED_REPOS = {
         'sample-metadata',
     ],
     'rdnow': [],
+    'amp-pd': [],
+    'heartkids': ['sample-metadata'],
+    'ravenscroft-rdstudy': ['sample-metadata'],
 }
 
 GCP_PROJECT = 'analysis-runner'
