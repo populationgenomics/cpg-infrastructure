@@ -50,6 +50,11 @@ def main():  # pylint: disable=too-many-locals,too-many-branches
 
     dataset = pulumi.get_stack()
 
+    if len(dataset) > 17:
+        raise ValueError(
+            f'The dataset length must be less than 17 characters (got {len(dataset)})'
+        )
+
     organization = gcp.organizations.get_organization(domain=DOMAIN)
     project_id = gcp.organizations.get_project().project_id
 
