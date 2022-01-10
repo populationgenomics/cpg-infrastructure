@@ -10,7 +10,10 @@ from google.cloud import secretmanager
 
 # dataset -> list of git repos
 ALLOWED_REPOS = {
-    'acute-care': ['sample-metadata'],
+    'acute-care': [
+        'sample-metadata',
+        'fewgenomes'
+    ],
     'ancestry': ['ancestry'],
     'fewgenomes': [
         'analysis-runner',
