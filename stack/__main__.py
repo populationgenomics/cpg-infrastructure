@@ -84,6 +84,13 @@ def main():  # pylint: disable=too-many-locals,too-many-branches
         opts=pulumi.resource.ResourceOptions(depends_on=[cloudresourcemanager]),
     )
 
+    # Enable Dataproc until the Hail Query Service is ready.
+    cloudidentity = gcp.projects.Service(
+        'dataproc-service',
+        service='dataproc.googleapis.com',
+        disable_on_destroy=False,
+    )
+
     service_accounts = defaultdict(list)
     for kind in 'hail', 'deployment':
         for access_level in ACCESS_LEVELS:
