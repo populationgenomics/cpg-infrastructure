@@ -9,43 +9,9 @@ from google.cloud import secretmanager
 
 
 # dataset -> list of git repos
-ALLOWED_REPOS = {
-    'acute-care': ['sample-metadata', 'fewgenomes'],
-    'ancestry': ['ancestry'],
-    'fewgenomes': [
-        'analysis-runner',
-        'fewgenomes',
-        'joint-calling',
-        'sv-workflows',
-        'sample-metadata',
-        'production-pipelines',
-    ],
-    'hgdp': ['hgdp'],
-    'mgrb': ['sample-metadata'],
-    'nagim': ['sample-metadata'],
-    'perth-neuro': ['sample-metadata'],
-    'seqr': ['hail-elasticsearch-pipelines', 'sample-metadata', 'production-pipelines'],
-    'thousand-genomes': [
-        'analysis-runner',
-        'thousand-genomes',
-        'joint-calling',
-        'sv-workflows',
-        'sample-metadata',
-        'production-pipelines',
-    ],
-    'tob-wgs': [
-        'ancestry',
-        'joint-calling',
-        'tob-wgs',
-        'sv-workflows',
-        'production-pipelines',
-        'sample-metadata',
-    ],
-    'rdnow': [],
-    'amp-pd': [],
-    'heartkids': ['sample-metadata'],
-    'ravenscroft-rdstudy': ['sample-metadata'],
-}
+with open('repository-map.json', encoding='utf-8') as allowed_repo_file:
+    ALLOWED_REPOS = json.load(allowed_repo_file)
+    print(f'Loaded repository-map with {len(ALLOWED_REPOS)} keys')
 
 GCP_PROJECT = 'analysis-runner'
 
