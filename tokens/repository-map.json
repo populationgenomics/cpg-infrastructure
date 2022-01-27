@@ -16,7 +16,11 @@
 	"heartkids": ["sample-metadata"],
 	"hgdp": ["hgdp"],
 	"mgrb": ["sample-metadata"],
-	"nagim": ["sample-metadata"],
+	"nagim": [
+		"sample-metadata",
+		"joint-calling",
+		"production-pipelines"
+	],
 	"ohmr3-mendelian": ["sample-metadata"],
 	"ohmr4-epilepsy": ["sample-metadata"],
 	"perth-neuro": ["sample-metadata"],
@@ -42,5 +46,15 @@
 		"sv-workflows",
 		"production-pipelines",
 		"sample-metadata"
+	],
+	"bioheart": [
+		"sample-metadata",
+		"joint-calling",
+		"production-pipelines"
+	],
+	"prophecy": [
+		"sample-metadata",
+		"joint-calling",
+		"production-pipelines"
 	]
 }
