@@ -1,60 +1,95 @@
 {
-	"acute-care": [
-		"sample-metadata",
-		"fewgenomes"
-	],
-	"amp-pd": [],
-	"ancestry": ["ancestry"],
-	"fewgenomes": [
-		"analysis-runner",
-		"fewgenomes",
-		"joint-calling",
-		"sv-workflows",
-		"sample-metadata",
-		"production-pipelines"
-	],
-	"heartkids": ["sample-metadata"],
-	"hgdp": ["hgdp"],
-	"mgrb": ["sample-metadata"],
-	"nagim": [
-		"sample-metadata",
-		"joint-calling",
-		"production-pipelines"
-	],
-	"ohmr3-mendelian": ["sample-metadata"],
-	"ohmr4-epilepsy": ["sample-metadata"],
-	"perth-neuro": ["sample-metadata"],
-	"ravenscroft-rdstudy": ["sample-metadata"],
-	"rdnow": [],
-	"seqr": [
-		"hail-elasticsearch-pipelines",
-		"sample-metadata",
-		"production-pipelines"
-	],
-	"thousand-genomes": [
-		"analysis-runner",
-		"thousand-genomes",
-		"joint-calling",
-		"sv-workflows",
-		"sample-metadata",
-		"production-pipelines"
-	],
-	"tob-wgs": [
-		"ancestry",
-		"joint-calling",
-		"tob-wgs",
-		"sv-workflows",
-		"production-pipelines",
-		"sample-metadata"
-	],
-	"bioheart": [
-		"sample-metadata",
-		"joint-calling",
-		"production-pipelines"
-	],
-	"prophecy": [
-		"sample-metadata",
-		"joint-calling",
-		"production-pipelines"
-	]
+    "acute-care":
+    [
+        "sample-metadata",
+        "fewgenomes"
+    ],
+    "amp-pd":
+    [],
+    "ancestry":
+    [
+        "ancestry"
+    ],
+    "circa":
+    [
+        "sample-metadata"
+    ],
+    "fewgenomes":
+    [
+        "analysis-runner",
+        "fewgenomes",
+        "joint-calling",
+        "sv-workflows",
+        "sample-metadata",
+        "production-pipelines"
+    ],
+    "flinders-ophthal":
+    [
+        "sample-metadata"
+    ],
+    "heartkids":
+    [
+        "sample-metadata"
+    ],
+    "hgdp":
+    [
+        "hgdp"
+    ],
+    "kccg-genomics-med":
+    [
+        "sample-metadata"
+    ],
+    "mgrb":
+    [
+        "sample-metadata"
+    ],
+    "nagim":
+    [
+        "sample-metadata"
+    ],
+    "ohmr3-mendelian":
+    [
+        "sample-metadata"
+    ],
+    "ohmr4-epilepsy":
+    [
+        "sample-metadata"
+    ],
+    "perth-neuro":
+    [
+        "sample-metadata"
+    ],
+    "ravenscroft-rdstudy":
+    [
+        "sample-metadata"
+    ],
+    "rdnow":
+    [],
+    "seqr":
+    [
+        "hail-elasticsearch-pipelines",
+        "sample-metadata",
+        "production-pipelines"
+    ],
+    "thousand-genomes":
+    [
+        "analysis-runner",
+        "thousand-genomes",
+        "joint-calling",
+        "sv-workflows",
+        "sample-metadata",
+        "production-pipelines"
+    ],
+    "tob-wgs":
+    [
+        "ancestry",
+        "joint-calling",
+        "tob-wgs",
+        "sv-workflows",
+        "production-pipelines",
+        "sample-metadata"
+    ],
+      "schr-neuro": [
+        "sample-metadata"
+    ]
 }
