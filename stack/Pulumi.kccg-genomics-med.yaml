@@ -1,0 +1,13 @@
+config:
+  datasets:archive_age: '90'
+  datasets:customer_id: C010ys3gt
+  datasets:enable_release: false
+  datasets:depends_on: '["nagim"]'
+  datasets:hail_service_account_full: kccg-genomics-med-full-914@hail-295901.iam.gserviceaccount.com
+  datasets:hail_service_account_standard: kccg-genomics-med-standard-304@hail-295901.iam.gserviceaccount.com
+  datasets:hail_service_account_test: kccg-genomics-med-test-791@hail-295901.iam.gserviceaccount.com
+  gcp:billing_project: kccg-genomics-med
+  gcp:project: kccg-genomics-med
+  gcp:user_project_override: 'true'
+
+encryptionsalt: v1:SPQXlVggjxw=:v1:X1sTpViNuyK+Wcom:3GANI8gZOKtk0gG7BklsyHeNU5uVLw==
