@@ -37,7 +37,9 @@
     ],
     "kccg-genomics-med":
     [
-        "sample-metadata"
+        "sample-metadata",
+        "cromwell-kccg-mutect2-chip",
+        "analysis-runner"
     ],
     "mgrb":
     [
