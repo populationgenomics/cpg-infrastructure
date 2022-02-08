@@ -1,8 +1,9 @@
 {
     "acute-care":
     [
-        "sample-metadata",
-        "fewgenomes"
+        "fewgenomes",
+        "gatk-sv",
+        "sample-metadata"
     ],
     "amp-pd":
     [],
@@ -85,6 +86,7 @@
     "tob-wgs":
     [
         "ancestry",
+        "gatk-sv",
         "joint-calling",
         "tob-wgs",
         "sv-workflows",
