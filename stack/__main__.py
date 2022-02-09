@@ -80,7 +80,7 @@ def main():  # pylint: disable=too-many-locals,too-many-branches
     )
 
     # Enable Dataproc until the Hail Query Service is ready.
-    cloudidentity = gcp.projects.Service(
+    _ = gcp.projects.Service(
         'dataproc-service',
         service='dataproc.googleapis.com',
         disable_on_destroy=False,
