@@ -1,23 +1,18 @@
 {
-    "acute-care":
-    [
+    "acute-care": [
         "fewgenomes",
         "gatk-sv",
         "rare-disease",
         "sample-metadata"
     ],
-    "amp-pd":
-    [],
-    "ancestry":
-    [
+    "amp-pd": [],
+    "ancestry": [
         "ancestry"
     ],
-    "circa":
-    [
+    "circa": [
         "sample-metadata"
     ],
-    "fewgenomes":
-    [
+    "fewgenomes": [
         "analysis-runner",
         "fewgenomes",
         "joint-calling",
@@ -26,58 +21,45 @@
         "sample-metadata",
         "sv-workflows"
     ],
-    "flinders-ophthal":
-    [
+    "flinders-ophthal": [
         "sample-metadata"
     ],
-    "heartkids":
-    [
+    "heartkids": [
         "sample-metadata"
     ],
-    "hgdp":
-    [
+    "hgdp": [
         "hgdp"
     ],
-    "kccg-genomics-med":
-    [
+    "kccg-genomics-med": [
         "sample-metadata",
         "cromwell-kccg-mutect2-chip",
         "analysis-runner"
     ],
-    "mgrb":
-    [
+    "mgrb": [
         "sample-metadata"
     ],
-    "nagim":
-    [
+    "nagim": [
         "sample-metadata"
     ],
-    "ohmr3-mendelian":
-    [
+    "ohmr3-mendelian": [
         "sample-metadata"
     ],
-    "ohmr4-epilepsy":
-    [
+    "ohmr4-epilepsy": [
         "sample-metadata"
     ],
-    "perth-neuro":
-    [
+    "perth-neuro": [
         "sample-metadata"
     ],
-    "ravenscroft-rdstudy":
-    [
+    "ravenscroft-rdstudy": [
         "sample-metadata"
     ],
-    "rdnow":
-    [],
-    "seqr":
-    [
+    "rdnow": [],
+    "seqr": [
         "hail-elasticsearch-pipelines",
         "sample-metadata",
         "production-pipelines"
     ],
-    "thousand-genomes":
-    [
+    "thousand-genomes": [
         "analysis-runner",
         "thousand-genomes",
         "joint-calling",
@@ -85,8 +67,7 @@
         "sample-metadata",
         "production-pipelines"
     ],
-    "tob-wgs":
-    [
+    "tob-wgs": [
         "ancestry",
         "gatk-sv",
         "joint-calling",
@@ -95,7 +76,10 @@
         "production-pipelines",
         "sample-metadata"
     ],
-      "schr-neuro": [
+    "schr-neuro": [
+        "sample-metadata"
+    ],
+    "sgs-somatic-mtn": [
         "sample-metadata"
     ]
 }
