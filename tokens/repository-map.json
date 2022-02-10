@@ -3,6 +3,7 @@
     [
         "fewgenomes",
         "gatk-sv",
+        "rare-disease",
         "sample-metadata"
     ],
     "amp-pd":
@@ -20,9 +21,10 @@
         "analysis-runner",
         "fewgenomes",
         "joint-calling",
-        "sv-workflows",
+        "production-pipelines",
+        "rare-disease",
         "sample-metadata",
-        "production-pipelines"
+        "sv-workflows"
     ],
     "flinders-ophthal":
     [
