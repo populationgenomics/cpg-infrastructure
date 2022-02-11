@@ -80,6 +80,7 @@
         "sample-metadata"
     ],
     "sgs-somatic-mtn": [
-        "sample-metadata"
+        "sample-metadata",
+        "sgs-somatic-mutation"
     ]
 }
