@@ -591,6 +591,16 @@ def main():  # pylint: disable=too-many-locals,too-many-branches
         member=pulumi.Output.concat('serviceAccount:', WEB_SERVER_SERVICE_ACCOUNT),
     )
 
+    # Allow reading from the Artifact registry.
+    gcp.artifactregistry.RepositoryIamMember(
+        f'access-group-images-reader-in-cpg-common',
+        project=CPG_COMMON_PROJECT,
+        location=REGION,
+        repository='images',
+        role='roles/artifactregistry.reader',
+        member=pulumi.Output.concat('group:', access_group.group_key.id),
+    )
+
     # Allow the usage of requester-pays buckets.
     gcp.projects.IAMMember(
         f'access-group-serviceusage-consumer',
