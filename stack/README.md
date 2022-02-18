@@ -87,4 +87,4 @@ can be brought up using Pulumi.
 
 ## Updating all stacks
 
-After any configuration change, you should apply the changes across all datasets, e.g. using [`update_all_stacks.sh`](update_all_stacks.sh). However, make sure that any changes will also be reflected in the `main` branch, as when the state in the repository differs from what's deployed in production, debugging becomes extremely difficult.
+After any configuration change, you should apply the changes across all datasets, e.g. using [`update_all_stacks.py`](update_all_stacks.py) (which requires Python >= 3.9). However, make sure that any changes will also be reflected in the `main` branch, as when the state in the repository differs from what's deployed in production, debugging becomes extremely difficult.
