@@ -15,6 +15,7 @@
     "fewgenomes": [
         "analysis-runner",
         "fewgenomes",
+        "images",
         "joint-calling",
         "production-pipelines",
         "rare-disease",
