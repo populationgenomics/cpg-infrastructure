@@ -54,6 +54,12 @@
     "ravenscroft-rdstudy": [
         "sample-metadata"
     ],
+    "prophecy": [
+        "sample-metadata",
+        "production-pipelines",
+        "joint-calling",
+        "gatk-sv"
+    ],
     "rdnow": [],
     "seqr": [
         "hail-elasticsearch-pipelines",
