@@ -28,6 +28,9 @@
     "heartkids": [
         "sample-metadata"
     ],
+    "hereditary-neuro": [
+        "sample-metadata"
+    ],
     "hgdp": [
         "hgdp"
     ],
@@ -51,14 +54,14 @@
     "perth-neuro": [
         "sample-metadata"
     ],
-    "ravenscroft-rdstudy": [
-        "sample-metadata"
-    ],
     "prophecy": [
         "sample-metadata",
         "production-pipelines",
         "joint-calling",
         "gatk-sv"
+    ],
+    "ravenscroft-rdstudy": [
+        "sample-metadata"
     ],
     "rdnow": [],
     "seqr": [
