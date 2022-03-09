@@ -1,0 +1,11 @@
+config:
+  datasets:archive_age: '90'
+  datasets:customer_id: C010ys3gt
+  datasets:enable_release: false
+  datasets:hail_service_account_full: hereditary-neuro-full-470@hail-295901.iam.gserviceaccount.com
+  datasets:hail_service_account_standard: hereditary-neuro-standard-913@hail-295901.iam.gserviceaccount.com
+  datasets:hail_service_account_test: hereditary-neuro-test-120@hail-295901.iam.gserviceaccount.com
+  gcp:billing_project: hereditary-neuro
+  gcp:project: hereditary-neuro
+  gcp:user_project_override: 'true'
+encryptionsalt: v1:SPQXlVggjxw=:v1:X1sTpViNuyK+Wcom:3GANI8gZOKtk0gG7BklsyHeNU5uVLw==
