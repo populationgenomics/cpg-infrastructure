@@ -22,6 +22,7 @@ ACCESS_GROUP_CACHE_SERVICE_ACCOUNT = (
     'access-group-cache@analysis-runner.iam.gserviceaccount.com'
 )
 REFERENCE_BUCKET_NAME = 'cpg-reference'
+HAIL_WHEEL_BUCKET_NAME = 'cpg-hail-ci'
 NOTEBOOKS_PROJECT = 'notebooks-314505'
 # cromwell-submission-access@populationgenomics.org.au
 CROMWELL_ACCESS_GROUP_ID = 'groups/03cqmetx2922fyu'
@@ -609,6 +610,14 @@ def main():  # pylint: disable=too-many-locals,too-many-branches
         member=pulumi.Output.concat('group:', access_group.group_key.id),
     )
 
+    # Read access to Hail wheels.
+    bucket_member(
+        'access-group-hail-wheels-viewer',
+        bucket=HAIL_WHEEL_BUCKET_NAME,
+        role=viewer_role_id,
+        member=pulumi.Output.concat('group:', access_group.group_key.id),
+    )
+
     # Allow the usage of requester-pays buckets.
     gcp.projects.IAMMember(
         f'access-group-serviceusage-consumer',
@@ -676,6 +685,14 @@ def main():  # pylint: disable=too-many-locals,too-many-branches
         bucket_member(
             f'{access_level}-reference-bucket-viewer',
             bucket=REFERENCE_BUCKET_NAME,
+            role=viewer_role_id,
+            member=pulumi.Output.concat('group:', group.group_key.id),
+        )
+
+        # Read access to Hail wheels.
+        bucket_member(
+            f'{access_level}-hail-wheels-viewer',
+            bucket=HAIL_WHEEL_BUCKET_NAME,
             role=viewer_role_id,
             member=pulumi.Output.concat('group:', group.group_key.id),
         )
