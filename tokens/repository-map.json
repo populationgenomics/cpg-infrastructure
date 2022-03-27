@@ -9,6 +9,9 @@
     "ancestry": [
         "ancestry"
     ],
+    "brain-malf": [
+        "sample-metadata"
+    ],
     "circa": [
         "sample-metadata"
     ],
@@ -39,7 +42,13 @@
         "cromwell-kccg-mutect2-chip",
         "analysis-runner"
     ],
+    "leukodystrophies": [
+        "sample-metadata"
+    ],
     "mgrb": [
+        "sample-metadata"
+    ],
+    "mito-disease": [
         "sample-metadata"
     ],
     "nagim": [
@@ -60,14 +69,24 @@
         "joint-calling",
         "gatk-sv"
     ],
+    "ravenscroft-arch": [
+        "sample-metadata"
+    ],
     "ravenscroft-rdstudy": [
         "sample-metadata"
     ],
     "rdnow": [],
+    "schr-neuro": [
+        "sample-metadata"
+    ],
     "seqr": [
         "hail-elasticsearch-pipelines",
         "sample-metadata",
         "production-pipelines"
+    ],
+    "sgs-somatic-mtn": [
+        "sample-metadata",
+        "sgs-somatic-mutation"
     ],
     "thousand-genomes": [
         "analysis-runner",
@@ -85,12 +104,5 @@
         "sv-workflows",
         "production-pipelines",
         "sample-metadata"
-    ],
-    "schr-neuro": [
-        "sample-metadata"
-    ],
-    "sgs-somatic-mtn": [
-        "sample-metadata",
-        "sgs-somatic-mutation"
     ]
 }
