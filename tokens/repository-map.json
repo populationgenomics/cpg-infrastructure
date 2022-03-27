@@ -1,5 +1,6 @@
 {
     "acute-care": [
+        "automated-interpretation-pipeline",
         "fewgenomes",
         "gatk-sv",
         "rare-disease",
@@ -16,6 +17,7 @@
         "sample-metadata"
     ],
     "fewgenomes": [
+        "automated-interpretation-pipeline",
         "analysis-runner",
         "fewgenomes",
         "images",
