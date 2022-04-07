@@ -716,6 +716,14 @@ def main():  # pylint: disable=too-many-locals,too-many-branches
             member=pulumi.Output.concat('serviceAccount:', service_account),
         )
 
+    # The analysis-runner also needs Hail bucket access for compiled code.
+    bucket_member(
+        f'analysis-runner-hail-bucket-admin',
+        bucket=hail_bucket.name,
+        role='roles/storage.admin',
+        member=pulumi.Output.concat('serviceAccount:', ANALYSIS_RUNNER_SERVICE_ACCOUNT),
+    )
+
     # Permissions increase by access level:
     # - test: view / create on any "test" bucket
     # - standard: view / create on any "test" or "main" bucket
