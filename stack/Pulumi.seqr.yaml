@@ -3,7 +3,7 @@ config:
   datasets:customer_id: C010ys3gt
   datasets:depends_on: '["acute-care", "perth-neuro", "rdnow", "heartkids", "ravenscroft-rdstudy",
     "ohmr3-mendelian", "ohmr4-epilepsy", "flinders-ophthal", "circa", "schr-neuro", "brain-malf",
-    "leukodystrophies", "mito-disease", "ravenscroft-arch"]'
+    "leukodystrophies", "mito-disease", "ravenscroft-arch", "hereditary-neuro"]'
   datasets:deployment_service_account_standard: seqr-prod@seqr-308602.iam.gserviceaccount.com
   datasets:deployment_service_account_test: seqr-dev@seqr-308602.iam.gserviceaccount.com
   datasets:enable_release: 'false'
