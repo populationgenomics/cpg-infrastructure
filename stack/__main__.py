@@ -81,9 +81,16 @@ def main():  # pylint: disable=too-many-locals,too-many-branches
     )
 
     # Enable Dataproc until the Hail Query Service is ready.
-    _ = gcp.projects.Service(
+    gcp.projects.Service(
         'dataproc-service',
         service='dataproc.googleapis.com',
+        disable_on_destroy=False,
+    )
+
+    # Cromwell uses the Life Sciences API.
+    gcp.projects.Service(
+        'lifesciences-service',
+        service='lifesciences.googleapis.com',
         disable_on_destroy=False,
     )
 
