@@ -87,11 +87,19 @@ def main():  # pylint: disable=too-many-locals,too-many-branches
         disable_on_destroy=False,
     )
 
+    # The Life Sciences API depends on the Service Usage API.
+    serviceusage = gcp.projects.Service(
+        'serviceusage-service',
+        service='serviceusage.googleapis.com',
+        disable_on_destroy=False,
+    )
+
     # Cromwell uses the Life Sciences API.
     gcp.projects.Service(
         'lifesciences-service',
         service='lifesciences.googleapis.com',
         disable_on_destroy=False,
+        opts=pulumi.resource.ResourceOptions(depends_on=[serviceusage]),
     )
 
     service_accounts = defaultdict(list)
