@@ -609,6 +609,15 @@ def main():  # pylint: disable=too-many-locals,too-many-branches
         member=pulumi.Output.concat('group:', access_group.group_key.id),
     )
 
+    gcp.artifactregistry.RepositoryIamMember(
+        f'access-group-images-reader-in-analysis-runner',
+        project=ANALYSIS_RUNNER_PROJECT,
+        location=REGION,
+        repository='images',
+        role='roles/artifactregistry.reader',
+        member=pulumi.Output.concat('group:', access_group.group_key.id),
+    )
+
     # Read access to reference data.
     bucket_member(
         'access-group-reference-bucket-viewer',
