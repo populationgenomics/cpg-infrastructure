@@ -1,10 +1,10 @@
-encryptionsalt: v1:SPQXlVggjxw=:v1:X1sTpViNuyK+Wcom:3GANI8gZOKtk0gG7BklsyHeNU5uVLw==
+encryptionsalt: v1:zCT2sVqV6/w=:v1:7nWUto0uu3moNnRb:jnLCKzyggeeNuA5h5155cc4zqmbC4A==
 config:
   datasets:customer_id: C010ys3gt
   datasets:enable_release: "false"
-  datasets:hail_service_account_test: thousand-genomes-test-508@hail-295901.iam.gserviceaccount.com
-  datasets:hail_service_account_standard: thousand-genomes-standard-832@hail-295901.iam.gserviceaccount.com
   datasets:hail_service_account_full: thousand-genomes-full-579@hail-295901.iam.gserviceaccount.com
+  datasets:hail_service_account_standard: thousand-genomes-standard-832@hail-295901.iam.gserviceaccount.com
+  datasets:hail_service_account_test: thousand-genomes-test-508@hail-295901.iam.gserviceaccount.com
   gcp:billing_project: thousand-genomes
   gcp:project: thousand-genomes
   gcp:user_project_override: "true"

@@ -35,7 +35,7 @@ can be brought up using Pulumi.
    ```shell
    cd stack
    gcloud auth application-default login
-   export PULUMI_CONFIG_PASSPHRASE=
+   export PULUMI_CONFIG_PASSPHRASE=$(gcloud --project=analysis-runner secrets versions access latest --secret=pulumi-passphrase)
    pulumi login gs://cpg-pulumi-state
    pulumi stack init $DATASET
    pulumi config set gcp:project $PROJECT
@@ -77,7 +77,7 @@ can be brought up using Pulumi.
    python3 -m venv venv
    source venv/bin/activate
    pip3 install -r requirements.txt
-   export PULUMI_CONFIG_PASSPHRASE=  # empty passphrase
+   export PULUMI_CONFIG_PASSPHRASE=$(gcloud --project=analysis-runner secrets versions access latest --secret=pulumi-passphrase)
    pulumi up
    ```
 

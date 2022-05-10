@@ -1,10 +1,10 @@
-encryptionsalt: v1:SPQXlVggjxw=:v1:X1sTpViNuyK+Wcom:3GANI8gZOKtk0gG7BklsyHeNU5uVLw==
+encryptionsalt: v1:Q3zrRIZGNiA=:v1:GFADTyJAQ+OdBvgc:1qS6R+VUlHH0Zky7sqwxklWtNjIK3Q==
 config:
   datasets:customer_id: C010ys3gt
   datasets:enable_release: "false"
-  datasets:hail_service_account_test: ancestry-test-355@hail-295901.iam.gserviceaccount.com
-  datasets:hail_service_account_standard: ancestry-standard-732@hail-295901.iam.gserviceaccount.com
   datasets:hail_service_account_full: ancestry-full-029@hail-295901.iam.gserviceaccount.com
+  datasets:hail_service_account_standard: ancestry-standard-732@hail-295901.iam.gserviceaccount.com
+  datasets:hail_service_account_test: ancestry-test-355@hail-295901.iam.gserviceaccount.com
   gcp:billing_project: ancestry-310609
   gcp:project: ancestry-310609
   gcp:user_project_override: "true"

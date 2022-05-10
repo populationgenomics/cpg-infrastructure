@@ -1,11 +1,11 @@
-encryptionsalt: v1:Fqx5NHuwjAg=:v1:h0vU5VjoszHXllH7:tUAorwiljPS1C1Ft18iHzaO0c+HOpg==
+encryptionsalt: v1:i4ZWH4r5EaQ=:v1:JQ1LSmKiaus3Q2XK:uZd8j4nhbF0UfcM/SrOD5wytUmn7HA==
 config:
   datasets:archive_age: "365"
   datasets:customer_id: C010ys3gt
   datasets:enable_release: "false"
-  datasets:hail_service_account_test: heartkids-test-608@hail-295901.iam.gserviceaccount.com
-  datasets:hail_service_account_standard: heartkids-standard-100@hail-295901.iam.gserviceaccount.com
   datasets:hail_service_account_full: heartkids-full-435@hail-295901.iam.gserviceaccount.com
+  datasets:hail_service_account_standard: heartkids-standard-100@hail-295901.iam.gserviceaccount.com
+  datasets:hail_service_account_test: heartkids-test-608@hail-295901.iam.gserviceaccount.com
   gcp:billing_project: heartkids
   gcp:project: heartkids
   gcp:user_project_override: "true"

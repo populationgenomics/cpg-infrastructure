@@ -1,11 +1,11 @@
+encryptionsalt: v1:lbgETcRsQxE=:v1:OARKM6fLh7WKpD//:rRJpuz+fMzzntkZjJ7VSwYCwplxUdQ==
 config:
-  datasets:archive_age: '90'
+  datasets:archive_age: "90"
   datasets:customer_id: C010ys3gt
-  datasets:enable_release: false
+  datasets:enable_release: "false"
   datasets:hail_service_account_full: brain-malf-full-315@hail-295901.iam.gserviceaccount.com
   datasets:hail_service_account_standard: brain-malf-standard-861@hail-295901.iam.gserviceaccount.com
   datasets:hail_service_account_test: brain-malf-test-219@hail-295901.iam.gserviceaccount.com
   gcp:billing_project: brain-malf
   gcp:project: brain-malf
-  gcp:user_project_override: 'true'
-encryptionsalt: v1:SPQXlVggjxw=:v1:X1sTpViNuyK+Wcom:3GANI8gZOKtk0gG7BklsyHeNU5uVLw==
+  gcp:user_project_override: "true"

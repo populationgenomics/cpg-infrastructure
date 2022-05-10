@@ -1,11 +1,11 @@
+encryptionsalt: v1:vPCrQ+mHxKw=:v1:pIOSFL+ZjmS7gzwC:Wv6EMYRe2FLtQM9uiNt0l3DEK2TjEA==
 config:
-  datasets:archive_age: '90'
+  datasets:archive_age: "90"
   datasets:customer_id: C010ys3gt
-  datasets:enable_release: false
+  datasets:enable_release: "false"
   datasets:hail_service_account_full: flinders-ophthal-full-077@hail-295901.iam.gserviceaccount.com
   datasets:hail_service_account_standard: flinders-ophthal-standard-593@hail-295901.iam.gserviceaccount.com
   datasets:hail_service_account_test: flinders-ophthal-test-267@hail-295901.iam.gserviceaccount.com
   gcp:billing_project: flinders-ophthal
   gcp:project: flinders-ophthal
-  gcp:user_project_override: 'true'
-encryptionsalt: v1:SPQXlVggjxw=:v1:X1sTpViNuyK+Wcom:3GANI8gZOKtk0gG7BklsyHeNU5uVLw==
+  gcp:user_project_override: "true"

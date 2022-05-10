@@ -1,11 +1,11 @@
+encryptionsalt: v1:lcEP1M7BsD0=:v1:SOajjgEUZzDfLORk:/M/E5W0h6t7AAAhBMhGjsoDn9ct5Zw==
 config:
-  datasets:archive_age: '90'
+  datasets:archive_age: "90"
   datasets:customer_id: C010ys3gt
-  datasets:enable_release: 'true'
+  datasets:enable_release: "true"
   datasets:hail_service_account_full: ohmr3-mendelian-full-279@hail-295901.iam.gserviceaccount.com
   datasets:hail_service_account_standard: ohmr3-mendelian-standard-377@hail-295901.iam.gserviceaccount.com
   datasets:hail_service_account_test: ohmr3-mendelian-test-605@hail-295901.iam.gserviceaccount.com
   gcp:billing_project: ohmr3-mendelian
   gcp:project: ohmr3-mendelian
-  gcp:user_project_override: 'true'
-encryptionsalt: v1:SPQXlVggjxw=:v1:X1sTpViNuyK+Wcom:3GANI8gZOKtk0gG7BklsyHeNU5uVLw==
+  gcp:user_project_override: "true"

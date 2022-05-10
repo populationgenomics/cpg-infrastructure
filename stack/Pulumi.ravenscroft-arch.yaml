@@ -1,11 +1,11 @@
+encryptionsalt: v1:To7ru5EwmUU=:v1:IvduNqoVTq2VpbZw:kL8Kl94bkjDnfUEsC6wqKzL8Ho1Ujw==
 config:
-  datasets:archive_age: '90'
+  datasets:archive_age: "90"
   datasets:customer_id: C010ys3gt
-  datasets:enable_release: false
+  datasets:enable_release: "false"
   datasets:hail_service_account_full: ravenscroft-arch-full-263@hail-295901.iam.gserviceaccount.com
   datasets:hail_service_account_standard: ravenscroft-arch-standard-429@hail-295901.iam.gserviceaccount.com
   datasets:hail_service_account_test: ravenscroft-arch-test-029@hail-295901.iam.gserviceaccount.com
   gcp:billing_project: ravenscroft-arch
   gcp:project: ravenscroft-arch
-  gcp:user_project_override: 'true'
-encryptionsalt: v1:SPQXlVggjxw=:v1:X1sTpViNuyK+Wcom:3GANI8gZOKtk0gG7BklsyHeNU5uVLw==
+  gcp:user_project_override: "true"

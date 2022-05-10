@@ -1,11 +1,11 @@
+encryptionsalt: v1:rsKhw3ZqoFA=:v1:VIROWPdrOuP/UnOA:N1R035EUIop7qRU0JeIl1kpW90VNFg==
 config:
-  datasets:archive_age: '90'
+  datasets:archive_age: "90"
   datasets:customer_id: C010ys3gt
-  datasets:enable_release: false
+  datasets:enable_release: "false"
   datasets:hail_service_account_full: leukodystrophies-full-536@hail-295901.iam.gserviceaccount.com
   datasets:hail_service_account_standard: leukodystrophies-standard-657@hail-295901.iam.gserviceaccount.com
   datasets:hail_service_account_test: leukodystrophies-test-164@hail-295901.iam.gserviceaccount.com
   gcp:billing_project: leukodystrophies
   gcp:project: leukodystrophies
-  gcp:user_project_override: 'true'
-encryptionsalt: v1:SPQXlVggjxw=:v1:X1sTpViNuyK+Wcom:3GANI8gZOKtk0gG7BklsyHeNU5uVLw==
+  gcp:user_project_override: "true"

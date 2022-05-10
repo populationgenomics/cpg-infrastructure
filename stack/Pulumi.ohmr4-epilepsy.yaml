@@ -1,11 +1,11 @@
+encryptionsalt: v1:u1CLg7EHuho=:v1:lOmyxOh2yd5YzWQr:PPQI0tS466MhizSlzmW2UEb1zNiv1Q==
 config:
-  datasets:archive_age: '90'
+  datasets:archive_age: "90"
   datasets:customer_id: C010ys3gt
-  datasets:enable_release: false
+  datasets:enable_release: "false"
   datasets:hail_service_account_full: ohmr4-epilepsy-full-666@hail-295901.iam.gserviceaccount.com
   datasets:hail_service_account_standard: ohmr4-epilepsy-standard-895@hail-295901.iam.gserviceaccount.com
   datasets:hail_service_account_test: ohmr4-epilepsy-test-744@hail-295901.iam.gserviceaccount.com
   gcp:billing_project: ohmr4-epilepsy
   gcp:project: ohmr4-epilepsy
-  gcp:user_project_override: 'true'
-encryptionsalt: v1:SPQXlVggjxw=:v1:X1sTpViNuyK+Wcom:3GANI8gZOKtk0gG7BklsyHeNU5uVLw==
+  gcp:user_project_override: "true"

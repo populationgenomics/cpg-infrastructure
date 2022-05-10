@@ -1,16 +1,16 @@
+encryptionsalt: v1:JIitg3R5A/c=:v1:hPajMZhTI/odqPKm:jcEFAXCJJ9/CuLercsF8npIkBffCIQ==
 config:
-  datasets:archive_age: '30'
+  datasets:archive_age: "30"
   datasets:customer_id: C010ys3gt
   datasets:depends_on: '["acute-care", "perth-neuro", "rdnow", "heartkids", "ravenscroft-rdstudy",
-    "ohmr3-mendelian", "ohmr4-epilepsy", "flinders-ophthal", "circa", "schr-neuro", "brain-malf",
-    "leukodystrophies", "mito-disease", "ravenscroft-arch", "hereditary-neuro"]'
+    "ohmr3-mendelian", "ohmr4-epilepsy", "flinders-ophthal", "circa", "schr-neuro",
+    "brain-malf", "leukodystrophies", "mito-disease", "ravenscroft-arch", "hereditary-neuro"]'
   datasets:deployment_service_account_standard: seqr-prod@seqr-308602.iam.gserviceaccount.com
   datasets:deployment_service_account_test: seqr-dev@seqr-308602.iam.gserviceaccount.com
-  datasets:enable_release: 'false'
+  datasets:enable_release: "false"
   datasets:hail_service_account_full: seqr-full-041@hail-295901.iam.gserviceaccount.com
   datasets:hail_service_account_standard: seqr-standard-758@hail-295901.iam.gserviceaccount.com
   datasets:hail_service_account_test: seqr-test-709@hail-295901.iam.gserviceaccount.com
   gcp:billing_project: seqr-308602
   gcp:project: seqr-308602
-  gcp:user_project_override: 'true'
-encryptionsalt: v1:58BWphXSDio=:v1:9KydLgEdNGdRloZf:phZCGaeRzAGsTdOdTWBG1Wbu6GtX3w==
+  gcp:user_project_override: "true"
