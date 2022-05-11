@@ -17,6 +17,10 @@
     "circa": [
         "sample-metadata"
     ],
+    "constraint": [
+        "sample-metadata",
+        "structural-constraint"
+    ],
     "fewgenomes": [
         "automated-interpretation-pipeline",
         "analysis-runner",
