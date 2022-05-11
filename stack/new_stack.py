@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 """
 Create GCP project + stack file for Pulumi
 
@@ -9,13 +11,14 @@ requirements:
 Example usage:
 
     cd stack
-    DATASET=""
+    DATASET="my-dataset"
     python new_stack.py \
         --dataset $DATASET \
         --perform-all --no-commit \
-        --release-stack \
+        --deploy-stack \
         --generate-service-account-key
 """
+
 # pylint: disable=unreachable,too-many-arguments,no-name-in-module,import-error,too-many-lines
 import os
 import random
@@ -42,6 +45,7 @@ from google.cloud.billing.budgets_v1 import (
 from google.api_core.client_options import ClientOptions
 from google.api_core.exceptions import GoogleAPICallError
 from google.type.money_pb2 import Money
+from stack_utils import get_pulumi_config_passphrase
 from sample_metadata.apis import ProjectApi
 
 
@@ -71,14 +75,14 @@ logging.basicConfig(level=logging.INFO)
     '--perform-all',
     required=False,
     is_flag=True,
-    help='Set-up GCP project + billing, release stack and create SM project',
+    help='Set-up GCP project + billing, deploy stack and create SM project',
 )
 @click.option('--create-gcp-project', required=False, is_flag=True)
 @click.option('--setup-gcp-billing', required=False, is_flag=True)
 @click.option('--create-hail-service-accounts', required=False, is_flag=True)
-@click.option('--prepare-pulumi-stack', required=False, is_flag=True)
+@click.option('--create-pulumi-stack', required=False, is_flag=True)
 @click.option('--add-to-seqr-stack', required=False, is_flag=True)
-@click.option('--release-stack', required=False, is_flag=True)
+@click.option('--deploy-stack', required=False, is_flag=True, help='Runs `pulumi up`')
 @click.option('--create-sample-metadata-project', required=False, is_flag=True)
 @click.option('--generate-service-account-key', required=False, is_flag=True)
 @click.option('--no-commit', required=False, is_flag=True)
@@ -92,9 +96,9 @@ def main(
     create_gcp_project=False,
     setup_gcp_billing=False,
     create_hail_service_accounts=False,
-    prepare_pulumi_stack=False,
+    create_pulumi_stack=False,
     add_to_seqr_stack=False,
-    release_stack=False,
+    deploy_stack=False,
     create_sample_metadata_project=False,
     generate_service_account_key=False,
     no_commit=False,
@@ -105,7 +109,7 @@ def main(
         create_gcp_project = True
         setup_gcp_billing = True
         create_hail_service_accounts = True
-        prepare_pulumi_stack = True
+        create_pulumi_stack = True
         create_sample_metadata_project = True
 
     dataset = dataset.lower()
@@ -151,7 +155,6 @@ def main(
         if created_gcp_project:
             assign_billing_account(_gcp_project)
 
-            # I think it makes sense to nest this in here, like
             if setup_gcp_billing:
                 create_budget(_gcp_project, amount=budget)
 
@@ -167,11 +170,10 @@ def main(
                 gcp_id=_gcp_project,
                 create_test_project=True,
             )
-            logging.info('Set up sample-metadata project')
 
     pulumi_config_fn = f'Pulumi.{dataset}.yaml'
-    if prepare_pulumi_stack:
-        generate_pulumi_stack_file(
+    if create_pulumi_stack:
+        create_stack(
             pulumi_config_fn=pulumi_config_fn,
             gcp_project=_gcp_project,
             add_to_seqr_stack=add_to_seqr_stack,
@@ -183,11 +185,8 @@ def main(
     if not os.path.exists(pulumi_config_fn):
         raise ValueError(f'Expected to find {pulumi_config_fn}, but it did not exist')
 
-    if release_stack:
-        env = {**os.environ, 'PULUMI_CONFIG_PASSPHRASE': ''}
-        subprocess.check_output(
-            ['pulumi', 'stack', 'select', '--create', dataset], env=env
-        )
+    if deploy_stack:
+        env = {**os.environ, 'PULUMI_CONFIG_PASSPHRASE': get_pulumi_config_passphrase()}
         rc = subprocess.call(['pulumi', 'up', '-y'], env=env)
         if rc != 0:
             raise ValueError(f'The stack {dataset} did not deploy correctly')
@@ -299,6 +298,7 @@ def get_hail_service_accounts(dataset: str):
             'clusters',
             'get-credentials',
             'vdc',
+            '--zone=australia-southeast1-b',
         ]
     )
     hail_client_emails_by_level = {}
@@ -398,7 +398,7 @@ def create_hail_accounts(dataset):
             time.sleep(5.0)
 
 
-def generate_pulumi_stack_file(
+def create_stack(
     pulumi_config_fn: str,
     gcp_project: str,
     dataset: str,
@@ -443,7 +443,6 @@ def generate_pulumi_stack_file(
         for access_level, value in hail_client_emails_by_level.items()
     }
     pulumi_stack = {
-        'encryptionsalt': 'v1:SPQXlVggjxw=:v1:X1sTpViNuyK+Wcom:3GANI8gZOKtk0gG7BklsyHeNU5uVLw==',
         'config': {
             'datasets:archive_age': '90',
             'datasets:customer_id': 'C010ys3gt',
@@ -468,8 +467,12 @@ def generate_pulumi_stack_file(
     add_dataset_to_tokens(dataset)
     files_to_add.append('../tokens/repository-map.json')
 
+    # Creating the stack sets the config passphrase encryption salt.
+    env = {**os.environ, 'PULUMI_CONFIG_PASSPHRASE': get_pulumi_config_passphrase()}
+    subprocess.check_output(['pulumi', 'stack', 'select', '--create', dataset], env=env)
+
     if should_commit:
-        logging.info('Preparing GIT commit')
+        logging.info('Preparing git commit')
 
         subprocess.check_output(['git', 'add', *files_to_add])
 
@@ -481,7 +484,7 @@ def generate_pulumi_stack_file(
             ['git', 'commit', '-m', commit_message or default_commit_message]
         )
         logging.info(
-            f'Created stack, you can push this WITH:\n\n'
+            f'Created stack, you can push this with:\n\n'
             f'\tgit push --set-upstream origin {branch_name}'
         )
     else:
@@ -543,6 +546,7 @@ def add_dataset_to_tokens(dataset: str):
 
     with open('../tokens/repository-map.json', 'w+', encoding='utf-8') as f:
         json.dump(d, f, indent=4, sort_keys=True)
+        f.write('\n')  # Make the inter happy.
 
     return True
 

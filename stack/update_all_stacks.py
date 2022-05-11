@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """Updates all stacks in an order compatible with each stack dependency."""
 
@@ -7,6 +7,8 @@ import graphlib  # TopologicalSorter requires python >= 3.9.
 import os
 import subprocess
 import yaml
+
+from stack_utils import get_pulumi_config_passphrase
 
 deps = {}
 for filename in glob.glob('Pulumi.*.yaml'):
@@ -18,19 +20,7 @@ for filename in glob.glob('Pulumi.*.yaml'):
         # Parse the string representation of the list.
         deps[dataset] = yaml.safe_load(deps[dataset])
 
-pulumi_config_passphrase = subprocess.check_output(
-    [
-        'gcloud',
-        '--project=analysis-runner',
-        'secrets',
-        'versions',
-        'access',
-        'latest',
-        '--secret=pulumi-passphrase',
-    ]
-)
-
-env = dict(os.environ, PULUMI_CONFIG_PASSPHRASE=pulumi_config_passphrase)
+env = dict(os.environ, PULUMI_CONFIG_PASSPHRASE=get_pulumi_config_passphrase())
 for dataset in graphlib.TopologicalSorter(deps).static_order():
     print(f'Updating {dataset}...')
     subprocess.check_call(['pulumi', 'stack', 'select', dataset], env=env)
