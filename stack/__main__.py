@@ -85,6 +85,7 @@ def main():  # pylint: disable=too-many-locals,too-many-branches
         'dataproc-service',
         service='dataproc.googleapis.com',
         disable_on_destroy=False,
+        opts=pulumi.resource.ResourceOptions(depends_on=[cloudresourcemanager]),
     )
 
     # The Life Sciences API depends on the Service Usage API.
@@ -385,6 +386,7 @@ def main():  # pylint: disable=too-many-locals,too-many-branches
         'secretmanager-service',
         service='secretmanager.googleapis.com',
         disable_on_destroy=False,
+        opts=pulumi.resource.ResourceOptions(depends_on=[cloudresourcemanager]),
     )
 
     # These secrets are used as a fast cache for checking memberships in the above groups.
