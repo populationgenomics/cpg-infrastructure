@@ -21,6 +21,10 @@
         "sample-metadata",
         "structural-constraint"
     ],
+    "epileptic-enceph": [
+        "sample-metadata",
+        "rare-disease"
+    ],
     "fewgenomes": [
         "automated-interpretation-pipeline",
         "analysis-runner",
