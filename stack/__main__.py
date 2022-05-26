@@ -22,6 +22,7 @@ ACCESS_GROUP_CACHE_SERVICE_ACCOUNT = (
     'access-group-cache@analysis-runner.iam.gserviceaccount.com'
 )
 REFERENCE_BUCKET_NAME = 'cpg-reference'
+ANALYSIS_RUNNER_CONFIG_BUCKET_NAME = 'cpg-config'
 HAIL_WHEEL_BUCKET_NAME = 'cpg-hail-ci'
 NOTEBOOKS_PROJECT = 'notebooks-314505'
 # cromwell-submission-access@populationgenomics.org.au
@@ -644,6 +645,14 @@ def main():  # pylint: disable=too-many-locals,too-many-branches
         member=pulumi.Output.concat('group:', access_group.group_key.id),
     )
 
+    # Read access to analysis-runner configs.
+    bucket_member(
+        'access-group-analysis-runner-config-viewer',
+        bucket=ANALYSIS_RUNNER_CONFIG_BUCKET_NAME,
+        role=viewer_role_id,
+        member=pulumi.Output.concat('group:', access_group.group_key.id),
+    )
+
     # Allow the usage of requester-pays buckets.
     gcp.projects.IAMMember(
         f'access-group-serviceusage-consumer',
@@ -719,6 +728,14 @@ def main():  # pylint: disable=too-many-locals,too-many-branches
         bucket_member(
             f'{access_level}-hail-wheels-viewer',
             bucket=HAIL_WHEEL_BUCKET_NAME,
+            role=viewer_role_id,
+            member=pulumi.Output.concat('group:', group.group_key.id),
+        )
+
+        # Read access to analysis-runner configs.
+        bucket_member(
+            f'{access_level}-analysis-runner-config-viewer',
+            bucket=ANALYSIS_RUNNER_CONFIG_BUCKET_NAME,
             role=viewer_role_id,
             member=pulumi.Output.concat('group:', group.group_key.id),
         )
