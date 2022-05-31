@@ -5,7 +5,7 @@ config:
   datasets:depends_on: '["acute-care", "perth-neuro", "rdnow", "heartkids", "ravenscroft-rdstudy",
     "ohmr3-mendelian", "ohmr4-epilepsy", "flinders-ophthal", "circa", "schr-neuro",
     "brain-malf", "leukodystrophies", "mito-disease", "epileptic-enceph", "ravenscroft-arch",
-    "hereditary-neuro"]'
+    "hereditary-neuro", "validation"]'
   datasets:deployment_service_account_standard: seqr-prod@seqr-308602.iam.gserviceaccount.com
   datasets:deployment_service_account_test: seqr-dev@seqr-308602.iam.gserviceaccount.com
   datasets:enable_release: "false"

@@ -1,0 +1,11 @@
+encryptionsalt: v1:goH1L3CvAZg=:v1:8NScnITVPYGpUfMH:KXDgnEo80i2nMt25U+VSgBriPyEZ+w==
+config:
+  datasets:archive_age: "90"
+  datasets:customer_id: C010ys3gt
+  datasets:enable_release: "false"
+  datasets:hail_service_account_full: validation-full-567@hail-295901.iam.gserviceaccount.com
+  datasets:hail_service_account_standard: validation-standard-575@hail-295901.iam.gserviceaccount.com
+  datasets:hail_service_account_test: validation-test-067@hail-295901.iam.gserviceaccount.com
+  gcp:billing_project: validation-351902
+  gcp:project: validation-351902
+  gcp:user_project_override: "true"
