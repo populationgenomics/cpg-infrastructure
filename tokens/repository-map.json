@@ -103,11 +103,12 @@
     ],
     "thousand-genomes": [
         "analysis-runner",
-        "thousand-genomes",
+        "cuKING",
         "joint-calling",
-        "sv-workflows",
+        "production-pipelines",
         "sample-metadata",
-        "production-pipelines"
+        "sv-workflows",
+        "thousand-genomes"
     ],
     "tob-wgs": [
         "ancestry",
@@ -122,6 +123,6 @@
         "sample-metadata",
         "production-pipelines",
         "joint-calling",
-        "gatk-sv",
+        "gatk-sv"
     ]
 }
