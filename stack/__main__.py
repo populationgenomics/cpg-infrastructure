@@ -1,8 +1,18 @@
-"""Pulumi stack to set up buckets and permission groups."""
+"""
+Pulumi stack to set up buckets and permission groups.
 
-from collections import defaultdict, namedtuple
+You can add the following keys to the config to allow
+extra service accounts to read / write data from SM.
+Note: Adding WRITE also gives you READ access.
+- sm_read_only_sas
+- sm_read_write_sas
+"""
+
+import re
 import base64
 from typing import Optional, List
+from collections import defaultdict, namedtuple
+
 import pulumi
 import pulumi_gcp as gcp
 
@@ -40,6 +50,8 @@ SampleMetadataAccessorMembership = namedtuple(
     'SampleMetadataAccessorMembership',
     ['name', 'member_key', 'permissions'],
 )
+
+NON_NAME_REGEX = re.compile(r'[^A-Za-z0-9_-]')
 
 
 def main():  # pylint: disable=too-many-locals,too-many-branches
@@ -491,6 +503,27 @@ def main():  # pylint: disable=too-many-locals,too-many-branches
         ),
     ]
 
+    # extra custom SAs
+    extra_sm_read_sas = config.get_object('sm_read_only_sas') or []
+    extra_sm_write_sas = config.get_object('sm_read_write_sas') or []
+
+    for sa in extra_sm_read_sas:
+        sm_access_levels.append(
+            SampleMetadataAccessorMembership(
+                name=_get_name_from_external_sa(sa),
+                member_key=sa,
+                permissions=('main-read',),
+            )
+        )
+    for sa in extra_sm_write_sas:
+        sm_access_levels.append(
+            SampleMetadataAccessorMembership(
+                name=_get_name_from_external_sa(sa),
+                member_key=sa,
+                permissions=('main-read', 'main-write'),
+            )
+        )
+
     # give access to sample_metadata groups (and hence sample-metadata API through secrets)
     for name, service_account, permission in sm_access_levels:
         for kind in permission:
@@ -503,6 +536,17 @@ def main():  # pylint: disable=too-many-locals,too-many-branches
                 roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
                 opts=pulumi.resource.ResourceOptions(depends_on=[cloudidentity]),
             )
+
+    # read contains writes too
+    for sa in set(extra_sm_read_sas + extra_sm_write_sas):
+        gcp.cloudrun.IamMember(
+            f'sample-metadata-{_get_name_from_external_sa(sa)}-invoker',
+            location=REGION,
+            project=SAMPLE_METADATA_PROJECT,
+            service='sample-metadata-api',
+            role='roles/run.invoker',
+            member=pulumi.Output.concat('serviceAccount:', sa),
+        )
 
     gcp.projects.IAMMember(
         'project-buckets-lister',
@@ -1079,6 +1123,27 @@ def main():  # pylint: disable=too-many-locals,too-many-branches
             role='roles/run.invoker',
             member=pulumi.Output.concat('group:', group.group_key.id),
         )
+
+
+def _get_name_from_external_sa(email: str, suffix='.iam.gserviceaccount.com'):
+    """
+    Convert service account email to name + some filtering.
+
+    >>> _get_name_from_external_sa('my-service-account@project.iam.gserviceaccount.com')
+    'my-service-account-project'
+
+    >>> _get_name_from_external_sa('yourname@populationgenomics.org.au')
+    'yourname'
+
+    >>> _get_name_from_external_sa('my.service-account+extra@domain.com')
+    'my-service-account-extra'
+    """
+    if email.endswith(suffix):
+        base = email[: -len(suffix)]
+    else:
+        base = email.split('@')[0]
+
+    return NON_NAME_REGEX.sub('-', base).replace('--', '-')
 
 
 if __name__ == '__main__':
