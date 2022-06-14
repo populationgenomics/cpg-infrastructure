@@ -123,6 +123,7 @@
         "sample-metadata",
         "production-pipelines",
         "joint-calling",
-        "gatk-sv"
+        "gatk-sv",
+        "rare-disease"
     ]
 }
