@@ -224,17 +224,19 @@ def main():  # pylint: disable=too-many-locals,too-many-branches
 
     # tmp buckets don't have an undelete lifecycle rule, to avoid paying for
     # intermediate results that get cleaned up immediately after workflow runs.
+    tmp_bucket_lifecycle_rules = [
+        gcp.storage.BucketLifecycleRuleArgs(
+            action=gcp.storage.BucketLifecycleRuleActionArgs(type='Delete'),
+            condition=gcp.storage.BucketLifecycleRuleConditionArgs(
+                age=TMP_BUCKET_PERIOD_IN_DAYS
+            ),
+        )
+    ]
+
     test_tmp_bucket = create_bucket(
         bucket_name('test-tmp'),
         enable_versioning=False,
-        lifecycle_rules=[
-            gcp.storage.BucketLifecycleRuleArgs(
-                action=gcp.storage.BucketLifecycleRuleActionArgs(type='Delete'),
-                condition=gcp.storage.BucketLifecycleRuleConditionArgs(
-                    age=TMP_BUCKET_PERIOD_IN_DAYS
-                ),
-            )
-        ],
+        lifecycle_rules=tmp_bucket_lifecycle_rules,
     )
 
     test_analysis_bucket = create_bucket(
@@ -252,14 +254,7 @@ def main():  # pylint: disable=too-many-locals,too-many-branches
     main_tmp_bucket = create_bucket(
         bucket_name('main-tmp'),
         enable_versioning=False,
-        lifecycle_rules=[
-            gcp.storage.BucketLifecycleRuleArgs(
-                action=gcp.storage.BucketLifecycleRuleActionArgs(type='Delete'),
-                condition=gcp.storage.BucketLifecycleRuleConditionArgs(
-                    age=TMP_BUCKET_PERIOD_IN_DAYS
-                ),
-            )
-        ],
+        lifecycle_rules=tmp_bucket_lifecycle_rules,
     )
 
     main_analysis_bucket = create_bucket(
@@ -791,8 +786,11 @@ def main():  # pylint: disable=too-many-locals,too-many-branches
             member=pulumi.Output.concat('group:', group.group_key.id),
         )
 
-    # The bucket used for Hail Batch pipelines.
-    hail_bucket = create_bucket(bucket_name('hail'), lifecycle_rules=[undelete_rule])
+    # The bucket used for Hail Batch pipelines, e.g. for passing input / output
+    # resources between jobs.
+    hail_bucket = create_bucket(
+        bucket_name('hail'), lifecycle_rules=tmp_bucket_lifecycle_rules
+    )
 
     for access_level, service_account in service_accounts['hail']:
         # Full access to the Hail Batch bucket.
