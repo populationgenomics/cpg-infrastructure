@@ -11,10 +11,12 @@
         "ancestry"
     ],
     "brain-malf": [
+        "automated-interpretation-pipeline",
         "sample-metadata",
         "rare-disease"
     ],
     "circa": [
+        "automated-interpretation-pipeline",
         "sample-metadata"
     ],
     "constraint": [
@@ -22,6 +24,7 @@
         "structural-constraint"
     ],
     "epileptic-enceph": [
+        "automated-interpretation-pipeline",
         "sample-metadata",
         "rare-disease"
     ],
@@ -43,6 +46,7 @@
         "sample-metadata"
     ],
     "hereditary-neuro": [
+        "automated-interpretation-pipeline",
         "sample-metadata"
     ],
     "hgdp": [
@@ -54,6 +58,7 @@
         "analysis-runner"
     ],
     "leukodystrophies": [
+        "automated-interpretation-pipeline",
         "sample-metadata",
         "rare-disease"
     ],
@@ -61,6 +66,7 @@
         "sample-metadata"
     ],
     "mito-disease": [
+        "automated-interpretation-pipeline",
         "sample-metadata",
         "rare-disease"
     ],
@@ -68,12 +74,15 @@
         "sample-metadata"
     ],
     "ohmr3-mendelian": [
+        "automated-interpretation-pipeline",
         "sample-metadata"
     ],
     "ohmr4-epilepsy": [
+        "automated-interpretation-pipeline",
         "sample-metadata"
     ],
     "perth-neuro": [
+        "automated-interpretation-pipeline",
         "sample-metadata"
     ],
     "prophecy": [
@@ -83,13 +92,18 @@
         "gatk-sv"
     ],
     "ravenscroft-arch": [
+        "automated-interpretation-pipeline",
         "sample-metadata"
     ],
     "ravenscroft-rdstudy": [
+        "automated-interpretation-pipeline",
         "sample-metadata"
     ],
-    "rdnow": [],
+    "rdnow": [
+        "automated-interpretation-pipeline"
+    ],
     "schr-neuro": [
+        "automated-interpretation-pipeline",
         "sample-metadata"
     ],
     "seqr": [
