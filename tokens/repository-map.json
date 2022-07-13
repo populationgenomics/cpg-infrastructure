@@ -136,7 +136,7 @@
         "production-pipelines",
         "sample-metadata"
     ],
-    "transcript-adapt": [
+    "tx-adapt": [
         "sample-metadata"
     ],
     "validation": [
