@@ -1,0 +1,11 @@
+encryptionsalt: v1:FeAOG4tAUYM=:v1:FMFbgUuZX6NEl2HY:3dT8DxAwqSGy3qmt/48Kak5J9dOZ1w==
+config:
+  datasets:archive_age: "90"
+  datasets:customer_id: C010ys3gt
+  datasets:enable_release: "false"
+  datasets:hail_service_account_full: kidgen-full-116@hail-295901.iam.gserviceaccount.com
+  datasets:hail_service_account_standard: kidgen-standard-963@hail-295901.iam.gserviceaccount.com
+  datasets:hail_service_account_test: kidgen-test-780@hail-295901.iam.gserviceaccount.com
+  gcp:billing_project: kidgen
+  gcp:project: kidgen
+  gcp:user_project_override: "true"
