@@ -6,9 +6,16 @@
         "rare-disease",
         "sample-metadata"
     ],
+    "ag-hidden": [
+        "sample-metadata",
+        "rare-disease"
+    ],
     "amp-pd": [],
     "ancestry": [
         "ancestry"
+    ],
+    "bioheart": [
+        "sample-metadata"
     ],
     "brain-malf": [
         "automated-interpretation-pipeline",
@@ -63,10 +70,17 @@
         "cromwell-kccg-mutect2-chip",
         "analysis-runner"
     ],
+    "kidgen": [
+        "sample-metadata",
+        "rare-disease"
+    ],
     "leukodystrophies": [
         "automated-interpretation-pipeline",
         "sample-metadata",
         "rare-disease"
+    ],
+    "mcri-lrp": [
+        "sample-metadata"
     ],
     "mgrb": [
         "sample-metadata"
@@ -140,7 +154,8 @@
         "sample-metadata"
     ],
     "tx-adapt": [
-        "sample-metadata"
+        "sample-metadata",
+        "tx-adapt"
     ],
     "validation": [
         "sample-metadata",
