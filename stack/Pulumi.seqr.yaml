@@ -1,11 +1,11 @@
-encryptionsalt: v1:JIitg3R5A/c=:v1:hPajMZhTI/odqPKm:jcEFAXCJJ9/CuLercsF8npIkBffCIQ==
 config:
   datasets:archive_age: "30"
   datasets:customer_id: C010ys3gt
-  datasets:depends_on: '["acute-care", "perth-neuro", "rdnow", "heartkids", "ravenscroft-rdstudy",
+  datasets:depends_on:
+    '["acute-care", "perth-neuro", "rdnow", "heartkids", "ravenscroft-rdstudy",
     "ohmr3-mendelian", "ohmr4-epilepsy", "flinders-ophthal", "circa", "schr-neuro",
     "brain-malf", "leukodystrophies", "mito-disease", "epileptic-enceph", "ravenscroft-arch",
-    "hereditary-neuro", "validation"]'
+    "hereditary-neuro", "validation", "ibmdx"]'
   datasets:deployment_service_account_standard: seqr-prod@seqr-308602.iam.gserviceaccount.com
   datasets:deployment_service_account_test: seqr-dev@seqr-308602.iam.gserviceaccount.com
   datasets:enable_release: "false"
@@ -15,3 +15,4 @@ config:
   gcp:billing_project: seqr-308602
   gcp:project: seqr-308602
   gcp:user_project_override: "true"
+encryptionsalt: v1:JIitg3R5A/c=:v1:hPajMZhTI/odqPKm:jcEFAXCJJ9/CuLercsF8npIkBffCIQ==
