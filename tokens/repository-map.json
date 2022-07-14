@@ -55,6 +55,9 @@
     "hgdp": [
         "hgdp"
     ],
+    "ibmdx": [
+        "sample-metadata"
+    ],
     "kccg-genomics-med": [
         "sample-metadata",
         "cromwell-kccg-mutect2-chip",
