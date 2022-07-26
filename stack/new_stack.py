@@ -187,9 +187,16 @@ def main(
 
     if deploy_stack:
         env = {**os.environ, 'PULUMI_CONFIG_PASSPHRASE': get_pulumi_config_passphrase()}
+        rc = subprocess.call(['pulumi', 'stack', 'select', dataset], env=env)
         rc = subprocess.call(['pulumi', 'up', '-y'], env=env)
         if rc != 0:
             raise ValueError(f'The stack {dataset} did not deploy correctly')
+
+        if add_to_seqr_stack:
+            rc = subprocess.call(['pulumi', 'stack', 'select', 'seqr'], env=env)
+            rc_seqr = subprocess.call(['pulumi', 'up', '-y'], env=env)
+            if rc_seqr != 0:
+                raise ValueError(f'The seqr stack {dataset} did not deploy correctly')
 
     if generate_service_account_key:
         generate_upload_account_json(dataset=dataset, gcp_project=_gcp_project)
