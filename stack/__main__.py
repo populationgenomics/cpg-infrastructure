@@ -170,7 +170,7 @@ def main():  # pylint: disable=too-many-locals,too-many-branches
     undelete_rule = gcp.storage.BucketLifecycleRuleArgs(
         action=gcp.storage.BucketLifecycleRuleActionArgs(type='Delete'),
         condition=gcp.storage.BucketLifecycleRuleConditionArgs(
-            age=30, with_state='ARCHIVED'
+            days_since_noncurrent_time=30, with_state='ARCHIVED'
         ),
     )
 
