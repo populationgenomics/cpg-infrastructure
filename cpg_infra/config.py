@@ -58,9 +58,9 @@ class CPGDatasetConfig:
     archive_age: int = 30
 
     @classmethod
-    def from_pulumi(cls, config):
+    def from_pulumi(cls, config, **kwargs):
         fields = {field.name: field.type for field in dataclasses.fields(cls)}
-        d = {}
+        d = {**kwargs}
         for fieldname, ftype in fields.items():
 
             if any(str(ftype).startswith(ext + "[") for ext in ("list", "dict")):

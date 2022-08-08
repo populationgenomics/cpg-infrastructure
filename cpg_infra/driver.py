@@ -71,15 +71,26 @@ NON_NAME_REGEX = re.compile(r"[^A-Za-z0-9_-]")
 
 
 class CPGInfrastructure:
+
+    @staticmethod
+    def deploy_all_from_config(config: CPGDatasetConfig):
+        _infra_map = {c.name(): c for c in CloudInfraBase.__subclasses__()}
+        _infras: list[Type[CloudInfraBase]] = [_infra_map[n] for n in config.deploy_locations]
+
+        for _infra in _infras:
+            CPGInfrastructure(_infra, config).main()
+
+
     def __init__(self, infra, config: CPGDatasetConfig):
         self.config: CPGDatasetConfig = config
         self.infra: CloudInfraBase = infra(self.config) if isclass(infra) else infra
         self.components: list[CPGDatasetComponents] = config.components.get(self.infra.name(), CPGDatasetComponents.default_component_for_infrastructure()[self.infra.name()])
 
     def create_group(self, name: str):
-        group = self.infra.create_group(name)
+        group_name = f'{self.config.dataset}-{name}'
+        group = self.infra.create_group(group_name)
         self.infra.add_group_member(
-            f"access-group-cacher-{name}", group, ACCESS_GROUP_CACHE_SERVICE_ACCOUNT
+            f"access-group-cacher-{group_name}", group, ACCESS_GROUP_CACHE_SERVICE_ACCOUNT
         )
         return group
 
@@ -198,7 +209,7 @@ class CPGInfrastructure:
                 service_accounts[kind].append(
                     (
                         access_level,
-                        self.infra.create_machine_account(f"{kind}-{access_level}"),
+                        self.infra.create_machine_account(f"{kind}-sa-{access_level}"),
                     )
                 )
 
@@ -246,7 +257,7 @@ class CPGInfrastructure:
         ) in self.working_machine_accounts_kind_al_account_gen():
             group = self.access_level_groups[access_level]
             self.infra.add_group_member(
-                f"{access_level}-grp-{kind}-membership",
+                f"{kind}-{access_level}-access-level-group-membership",
                 group=group,
                 member=machine_account,
             )

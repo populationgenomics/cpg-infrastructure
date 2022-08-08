@@ -3,7 +3,7 @@ from typing import Any
 import pulumi
 import pulumi_gcp as gcp
 
-from cpg_infra.abstraction.base import CloudInfraBase, UNDELETE_PERIOD_IN_DAYS
+from cpg_infra.abstraction.base import CloudInfraBase, UNDELETE_PERIOD_IN_DAYS, ARCHIVE_PERIOD_IN_DAYS, TMP_BUCKET_PERIOD_IN_DAYS, BucketPermission
 from cpg_infra.config import CPGDatasetConfig, CPGDatasetComponents
 
 GCP_CUSTOMER_ID = "C010ys3gt"
@@ -66,6 +66,22 @@ class GcpInfrastructure(CloudInfraBase):
             ),
         )
 
+    def bucket_rule_archive(self, days=ARCHIVE_PERIOD_IN_DAYS) -> Any:
+        return gcp.storage.BucketLifecycleRuleArgs(
+                action=gcp.storage.BucketLifecycleRuleActionArgs(
+                    type='SetStorageClass', storage_class='ARCHIVE'
+                ),
+                condition=gcp.storage.BucketLifecycleRuleConditionArgs(age=days),
+            )
+
+    def bucket_rule_temporary(self, days=TMP_BUCKET_PERIOD_IN_DAYS) -> Any:
+        return gcp.storage.BucketLifecycleRuleArgs(
+            action=gcp.storage.BucketLifecycleRuleActionArgs(type='Delete'),
+            condition=gcp.storage.BucketLifecycleRuleConditionArgs(
+                age=days
+            ),
+        )
+
     def create_bucket(
         self, name: str, lifecycle_rules: list, unique=False, requester_pays=False
     ) -> Any:
@@ -73,12 +89,12 @@ class GcpInfrastructure(CloudInfraBase):
         if not unique:
             unique_bucket_name = f"cpg-{self.dataset}-{name}"
         return gcp.storage.Bucket(
-            "bucket-" + name,
+            unique_bucket_name,
             name=unique_bucket_name,
             location=self.region,
             uniform_bucket_level_access=True,
             # versioning=gcp.storage.BucketVersioningArgs(enabled=enable_versioning),
-            labels={"bucket": name},
+            labels={"bucket": unique_bucket_name},
             lifecycle_rules=lifecycle_rules,
         )
 
@@ -91,20 +107,33 @@ class GcpInfrastructure(CloudInfraBase):
 
         raise NotImplementedError(f"Not valid for type {type(member)}")
 
+    @staticmethod
+    def bucket_membership_to_role(membership: BucketPermission):
+        # TODO: fix organization id
+        organization_id = 'TEMPORARY'
+        if membership == BucketPermission.MUTATE:
+            return 'roles/storage.admin'
+        if membership == BucketPermission.APPEND:
+            return f'{organization_id}/roles/StorageViewerAndCreator'
+        if membership == BucketPermission.READ:
+            return f'{organization_id}/roles/StorageObjectAndBucketViewer'
+        if membership == BucketPermission.LIST:
+            return f'{organization_id}/roles/StorageLister'
+
     def add_member_to_bucket(
-        self, resource_key: str, bucket, member, membership
+        self, resource_key: str, bucket, member, membership: BucketPermission
     ) -> Any:
 
         gcp.storage.BucketIAMMember(
             resource_key,
             bucket=bucket.name,
-            role="roles/storage.admin",
+            role=self.bucket_membership_to_role(membership),
             member=self.get_member_key(member),
         )
 
     def create_machine_account(self, name: str) -> Any:
         return gcp.serviceaccount.Account(
-            f"service-account-name",
+            f'service-account-{name}',
             account_id=name,
             display_name=name,
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
@@ -135,9 +164,8 @@ class GcpInfrastructure(CloudInfraBase):
         )
 
     def add_group_member(self, resource_key: str, group, member) -> Any:
-        print(member)
         gcp.cloudidentity.GroupMembership(
-            "access-group-cache-membership",
+            resource_key,
             group=group.id,
             preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
                 id=member

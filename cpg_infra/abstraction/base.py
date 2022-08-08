@@ -22,6 +22,7 @@ from cpg_infra.config import CPGDatasetConfig, CPGDatasetComponents
 
 UNDELETE_PERIOD_IN_DAYS = 30
 TMP_BUCKET_PERIOD_IN_DAYS = 8  # tmp content gets deleted afterwards.
+ARCHIVE_PERIOD_IN_DAYS = 30
 
 
 class SecretMembership(Enum):
@@ -178,9 +179,8 @@ class DevInfra(CloudInfraBase):
         print(f"Allow {member} to access {machine_account}")
 
     def create_group(self, name: str) -> Any:
-        group_name = f"{self.dataset}-{name}"
-        print(f"Creating Group: {group_name}")
-        return group_name + "@populationgenomics.org.au"
+        print(f"Creating Group: {name}")
+        return name + "@populationgenomics.org.au"
 
     def add_group_member(self, resource_key: str, group, member) -> Any:
         print(f"{resource_key} :: Add {member} to {group}")
