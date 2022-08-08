@@ -1,4 +1,5 @@
-from typing import Type, Any, Iterator
+import re
+from typing import Type, Any, Iterator, Iterable
 from inspect import isclass
 from collections import defaultdict, namedtuple
 
@@ -8,7 +9,7 @@ import pulumi
 
 from cpg_infra.abstraction.azure import AzureInfra
 from cpg_infra.abstraction.gcp import GcpInfrastructure
-from cpg_infra.abstraction.base import CloudInfraBase, DevInfra
+from cpg_infra.abstraction.base import CloudInfraBase, DevInfra, SecretMembership
 from cpg_infra.config import CPGDatasetConfig
 
 DOMAIN = "populationgenomics.org.au"
@@ -37,7 +38,6 @@ SAMPLE_METADATA_PROJECT = "sample-metadata"
 SAMPLE_METADATA_API_SERVICE_ACCOUNT = (
     "sample-metadata-api@sample-metadata.iam.gserviceaccount.com"
 )
-ACCESS_LEVELS = ("test", "standard", "full")
 TMP_BUCKET_PERIOD_IN_DAYS = 8  # tmp content gets deleted afterwards.
 
 SampleMetadataAccessorMembership = namedtuple(
@@ -46,48 +46,76 @@ SampleMetadataAccessorMembership = namedtuple(
     ["name", "member_key", "permissions"],
 )
 
+SM_TEST_READ = "test-read"
+SM_TEST_WRITE = "test-write"
+SM_MAIN_READ = "main-read"
+SM_MAIN_WRITE = "main-write"
+SAMPLE_METADATA_PERMISSIONS = [
+    SM_TEST_READ,
+    SM_TEST_WRITE,
+    SM_MAIN_READ,
+    SM_MAIN_WRITE,
+]
+
+
+AccessLevel = str
+ACCESS_LEVELS: Iterable[AccessLevel] = ("test", "standard", "full")
+NON_NAME_REGEX = re.compile(r'[^A-Za-z0-9_-]')
+
+
 class CPGInfrastructure:
     def __init__(self, infra, config: CPGDatasetConfig):
         self.config: CPGDatasetConfig = config
         self.infra: CloudInfraBase = infra(config) if isclass(infra) else infra
 
-        # cache
-        self._working_machine_accounts_by_access_level = None
-
     def main(self):
 
-        main_upload_account = self.infra.create_machine_account("main-upload")
-        main_upload_buckets = self.get_main_upload_buckets()
+        # set-up machine group membership
+        self.setup_access_level_group_memberships()
+        self.setup_dependent_group_memberships()
 
-        test_upload_bucket = self.infra.create_bucket("test-upload", lifecycle_rules=[])
-        for bname, main_upload_bucket in main_upload_buckets.items():
-            self.infra.add_member_to_bucket(
-                f"main-upload-service-account-{bname}-bucket-creator",
-                bucket=main_upload_bucket,
-                member=main_upload_account,
-            )
+        # setup bucket permissions
+        self.setup_main_bucket_permissions()
 
-        working_machine_accounts = self.get_working_machine_accounts_by_type()
-        for obj in self.working_machine_accounts_gen():
-            print(obj)
+        self.setup_sample_metadata_permissions()
 
+        self.setup_main_upload_buckets()
+
+        # outputs
+        self.setup_access_level_group_outputs()
+
+    # region MACHINE ACCOUNTS
+
+    @property
     @lru_cache()
-    def get_working_machine_accounts_by_type(self) -> dict[str, list[tuple[str, Any]]]:
-        print('GENERATING ACCOUNTS')
+    def main_upload_account(self):
+        return self.infra.create_machine_account("main-upload")
+
+    @property
+    @lru_cache()
+    def working_machine_accounts_by_type(
+        self,
+    ) -> dict[str, list[tuple[AccessLevel, Any]]]:
+        print("GENERATING ACCOUNTS")
         machine_accounts: dict[str, list] = defaultdict(list)
-        for kind, access_level_and_sa in self.get_hail_accounts().items():
+        for kind, access_level_and_sa in self._get_hail_and_deploy_accounts().items():
             machine_accounts[kind].extend(access_level_and_sa)
-        for kind, access_level_and_sa in self.generate_dataproc_and_cromwell_machine_accounts().items():
+        for (
+            kind,
+            access_level_and_sa,
+        ) in self._generate_dataproc_and_cromwell_machine_accounts().items():
             machine_accounts[kind].extend(access_level_and_sa)
 
         return machine_accounts
 
-    def working_machine_accounts_gen(self) -> Iterator[tuple[str, str, Any]]:
-        for kind, values in self.get_working_machine_accounts_by_type().items():
-            for access_level, service_account in values:
-                yield kind, access_level, service_account
+    def working_machine_accounts_kind_al_account_gen(
+        self,
+    ) -> Iterator[tuple[str, AccessLevel, Any]]:
+        for kind, values in self.working_machine_accounts_by_type.items():
+            for access_level, machine_account in values:
+                yield kind, access_level, machine_account
 
-    def get_hail_accounts(self):
+    def _get_hail_and_deploy_accounts(self) -> dict[str, list[tuple[AccessLevel, Any]]]:
         service_accounts = defaultdict(list)
         for kind in "hail", "deployment":
             for access_level in ACCESS_LEVELS:
@@ -99,7 +127,9 @@ class CPGInfrastructure:
 
         return service_accounts
 
-    def generate_dataproc_and_cromwell_machine_accounts(self):
+    def _generate_dataproc_and_cromwell_machine_accounts(
+        self,
+    ) -> dict[str, list[tuple[AccessLevel, Any]]]:
         service_accounts = defaultdict(list)
         for kind in "dataproc", "cromwell":
             for access_level in ACCESS_LEVELS:
@@ -112,8 +142,188 @@ class CPGInfrastructure:
 
         return service_accounts
 
-    def get_main_upload_buckets(self) -> dict[str, Any]:
-        main_upload_undelete = self.infra.rule_undelete(days=30)
+    # endregion MACHINE ACCOUNTS
+
+    # region GROUPS
+
+    @property
+    @lru_cache
+    def access_group(self):
+        return self.infra.create_group("access")
+
+    @property
+    @lru_cache()
+    def web_access_group(self):
+        return self.infra.create_group("web-access")
+
+    @property
+    @lru_cache()
+    def access_level_groups(self) -> dict[AccessLevel, Any]:
+        return {al: self.infra.create_group(al) for al in ACCESS_LEVELS}
+
+    @staticmethod
+    def get_access_level_group_output_name(*, access_level: AccessLevel):
+        return f"{access_level}-access-group-id"
+
+    def setup_access_level_group_outputs(self):
+        for access_level, group in self.access_level_groups.items():
+            pulumi.export(
+                self.get_access_level_group_output_name(access_level=access_level),
+                group.id if hasattr(group, 'id') else group,
+            )
+
+    def setup_access_level_group_memberships(self):
+        for (
+            kind,
+            access_level,
+            machine_account,
+        ) in self.working_machine_accounts_kind_al_account_gen():
+            group = self.access_level_groups[access_level]
+            self.infra.add_group_member(
+                f"{access_level}-grp-{kind}-membership",
+                group=group,
+                member=machine_account,
+            )
+
+    @property
+    @lru_cache()
+    def sample_metadata_groups(self) -> dict[str, any]:
+        sm_groups = {}
+        for key in SAMPLE_METADATA_PERMISSIONS:
+            sm_groups[key] = self.infra.create_group(f"sample-metadata-{key}")
+
+        return sm_groups
+
+    def setup_sample_metadata_permissions(self):
+        sm_access_levels: list[SampleMetadataAccessorMembership] = [
+            SampleMetadataAccessorMembership(
+                name="human",
+                member_key=self.access_group,
+                permissions=(SM_MAIN_READ, SM_TEST_READ, SM_TEST_WRITE),
+            ),
+            SampleMetadataAccessorMembership(
+                name="test",
+                member_key=self.access_level_groups["test"],
+                permissions=(SM_MAIN_READ, SM_TEST_READ, SM_TEST_WRITE),
+            ),
+            SampleMetadataAccessorMembership(
+                name="standard",
+                member_key=self.access_level_groups["standard"],
+                permissions=(SM_MAIN_READ, SM_MAIN_WRITE),
+            ),
+            SampleMetadataAccessorMembership(
+                name="full",
+                member_key=self.access_level_groups["full"],
+                permissions=SAMPLE_METADATA_PERMISSIONS,
+            ),
+            # allow the analysis-runner logging cloud function to update the sample-metadata project
+            SampleMetadataAccessorMembership(
+                name="analysis-runner-logger",
+                member_key=ANALYSIS_RUNNER_LOGGER_SERVICE_ACCOUNT,
+                permissions=SAMPLE_METADATA_PERMISSIONS,
+            ),
+        ]
+
+        # extra custom SAs
+        extra_sm_read_sas = self.config.sm_read_only_sas
+        extra_sm_write_sas = self.config.sm_read_write_sas
+
+        for sa in extra_sm_read_sas:
+            sm_access_levels.append(
+                SampleMetadataAccessorMembership(
+                    name=self._get_name_from_external_sa(sa),
+                    member_key=sa,
+                    permissions=(SM_MAIN_READ,),
+                )
+            )
+        for sa in extra_sm_write_sas:
+            sm_access_levels.append(
+                SampleMetadataAccessorMembership(
+                    name=self._get_name_from_external_sa(sa),
+                    member_key=sa,
+                    permissions=(SM_MAIN_READ, SM_MAIN_WRITE),
+                )
+            )
+
+        # give access to sample_metadata groups (and hence sample-metadata API through secrets)
+        for name, member, permission in sm_access_levels:
+            for kind in permission:
+                self.infra.add_group_member(
+                    f'sample-metadata-{kind}-{name}-access-level-group-membership',
+                    self.sample_metadata_groups[kind],
+                    member,
+                )
+
+    def setup_sample_metadata_members_cache_secrets(self):
+        # hopefully this is just temporary
+        for sm_group_name, sm_group in self.sample_metadata_groups.items():
+            self.infra.add_group_member(
+                f"sample-metadata-group-cache-{sm_group_name}-group-membership",
+                sm_group,
+                ACCESS_GROUP_CACHE_SERVICE_ACCOUNT,
+            )
+
+            sm_cache_secret = self.infra.create_secret(f"{sm_group_name}-members-cache")
+
+            self.infra.add_secret_member(
+                f"{sm_group_name}-group-cache-secret-accessor",
+                sm_cache_secret,
+                ACCESS_GROUP_CACHE_SERVICE_ACCOUNT,
+                SecretMembership.ADMIN,
+            ),
+            self.infra.add_secret_member(
+                f"{sm_group_name}-smservice-secret-accessor",
+                sm_cache_secret,
+                SAMPLE_METADATA_API_SERVICE_ACCOUNT,
+                SecretMembership.ACCESSOR,
+            ),
+
+    # endregion GROUPS
+    # region MAIN BUCKETS
+
+    def setup_main_upload_buckets_permissions(self):
+        for bname, main_upload_bucket in self.main_upload_buckets.items():
+            self.infra.add_member_to_bucket(
+                f"main-upload-service-account-{bname}-bucket-creator",
+                bucket=main_upload_bucket,
+                member=self.main_upload_account,
+            )
+
+    def setup_main_bucket_permissions(self):
+        pass
+
+    @property
+    @lru_cache()
+    def main_bucket(self):
+        return self.infra.create_bucket(
+            "main", lifecycle_rules=[self.infra.bucket_rule_undelete()]
+        )
+
+    @property
+    @lru_cache()
+    def main_tmp_bucket(self):
+        return self.infra.create_bucket(
+            "main-tmp", lifecycle_rules=[self.infra.bucket_rule_temporary()]
+        )
+
+    @property
+    @lru_cache()
+    def main_analysis(self):
+        return self.infra.create_bucket(
+            "main-analysis", lifecycle_rules=[self.infra.bucket_rule_undelete()]
+        )
+
+    @property
+    @lru_cache()
+    def main_web(self):
+        return self.infra.create_bucket(
+            "main-web", lifecycle_rules=[self.infra.bucket_rule_undelete()]
+        )
+
+    @property
+    @lru_cache()
+    def main_upload_buckets(self) -> dict[str, Any]:
+        main_upload_undelete = self.infra.bucket_rule_undelete(days=30)
         main_upload_buckets = {
             "main-upload": self.infra.create_bucket(
                 "main-upload", lifecycle_rules=[main_upload_undelete]
@@ -128,6 +338,52 @@ class CPGInfrastructure:
             )
 
         return main_upload_buckets
+
+    # endregion MAIN BUCKETS
+
+    # region DEPENDENCIES
+
+    def setup_dependent_group_memberships(self):
+        for access_level, primary_access_group in self.access_level_groups.items():
+            for dependency in self.config.depends_on:
+                dependency_group_id = self.get_pulumi_stack(dependency).get_output(
+                    self.get_access_level_group_output_name(access_level=access_level),
+                )
+
+                # add this dataset to dependencies membership
+                self.infra.add_group_member(
+                    f"{dependency}-{access_level}-access-level-group",
+                    dependency_group_id,
+                    primary_access_group,
+                )
+
+    @staticmethod
+    @lru_cache()
+    def get_pulumi_stack(dependency_name: str):
+        return pulumi.StackReference(dependency_name)
+
+    # endregion DEPENDENCIES
+
+    @staticmethod
+    def _get_name_from_external_sa(email: str, suffix='.iam.gserviceaccount.com'):
+        """
+        Convert service account email to name + some filtering.
+
+        >>> CPGInfrastructure._get_name_from_external_sa('my-service-account@project.iam.gserviceaccount.com')
+        'my-service-account-project'
+
+        >>> CPGInfrastructure._get_name_from_external_sa('yourname@populationgenomics.org.au')
+        'yourname'
+
+        >>> CPGInfrastructure._get_name_from_external_sa('my.service-account+extra@domain.com')
+        'my-service-account-extra'
+        """
+        if email.endswith(suffix):
+            base = email[: -len(suffix)]
+        else:
+            base = email.split('@')[0]
+
+        return NON_NAME_REGEX.sub('-', base).replace('--', '-')
 
 
 if __name__ == "__main__":
