@@ -15,11 +15,24 @@ Some challenges I forsee with this abstraction:
 """
 
 from abc import ABC, abstractmethod
+from enum import Enum
 from typing import Any
 
 from cpg_infra.config import CPGDatasetConfig
 
-UNDELETE_DAYS = 30
+UNDELETE_PERIOD_IN_DAYS = 30
+TMP_BUCKET_PERIOD_IN_DAYS = 8  # tmp content gets deleted afterwards.
+
+
+class SecretMembership(Flag):
+    ACCESSOR = 'accessor'
+    ADMIN = 'admin'
+
+
+class BucketPermission(Enum):
+    LIST = 'list'
+    READ = 'read'
+    MUTATE = 'mutate'
 
 
 class CloudInfraBase(ABC):
@@ -28,12 +41,20 @@ class CloudInfraBase(ABC):
         self.dataset = config.dataset
 
     @abstractmethod
-    def rule_undelete(self, days=UNDELETE_DAYS) -> Any:
+    def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
         """
         Return a lifecycle_rule that stores data for n days after delete"""
         pass
 
-    # BUCKET
+    @abstractmethod
+    def bucket_rule_temporary(self, days=TMP_BUCKET_PERIOD_IN_DAYS) -> Any:
+        """
+        Return a lifecycle_rule that stores data for n days after delete"""
+        pass
+
+    @abstractmethod
+
+    # region BUCKET
 
     @abstractmethod
     def create_bucket(self, name: str, lifecycle_rules: list, unique=False) -> Any:
@@ -51,7 +72,9 @@ class CloudInfraBase(ABC):
         """
         pass
 
-    # MACHINE ACCOUNTS
+    # endregion BUCKET
+
+    # region MACHINE ACCOUNTS
     @abstractmethod
     def create_machine_account(self, name: str) -> Any:
         """
@@ -65,6 +88,7 @@ class CloudInfraBase(ABC):
     ) -> Any:
         pass
 
+    # endregion MACHINE ACCOUNTS
     # GROUPS
     @abstractmethod
     def create_group(self, name: str) -> Any:
@@ -88,7 +112,7 @@ class CloudInfraBase(ABC):
         pass
 
     @abstractmethod
-    def add_secret_member_accessor(self, resource_key: str, secret, member) -> Any:
+    def add_secret_member(self, resource_key: str, secret, member, membership: SecretMembership) -> Any:
         pass
 
     # ARTIFACT REPOSITORY
@@ -105,11 +129,14 @@ class CloudInfraBase(ABC):
 
 
 class DevInfra(CloudInfraBase):
-    def rule_undelete(self, days=UNDELETE_DAYS) -> Any:
-        return None
+    def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
+        return f'RULE:undelete={days}d'
+
+    def bucket_rule_temporary(self, days=TMP_BUCKET_PERIOD_IN_DAYS) -> Any:
+        return f'RULE:tmp={days}d'
 
     def create_bucket(self, name: str, lifecycle_rules: list, unique=False) -> Any:
-        print(f"Create bucket: {name}")
+        print(f'Create bucket: {name} w/ rules: {", ".join(lifecycle_rules)}')
         return f"BUCKET://{name}"
 
     def add_member_to_bucket(self, resource_key: str, bucket, member):
@@ -125,8 +152,9 @@ class DevInfra(CloudInfraBase):
         print(f"Allow {member} to access {machine_account}")
 
     def create_group(self, name: str) -> Any:
-        print(f"Creating Group: {name}")
-        return name + "@populationgenomics.org.au"
+        group_name = f'{self.dataset}-{name}'
+        print(f"Creating Group: {group_name}")
+        return group_name + "@populationgenomics.org.au"
 
     def add_group_member(self, resource_key: str, group, member) -> Any:
         print(f"{resource_key} :: Add {member} to {group}")
@@ -135,7 +163,7 @@ class DevInfra(CloudInfraBase):
         print(f"Creating secret: {name}")
         return f"SECRET:{name}"
 
-    def add_secret_member_accessor(self, resource_key: str, secret, member) -> Any:
+    def add_secret_member(self, resource_key: str, secret, member, membership) -> Any:
         print(f"{resource_key} :: Allow {member} to read secret {secret}")
 
     def add_member_to_artifact_registry(

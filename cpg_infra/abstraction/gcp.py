@@ -3,7 +3,7 @@ from typing import Any
 import pulumi
 import pulumi_gcp as gcp
 
-from cpg_infra.abstraction.base import CloudInfraBase, UNDELETE_DAYS
+from cpg_infra.abstraction.base import CloudInfraBase, UNDELETE_PERIOD_IN_DAYS
 from cpg_infra.config import CPGDatasetConfig
 
 GCP_CUSTOMER_ID = 'C010ys3gt'
@@ -30,11 +30,11 @@ class GcpInfrastructure(CloudInfraBase):
             ),
         )
 
-    def rule_undelete(self, days=UNDELETE_DAYS) -> Any:
+    def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
         return gcp.storage.BucketLifecycleRuleArgs(
             action=gcp.storage.BucketLifecycleRuleActionArgs(type="Delete"),
             condition=gcp.storage.BucketLifecycleRuleConditionArgs(
-                days_since_noncurrent_time=30, with_state="ARCHIVED"
+                days_since_noncurrent_time=days, with_state="ARCHIVED"
             ),
         )
 
@@ -109,7 +109,7 @@ class GcpInfrastructure(CloudInfraBase):
     def create_secret(self, name: str) -> Any:
         pass
 
-    def add_secret_member_accessor(self, resource_key: str, secret, member) -> Any:
+    def add_secret_member(self, resource_key: str, secret, member, membership) -> Any:
         pass
 
     def add_member_to_artifact_registry(

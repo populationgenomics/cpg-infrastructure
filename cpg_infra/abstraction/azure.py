@@ -2,7 +2,7 @@ from typing import Any
 
 import pulumi_azure_native as az
 
-from cpg_infra.abstraction.base import CloudInfraBase, UNDELETE_DAYS
+from cpg_infra.abstraction.base import CloudInfraBase, UNDELETE_PERIOD_IN_DAYS
 from cpg_infra.config import CPGDatasetConfig
 
 
@@ -31,7 +31,7 @@ class AzureInfra(CloudInfraBase):
             )
         return self._storage_account
 
-    def rule_undelete(self, days=UNDELETE_DAYS) -> Any:
+    def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
         pass
 
     def create_bucket(self, name: str, lifecycle_rules: list, unique=False) -> Any:
@@ -69,7 +69,7 @@ class AzureInfra(CloudInfraBase):
     def create_secret(self, name: str) -> Any:
         pass
 
-    def add_secret_member_accessor(self, resource_key: str, secret, member) -> Any:
+    def add_secret_member(self, resource_key: str, secret, member, membership) -> Any:
         pass
 
     def add_member_to_artifact_registry(
