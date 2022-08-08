@@ -1,4 +1,25 @@
 import dataclasses
+from enum import Enum
+
+
+class CPGDatasetComponents(Enum):
+    STORAGE = "storage"
+    SPARK = "spark"
+    CROMWELL = "cromwell"
+    NOTEBOOKS = "notebooks"
+    SAMPLE_METADATA = "sample_metadata"
+
+    @staticmethod
+    def default_component_for_infrastructure():
+
+        return {
+            "dev": list(CPGDatasetComponents),
+            "gcp": list(CPGDatasetComponents),
+            "azure": [
+                CPGDatasetComponents.STORAGE,
+                # CPGDatasetComponents.SAMPLE_METADATA,
+            ],
+        }
 
 
 @dataclasses.dataclass(frozen=True)
@@ -15,6 +36,8 @@ class CPGDatasetConfig:
     deployment_service_account_standard: str | None = None
     deployment_service_account_full: str | None = None
 
+    deploy_locations: list[str] = dataclasses.field(default_factory=lambda: ['gcp'])
+
     # creates a release requester-pays bucket
     enable_release: bool = False
 
@@ -28,6 +51,10 @@ class CPGDatasetConfig:
     sm_read_only_sas: list[str] = dataclasses.field(default_factory=list)
     sm_read_write_sas: list[str] = dataclasses.field(default_factory=list)
 
+    components: dict[str, list[CPGDatasetComponents]] = dataclasses.field(
+        default_factory=dict
+    )
+
     archive_age: int = 30
 
     @classmethod
@@ -36,7 +63,7 @@ class CPGDatasetConfig:
         d = {}
         for fieldname, ftype in fields.items():
 
-            if any(str(ftype).startswith(ext + '[') for ext in ('list', 'dict')):
+            if any(str(ftype).startswith(ext + "[") for ext in ("list", "dict")):
                 value = config.get_object(fieldname)
             else:
                 value = config.get(fieldname)
