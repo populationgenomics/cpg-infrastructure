@@ -34,7 +34,7 @@ class AzureInfra(CloudInfraBase):
     def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
         pass
 
-    def create_bucket(self, name: str, lifecycle_rules: list, unique=False) -> Any:
+    def create_bucket(self, name: str, lifecycle_rules: list, unique=False, requester_pays=False) -> Any:
         return az.storage.BlobContainer(
             f"bucket-{name}",
             resource_group_name=self.resource_group_name,
@@ -42,7 +42,7 @@ class AzureInfra(CloudInfraBase):
             container_name=name,
         )
 
-    def add_member_to_bucket(self, resource_key: str, bucket, member) -> Any:
+    def add_member_to_bucket(self, resource_key: str, bucket, member, membership) -> Any:
         az.authorization.RoleAssignment(
             resource_key,
             scope=bucket.id,

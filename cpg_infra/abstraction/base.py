@@ -18,27 +18,34 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Any
 
-from cpg_infra.config import CPGDatasetConfig
+from cpg_infra.config import CPGDatasetConfig, CPGDatasetComponents
 
 UNDELETE_PERIOD_IN_DAYS = 30
 TMP_BUCKET_PERIOD_IN_DAYS = 8  # tmp content gets deleted afterwards.
 
 
-class SecretMembership(Flag):
-    ACCESSOR = 'accessor'
-    ADMIN = 'admin'
+class SecretMembership(Enum):
+    ACCESSOR = "accessor"
+    ADMIN = "admin"
 
 
 class BucketPermission(Enum):
-    LIST = 'list'
-    READ = 'read'
-    MUTATE = 'mutate'
+    LIST = "list"
+    READ = "read"
+    APPEND = "append"
+    MUTATE = "mutate"
 
 
 class CloudInfraBase(ABC):
     def __init__(self, config: CPGDatasetConfig):
         super().__init__()
         self.dataset = config.dataset
+        self.components = config.components.get(self.name(), CPGDatasetComponents.default_component_for_infrastructure()[self.name()])
+
+    @staticmethod
+    @abstractmethod
+    def name():
+        pass
 
     @abstractmethod
     def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
@@ -57,18 +64,28 @@ class CloudInfraBase(ABC):
     # region BUCKET
 
     @abstractmethod
-    def create_bucket(self, name: str, lifecycle_rules: list, unique=False) -> Any:
+    def create_bucket(
+        self,
+        name: str,
+        lifecycle_rules: list,
+        unique: bool = False,
+        requester_pays: bool = False,
+    ) -> Any:
         """
         This should take a potentially `non-unique` bucket name,
         and create a bucket, returning a resource.
+        :param requester_pays:
         """
         pass
 
     @abstractmethod
-    def add_member_to_bucket(self, resource_key: str, bucket, member) -> Any:
+    def add_member_to_bucket(
+        self, resource_key: str, bucket, member, membership: BucketPermission
+    ) -> Any:
         """
         Add some member to a bucket.
         Note: You MUST specify a unique resource_key
+        :param membership:
         """
         pass
 
@@ -112,7 +129,9 @@ class CloudInfraBase(ABC):
         pass
 
     @abstractmethod
-    def add_secret_member(self, resource_key: str, secret, member, membership: SecretMembership) -> Any:
+    def add_secret_member(
+        self, resource_key: str, secret, member, membership: SecretMembership
+    ) -> Any:
         pass
 
     # ARTIFACT REPOSITORY
@@ -129,17 +148,24 @@ class CloudInfraBase(ABC):
 
 
 class DevInfra(CloudInfraBase):
+
+    @staticmethod
+    def name():
+        return 'dev'
+
     def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
-        return f'RULE:undelete={days}d'
+        return f"RULE:undelete={days}d"
 
     def bucket_rule_temporary(self, days=TMP_BUCKET_PERIOD_IN_DAYS) -> Any:
-        return f'RULE:tmp={days}d'
+        return f"RULE:tmp={days}d"
 
-    def create_bucket(self, name: str, lifecycle_rules: list, unique=False) -> Any:
+    def create_bucket(
+        self, name: str, lifecycle_rules: list, unique=False, requester_pays=False
+    ) -> Any:
         print(f'Create bucket: {name} w/ rules: {", ".join(lifecycle_rules)}')
         return f"BUCKET://{name}"
 
-    def add_member_to_bucket(self, resource_key: str, bucket, member):
+    def add_member_to_bucket(self, resource_key: str, bucket, member, membership):
         print(f"{resource_key} :: Add {member} to {bucket}")
 
     def create_machine_account(self, name: str) -> Any:
@@ -152,7 +178,7 @@ class DevInfra(CloudInfraBase):
         print(f"Allow {member} to access {machine_account}")
 
     def create_group(self, name: str) -> Any:
-        group_name = f'{self.dataset}-{name}'
+        group_name = f"{self.dataset}-{name}"
         print(f"Creating Group: {group_name}")
         return group_name + "@populationgenomics.org.au"
 

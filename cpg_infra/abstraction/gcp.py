@@ -4,12 +4,16 @@ import pulumi
 import pulumi_gcp as gcp
 
 from cpg_infra.abstraction.base import CloudInfraBase, UNDELETE_PERIOD_IN_DAYS
-from cpg_infra.config import CPGDatasetConfig
+from cpg_infra.config import CPGDatasetConfig, CPGDatasetComponents
 
-GCP_CUSTOMER_ID = 'C010ys3gt'
+GCP_CUSTOMER_ID = "C010ys3gt"
 
 
 class GcpInfrastructure(CloudInfraBase):
+    @staticmethod
+    def name():
+        return "gcp"
+
     def __init__(self, config: CPGDatasetConfig):
         super().__init__(config)
 
@@ -30,6 +34,30 @@ class GcpInfrastructure(CloudInfraBase):
             ),
         )
 
+        self._svc_serviceusage = gcp.projects.Service(
+            "serviceusage-service",
+            service="serviceusage.googleapis.com",
+            disable_on_destroy=False,
+        )
+
+        self._svc_lifescience = gcp.projects.Service(
+            "lifesciences-service",
+            service="lifesciences.googleapis.com",
+            disable_on_destroy=False,
+            opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_serviceusage]),
+        )
+
+        self._svc_dataproc = None
+        if CPGDatasetComponents.SPARK in self.components:
+            self._svc_dataproc = gcp.projects.Service(
+                "dataproc-service",
+                service="dataproc.googleapis.com",
+                disable_on_destroy=False,
+                opts=pulumi.resource.ResourceOptions(
+                    depends_on=[self._svc_cloudresourcemanager]
+                ),
+            )
+
     def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
         return gcp.storage.BucketLifecycleRuleArgs(
             action=gcp.storage.BucketLifecycleRuleActionArgs(type="Delete"),
@@ -38,7 +66,9 @@ class GcpInfrastructure(CloudInfraBase):
             ),
         )
 
-    def create_bucket(self, name: str, lifecycle_rules: list, unique=False) -> Any:
+    def create_bucket(
+        self, name: str, lifecycle_rules: list, unique=False, requester_pays=False
+    ) -> Any:
         unique_bucket_name = name
         if not unique:
             unique_bucket_name = f"cpg-{self.dataset}-{name}"
@@ -59,9 +89,11 @@ class GcpInfrastructure(CloudInfraBase):
         if isinstance(member, gcp.cloudidentity.Group):
             return member.group_key
 
-        raise NotImplementedError(f'Not valid for type {type(member)}')
+        raise NotImplementedError(f"Not valid for type {type(member)}")
 
-    def add_member_to_bucket(self, resource_key: str, bucket, member) -> Any:
+    def add_member_to_bucket(
+        self, resource_key: str, bucket, member, membership
+    ) -> Any:
 
         gcp.storage.BucketIAMMember(
             resource_key,
@@ -81,28 +113,36 @@ class GcpInfrastructure(CloudInfraBase):
     def add_member_to_machine_account_access(
         self, resource_key: str, machine_account, member
     ) -> Any:
-        pass
+        gcp.serviceaccount.IAMMember(
+            resource_key,
+            service_account_id=self.get_member_key(machine_account),
+            # pulumi.Output.concat(
+            #     'projects/', project_id, '/serviceAccounts/', service_account
+            # ),
+            role="roles/iam.serviceAccountUser",
+            member=self.get_member_key(member),
+        )
 
     def create_group(self, name: str) -> Any:
-        mail = f'{name}@populationgenomics.org.au'
+        mail = f"{name}@populationgenomics.org.au"
         return gcp.cloudidentity.Group(
             name,
             display_name=name,
             group_key=gcp.cloudidentity.GroupGroupKeyArgs(id=mail),
-            labels={'cloudidentity.googleapis.com/groups.discussion_forum': ''},
-            parent=f'customers/{GCP_CUSTOMER_ID}',
+            labels={"cloudidentity.googleapis.com/groups.discussion_forum": ""},
+            parent=f"customers/{GCP_CUSTOMER_ID}",
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
         )
 
     def add_group_member(self, resource_key: str, group, member) -> Any:
         print(member)
         gcp.cloudidentity.GroupMembership(
-            'access-group-cache-membership',
+            "access-group-cache-membership",
             group=group.id,
             preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
                 id=member
             ),
-            roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
+            roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name="MEMBER")],
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
         )
 
@@ -116,3 +156,10 @@ class GcpInfrastructure(CloudInfraBase):
         self, resource_key: str, artifact_registry, member
     ) -> Any:
         pass
+
+    def add_member_to_lifescience_api(self, resource_key: str, service_account):
+        gcp.projects.IAMMember(
+            resource_key,
+            role="roles/lifesciences.workflowsRunner",
+            member=pulumi.Output.concat("serviceAccount:", service_account),
+        )
