@@ -1,7 +1,7 @@
 import dataclasses
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class CPGDatasetConfig:
     # duh
     dataset: str
@@ -29,3 +29,21 @@ class CPGDatasetConfig:
     sm_read_write_sas: list[str] = dataclasses.field(default_factory=list)
 
     archive_age: int = 30
+
+    @classmethod
+    def from_pulumi(cls, config):
+        fields = {field.name: field.type for field in dataclasses.fields(cls)}
+        d = {}
+        for fieldname, ftype in fields.items():
+
+            if any(str(ftype).startswith(ext + '[') for ext in ('list', 'dict')):
+                value = config.get_object(fieldname)
+            else:
+                value = config.get(fieldname)
+                if value:
+                    value = ftype(value)
+
+            if value:
+                d[fieldname] = value
+
+        return cls(**d)
