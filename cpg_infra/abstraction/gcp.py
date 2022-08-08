@@ -4,12 +4,13 @@ import pulumi
 import pulumi_gcp as gcp
 
 from cpg_infra.abstraction.base import CloudInfraBase, UNDELETE_DAYS
+from cpg_infra.config import CPGDatasetConfig
 
 GCP_CUSTOMER_ID = 'C010ys3gt'
 
 
 class GcpInfrastructure(CloudInfraBase):
-    def __init__(self, config: dict):
+    def __init__(self, config: CPGDatasetConfig):
         super().__init__(config)
 
         self.region = "australia-southeast1"
@@ -37,8 +38,10 @@ class GcpInfrastructure(CloudInfraBase):
             ),
         )
 
-    def create_bucket(self, name: str, lifecycle_rules: list) -> Any:
-        unique_bucket_name = f"cpg-{self.dataset}-{name}"
+    def create_bucket(self, name: str, lifecycle_rules: list, unique=False) -> Any:
+        unique_bucket_name = name
+        if not unique:
+            unique_bucket_name = f"cpg-{self.dataset}-{name}"
         return gcp.storage.Bucket(
             "bucket-" + name,
             name=unique_bucket_name,

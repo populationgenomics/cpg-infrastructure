@@ -3,10 +3,11 @@ from typing import Any
 import pulumi_azure_native as az
 
 from cpg_infra.abstraction.base import CloudInfraBase, UNDELETE_DAYS
+from cpg_infra.config import CPGDatasetConfig
 
 
 class AzureInfra(CloudInfraBase):
-    def __init__(self, config):
+    def __init__(self, config: CPGDatasetConfig):
         super().__init__(config)
 
         self.resource_group_name = f"cpg-{self.dataset}"
@@ -33,7 +34,7 @@ class AzureInfra(CloudInfraBase):
     def rule_undelete(self, days=UNDELETE_DAYS) -> Any:
         pass
 
-    def create_bucket(self, name: str, lifecycle_rules: list) -> Any:
+    def create_bucket(self, name: str, lifecycle_rules: list, unique=False) -> Any:
         return az.storage.BlobContainer(
             f"bucket-{name}",
             resource_group_name=self.resource_group_name,

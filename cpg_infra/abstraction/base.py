@@ -17,13 +17,15 @@ Some challenges I forsee with this abstraction:
 from abc import ABC, abstractmethod
 from typing import Any
 
+from cpg_infra.config import CPGDatasetConfig
+
 UNDELETE_DAYS = 30
 
 
 class CloudInfraBase(ABC):
-    def __init__(self, config: dict):
+    def __init__(self, config: CPGDatasetConfig):
         super().__init__()
-        self.dataset = config["dataset"]
+        self.dataset = config.dataset
 
     @abstractmethod
     def rule_undelete(self, days=UNDELETE_DAYS) -> Any:
@@ -34,7 +36,7 @@ class CloudInfraBase(ABC):
     # BUCKET
 
     @abstractmethod
-    def create_bucket(self, name: str, lifecycle_rules: list) -> Any:
+    def create_bucket(self, name: str, lifecycle_rules: list, unique=False) -> Any:
         """
         This should take a potentially `non-unique` bucket name,
         and create a bucket, returning a resource.
@@ -106,7 +108,7 @@ class DevInfra(CloudInfraBase):
     def rule_undelete(self, days=UNDELETE_DAYS) -> Any:
         return None
 
-    def create_bucket(self, name: str, lifecycle_rules: list) -> Any:
+    def create_bucket(self, name: str, lifecycle_rules: list, unique=False) -> Any:
         print(f"Create bucket: {name}")
         return f"BUCKET://{name}"
 
@@ -115,7 +117,7 @@ class DevInfra(CloudInfraBase):
 
     def create_machine_account(self, name: str) -> Any:
         print(f"Creating SA: {name}")
-        return name + "@service-account"
+        return name + "@generated.service-account"
 
     def add_member_to_machine_account_access(
         self, resource_key: str, machine_account, member
