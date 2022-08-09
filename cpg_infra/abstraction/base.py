@@ -41,7 +41,10 @@ class CloudInfraBase(ABC):
     def __init__(self, config: CPGDatasetConfig):
         super().__init__()
         self.dataset = config.dataset
-        self.components = config.components.get(self.name(), CPGDatasetComponents.default_component_for_infrastructure()[self.name()])
+        self.components = config.components.get(
+            self.name(),
+            CPGDatasetComponents.default_component_for_infrastructure()[self.name()],
+        )
 
     @staticmethod
     @abstractmethod
@@ -71,6 +74,7 @@ class CloudInfraBase(ABC):
         lifecycle_rules: list,
         unique: bool = False,
         requester_pays: bool = False,
+        versioning: bool = True,
     ) -> Any:
         """
         This should take a potentially `non-unique` bucket name,
@@ -149,7 +153,6 @@ class CloudInfraBase(ABC):
 
 
 class DevInfra(CloudInfraBase):
-
     @staticmethod
     def name():
         return 'dev'

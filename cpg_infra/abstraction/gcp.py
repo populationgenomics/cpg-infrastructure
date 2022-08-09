@@ -3,8 +3,14 @@ from typing import Any
 import pulumi
 import pulumi_gcp as gcp
 
-from cpg_infra.abstraction.base import CloudInfraBase, UNDELETE_PERIOD_IN_DAYS, ARCHIVE_PERIOD_IN_DAYS, TMP_BUCKET_PERIOD_IN_DAYS, BucketPermission
-from cpg_infra.config import CPGDatasetConfig, CPGDatasetComponents
+from cpg_infra.abstraction.base import (
+    CloudInfraBase,
+    UNDELETE_PERIOD_IN_DAYS,
+    ARCHIVE_PERIOD_IN_DAYS,
+    TMP_BUCKET_PERIOD_IN_DAYS,
+    BucketPermission,
+)
+from cpg_infra.config import CPGDatasetConfig, CPGDatasetComponents, DOMAIN
 
 GCP_CUSTOMER_ID = "C010ys3gt"
 
@@ -18,6 +24,7 @@ class GcpInfrastructure(CloudInfraBase):
         super().__init__(config)
 
         self.region = "australia-southeast1"
+        self.organization = gcp.organizations.get_organization(domain=DOMAIN)
 
         self._svc_cloudresourcemanager = gcp.projects.Service(
             "cloudresourcemanager-service",
@@ -68,22 +75,25 @@ class GcpInfrastructure(CloudInfraBase):
 
     def bucket_rule_archive(self, days=ARCHIVE_PERIOD_IN_DAYS) -> Any:
         return gcp.storage.BucketLifecycleRuleArgs(
-                action=gcp.storage.BucketLifecycleRuleActionArgs(
-                    type='SetStorageClass', storage_class='ARCHIVE'
-                ),
-                condition=gcp.storage.BucketLifecycleRuleConditionArgs(age=days),
-            )
+            action=gcp.storage.BucketLifecycleRuleActionArgs(
+                type='SetStorageClass', storage_class='ARCHIVE'
+            ),
+            condition=gcp.storage.BucketLifecycleRuleConditionArgs(age=days),
+        )
 
     def bucket_rule_temporary(self, days=TMP_BUCKET_PERIOD_IN_DAYS) -> Any:
         return gcp.storage.BucketLifecycleRuleArgs(
             action=gcp.storage.BucketLifecycleRuleActionArgs(type='Delete'),
-            condition=gcp.storage.BucketLifecycleRuleConditionArgs(
-                age=days
-            ),
+            condition=gcp.storage.BucketLifecycleRuleConditionArgs(age=days),
         )
 
     def create_bucket(
-        self, name: str, lifecycle_rules: list, unique=False, requester_pays=False
+        self,
+        name: str,
+        lifecycle_rules: list,
+        unique=False,
+        requester_pays=False,
+        versioning: bool = True,
     ) -> Any:
         unique_bucket_name = name
         if not unique:
@@ -93,9 +103,10 @@ class GcpInfrastructure(CloudInfraBase):
             name=unique_bucket_name,
             location=self.region,
             uniform_bucket_level_access=True,
-            # versioning=gcp.storage.BucketVersioningArgs(enabled=enable_versioning),
+            versioning=gcp.storage.BucketVersioningArgs(enabled=versioning),
             labels={"bucket": unique_bucket_name},
             lifecycle_rules=lifecycle_rules,
+            requester_pays=requester_pays,
         )
 
     def get_member_key(self, member):
@@ -103,32 +114,41 @@ class GcpInfrastructure(CloudInfraBase):
             return pulumi.Output.concat("serviceAccount:", member.email)
 
         if isinstance(member, gcp.cloudidentity.Group):
-            return member.group_key
+            return pulumi.Output.concat('group:', member.group_key.id)
+
+        if isinstance(member, str):
+            return member
+
+        if isinstance(member, pulumi.Output):
+            return member
 
         raise NotImplementedError(f"Not valid for type {type(member)}")
 
-    @staticmethod
-    def bucket_membership_to_role(membership: BucketPermission):
+    def bucket_membership_to_role(self, membership: BucketPermission):
         # TODO: fix organization id
-        organization_id = 'TEMPORARY'
         if membership == BucketPermission.MUTATE:
             return 'roles/storage.admin'
         if membership == BucketPermission.APPEND:
-            return f'{organization_id}/roles/StorageViewerAndCreator'
+            return f'{self.organization.id}/roles/StorageViewerAndCreator'
         if membership == BucketPermission.READ:
-            return f'{organization_id}/roles/StorageObjectAndBucketViewer'
+            return f'{self.organization.id}/roles/StorageObjectAndBucketViewer'
         if membership == BucketPermission.LIST:
-            return f'{organization_id}/roles/StorageLister'
+            return f'{self.organization.id}/roles/StorageLister'
 
     def add_member_to_bucket(
         self, resource_key: str, bucket, member, membership: BucketPermission
     ) -> Any:
-
+        kwargs = dict(
+            bucket=bucket,
+            member=member,
+            role=membership,
+        )
+        # print(f'Creating BucketIAMMember ({resource_key}): {kwargs}', flush=True)
         gcp.storage.BucketIAMMember(
             resource_key,
             bucket=bucket.name,
-            role=self.bucket_membership_to_role(membership),
             member=self.get_member_key(member),
+            role=self.bucket_membership_to_role(membership),
         )
 
     def create_machine_account(self, name: str) -> Any:
