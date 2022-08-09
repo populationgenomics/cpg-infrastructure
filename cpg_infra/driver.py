@@ -28,7 +28,9 @@ ANALYSIS_RUNNER_SERVICE_ACCOUNT = (
 ANALYSIS_RUNNER_LOGGER_SERVICE_ACCOUNT = (
     "sample-metadata@analysis-runner.iam.gserviceaccount.com"
 )
-WEB_SERVER_SERVICE_ACCOUNT = "web-server@analysis-runner.iam.gserviceaccount.com"
+WEB_SERVER_SERVICE_ACCOUNT = (
+    "serviceAccount:web-server@analysis-runner.iam.gserviceaccount.com"
+)
 ACCESS_GROUP_CACHE_SERVICE_ACCOUNT = (
     "access-group-cache@analysis-runner.iam.gserviceaccount.com"
 )
@@ -537,7 +539,7 @@ class CPGInfrastructure:
             for resource_key, group in test_bucket_admins:
                 self.infra.add_member_to_bucket(
                     resource_key,
-                    self.test_bucket,
+                    bucket,
                     group,
                     BucketPermission.MUTATE,
                 )
