@@ -1,6 +1,8 @@
 import dataclasses
 from enum import Enum
 
+DOMAIN = "populationgenomics.org.au"
+
 
 class CPGDatasetComponents(Enum):
     STORAGE = "storage"
@@ -65,6 +67,8 @@ class CPGDatasetConfig:
 
             if any(str(ftype).startswith(ext + "[") for ext in ("list", "dict")):
                 value = config.get_object(fieldname)
+            elif ftype == bool:
+                value = config.get_bool(fieldname)
             else:
                 value = config.get(fieldname)
                 if value:
