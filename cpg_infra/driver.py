@@ -68,29 +68,34 @@ ACCESS_LEVELS: Iterable[AccessLevel] = ("test", "standard", "full")
 NON_NAME_REGEX = re.compile(r"[^A-Za-z0-9_-]")
 
 
-
-
 class CPGInfrastructure:
-
     @staticmethod
     def deploy_all_from_config(config: CPGDatasetConfig):
         _infra_map = {c.name(): c for c in CloudInfraBase.__subclasses__()}
-        _infras: list[Type[CloudInfraBase]] = [_infra_map[n] for n in config.deploy_locations]
+        _infras: list[Type[CloudInfraBase]] = [
+            _infra_map[n] for n in config.deploy_locations
+        ]
 
         for _infra in _infras:
             CPGInfrastructure(_infra, config).main()
 
-
     def __init__(self, infra, config: CPGDatasetConfig):
         self.config: CPGDatasetConfig = config
         self.infra: CloudInfraBase = infra(self.config) if isclass(infra) else infra
-        self.components: list[CPGDatasetComponents] = config.components.get(self.infra.name(), CPGDatasetComponents.default_component_for_infrastructure()[self.infra.name()])
+        self.components: list[CPGDatasetComponents] = config.components.get(
+            self.infra.name(),
+            CPGDatasetComponents.default_component_for_infrastructure()[
+                self.infra.name()
+            ],
+        )
 
     def create_group(self, name: str):
         group_name = f'{self.config.dataset}-{name}'
         group = self.infra.create_group(group_name)
         self.infra.add_group_member(
-            f"access-group-cacher-{group_name}", group, ACCESS_GROUP_CACHE_SERVICE_ACCOUNT
+            f"access-group-cacher-{group_name}",
+            group,
+            ACCESS_GROUP_CACHE_SERVICE_ACCOUNT,
         )
         return group
 
@@ -135,9 +140,7 @@ class CPGInfrastructure:
 
         pass
 
-
     # endregion GCP SPECIFIC
-
     # region MACHINE ACCOUNTS
 
     @property
@@ -360,6 +363,7 @@ class CPGInfrastructure:
 
     def setup_main_bucket_permissions(self):
         # access has list permission
+
         self.infra.add_member_to_bucket(
             "project-bucket-lister",
             self.main_bucket,
@@ -459,36 +463,49 @@ class CPGInfrastructure:
     @property
     @lru_cache()
     def main_bucket(self):
-        return self.infra.create_bucket("main", lifecycle_rules=[self.infra.bucket_rule_undelete()])
+        return self.infra.create_bucket(
+            "main", lifecycle_rules=[self.infra.bucket_rule_undelete()]
+        )
 
     @property
     @lru_cache()
     def main_tmp_bucket(self):
-        return self.infra.create_bucket("main-tmp", lifecycle_rules=[self.infra.bucket_rule_temporary()])
+        return self.infra.create_bucket(
+            "main-tmp",
+            lifecycle_rules=[self.infra.bucket_rule_temporary()],
+            versioning=False,
+        )
 
     @property
     @lru_cache()
     def main_analysis_bucket(self):
-        return self.infra.create_bucket("main-analysis", lifecycle_rules=[self.infra.bucket_rule_undelete()])
+        return self.infra.create_bucket(
+            "main-analysis", lifecycle_rules=[self.infra.bucket_rule_undelete()]
+        )
 
     @property
     @lru_cache()
     def main_web_bucket(self):
-        return self.infra.create_bucket("main-web", lifecycle_rules=[self.infra.bucket_rule_undelete()])
+        return self.infra.create_bucket(
+            "main-web", lifecycle_rules=[self.infra.bucket_rule_undelete()]
+        )
 
     @property
     @lru_cache()
     def main_upload_buckets(self) -> dict[str, Any]:
         main_upload_undelete = self.infra.bucket_rule_undelete(days=30)
         main_upload_buckets = {
-            "main-upload": self.infra.create_bucket("main-upload", lifecycle_rules=[main_upload_undelete])
+            "main-upload": self.infra.create_bucket(
+                "main-upload", lifecycle_rules=[main_upload_undelete]
+            )
         }
 
         for additional_upload_bucket in self.config.additional_upload_buckets:
-            main_upload_buckets[additional_upload_bucket] = self.infra.create_bucket(additional_upload_bucket,
-                                                                                     lifecycle_rules=[
-                                                                                         main_upload_undelete],
-                                                                                     unique=True)
+            main_upload_buckets[additional_upload_bucket] = self.infra.create_bucket(
+                additional_upload_bucket,
+                lifecycle_rules=[main_upload_undelete],
+                unique=True,
+            )
 
         return main_upload_buckets
 
@@ -513,7 +530,7 @@ class CPGInfrastructure:
             test_bucket_admins: list[tuple[str, Any]] = [
                 (f'access-group-{bucket_name}-bucket-admin', self.access_group),
                 *[
-                    (f"{access_level}-test-bucket-admin", group)
+                    (f"{access_level}-{bucket_name}-bucket-admin", group)
                     for access_level, group in self.access_level_groups.items()
                 ],
             ]
@@ -528,54 +545,77 @@ class CPGInfrastructure:
     @property
     @lru_cache()
     def test_bucket(self):
-        return self.infra.create_bucket("test", lifecycle_rules=[self.infra.bucket_rule_undelete()])
+        return self.infra.create_bucket(
+            "test", lifecycle_rules=[self.infra.bucket_rule_undelete()]
+        )
 
     @property
     @lru_cache()
     def test_analysis_bucket(self):
-        return self.infra.create_bucket("test-analysis", lifecycle_rules=[self.infra.bucket_rule_undelete()])
+        return self.infra.create_bucket(
+            "test-analysis", lifecycle_rules=[self.infra.bucket_rule_undelete()]
+        )
 
     @property
     @lru_cache()
     def test_web_bucket(self):
-        return self.infra.create_bucket("test-web", lifecycle_rules=[self.infra.bucket_rule_undelete()])
+        return self.infra.create_bucket(
+            "test-web", lifecycle_rules=[self.infra.bucket_rule_undelete()]
+        )
 
     @property
     @lru_cache()
     def test_tmp_bucket(self):
-        return self.infra.create_bucket("test-tmp", lifecycle_rules=[self.infra.bucket_rule_temporary()])
+        return self.infra.create_bucket(
+            "test-tmp",
+            lifecycle_rules=[self.infra.bucket_rule_temporary()],
+            versioning=False,
+        )
 
     # endregion TEST BUCKETS
     # region RELEASE BUCKETS
 
     def setup_release_bucket_permissions(self):
-        self.infra.add_member_to_bucket('access-group-release-bucket-viewer', self.release_bucket, self.access_group, BucketPermission.READ)
+        self.infra.add_member_to_bucket(
+            'access-group-release-bucket-viewer',
+            self.release_bucket,
+            self.access_group,
+            BucketPermission.READ,
+        )
 
         self.infra.add_member_to_bucket(
             'release-access-group-release-bucket-viewer',
             self.release_bucket,
             self.release_access_group,
-            BucketPermission.READ
+            BucketPermission.READ,
         )
 
         self.infra.add_member_to_bucket(
             'full-release-bucket-admin',
             self.release_bucket,
             self.access_level_groups['full'],
-            BucketPermission.MUTATE
+            BucketPermission.MUTATE,
         )
 
     @property
     @lru_cache()
     def release_bucket(self):
-        return self.infra.create_bucket('release-requester-pays', lifecycle_rules=[self.infra.bucket_rule_undelete()])
+        return self.infra.create_bucket(
+            'release-requester-pays',
+            lifecycle_rules=[self.infra.bucket_rule_undelete()],
+        )
+
     # endregion RELEASE BUCKETS
     # region CROMWELL
 
     def setup_cromwell_machine_accounts(self):
-        cromwell_machine_accounts = self.working_machine_accounts_by_type.get('cromwell')
+        cromwell_machine_accounts = self.working_machine_accounts_by_type.get(
+            'cromwell'
+        )
         if not cromwell_machine_accounts:
-            raise ValueError('This method may be called where cromwell machine accounts are not activated')
+            raise ValueError(
+                'This method may be called where cromwell machine accounts are not activated'
+            )
 
         for access_level, machine_account in cromwell_machine_accounts:
 
@@ -592,15 +632,12 @@ class CPGInfrastructure:
             self.infra.add_member_to_machine_account_access(
                 f'cromwell-runner-{access_level}-service-account-user',
                 machine_account,
-                CROMWELL_RUNNER_ACCOUNT
+                CROMWELL_RUNNER_ACCOUNT,
             )
 
     def _GCP_setup_cromwell(self):
         assert isinstance(self.infra, GcpInfrastructure)
         # Allow the Cromwell service accounts to run workflows.
-
-
-
 
     # endregion CROMWELL
     # region DEPENDENCIES
