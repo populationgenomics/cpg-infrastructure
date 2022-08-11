@@ -164,7 +164,12 @@ class DevInfra(CloudInfraBase):
         return f"RULE:tmp={days}d"
 
     def create_bucket(
-        self, name: str, lifecycle_rules: list, unique=False, requester_pays=False
+        self,
+        name: str,
+        lifecycle_rules: list,
+        unique: bool = False,
+        requester_pays: bool = False,
+        versioning: bool = True,
     ) -> Any:
         print(f'Create bucket: {name} w/ rules: {", ".join(lifecycle_rules)}')
         return f"BUCKET://{name}"

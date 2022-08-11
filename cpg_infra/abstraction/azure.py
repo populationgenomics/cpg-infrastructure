@@ -2,7 +2,11 @@ from typing import Any
 
 import pulumi_azure_native as az
 
-from cpg_infra.abstraction.base import CloudInfraBase, UNDELETE_PERIOD_IN_DAYS
+from cpg_infra.abstraction.base import (
+    CloudInfraBase,
+    UNDELETE_PERIOD_IN_DAYS,
+    TMP_BUCKET_PERIOD_IN_DAYS,
+)
 from cpg_infra.config import CPGDatasetConfig
 
 
@@ -15,6 +19,10 @@ class AzureInfra(CloudInfraBase):
 
         self._storage_account = None
         self._resource_group = None
+
+    @staticmethod
+    def name():
+        return 'azure'
 
     @property
     def resource_group(self):
@@ -34,7 +42,17 @@ class AzureInfra(CloudInfraBase):
     def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
         pass
 
-    def create_bucket(self, name: str, lifecycle_rules: list, unique=False, requester_pays=False) -> Any:
+    def bucket_rule_temporary(self, days=TMP_BUCKET_PERIOD_IN_DAYS) -> Any:
+        pass
+
+    def create_bucket(
+        self,
+        name: str,
+        lifecycle_rules: list,
+        unique=False,
+        requester_pays=False,
+        versioning=True,
+    ) -> Any:
         return az.storage.BlobContainer(
             f"bucket-{name}",
             resource_group_name=self.resource_group_name,
@@ -42,7 +60,9 @@ class AzureInfra(CloudInfraBase):
             container_name=name,
         )
 
-    def add_member_to_bucket(self, resource_key: str, bucket, member, membership) -> Any:
+    def add_member_to_bucket(
+        self, resource_key: str, bucket, member, membership
+    ) -> Any:
         az.authorization.RoleAssignment(
             resource_key,
             scope=bucket.id,
@@ -52,7 +72,12 @@ class AzureInfra(CloudInfraBase):
         )
 
     def create_machine_account(self, name: str) -> Any:
-        application = az.batch.Application(f'application-{name}', account_name=name, display_name=name, resource_group_name=self.resource_group_name)
+        application = az.batch.Application(
+            f'application-{name}',
+            account_name=name,
+            display_name=name,
+            resource_group_name=self.resource_group_name,
+        )
         return application
 
     def add_member_to_machine_account_access(
