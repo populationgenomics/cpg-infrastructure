@@ -1,3 +1,12 @@
+"""
+
+
+Still to address:
+
+gcp:cloudidentity:GroupMembership  access-group-cache-standard-access-level-group-membership
+gcp:cloudidentity:GroupMembership  access-group-cache-standard-access-level-group-membership
+"""
+import base64
 import re
 from typing import Type, Any, Iterator, Iterable
 from inspect import isclass
@@ -21,35 +30,38 @@ from cpg_infra.config import CPGDatasetConfig, CPGDatasetComponents
 DOMAIN = "populationgenomics.org.au"
 CUSTOMER_ID = "C010ys3gt"
 REGION = "australia-southeast1"
+
 ANALYSIS_RUNNER_PROJECT = "analysis-runner"
 ANALYSIS_RUNNER_CONTAINER_REGISTRY_NAME = 'images'
-CPG_COMMON_PROJECT = "cpg-common"
-CPG_COMMON_CONTAINER_REGISTRY_NAME = 'images'
+ANALYSIS_RUNNER_CLOUD_RUN_INSTANCE_NAME = 'server'
 ANALYSIS_RUNNER_SERVICE_ACCOUNT = (
     "analysis-runner-server@analysis-runner.iam.gserviceaccount.com"
 )
 ANALYSIS_RUNNER_LOGGER_SERVICE_ACCOUNT = (
     "sample-metadata@analysis-runner.iam.gserviceaccount.com"
 )
+ANALYSIS_RUNNER_CONFIG_BUCKET_NAME = "cpg-config"
+
+CPG_COMMON_PROJECT = "cpg-common"
+CPG_COMMON_CONTAINER_REGISTRY_NAME = 'images'
+REFERENCE_BUCKET_NAME = "cpg-reference"
+
 WEB_SERVER_SERVICE_ACCOUNT = (
     "serviceAccount:web-server@analysis-runner.iam.gserviceaccount.com"
 )
 ACCESS_GROUP_CACHE_SERVICE_ACCOUNT = (
     "access-group-cache@analysis-runner.iam.gserviceaccount.com"
 )
-REFERENCE_BUCKET_NAME = "cpg-reference"
-ANALYSIS_RUNNER_CONFIG_BUCKET_NAME = "cpg-config"
 HAIL_WHEEL_BUCKET_NAME = "cpg-hail-ci"
 NOTEBOOKS_PROJECT = "notebooks-314505"
-# cromwell-submission-access@populationgenomics.org.au
 CROMWELL_ACCESS_GROUP_ID = "groups/03cqmetx2922fyu"
 CROMWELL_RUNNER_ACCOUNT = "cromwell-runner@cromwell-305305.iam.gserviceaccount.com"
+
 SAMPLE_METADATA_PROJECT = "sample-metadata"
 SAMPLE_METADATA_SERVICE_NAME = 'sample-metadata-api'
 SAMPLE_METADATA_API_SERVICE_ACCOUNT = (
     "serviceAccount:sample-metadata-api@sample-metadata.iam.gserviceaccount.com"
 )
-TMP_BUCKET_PERIOD_IN_DAYS = 8  # tmp content gets deleted afterwards.
 
 SampleMetadataAccessorMembership = namedtuple(
     "SampleMetadataAccessorMembership",
@@ -76,13 +88,12 @@ NON_NAME_REGEX = re.compile(r"[^A-Za-z0-9_-]")
 class CPGInfrastructure:
     @staticmethod
     def deploy_all_from_config(config: CPGDatasetConfig):
-        _infra_map = {c.name(): c for c in CloudInfraBase.__subclasses__()}
-        _infras: list[Type[CloudInfraBase]] = [
-            _infra_map[n] for n in config.deploy_locations
-        ]
+        infra_map = {c.name(): c for c in CloudInfraBase.__subclasses__()}
 
-        for _infra in _infras:
-            CPGInfrastructure(_infra, config).main()
+        for infra_obj in [
+            infra_map[n] for n in config.deploy_locations
+        ]:
+            CPGInfrastructure(infra_obj, config).main()
 
     def __init__(self, infra, config: CPGDatasetConfig):
         self.config: CPGDatasetConfig = config
@@ -104,6 +115,9 @@ class CPGInfrastructure:
         self.should_setup_hail = CPGDatasetComponents.HAIL_ACCOUNTS in self.components
         self.should_setup_container_registry = (
             CPGDatasetComponents.CONTAINER_REGISTRY in self.components
+        )
+        self.should_setup_analysis_runner = (
+            CPGDatasetComponents.ANALYSIS_RUNNER in self.components
         )
 
     def create_group(self, name: str):
@@ -133,6 +147,11 @@ class CPGInfrastructure:
         if self.should_setup_container_registry:
             self.setup_container_registry()
 
+        if self.should_setup_analysis_runner:
+            self.setup_analysis_runner()
+
+        self.setup_reference()
+
         self.setup_group_caches()
 
     # region MACHINE ACCOUNTS
@@ -147,7 +166,6 @@ class CPGInfrastructure:
     def working_machine_accounts_by_type(
         self,
     ) -> dict[str, list[tuple[AccessLevel, Any]]]:
-        print("GENERATING ACCOUNTS")
         machine_accounts: dict[str, list] = defaultdict(list)
 
         for access_level, account in self.hail_accounts_by_access_level.items():
@@ -270,6 +288,7 @@ class CPGInfrastructure:
         if not self.should_setup_storage:
             return
 
+        self.infra.give_member_ability_to_list_buckets('project-buckets-lister', self.access_group)
         self.setup_archive_bucket_permissions()
         self.setup_main_bucket_permissions()
         self.setup_main_tmp_bucket()
@@ -417,6 +436,8 @@ class CPGInfrastructure:
 
     def setup_main_upload_buckets_permissions(self):
         for bname, main_upload_bucket in self.main_upload_buckets.items():
+
+            # main_upload SA has ADMIN
             self.infra.add_member_to_bucket(
                 f"main-upload-service-account-{bname}-bucket-creator",
                 bucket=main_upload_bucket,
@@ -424,6 +445,7 @@ class CPGInfrastructure:
                 membership=BucketPermission.MUTATE,
             )
 
+            # full GROUP has ADMIN
             self.infra.add_member_to_bucket(
                 f"full-{bname}-bucket-admin",
                 bucket=main_upload_bucket,
@@ -431,12 +453,23 @@ class CPGInfrastructure:
                 membership=BucketPermission.MUTATE,
             )
 
+            # standard GROUP has READ
             self.infra.add_member_to_bucket(
                 f"standard-{bname}-bucket-viewer",
                 bucket=main_upload_bucket,
                 member=self.access_level_groups['standard'],
                 membership=BucketPermission.READ,
             )
+
+            # access GROUP has VIEWER
+            # (semi surprising tbh, but useful for reading uploaded metadata)
+            self.infra.add_member_to_bucket(
+                f'access-group-{bname}-bucket-viewer',
+                bucket=main_upload_bucket,
+                member=self.access_group,
+                membership=BucketPermission.READ,
+            )
+
 
     @property
     @lru_cache()
@@ -605,6 +638,7 @@ class CPGInfrastructure:
 
     def setup_hail(self):
         self.setup_hail_bucket_permissions()
+        self.setup_hail_wheels_bucket_permissions()
 
     def setup_hail_bucket_permissions(self):
 
@@ -627,6 +661,21 @@ class CPGInfrastructure:
             member=ANALYSIS_RUNNER_SERVICE_ACCOUNT,
             membership=BucketPermission.MUTATE,
         )
+
+    def setup_hail_wheels_bucket_permissions(self):
+
+        keys = {
+            'access-group': self.access_group,
+            **self.hail_accounts_by_access_level
+        }
+
+        for key, group in keys.items():
+            self.infra.add_member_to_bucket(
+                f'{key}-hail-wheels-viewer',
+                bucket=HAIL_WHEEL_BUCKET_NAME,
+                member=group,
+                membership=BucketPermission.READ,
+            )
 
     @property
     @lru_cache()
@@ -656,10 +705,9 @@ class CPGInfrastructure:
             return
 
         self.setup_cromwell_machine_accounts()
+        self.setup_cromwell_credentials()
 
     def setup_cromwell_machine_accounts(self):
-        print('RUNNING cromwell-runner permission', flush=True)
-
         for (
             access_level,
             machine_account,
@@ -683,6 +731,46 @@ class CPGInfrastructure:
 
         if isinstance(self.infra, GcpInfrastructure):
             self._GCP_setup_cromwell()
+
+    def setup_cromwell_credentials(self):
+        for access_level, cromwell_account in self.cromwell_machine_accounts_by_access_level.items():
+            secret = self.infra.create_secret(
+                f'cromwell-service-account-{access_level}-secret',
+                project=ANALYSIS_RUNNER_PROJECT,
+            )
+
+            credentials = self.infra.get_credentials_for_machine_account(
+                f'cromwell-service-account-{access_level}-key',
+                cromwell_account
+            )
+
+            # add credentials to the secret
+            self.infra.add_secret_version(
+                f'cromwell-service-account-{access_level}-secret-version',
+                secret=secret,
+                contents=credentials,
+                processor=lambda s: base64.b64decode(s).decode('utf-8')
+
+            )
+
+            # allow the analysis-runner to view the secret
+            self.infra.add_secret_member(
+                f'cromwell-service-account-{access_level}-secret-accessor',
+                secret=secret,
+                member=ANALYSIS_RUNNER_SERVICE_ACCOUNT,
+                membership=SecretMembership.ACCESSOR,
+            )
+
+            # Allow the Hail service account to access its corresponding cromwell key
+            if self.should_setup_hail:
+                hail_service_account = self.hail_accounts_by_access_level[access_level]
+                self.infra.add_secret_member(
+                    f'cromwell-service-account-{access_level}-self-accessor',
+                    project=ANALYSIS_RUNNER_PROJECT,
+                    secret=secret,
+                    member=hail_service_account,
+                    membership=SecretMembership.ACCESSOR,
+                )
 
     @property
     @lru_cache()
@@ -728,7 +816,7 @@ class CPGInfrastructure:
         for access_level, hail_account in self.hail_accounts_by_access_level.items():
             # Allow the hail account to run jobs AS the spark user
             self.infra.add_member_to_machine_account_access(
-                f'hail-service-account-{access_level}-dataproc-user',
+                f'hail-service-account-{access_level}-dataproc-service-account-user',
                 spark_accounts[access_level],
                 hail_account,
             )
@@ -802,6 +890,7 @@ class CPGInfrastructure:
         assert isinstance(self.infra, GcpInfrastructure)
 
         for sm_type, group in self.sample_metadata_groups.items():
+            print(f'SM_CLOUDRUN_INVOKER :: {sm_type}', flush=True)
             self.infra.add_cloudrun_invoker(
                 f'sample-metadata-{sm_type}-cloudrun-invoker',
                 service=SAMPLE_METADATA_SERVICE_NAME,
@@ -887,6 +976,11 @@ class CPGInfrastructure:
         :return:
         """
 
+        container_registries = [
+            (ANALYSIS_RUNNER_PROJECT, ANALYSIS_RUNNER_CONTAINER_REGISTRY_NAME),
+            (CPG_COMMON_PROJECT, CPG_COMMON_CONTAINER_REGISTRY_NAME)
+        ]
+
         kinds = {
             'access-group': self.access_group,
             **self.access_level_groups,
@@ -894,20 +988,17 @@ class CPGInfrastructure:
 
         for kind, account in kinds.items():
 
-            self.infra.add_member_to_container_registry(
-                f'{kind}-images-reader-in-analysis-runner',
-                registry=ANALYSIS_RUNNER_CONTAINER_REGISTRY_NAME,
-                project=ANALYSIS_RUNNER_PROJECT,
-                member=account,
-                membership=ContainerRegistryMembership.READER,
-            )
-            self.infra.add_member_to_container_registry(
-                f'{kind}-images-reader-in-cpg-common',
-                registry=CPG_COMMON_CONTAINER_REGISTRY_NAME,
-                project=CPG_COMMON_PROJECT,
-                member=account,
-                membership=ContainerRegistryMembership.READER,
-            )
+            # Allow the service accounts to pull images. Note that the global project will
+            # refer to the dataset, but the Docker images are stored in the "analysis-runner"
+            # and "cpg-common" projects' Artifact Registry repositories.
+            for project, registry_name in container_registries:
+                self.infra.add_member_to_container_registry(
+                    f'{kind}-images-reader-in-{project}',
+                    registry=registry_name,
+                    project=project,
+                    member=account,
+                    membership=ContainerRegistryMembership.READER,
+                )
 
             if kind in ('full', 'standard'):
                 self.infra.add_member_to_container_registry(
@@ -957,6 +1048,40 @@ class CPGInfrastructure:
         )
 
     # endregion NOTEBOOKS
+    # region ANALYSIS RUNNER
+
+    def setup_analysis_runner(self):
+
+        self.setup_analysis_runner_config_access()
+
+        if isinstance(self.infra, GcpInfrastructure):
+            self.setup_analysis_runner_access()
+
+    def setup_analysis_runner_access(self):
+
+        assert isinstance(self.infra, GcpInfrastructure)
+        self.infra.add_cloudrun_invoker(
+            f'analysis-runner-access-invoker',
+            project=ANALYSIS_RUNNER_PROJECT,
+            service=ANALYSIS_RUNNER_CLOUD_RUN_INSTANCE_NAME,
+            member=self.access_group
+        )
+
+    def setup_analysis_runner_config_access(self):
+        keys = {
+            'access-group': self.access_group,
+            **self.hail_accounts_by_access_level
+        }
+
+        for key, group in keys.items():
+            self.infra.add_member_to_bucket(
+                f'{key}-analysis-runner-config-viewer',
+                bucket=ANALYSIS_RUNNER_CONFIG_BUCKET_NAME,
+                member=self.access_group,
+                membership=BucketPermission.READ
+            )
+
+    # endregion ANALYSIS RUNNER
     # region ACCESS GROUP CACHE
 
     def setup_group_caches(self):
@@ -985,15 +1110,24 @@ class CPGInfrastructure:
 
     def setup_access_group_cache(self):
         # Allow list of access-group
-        secret = self._setup_group_cache_secret(self.access_group, 'access')
 
-        # analysis-runner list
-        self.infra.add_secret_member(
-            'access-group-cache-secret-accessor',
-            secret,
-            ANALYSIS_RUNNER_SERVICE_ACCOUNT,
-            SecretMembership.ACCESSOR,
-        )
+        groups_to_cache = {
+            'access': self.access_group,
+            # are the test, standard, full access-group caches used anywhere?
+            **self.access_level_groups,
+        }
+
+        for key, group in groups_to_cache.items():
+
+            secret = self._setup_group_cache_secret(self.access_group, key)
+
+            # analysis-runner view contents of secrets
+            self.infra.add_secret_member(
+                f'analysis-runner-{key}-group-cache-secret-accessor',
+                secret,
+                ANALYSIS_RUNNER_SERVICE_ACCOUNT,
+                SecretMembership.ACCESSOR,
+            )
 
     def setup_sample_metadata_access_secrets(self):
         """
@@ -1024,7 +1158,7 @@ class CPGInfrastructure:
         secret = self._setup_group_cache_secret(self.web_access_group, 'web-access')
 
         self.infra.add_secret_member(
-            'web-access-group-cache-secret-accessor',
+            'web-server-web-access-group-cache-secret-accessor',
             secret,
             WEB_SERVER_SERVICE_ACCOUNT,
             SecretMembership.ACCESSOR,

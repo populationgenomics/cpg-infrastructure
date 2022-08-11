@@ -12,6 +12,7 @@ class CPGDatasetComponents(Enum):
     HAIL_ACCOUNTS = "hail-accounts"
     SAMPLE_METADATA = "sample_metadata"
     CONTAINER_REGISTRY = 'container-registry'
+    ANALYSIS_RUNNER = 'analysis-runner'
 
     @staticmethod
     def default_component_for_infrastructure():

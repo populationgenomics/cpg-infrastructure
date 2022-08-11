@@ -16,7 +16,7 @@ Some challenges I forsee with this abstraction:
 
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any
+from typing import Any, Callable
 
 from cpg_infra.config import CPGDatasetConfig, CPGDatasetComponents
 
@@ -84,6 +84,7 @@ class CloudInfraBase(ABC):
         unique: bool = False,
         requester_pays: bool = False,
         versioning: bool = True,
+        project: str = None,
     ) -> Any:
         """
         This should take a potentially `non-unique` bucket name,
@@ -103,11 +104,17 @@ class CloudInfraBase(ABC):
         """
         pass
 
+    @abstractmethod
+    def give_member_ability_to_list_buckets(
+        self, resource_key: str, member, project: str = None
+    ):
+        pass
+
     # endregion BUCKET
 
     # region MACHINE ACCOUNTS
     @abstractmethod
-    def create_machine_account(self, name: str, project: str=None) -> Any:
+    def create_machine_account(self, name: str) -> Any:
         """
         Generate a non-person account with some name
         :param project:
@@ -118,6 +125,10 @@ class CloudInfraBase(ABC):
     def add_member_to_machine_account_access(
         self, resource_key: str, machine_account, member
     ) -> Any:
+        pass
+
+    @abstractmethod
+    def get_credentials_for_machine_account(self, resource_key, account):
         pass
 
     # endregion MACHINE ACCOUNTS
@@ -140,20 +151,40 @@ class CloudInfraBase(ABC):
     # SECRETS
 
     @abstractmethod
-    def create_secret(self, name: str) -> Any:
+    def create_secret(self, name: str, project: str = None) -> Any:
         pass
 
     @abstractmethod
     def add_secret_member(
-        self, resource_key: str, secret, member, membership: SecretMembership
+        self,
+        resource_key: str,
+        secret,
+        member,
+        membership: SecretMembership,
+        project: str = None,
     ) -> Any:
+        pass
+
+    @abstractmethod
+    def add_secret_version(
+        self,
+        resource_key: str,
+        secret: Any,
+        contents: Any,
+        processor: Callable[[Any], Any] = None,
+    ):
         pass
 
     # ARTIFACT REPOSITORY
 
     @abstractmethod
     def add_member_to_container_registry(
-        self, resource_key: str, registry, member, membership: ContainerRegistryMembership, project: str=None,
+        self,
+        resource_key: str,
+        registry,
+        member,
+        membership: ContainerRegistryMembership,
+        project: str = None,
     ) -> Any:
         # TODO: this might need more thought
         pass
@@ -180,6 +211,7 @@ class DevInfra(CloudInfraBase):
         unique: bool = False,
         requester_pays: bool = False,
         versioning: bool = True,
+        project: str = None,
     ) -> Any:
         print(f'Create bucket: {name} w/ rules: {", ".join(lifecycle_rules)}')
         return f"BUCKET://{name}"
@@ -187,7 +219,7 @@ class DevInfra(CloudInfraBase):
     def add_member_to_bucket(self, resource_key: str, bucket, member, membership):
         print(f"{resource_key} :: Add {member} to {bucket}")
 
-    def create_machine_account(self, name: str, project=None) -> Any:
+    def create_machine_account(self, name: str, project: str = None) -> Any:
         print(f"Creating SA: {name}")
         return name + "@generated.service-account"
 
@@ -203,12 +235,16 @@ class DevInfra(CloudInfraBase):
     def add_group_member(self, resource_key: str, group, member) -> Any:
         print(f"{resource_key} :: Add {member} to {group}")
 
-    def create_secret(self, name: str) -> Any:
+    def create_secret(self, name: str, project: str = None) -> Any:
         print(f"Creating secret: {name}")
         return f"SECRET:{name}"
 
-    def add_secret_member(self, resource_key: str, secret, member, membership) -> Any:
+    def add_secret_member(
+        self, resource_key: str, secret, member, membership, project: str = None
+    ) -> Any:
         print(f"{resource_key} :: Allow {member} to read secret {secret}")
 
-    def add_member_to_container_registry(self, resource_key: str, registry, member, membership, project=None) -> Any:
+    def add_member_to_container_registry(
+        self, resource_key: str, registry, member, membership, project=None
+    ) -> Any:
         pass

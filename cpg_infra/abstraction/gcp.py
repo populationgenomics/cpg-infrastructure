@@ -1,5 +1,5 @@
 from functools import lru_cache
-from typing import Any
+from typing import Any, Callable
 
 import pulumi
 import pulumi_gcp as gcp
@@ -9,7 +9,9 @@ from cpg_infra.abstraction.base import (
     UNDELETE_PERIOD_IN_DAYS,
     ARCHIVE_PERIOD_IN_DAYS,
     TMP_BUCKET_PERIOD_IN_DAYS,
-    BucketPermission, SecretMembership, ContainerRegistryMembership,
+    BucketPermission,
+    SecretMembership,
+    ContainerRegistryMembership,
 )
 from cpg_infra.config import CPGDatasetConfig, CPGDatasetComponents, DOMAIN
 
@@ -108,6 +110,7 @@ class GcpInfrastructure(CloudInfraBase):
         unique=False,
         requester_pays=False,
         versioning: bool = True,
+        project: str = None,
     ) -> Any:
         unique_bucket_name = name
         if not unique:
@@ -121,6 +124,7 @@ class GcpInfrastructure(CloudInfraBase):
             labels={"bucket": unique_bucket_name},
             lifecycle_rules=lifecycle_rules,
             requester_pays=requester_pays,
+            project=project or self.project,
         )
 
     def get_member_key(self, member):
@@ -129,6 +133,9 @@ class GcpInfrastructure(CloudInfraBase):
 
         if isinstance(member, gcp.cloudidentity.Group):
             return pulumi.Output.concat('group:', member.group_key.id)
+
+        if isinstance(member, gcp.storage.Bucket):
+            return member.name
 
         if isinstance(member, str):
             return member
@@ -152,29 +159,34 @@ class GcpInfrastructure(CloudInfraBase):
     def add_member_to_bucket(
         self, resource_key: str, bucket, member, membership: BucketPermission
     ) -> Any:
-        kwargs = dict(
-            bucket=bucket,
-            member=member,
-            role=membership,
-        )
-        # print(f'Creating BucketIAMMember ({resource_key}): {kwargs}', flush=True)
         gcp.storage.BucketIAMMember(
             resource_key,
-            bucket=bucket.name,
+            bucket=self.get_member_key(bucket),
             member=self.get_member_key(member),
             role=self.bucket_membership_to_role(membership),
         )
 
-    def create_machine_account(self, name: str, project=None) -> Any:
+    def give_member_ability_to_list_buckets(
+        self, resource_key: str, member, project: str = None
+    ):
+        gcp.projects.IAMMember(
+            'project-buckets-lister',
+            role=self.bucket_membership_to_role(BucketPermission.LIST),
+            member=self.get_member_key(member),
+            project=project or self.project,
+        )
+
+    def create_machine_account(self, name: str, project: str = None) -> Any:
         return gcp.serviceaccount.Account(
             f'service-account-{name}',
             account_id=name,
             display_name=name,
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
+            project=project or self.project,
         )
 
     def add_member_to_machine_account_access(
-        self, resource_key: str, machine_account, member
+        self, resource_key: str, machine_account, member, project: str = None
     ) -> Any:
         gcp.serviceaccount.IAMMember(
             resource_key,
@@ -184,6 +196,12 @@ class GcpInfrastructure(CloudInfraBase):
             # ),
             role="roles/iam.serviceAccountUser",
             member=self.get_member_key(member),
+        )
+
+    def get_credentials_for_machine_account(self, resource_key, account):
+        return gcp.serviceaccount.Key(
+            resource_key,
+            service_account_id=self.get_member_key(account),
         )
 
     def create_group(self, name: str) -> Any:
@@ -208,7 +226,7 @@ class GcpInfrastructure(CloudInfraBase):
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
         )
 
-    def create_secret(self, name: str) -> Any:
+    def create_secret(self, name: str, project: str = None) -> Any:
         return gcp.secretmanager.Secret(
             name,
             secret_id=name,
@@ -222,9 +240,17 @@ class GcpInfrastructure(CloudInfraBase):
                 ),
             ),
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_secretmanager]),
+            project=project or self.project
         )
 
-    def add_secret_member(self, resource_key: str, secret, member, membership: SecretMembership, project: str=None) -> Any:
+    def add_secret_member(
+        self,
+        resource_key: str,
+        secret,
+        member,
+        membership: SecretMembership,
+        project: str = None,
+    ) -> Any:
 
         if membership == SecretMembership.ADMIN:
             role = 'roles/secretmanager.secretVersionManager'
@@ -241,7 +267,31 @@ class GcpInfrastructure(CloudInfraBase):
             member=self.get_member_key(member),
         )
 
-    def add_member_to_container_registry(self, resource_key: str, registry, member, membership, project=None) -> Any:
+    def prepare_secret_contents(self, value, processor: Callable[[Any], Any]):
+        _processor = processor or (lambda el: el)
+        if isinstance(value, str):
+            return _processor(value)
+        elif isinstance(value, gcp.serviceaccount.Key):
+            return value.private_key.apply(_processor)
+        else:
+            raise ValueError(f'Unknown secret contents type {type(value)}')
+
+    def add_secret_version(
+        self,
+        resource_key: str,
+        secret: Any,
+        contents: Any,
+        processor: Callable[[Any], Any] = None,
+    ):
+        return gcp.secretmanager.SecretVersion(
+            resource_key,
+            secret=secret.id,
+            secret_data=self.prepare_secret_contents(contents, processor),
+        )
+
+    def add_member_to_container_registry(
+        self, resource_key: str, registry, member, membership, project=None
+    ) -> Any:
 
         if membership == ContainerRegistryMembership.READER:
             role = 'roles/artifactregistry.reader'
@@ -295,7 +345,7 @@ class GcpInfrastructure(CloudInfraBase):
         )
 
     def add_project_role(
-        self, resource_key: str, *, member: any, role: str, project: str=None
+        self, resource_key: str, *, member: any, role: str, project: str = None
     ):
         gcp.projects.IAMMember(
             resource_key,
