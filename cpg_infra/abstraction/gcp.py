@@ -1,3 +1,4 @@
+from functools import lru_cache
 from typing import Any
 
 import pulumi
@@ -54,6 +55,15 @@ class GcpInfrastructure(CloudInfraBase):
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_serviceusage]),
         )
 
+        self._svc_secretmanager = gcp.projects.Service(
+            'secretmanager-service',
+            service='secretmanager.googleapis.com',
+            disable_on_destroy=False,
+            opts=pulumi.resource.ResourceOptions(
+                depends_on=[self._svc_cloudresourcemanager]
+            ),
+        )
+
         self._svc_dataproc = None
         if CPGDatasetComponents.SPARK in self.components:
             self._svc_dataproc = gcp.projects.Service(
@@ -64,6 +74,16 @@ class GcpInfrastructure(CloudInfraBase):
                     depends_on=[self._svc_cloudresourcemanager]
                 ),
             )
+
+    @property
+    @lru_cache
+    def _svc_lifescienceapi(self):
+        return gcp.projects.Service(
+            'lifesciences-service',
+            service='lifesciences.googleapis.com',
+            disable_on_destroy=False,
+            opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_serviceusage]),
+        )
 
     def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
         return gcp.storage.BucketLifecycleRuleArgs(
@@ -195,7 +215,20 @@ class GcpInfrastructure(CloudInfraBase):
         )
 
     def create_secret(self, name: str) -> Any:
-        pass
+        return gcp.secretmanager.Secret(
+            name,
+            secret_id=name,
+            replication=gcp.secretmanager.SecretReplicationArgs(
+                user_managed=gcp.secretmanager.SecretReplicationUserManagedArgs(
+                    replicas=[
+                        gcp.secretmanager.SecretReplicationUserManagedReplicaArgs(
+                            location=self.region,
+                        ),
+                    ],
+                ),
+            ),
+            opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_secretmanager]),
+        )
 
     def add_secret_member(self, resource_key: str, secret, member, membership) -> Any:
         pass
@@ -205,9 +238,35 @@ class GcpInfrastructure(CloudInfraBase):
     ) -> Any:
         pass
 
-    def add_member_to_lifescience_api(self, resource_key: str, service_account):
+    # region GCP SPECIFIC
+
+    def add_member_to_lifescience_api(self, resource_key: str, account):
         gcp.projects.IAMMember(
             resource_key,
             role="roles/lifesciences.workflowsRunner",
-            member=pulumi.Output.concat("serviceAccount:", service_account),
+            member=self.get_member_key(account),
+            opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_lifescienceapi]),
         )
+
+    #
+    def add_member_to_dataproc_api(self, resource_key: str, account):
+        gcp.projects.IAMMember(
+            resource_key,
+            role='roles/dataproc.worker',
+            member=self.get_member_key(account),
+            opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_lifescienceapi]),
+        )
+
+    def add_cloudrun_invoker(
+        self, resource_key: str, *, service: str, project: str, member
+    ):
+        gcp.cloudrun.IamMember(
+            resource_key,
+            location=self.region,
+            project=project,
+            service=service,
+            role='roles/run.invoker',
+            member=self.get_member_key(member),
+        )
+
+    # region GCP SPECIFIC
