@@ -148,13 +148,13 @@ class CPGInfrastructure:
         print("GENERATING ACCOUNTS")
         machine_accounts: dict[str, list] = defaultdict(list)
 
-        for access_level, account in self.hail_accounts_by_access_level:
+        for access_level, account in self.hail_accounts_by_access_level.items():
             machine_accounts['hail'].append((access_level, account))
-        for access_level, account in self.deployment_accounts_by_access_level:
+        for access_level, account in self.deployment_accounts_by_access_level.items():
             machine_accounts['deployment'].append((access_level, account))
-        for access_level, account in self.dataproc_machine_accounts_by_access_level:
+        for access_level, account in self.dataproc_machine_accounts_by_access_level.items():
             machine_accounts['dataproc'].append((access_level, account))
-        for access_level, account in self.cromwell_machine_accounts_by_access_level:
+        for access_level, account in self.cromwell_machine_accounts_by_access_level.items():
             machine_accounts['cromwell'].append((access_level, account))
 
         return machine_accounts
@@ -642,9 +642,11 @@ class CPGInfrastructure:
         if not self.should_setup_sample_metadata:
             return {}
 
+        self.setup_sample_metadata_access_permissions()
+
         if isinstance(self.infra, GcpInfrastructure):
             # do some cloudrun stuff
-            self.setup_sample_metadata_access_permissions()
+            self.setup_sample_metadata_cloudrun_permissions()
         elif isinstance(self.infra, AzureInfra):
             # we'll do some custom stuff here :)
             raise NotImplementedError
@@ -662,36 +664,23 @@ class CPGInfrastructure:
 
         return sm_groups
 
-    @property
-    @lru_cache()
-    def sample_metadata_access_group(self):
-        """
-        This convenience group makes it easier to add lots of accounts
-        to physically access the sample-metadata service
-        """
-        return self.create_group('sample-metadata-access')
-
-    def setup_sample_metadata_access_group(self):
-        self.infra.add_group_member(
-            'sample-metadata-access-access-group-membership',
-            self.sample_metadata_access_group,
-            self.access_group,
-        )
-        for access_level, group in self.access_level_groups.items():
-            self.infra.add_group_member(
-                f'sample-metadata-access-{access_level}-group-membership',
-                self.sample_metadata_access_group,
-                group,
-            )
-
+    def setup_sample_metadata_cloudrun_permissions(self):
         # now we give the sample_metadata_access_group access to cloud-run instance
         assert isinstance(self.infra, GcpInfrastructure)
 
+        for sm_type, group in self.sample_metadata_groups.items():
+            self.infra.add_cloudrun_invoker(
+                f'sample-metadata-{sm_type}-cloudrun-invoker',
+                service=SAMPLE_METADATA_SERVICE_NAME,
+                project=SAMPLE_METADATA_PROJECT,
+                member=group,
+            )
+
         self.infra.add_cloudrun_invoker(
-            f'sample-metadata-cloudrun-invoker',
+            f'sample-metadata-access-group-cloudrun-invoker',
             service=SAMPLE_METADATA_SERVICE_NAME,
             project=SAMPLE_METADATA_PROJECT,
-            member=self.sample_metadata_access_group,
+            member=self.access_group,
         )
 
     def setup_sample_metadata_access_permissions(self):
@@ -750,11 +739,50 @@ class CPGInfrastructure:
     # endregion SAMPLE METADATA
     # region CONTAINER REGISTRY
 
+    def setup_container_registry(self):
+        # give pretty much everyone compute-account access to container registry
+
+        self.infra.add_member_to_artifact_registry('')
+
     # endregion CONTAINER REGISTRY
     # region NOTEBOOKS
 
     def setup_notebooks(self):
-        pass
+        self.setup_notebook_account()
+
+    def setup_notebook_account(self):
+
+        # allow access group to use notebook account
+        self.infra.add_member_to_machine_account_access(
+            'notebook-account-users', self.notebook_account, self.access_group
+        )
+
+        # Grant the notebook account the same permissions as the access group members.
+        self.infra.add_group_member(
+            'notebook-service-account-access-group-member',
+            self.access_group,
+            self.notebook_account,
+        )
+
+        if not isinstance(self.infra, GcpInfrastructure):
+            # TODO: How to abstract compute.admin on project
+            raise NotImplementedError
+
+        self.infra.add_project_role(
+            'notebook-account-compute-admin',
+            project=NOTEBOOKS_PROJECT,
+            role='roles/compute.admin',
+            member=self.notebook_account,
+        )
+
+    @property
+    @lru_cache()
+    def notebook_account(self):
+        if self.should_setup_notebooks:
+            return None
+        return self.infra.create_machine_account(
+            f'notebook-{self.config.dataset}', project=NOTEBOOKS_PROJECT
+        )
 
     # endregion NOTEBOOKS
     # region ACCESS GROUP CACHE

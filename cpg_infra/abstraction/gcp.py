@@ -25,6 +25,7 @@ class GcpInfrastructure(CloudInfraBase):
         super().__init__(config)
 
         self.region = "australia-southeast1"
+        self.project = gcp.organizations.get_project().project_id
         self.organization = gcp.organizations.get_organization(domain=DOMAIN)
 
         self._svc_cloudresourcemanager = gcp.projects.Service(
@@ -46,13 +47,6 @@ class GcpInfrastructure(CloudInfraBase):
             "serviceusage-service",
             service="serviceusage.googleapis.com",
             disable_on_destroy=False,
-        )
-
-        self._svc_lifescience = gcp.projects.Service(
-            "lifesciences-service",
-            service="lifesciences.googleapis.com",
-            disable_on_destroy=False,
-            opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_serviceusage]),
         )
 
         self._svc_secretmanager = gcp.projects.Service(
@@ -171,7 +165,7 @@ class GcpInfrastructure(CloudInfraBase):
             role=self.bucket_membership_to_role(membership),
         )
 
-    def create_machine_account(self, name: str) -> Any:
+    def create_machine_account(self, name: str, project=None) -> Any:
         return gcp.serviceaccount.Account(
             f'service-account-{name}',
             account_id=name,
@@ -245,6 +239,7 @@ class GcpInfrastructure(CloudInfraBase):
             resource_key,
             role="roles/lifesciences.workflowsRunner",
             member=self.get_member_key(account),
+            project=self.project,
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_lifescienceapi]),
         )
 
@@ -269,4 +264,14 @@ class GcpInfrastructure(CloudInfraBase):
             member=self.get_member_key(member),
         )
 
-    # region GCP SPECIFIC
+    def add_project_role(
+        self, resource_key: str, *, project: str, member: any, role: str
+    ):
+        gcp.projects.IAMMember(
+            resource_key,
+            project=project,
+            role=role,
+            member=self.get_member_key(member),
+        )
+
+    # endregion GCP SPECIFIC

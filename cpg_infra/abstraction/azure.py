@@ -71,7 +71,7 @@ class AzureInfra(CloudInfraBase):
             role_assignment_name='Storage Blob Data Contributor',
         )
 
-    def create_machine_account(self, name: str) -> Any:
+    def create_machine_account(self, name: str, project=None) -> Any:
         application = az.batch.Application(
             f'application-{name}',
             account_name=name,
