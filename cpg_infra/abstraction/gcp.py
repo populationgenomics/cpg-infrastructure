@@ -9,7 +9,7 @@ from cpg_infra.abstraction.base import (
     UNDELETE_PERIOD_IN_DAYS,
     ARCHIVE_PERIOD_IN_DAYS,
     TMP_BUCKET_PERIOD_IN_DAYS,
-    BucketPermission,
+    BucketPermission, SecretMembership, ContainerRegistryMembership,
 )
 from cpg_infra.config import CPGDatasetConfig, CPGDatasetComponents, DOMAIN
 
@@ -200,9 +200,9 @@ class GcpInfrastructure(CloudInfraBase):
     def add_group_member(self, resource_key: str, group, member) -> Any:
         gcp.cloudidentity.GroupMembership(
             resource_key,
-            group=group.id,
+            group=self.get_member_key(group),
             preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
-                id=member
+                id=self.get_member_key(member)
             ),
             roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name="MEMBER")],
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
@@ -224,13 +224,40 @@ class GcpInfrastructure(CloudInfraBase):
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_secretmanager]),
         )
 
-    def add_secret_member(self, resource_key: str, secret, member, membership) -> Any:
-        pass
+    def add_secret_member(self, resource_key: str, secret, member, membership: SecretMembership, project: str=None) -> Any:
 
-    def add_member_to_artifact_registry(
-        self, resource_key: str, artifact_registry, member
-    ) -> Any:
-        pass
+        if membership == SecretMembership.ADMIN:
+            role = 'roles/secretmanager.secretVersionManager'
+        elif membership == SecretMembership.ACCESSOR:
+            role = 'roles/secretmanager.secretAccessor'
+        else:
+            raise ValueError(f'Unrecognised secret membership type: {membership}')
+
+        gcp.secretmanager.SecretIamMember(
+            resource_key,
+            project=project or self.project,
+            secret_id=secret.id,
+            role=role,
+            member=self.get_member_key(member),
+        )
+
+    def add_member_to_container_registry(self, resource_key: str, registry, member, membership, project=None) -> Any:
+
+        if membership == ContainerRegistryMembership.READER:
+            role = 'roles/artifactregistry.reader'
+        elif membership == ContainerRegistryMembership.APPEND:
+            role = 'roles/artifactregistry.writer'
+        else:
+            raise ValueError(f'Unrecognised group membership type: {membership}')
+
+        gcp.artifactregistry.RepositoryIamMember(
+            resource_key,
+            project=project or self.project,
+            location=self.region,
+            repository=registry,
+            role=role,
+            member=self.get_member_key(member),
+        )
 
     # region GCP SPECIFIC
 
@@ -244,12 +271,15 @@ class GcpInfrastructure(CloudInfraBase):
         )
 
     #
-    def add_member_to_dataproc_api(self, resource_key: str, account):
+    def add_member_to_dataproc_api(self, resource_key: str, account, role: str):
+        assert role in ('worker', 'admin')
+
         gcp.projects.IAMMember(
             resource_key,
-            role='roles/dataproc.worker',
+            role=f'roles/dataproc.{role}',
             member=self.get_member_key(account),
-            opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_lifescienceapi]),
+            project=self.project,
+            opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_dataproc]),
         )
 
     def add_cloudrun_invoker(
@@ -265,11 +295,11 @@ class GcpInfrastructure(CloudInfraBase):
         )
 
     def add_project_role(
-        self, resource_key: str, *, project: str, member: any, role: str
+        self, resource_key: str, *, member: any, role: str, project: str=None
     ):
         gcp.projects.IAMMember(
             resource_key,
-            project=project,
+            project=project or self.project,
             role=role,
             member=self.get_member_key(member),
         )

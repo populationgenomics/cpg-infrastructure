@@ -97,7 +97,5 @@ class AzureInfra(CloudInfraBase):
     def add_secret_member(self, resource_key: str, secret, member, membership) -> Any:
         pass
 
-    def add_member_to_artifact_registry(
-        self, resource_key: str, artifact_registry, member
-    ) -> Any:
+    def add_member_to_container_registry(self, resource_key: str, registry, member, membership, project=None) -> Any:
         pass

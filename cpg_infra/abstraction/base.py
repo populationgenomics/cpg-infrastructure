@@ -37,6 +37,11 @@ class BucketPermission(Enum):
     MUTATE = "mutate"
 
 
+class ContainerRegistryMembership(Enum):
+    READER = 'reader'
+    APPEND = 'append'
+
+
 class CloudInfraBase(ABC):
     def __init__(self, config: CPGDatasetConfig):
         super().__init__()
@@ -61,6 +66,10 @@ class CloudInfraBase(ABC):
     def bucket_rule_temporary(self, days=TMP_BUCKET_PERIOD_IN_DAYS) -> Any:
         """
         Return a lifecycle_rule that stores data for n days after delete"""
+        pass
+
+    @abstractmethod
+    def bucket_rule_archive(self, days=ARCHIVE_PERIOD_IN_DAYS) -> Any:
         pass
 
     @abstractmethod
@@ -143,8 +152,8 @@ class CloudInfraBase(ABC):
     # ARTIFACT REPOSITORY
 
     @abstractmethod
-    def add_member_to_artifact_registry(
-        self, resource_key: str, artifact_registry, member
+    def add_member_to_container_registry(
+        self, resource_key: str, registry, member, membership: ContainerRegistryMembership, project: str=None,
     ) -> Any:
         # TODO: this might need more thought
         pass
@@ -201,7 +210,5 @@ class DevInfra(CloudInfraBase):
     def add_secret_member(self, resource_key: str, secret, member, membership) -> Any:
         print(f"{resource_key} :: Allow {member} to read secret {secret}")
 
-    def add_member_to_artifact_registry(
-        self, resource_key: str, artifact_registry, member
-    ) -> Any:
+    def add_member_to_container_registry(self, resource_key: str, registry, member, membership, project=None) -> Any:
         pass

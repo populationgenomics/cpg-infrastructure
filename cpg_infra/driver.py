@@ -14,6 +14,7 @@ from cpg_infra.abstraction.base import (
     DevInfra,
     SecretMembership,
     BucketPermission,
+    ContainerRegistryMembership,
 )
 from cpg_infra.config import CPGDatasetConfig, CPGDatasetComponents
 
@@ -21,7 +22,9 @@ DOMAIN = "populationgenomics.org.au"
 CUSTOMER_ID = "C010ys3gt"
 REGION = "australia-southeast1"
 ANALYSIS_RUNNER_PROJECT = "analysis-runner"
+ANALYSIS_RUNNER_CONTAINER_REGISTRY_NAME = 'images'
 CPG_COMMON_PROJECT = "cpg-common"
+CPG_COMMON_CONTAINER_REGISTRY_NAME = 'images'
 ANALYSIS_RUNNER_SERVICE_ACCOUNT = (
     "analysis-runner-server@analysis-runner.iam.gserviceaccount.com"
 )
@@ -49,9 +52,8 @@ SAMPLE_METADATA_API_SERVICE_ACCOUNT = (
 TMP_BUCKET_PERIOD_IN_DAYS = 8  # tmp content gets deleted afterwards.
 
 SampleMetadataAccessorMembership = namedtuple(
-    # the member_key for a group might be group.group_key.id
     "SampleMetadataAccessorMembership",
-    ["name", "member_key", "permissions"],
+    ["name", "member", "permissions"],
 )
 
 SM_TEST_READ = "test-read"
@@ -119,19 +121,19 @@ class CPGInfrastructure:
         if self.should_setup_storage:
             self.setup_storage()
         if self.should_setup_sample_metadata:
-            self.setup_cromwell()
+            self.setup_sample_metadata()
         if self.should_setup_hail:
             self.setup_hail()
         if self.should_setup_cromwell:
-            self.setup_cromwell_machine_accounts()
+            self.setup_cromwell()
         if self.should_setup_spark:
             self.setup_spark()
         if self.should_setup_notebooks:
             self.setup_notebooks()
+        if self.should_setup_container_registry:
+            self.setup_container_registry()
 
         self.setup_group_caches()
-
-        # outputs
 
     # region MACHINE ACCOUNTS
 
@@ -152,9 +154,15 @@ class CPGInfrastructure:
             machine_accounts['hail'].append((access_level, account))
         for access_level, account in self.deployment_accounts_by_access_level.items():
             machine_accounts['deployment'].append((access_level, account))
-        for access_level, account in self.dataproc_machine_accounts_by_access_level.items():
+        for (
+            access_level,
+            account,
+        ) in self.dataproc_machine_accounts_by_access_level.items():
             machine_accounts['dataproc'].append((access_level, account))
-        for access_level, account in self.cromwell_machine_accounts_by_access_level.items():
+        for (
+            access_level,
+            account,
+        ) in self.cromwell_machine_accounts_by_access_level.items():
             machine_accounts['cromwell'].append((access_level, account))
 
         return machine_accounts
@@ -194,6 +202,9 @@ class CPGInfrastructure:
         self.setup_dependent_group_memberships()
         self.setup_access_level_group_outputs()
 
+        if isinstance(self.infra, GcpInfrastructure):
+            self.setup_gcp_monitoring_access()
+
     @property
     @lru_cache
     def access_group(self):
@@ -215,13 +226,19 @@ class CPGInfrastructure:
         return {al: self.create_group(al) for al in ACCESS_LEVELS}
 
     @staticmethod
-    def get_access_level_group_output_name(*, access_level: AccessLevel):
-        return f"{access_level}-access-group-id"
+    def get_group_output_name(*, dataset: str, kind: str):
+        return f"{dataset}-{kind}-group-id"
 
     def setup_access_level_group_outputs(self):
-        for access_level, group in self.access_level_groups.items():
+
+        kinds = {
+            'access': self.access_group,
+            **self.access_level_groups,
+        }
+
+        for kind, group in kinds.items():
             pulumi.export(
-                self.get_access_level_group_output_name(access_level=access_level),
+                self.get_group_output_name(dataset=self.config.dataset, kind=kind),
                 group.id if hasattr(group, "id") else group,
             )
 
@@ -238,6 +255,14 @@ class CPGInfrastructure:
                 member=machine_account,
             )
 
+    def setup_gcp_monitoring_access(self):
+        assert isinstance(self.infra, GcpInfrastructure)
+        self.infra.add_project_role(
+            'project-monitoring-viewer',
+            member=self.access_group,
+            role='roles/monitoring.viewer',
+        )
+
     # endregion ACCESS GROUPS
     # region STORAGE
 
@@ -245,6 +270,7 @@ class CPGInfrastructure:
         if not self.should_setup_storage:
             return
 
+        self.setup_archive_bucket_permissions()
         self.setup_main_bucket_permissions()
         self.setup_main_tmp_bucket()
         self.setup_main_analysis_bucket()
@@ -255,13 +281,55 @@ class CPGInfrastructure:
         if self.config.enable_release:
             self.setup_release_bucket_permissions()
 
+        if isinstance(self.infra, GcpInfrastructure):
+            self.setup_gcp_requester_pays_access()
+
+    def setup_gcp_requester_pays_access(self):
+        """
+        Allows the usage of requester-pays buckets for
+        access + test + standard + full groups
+        :return:
+        """
+        assert isinstance(self.infra, GcpInfrastructure)
+
+        kinds = {
+            'access-group': self.access_group,
+            **self.access_level_groups,
+        }
+        for key, account in kinds.items():
+            # Allow the usage of requester-pays buckets.
+            self.infra.add_project_role(
+                f'{key}-serviceusage-consumer',
+                role='roles/serviceusage.serviceUsageConsumer',
+                member=account
+            )
+
+    def setup_archive_bucket_permissions(self):
+        self.infra.add_member_to_bucket(
+            'full-archive-bucket-admin',
+            self.archive_bucket,
+            self.access_level_groups['full'],
+            BucketPermission.MUTATE,
+        )
+
+    @property
+    @lru_cache()
+    def archive_bucket(self):
+        return self.infra.create_bucket(
+            'archive',
+            lifecycle_rules=[
+                self.infra.bucket_rule_archive(),
+                self.infra.bucket_rule_undelete(),
+            ],
+        )
+
     # region MAIN BUCKETS
 
     def setup_main_bucket_permissions(self):
         # access has list permission
 
         self.infra.add_member_to_bucket(
-            "project-bucket-lister",
+            "project-buckets-lister",
             self.main_bucket,
             self.access_group,
             BucketPermission.LIST,
@@ -344,7 +412,7 @@ class CPGInfrastructure:
             "full-main-web-bucket-admin",
             self.main_web_bucket,
             self.access_level_groups["full"],
-            BucketPermission.APPEND,
+            BucketPermission.MUTATE,
         )
 
     def setup_main_upload_buckets_permissions(self):
@@ -354,6 +422,20 @@ class CPGInfrastructure:
                 bucket=main_upload_bucket,
                 member=self.main_upload_account,
                 membership=BucketPermission.MUTATE,
+            )
+
+            self.infra.add_member_to_bucket(
+                f"full-{bname}-bucket-admin",
+                bucket=main_upload_bucket,
+                member=self.access_level_groups['full'],
+                membership=BucketPermission.MUTATE,
+            )
+
+            self.infra.add_member_to_bucket(
+                f"standard-{bname}-bucket-viewer",
+                bucket=main_upload_bucket,
+                member=self.access_level_groups['standard'],
+                membership=BucketPermission.READ,
             )
 
     @property
@@ -419,6 +501,7 @@ class CPGInfrastructure:
             ('test-analysis', self.test_analysis_bucket),
             ('test-tmp', self.test_tmp_bucket),
             ('test-web', self.test_web_bucket),
+            ('test-upload', self.test_upload_bucket),
         ]
 
         for bucket_name, bucket in buckets:
@@ -437,6 +520,14 @@ class CPGInfrastructure:
                     group,
                     BucketPermission.MUTATE,
                 )
+
+        # give web-server access to test-bucket
+        self.infra.add_member_to_bucket(
+            'web-server-test-web-bucket-viewer',
+            bucket=self.test_web_bucket,
+            member=WEB_SERVER_SERVICE_ACCOUNT,
+            membership=BucketPermission.READ,
+        )
 
     @property
     @lru_cache()
@@ -466,6 +557,13 @@ class CPGInfrastructure:
             "test-tmp",
             lifecycle_rules=[self.infra.bucket_rule_temporary()],
             versioning=False,
+        )
+
+    @property
+    @lru_cache()
+    def test_upload_bucket(self):
+        return self.infra.create_bucket(
+            "test-upload", lifecycle_rules=[self.infra.bucket_rule_undelete()]
         )
 
     # endregion TEST BUCKETS
@@ -522,6 +620,14 @@ class CPGInfrastructure:
                 BucketPermission.MUTATE,
             )
 
+        # The analysis-runner also needs Hail bucket access for compiled code.
+        self.infra.add_member_to_bucket(
+            'analysis-runner-hail-bucket-admin',
+            bucket=self.hail_bucket,
+            member=ANALYSIS_RUNNER_SERVICE_ACCOUNT,
+            membership=BucketPermission.MUTATE,
+        )
+
     @property
     @lru_cache()
     def hail_accounts_by_access_level(self):
@@ -552,6 +658,7 @@ class CPGInfrastructure:
         self.setup_cromwell_machine_accounts()
 
     def setup_cromwell_machine_accounts(self):
+        print('RUNNING cromwell-runner permission', flush=True)
 
         for (
             access_level,
@@ -591,8 +698,16 @@ class CPGInfrastructure:
 
     def _GCP_setup_cromwell(self):
         assert isinstance(self.infra, GcpInfrastructure)
-        # Allow the Cromwell service accounts to run workflows.
 
+        # Add Hail service accounts to (premade) Cromwell access group.
+        for access_level, hail_account in self.hail_accounts_by_access_level.items():
+            self.infra.add_group_member(
+                f'hail-service-account-{access_level}-cromwell-access',
+                group=CROMWELL_ACCESS_GROUP_ID,
+                member=hail_account,
+            )
+
+        # Allow the Cromwell service accounts to run workflows.
         for (
             access_level,
             account,
@@ -611,16 +726,34 @@ class CPGInfrastructure:
 
         spark_accounts = self.dataproc_machine_accounts_by_access_level
         for access_level, hail_account in self.hail_accounts_by_access_level.items():
+            # Allow the hail account to run jobs AS the spark user
             self.infra.add_member_to_machine_account_access(
-                f'hail-service-account-{access_level}-dataproc-service-account-user',
+                f'hail-service-account-{access_level}-dataproc-user',
                 spark_accounts[access_level],
                 hail_account,
             )
 
         if isinstance(self.infra, GcpInfrastructure):
-            for access_level, account in spark_accounts.items():
+            for access_level, spark_account in spark_accounts.items():
+                # allow the spark_account to run jobs
                 self.infra.add_member_to_dataproc_api(
-                    f'dataproc-service-account-{access_level}-dataproc-worker', account
+                    f'dataproc-service-account-{access_level}-dataproc-worker', spark_account, 'worker'
+                )
+
+            for access_level, hail_account in self.hail_accounts_by_access_level.items():
+
+                # Allow hail account to create a cluster
+                self.infra.add_member_to_dataproc_api(
+                    f'hail-service-account-{access_level}-dataproc-admin',
+                    account=hail_account,
+                    role='admin',
+                )
+
+                # Give hail worker permissions to submit jobs.
+                self.infra.add_member_to_dataproc_api(
+                    f'hail-service-account-{access_level}-dataproc-worker',
+                    account=hail_account,
+                    role='worker',
                 )
 
     @property
@@ -689,28 +822,28 @@ class CPGInfrastructure:
         sm_access_levels: list[SampleMetadataAccessorMembership] = [
             SampleMetadataAccessorMembership(
                 name="human",
-                member_key=self.access_group,
+                member=self.access_group,
                 permissions=(SM_MAIN_READ, SM_TEST_READ, SM_TEST_WRITE),
             ),
             SampleMetadataAccessorMembership(
                 name="test",
-                member_key=self.access_level_groups["test"],
+                member=self.access_level_groups["test"],
                 permissions=(SM_MAIN_READ, SM_TEST_READ, SM_TEST_WRITE),
             ),
             SampleMetadataAccessorMembership(
                 name="standard",
-                member_key=self.access_level_groups["standard"],
+                member=self.access_level_groups["standard"],
                 permissions=(SM_MAIN_READ, SM_MAIN_WRITE),
             ),
             SampleMetadataAccessorMembership(
                 name="full",
-                member_key=self.access_level_groups["full"],
+                member=self.access_level_groups["full"],
                 permissions=SAMPLE_METADATA_PERMISSIONS,
             ),
             # allow the analysis-runner logging cloud function to update the sample-metadata project
             SampleMetadataAccessorMembership(
                 name="analysis-runner-logger",
-                member_key=ANALYSIS_RUNNER_LOGGER_SERVICE_ACCOUNT,
+                member=ANALYSIS_RUNNER_LOGGER_SERVICE_ACCOUNT,
                 permissions=SAMPLE_METADATA_PERMISSIONS,
             ),
         ]
@@ -723,7 +856,7 @@ class CPGInfrastructure:
             sm_access_levels.append(
                 SampleMetadataAccessorMembership(
                     name=self._get_name_from_external_sa(sa),
-                    member_key=sa,
+                    member=sa,
                     permissions=(SM_MAIN_READ,),
                 )
             )
@@ -731,18 +864,59 @@ class CPGInfrastructure:
             sm_access_levels.append(
                 SampleMetadataAccessorMembership(
                     name=self._get_name_from_external_sa(sa),
-                    member_key=sa,
+                    member=sa,
                     permissions=(SM_MAIN_READ, SM_MAIN_WRITE),
                 )
             )
+
+        for name, member, permission in sm_access_levels:
+            for kind in permission:
+                self.infra.add_group_member(
+                    f'sample-metadata-{kind}-{name}-access-level-group-membership',
+                    group=self.sample_metadata_groups[kind],
+                    member=member,
+                )
 
     # endregion SAMPLE METADATA
     # region CONTAINER REGISTRY
 
     def setup_container_registry(self):
-        # give pretty much everyone compute-account access to container registry
+        """
+        Give compute-accounts access to analysis-runner
+        + cpg-common container registries
+        :return:
+        """
 
-        self.infra.add_member_to_artifact_registry('')
+        kinds = {
+            'access-group': self.access_group,
+            **self.access_level_groups,
+        }
+
+        for kind, account in kinds.items():
+
+            self.infra.add_member_to_container_registry(
+                f'{kind}-images-reader-in-analysis-runner',
+                registry=ANALYSIS_RUNNER_CONTAINER_REGISTRY_NAME,
+                project=ANALYSIS_RUNNER_PROJECT,
+                member=account,
+                membership=ContainerRegistryMembership.READER,
+            )
+            self.infra.add_member_to_container_registry(
+                f'{kind}-images-reader-in-cpg-common',
+                registry=CPG_COMMON_CONTAINER_REGISTRY_NAME,
+                project=CPG_COMMON_PROJECT,
+                member=account,
+                membership=ContainerRegistryMembership.READER,
+            )
+
+            if kind in ('full', 'standard'):
+                self.infra.add_member_to_container_registry(
+                    f'{kind}-images-writer-in-cpg-common',
+                    registry=CPG_COMMON_CONTAINER_REGISTRY_NAME,
+                    project=CPG_COMMON_PROJECT,
+                    member=account,
+                    membership=ContainerRegistryMembership.APPEND,
+                )
 
     # endregion CONTAINER REGISTRY
     # region NOTEBOOKS
@@ -778,8 +952,6 @@ class CPGInfrastructure:
     @property
     @lru_cache()
     def notebook_account(self):
-        if self.should_setup_notebooks:
-            return None
         return self.infra.create_machine_account(
             f'notebook-{self.config.dataset}', project=NOTEBOOKS_PROJECT
         )
@@ -859,6 +1031,25 @@ class CPGInfrastructure:
         )
 
     # endregion ACCESS GROUP CACHE
+    # region REFERENCE
+
+    def setup_reference(self):
+
+        kinds = {
+            'access-group': self.access_group,
+            **self.access_level_groups,
+        }
+
+        for kind, group in kinds.items():
+            self.infra.add_member_to_bucket(
+                f'{kind}-reference-bucket-viewer',
+                bucket=REFERENCE_BUCKET_NAME,
+                member=group,
+                membership=BucketPermission.READ,
+            )
+
+
+    # endregion REFERENCE
     # region DEPENDENCIES
 
     def setup_dependent_group_memberships(self):
