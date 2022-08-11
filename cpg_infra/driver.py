@@ -42,8 +42,9 @@ NOTEBOOKS_PROJECT = "notebooks-314505"
 CROMWELL_ACCESS_GROUP_ID = "groups/03cqmetx2922fyu"
 CROMWELL_RUNNER_ACCOUNT = "cromwell-runner@cromwell-305305.iam.gserviceaccount.com"
 SAMPLE_METADATA_PROJECT = "sample-metadata"
+SAMPLE_METADATA_SERVICE_NAME = 'sample-metadata-api'
 SAMPLE_METADATA_API_SERVICE_ACCOUNT = (
-    "sample-metadata-api@sample-metadata.iam.gserviceaccount.com"
+    "serviceAccount:sample-metadata-api@sample-metadata.iam.gserviceaccount.com"
 )
 TMP_BUCKET_PERIOD_IN_DAYS = 8  # tmp content gets deleted afterwards.
 
@@ -91,58 +92,47 @@ class CPGInfrastructure:
             ],
         )
 
+        self.should_setup_storage = CPGDatasetComponents.STORAGE in self.components
+        self.should_setup_spark = CPGDatasetComponents.SPARK in self.components
+        self.should_setup_cromwell = CPGDatasetComponents.CROMWELL in self.components
+        self.should_setup_notebooks = CPGDatasetComponents.NOTEBOOKS in self.components
+        self.should_setup_sample_metadata = (
+            CPGDatasetComponents.SAMPLE_METADATA in self.components
+        )
+        self.should_setup_hail = CPGDatasetComponents.HAIL_ACCOUNTS in self.components
+        self.should_setup_container_registry = (
+            CPGDatasetComponents.CONTAINER_REGISTRY in self.components
+        )
+
     def create_group(self, name: str):
         group_name = f'{self.config.dataset}-{name}'
         group = self.infra.create_group(group_name)
-        self.infra.add_group_member(
-            f"access-group-cacher-{group_name}",
-            group,
-            ACCESS_GROUP_CACHE_SERVICE_ACCOUNT,
-        )
         return group
 
     def main(self):
 
-        # set-up machine group membership
-        self.setup_access_level_group_memberships()
-        self.setup_dependent_group_memberships()
+        # access-groups
+        self.setup_access_groups()
 
-        # setup bucket permissions
-        if CPGDatasetComponents.STORAGE in self.components:
-            self.setup_main_bucket_permissions()
-            self.setup_main_tmp_bucket()
-            self.setup_main_analysis_bucket()
-            self.setup_main_web_bucket_permissions()
-            self.setup_main_upload_buckets_permissions()
-            self.setup_test_buckets_permissions()
+        # optional components
 
-            if self.config.enable_release:
-                self.setup_release_bucket_permissions()
-
-        if CPGDatasetComponents.SAMPLE_METADATA in self.components:
-
-            # sample-metadata
-            self.setup_sample_metadata_permissions()
-
-        if CPGDatasetComponents.CROMWELL in self.components:
+        if self.should_setup_storage:
+            self.setup_storage()
+        if self.should_setup_sample_metadata:
+            self.setup_cromwell()
+        if self.should_setup_hail:
+            self.setup_hail()
+        if self.should_setup_cromwell:
             self.setup_cromwell_machine_accounts()
+        if self.should_setup_spark:
+            self.setup_spark()
+        if self.should_setup_notebooks:
+            self.setup_notebooks()
 
-        if isinstance(self.infra, GcpInfrastructure):
-            self._gcp_extra_steps()
+        self.setup_group_caches()
 
         # outputs
-        self.setup_access_level_group_outputs()
 
-    # region GCP SPECIFIC
-
-    def _gcp_extra_steps(self):
-        if 'azure' in self.config.deploy_locations:
-            # we'll set up GCP service-accounts for use by Azure SAs, with credentials on SM
-            pass
-
-        pass
-
-    # endregion GCP SPECIFIC
     # region MACHINE ACCOUNTS
 
     @property
@@ -152,23 +142,20 @@ class CPGInfrastructure:
 
     @property
     @lru_cache()
-    def notebook_account(self):
-        pass
-
-    @property
-    @lru_cache()
     def working_machine_accounts_by_type(
         self,
     ) -> dict[str, list[tuple[AccessLevel, Any]]]:
         print("GENERATING ACCOUNTS")
         machine_accounts: dict[str, list] = defaultdict(list)
-        for kind, access_level_and_sa in self._get_hail_and_deploy_accounts().items():
-            machine_accounts[kind].extend(access_level_and_sa)
-        for (
-            kind,
-            access_level_and_sa,
-        ) in self._generate_dataproc_and_cromwell_machine_accounts().items():
-            machine_accounts[kind].extend(access_level_and_sa)
+
+        for access_level, account in self.hail_accounts_by_access_level:
+            machine_accounts['hail'].append((access_level, account))
+        for access_level, account in self.deployment_accounts_by_access_level:
+            machine_accounts['deployment'].append((access_level, account))
+        for access_level, account in self.dataproc_machine_accounts_by_access_level:
+            machine_accounts['dataproc'].append((access_level, account))
+        for access_level, account in self.cromwell_machine_accounts_by_access_level:
+            machine_accounts['cromwell'].append((access_level, account))
 
         return machine_accounts
 
@@ -187,41 +174,25 @@ class CPGInfrastructure:
 
         return machine_accounts
 
-    def _get_hail_and_deploy_accounts(self) -> dict[str, list[tuple[AccessLevel, Any]]]:
-        service_accounts = defaultdict(list)
-        for kind in "hail", "deployment":
-            for access_level in ACCESS_LEVELS:
-                service_account = getattr(
-                    self.config, f"{kind}_service_account_{access_level}"
-                )
-                if service_account:
-                    service_accounts[kind].append((access_level, service_account))
-
-        return service_accounts
-
-    def _generate_dataproc_and_cromwell_machine_accounts(
-        self,
-    ) -> dict[str, list[tuple[AccessLevel, Any]]]:
-        service_accounts = defaultdict(list)
-        kinds = []
-        if CPGDatasetComponents.SPARK in self.components:
-            kinds.append('dataproc')
-        if CPGDatasetComponents.CROMWELL in self.components:
-            kinds.append('cromwell')
-
-        for kind in kinds:
-            for access_level in ACCESS_LEVELS:
-                service_accounts[kind].append(
-                    (
-                        access_level,
-                        self.infra.create_machine_account(f"{kind}-sa-{access_level}"),
-                    )
-                )
-
-        return service_accounts
+    @property
+    @lru_cache()
+    def deployment_accounts_by_access_level(self):
+        accounts = {
+            'test': self.config.deployment_service_account_test,
+            'standard': self.config.deployment_service_account_standard,
+            'full': self.config.deployment_service_account_full,
+        }
+        if any(ac is None for ac in accounts.values()):
+            return {}
+        return accounts
 
     # endregion MACHINE ACCOUNTS
-    # region GROUPS
+    # region ACCESS GROUPS
+
+    def setup_access_groups(self):
+        self.setup_access_level_group_memberships()
+        self.setup_dependent_group_memberships()
+        self.setup_access_level_group_outputs()
 
     @property
     @lru_cache
@@ -267,100 +238,23 @@ class CPGInfrastructure:
                 member=machine_account,
             )
 
-    @property
-    @lru_cache()
-    def sample_metadata_groups(self) -> dict[str, any]:
-        sm_groups = {}
-        for key in SAMPLE_METADATA_PERMISSIONS:
-            sm_groups[key] = self.create_group(f"sample-metadata-{key}")
+    # endregion ACCESS GROUPS
+    # region STORAGE
 
-        return sm_groups
+    def setup_storage(self):
+        if not self.should_setup_storage:
+            return
 
-    def setup_sample_metadata_permissions(self):
-        sm_access_levels: list[SampleMetadataAccessorMembership] = [
-            SampleMetadataAccessorMembership(
-                name="human",
-                member_key=self.access_group,
-                permissions=(SM_MAIN_READ, SM_TEST_READ, SM_TEST_WRITE),
-            ),
-            SampleMetadataAccessorMembership(
-                name="test",
-                member_key=self.access_level_groups["test"],
-                permissions=(SM_MAIN_READ, SM_TEST_READ, SM_TEST_WRITE),
-            ),
-            SampleMetadataAccessorMembership(
-                name="standard",
-                member_key=self.access_level_groups["standard"],
-                permissions=(SM_MAIN_READ, SM_MAIN_WRITE),
-            ),
-            SampleMetadataAccessorMembership(
-                name="full",
-                member_key=self.access_level_groups["full"],
-                permissions=SAMPLE_METADATA_PERMISSIONS,
-            ),
-            # allow the analysis-runner logging cloud function to update the sample-metadata project
-            SampleMetadataAccessorMembership(
-                name="analysis-runner-logger",
-                member_key=ANALYSIS_RUNNER_LOGGER_SERVICE_ACCOUNT,
-                permissions=SAMPLE_METADATA_PERMISSIONS,
-            ),
-        ]
+        self.setup_main_bucket_permissions()
+        self.setup_main_tmp_bucket()
+        self.setup_main_analysis_bucket()
+        self.setup_main_web_bucket_permissions()
+        self.setup_main_upload_buckets_permissions()
+        self.setup_test_buckets_permissions()
 
-        # extra custom SAs
-        extra_sm_read_sas = self.config.sm_read_only_sas
-        extra_sm_write_sas = self.config.sm_read_write_sas
+        if self.config.enable_release:
+            self.setup_release_bucket_permissions()
 
-        for sa in extra_sm_read_sas:
-            sm_access_levels.append(
-                SampleMetadataAccessorMembership(
-                    name=self._get_name_from_external_sa(sa),
-                    member_key=sa,
-                    permissions=(SM_MAIN_READ,),
-                )
-            )
-        for sa in extra_sm_write_sas:
-            sm_access_levels.append(
-                SampleMetadataAccessorMembership(
-                    name=self._get_name_from_external_sa(sa),
-                    member_key=sa,
-                    permissions=(SM_MAIN_READ, SM_MAIN_WRITE),
-                )
-            )
-
-        # give access to sample_metadata groups (and hence sample-metadata API through secrets)
-        for name, member, permission in sm_access_levels:
-            for kind in permission:
-                self.infra.add_group_member(
-                    f"sample-metadata-{kind}-{name}-access-level-group-membership",
-                    self.sample_metadata_groups[kind],
-                    member,
-                )
-
-    def setup_sample_metadata_members_cache_secrets(self):
-        # hopefully this is just temporary
-        for sm_group_name, sm_group in self.sample_metadata_groups.items():
-            self.infra.add_group_member(
-                f"sample-metadata-group-cache-{sm_group_name}-group-membership",
-                sm_group,
-                ACCESS_GROUP_CACHE_SERVICE_ACCOUNT,
-            )
-
-            sm_cache_secret = self.infra.create_secret(f"{sm_group_name}-members-cache")
-
-            self.infra.add_secret_member(
-                f"{sm_group_name}-group-cache-secret-accessor",
-                sm_cache_secret,
-                ACCESS_GROUP_CACHE_SERVICE_ACCOUNT,
-                SecretMembership.ADMIN,
-            ),
-            self.infra.add_secret_member(
-                f"{sm_group_name}-smservice-secret-accessor",
-                sm_cache_secret,
-                SAMPLE_METADATA_API_SERVICE_ACCOUNT,
-                SecretMembership.ACCESSOR,
-            ),
-
-    # endregion GROUPS
     # region MAIN BUCKETS
 
     def setup_main_bucket_permissions(self):
@@ -608,18 +502,61 @@ class CPGInfrastructure:
         )
 
     # endregion RELEASE BUCKETS
-    # region CROMWELL
+    # endregion STORAGE
+    # region HAIL
 
-    def setup_cromwell_machine_accounts(self):
-        cromwell_machine_accounts = self.working_machine_accounts_by_type.get(
-            'cromwell'
-        )
-        if not cromwell_machine_accounts:
-            raise ValueError(
-                'This method may be called where cromwell machine accounts are not activated'
+    def setup_hail(self):
+        self.setup_hail_bucket_permissions()
+
+    def setup_hail_bucket_permissions(self):
+
+        for (
+            access_level,
+            hail_machine_account,
+        ) in self.hail_accounts_by_access_level.items():
+            # Full access to the Hail Batch bucket.
+            self.infra.add_member_to_bucket(
+                f'hail-service-account-{access_level}-hail-bucket-admin',
+                self.hail_bucket,
+                hail_machine_account,
+                BucketPermission.MUTATE,
             )
 
-        for access_level, machine_account in cromwell_machine_accounts:
+    @property
+    @lru_cache()
+    def hail_accounts_by_access_level(self):
+        if not self.should_setup_hail:
+            return {}
+        accounts = {
+            'test': self.config.hail_service_account_test,
+            'standard': self.config.hail_service_account_standard,
+            'full': self.config.hail_service_account_full,
+        }
+        assert all(ac is not None for ac in accounts.values())
+        return accounts
+
+    @property
+    @lru_cache()
+    def hail_bucket(self):
+        return self.infra.create_bucket(
+            'hail', lifecycle_rules=[self.infra.bucket_rule_temporary()]
+        )
+
+    # endregion HAIL
+    # region CROMWELL
+
+    def setup_cromwell(self):
+        if not self.should_setup_cromwell:
+            return
+
+        self.setup_cromwell_machine_accounts()
+
+    def setup_cromwell_machine_accounts(self):
+
+        for (
+            access_level,
+            machine_account,
+        ) in self.cromwell_machine_accounts_by_access_level.items():
 
             # To use a service account for VMs, Cromwell accounts need
             # to be allowed to use themselves ;)
@@ -637,11 +574,263 @@ class CPGInfrastructure:
                 CROMWELL_RUNNER_ACCOUNT,
             )
 
+        if isinstance(self.infra, GcpInfrastructure):
+            self._GCP_setup_cromwell()
+
+    @property
+    @lru_cache()
+    def cromwell_machine_accounts_by_access_level(self) -> dict[AccessLevel, Any]:
+        if not self.should_setup_cromwell:
+            return {}
+
+        accounts = {
+            access_level: self.infra.create_machine_account(f"cromwell-{access_level}")
+            for access_level in ACCESS_LEVELS
+        }
+        return accounts
+
     def _GCP_setup_cromwell(self):
         assert isinstance(self.infra, GcpInfrastructure)
         # Allow the Cromwell service accounts to run workflows.
 
+        for (
+            access_level,
+            account,
+        ) in self.cromwell_machine_accounts_by_access_level.items():
+            self.infra.add_member_to_lifescience_api(
+                f'cromwell-service-account-{access_level}-workflows-runner',
+                account,
+            )
+
     # endregion CROMWELL
+    # region SPARK
+
+    def setup_spark(self):
+        if not self.should_setup_spark:
+            return
+
+        spark_accounts = self.dataproc_machine_accounts_by_access_level
+        for access_level, hail_account in self.hail_accounts_by_access_level.items():
+            self.infra.add_member_to_machine_account_access(
+                f'hail-service-account-{access_level}-dataproc-service-account-user',
+                spark_accounts[access_level],
+                hail_account,
+            )
+
+        if isinstance(self.infra, GcpInfrastructure):
+            for access_level, account in spark_accounts.items():
+                self.infra.add_member_to_dataproc_api(
+                    f'dataproc-service-account-{access_level}-dataproc-worker', account
+                )
+
+    @property
+    @lru_cache()
+    def dataproc_machine_accounts_by_access_level(self) -> dict[AccessLevel, Any]:
+        if not self.should_setup_spark:
+            return {}
+
+        accounts = {
+            access_level: self.infra.create_machine_account(f"dataproc-{access_level}")
+            for access_level in ACCESS_LEVELS
+        }
+        return accounts
+
+    # endregion SPARK
+    # region SAMPLE METADATA
+
+    def setup_sample_metadata(self):
+        if not self.should_setup_sample_metadata:
+            return {}
+
+        if isinstance(self.infra, GcpInfrastructure):
+            # do some cloudrun stuff
+            self.setup_sample_metadata_access_permissions()
+        elif isinstance(self.infra, AzureInfra):
+            # we'll do some custom stuff here :)
+            raise NotImplementedError
+
+    @property
+    @lru_cache()
+    def sample_metadata_groups(self) -> dict[str, any]:
+        if not self.should_setup_sample_metadata:
+            return {}
+
+        sm_groups = {
+            key: self.create_group(f"sample-metadata-{key}")
+            for key in SAMPLE_METADATA_PERMISSIONS
+        }
+
+        return sm_groups
+
+    @property
+    @lru_cache()
+    def sample_metadata_access_group(self):
+        """
+        This convenience group makes it easier to add lots of accounts
+        to physically access the sample-metadata service
+        """
+        return self.create_group('sample-metadata-access')
+
+    def setup_sample_metadata_access_group(self):
+        self.infra.add_group_member(
+            'sample-metadata-access-access-group-membership',
+            self.sample_metadata_access_group,
+            self.access_group,
+        )
+        for access_level, group in self.access_level_groups.items():
+            self.infra.add_group_member(
+                f'sample-metadata-access-{access_level}-group-membership',
+                self.sample_metadata_access_group,
+                group,
+            )
+
+        # now we give the sample_metadata_access_group access to cloud-run instance
+        assert isinstance(self.infra, GcpInfrastructure)
+
+        self.infra.add_cloudrun_invoker(
+            f'sample-metadata-cloudrun-invoker',
+            service=SAMPLE_METADATA_SERVICE_NAME,
+            project=SAMPLE_METADATA_PROJECT,
+            member=self.sample_metadata_access_group,
+        )
+
+    def setup_sample_metadata_access_permissions(self):
+        if not self.should_setup_sample_metadata:
+            return
+        sm_access_levels: list[SampleMetadataAccessorMembership] = [
+            SampleMetadataAccessorMembership(
+                name="human",
+                member_key=self.access_group,
+                permissions=(SM_MAIN_READ, SM_TEST_READ, SM_TEST_WRITE),
+            ),
+            SampleMetadataAccessorMembership(
+                name="test",
+                member_key=self.access_level_groups["test"],
+                permissions=(SM_MAIN_READ, SM_TEST_READ, SM_TEST_WRITE),
+            ),
+            SampleMetadataAccessorMembership(
+                name="standard",
+                member_key=self.access_level_groups["standard"],
+                permissions=(SM_MAIN_READ, SM_MAIN_WRITE),
+            ),
+            SampleMetadataAccessorMembership(
+                name="full",
+                member_key=self.access_level_groups["full"],
+                permissions=SAMPLE_METADATA_PERMISSIONS,
+            ),
+            # allow the analysis-runner logging cloud function to update the sample-metadata project
+            SampleMetadataAccessorMembership(
+                name="analysis-runner-logger",
+                member_key=ANALYSIS_RUNNER_LOGGER_SERVICE_ACCOUNT,
+                permissions=SAMPLE_METADATA_PERMISSIONS,
+            ),
+        ]
+
+        # extra custom SAs
+        extra_sm_read_sas = self.config.sm_read_only_sas
+        extra_sm_write_sas = self.config.sm_read_write_sas
+
+        for sa in extra_sm_read_sas:
+            sm_access_levels.append(
+                SampleMetadataAccessorMembership(
+                    name=self._get_name_from_external_sa(sa),
+                    member_key=sa,
+                    permissions=(SM_MAIN_READ,),
+                )
+            )
+        for sa in extra_sm_write_sas:
+            sm_access_levels.append(
+                SampleMetadataAccessorMembership(
+                    name=self._get_name_from_external_sa(sa),
+                    member_key=sa,
+                    permissions=(SM_MAIN_READ, SM_MAIN_WRITE),
+                )
+            )
+
+    # endregion SAMPLE METADATA
+    # region CONTAINER REGISTRY
+
+    # endregion CONTAINER REGISTRY
+    # region NOTEBOOKS
+
+    def setup_notebooks(self):
+        pass
+
+    # endregion NOTEBOOKS
+    # region ACCESS GROUP CACHE
+
+    def setup_group_caches(self):
+        self.setup_access_group_cache()
+        self.setup_web_access_group_cache()
+        self.setup_sample_metadata_access_secrets()
+
+    def _setup_group_cache_secret(self, group, key, secret_name: str = None):
+        self.infra.add_group_member(
+            f"{key}-group-cache-membership",
+            group,
+            ACCESS_GROUP_CACHE_SERVICE_ACCOUNT,
+        )
+        group_cache_secret = self.infra.create_secret(
+            secret_name or f'{key}-group-cache-secret'
+        )
+        # Modify access_group_cache secret
+        self.infra.add_secret_member(
+            f'{key}-group-cache-secret-version-manager',
+            group_cache_secret,
+            ACCESS_GROUP_CACHE_SERVICE_ACCOUNT,
+            SecretMembership.ADMIN,
+        )
+
+        return group_cache_secret
+
+    def setup_access_group_cache(self):
+        # Allow list of access-group
+        secret = self._setup_group_cache_secret(self.access_group, 'access')
+
+        # analysis-runner list
+        self.infra.add_secret_member(
+            'access-group-cache-secret-accessor',
+            secret,
+            ANALYSIS_RUNNER_SERVICE_ACCOUNT,
+            SecretMembership.ACCESSOR,
+        )
+
+    def setup_sample_metadata_access_secrets(self):
+        """
+        sample-metadata-main-read-group-cache-secret
+        sample-metadata-main-write-group-cache-secret
+        sample-metadata-test-read-group-cache-secret
+        sample-metadata-test-write-group-cache-secret
+                :return:
+        """
+        for key, sm_group in self.sample_metadata_groups.items():
+            secret = self._setup_group_cache_secret(
+                sm_group,
+                key=f'sample-metadata-{key}',
+                # oops, shouldn't have included the dataset in the original
+                # secret name, will be fixed by the new group-cache anyway
+                secret_name=f'{self.config.dataset}-sample-metadata-{key}-members-cache',
+            )
+
+            self.infra.add_secret_member(
+                f'sample-metadata-{key}-api-secret-accessor',
+                secret,
+                SAMPLE_METADATA_API_SERVICE_ACCOUNT,
+                SecretMembership.ACCESSOR,
+            )
+
+    def setup_web_access_group_cache(self):
+        # Allow list of access-group
+        secret = self._setup_group_cache_secret(self.web_access_group, 'web-access')
+
+        self.infra.add_secret_member(
+            'web-access-group-cache-secret-accessor',
+            secret,
+            WEB_SERVER_SERVICE_ACCOUNT,
+            SecretMembership.ACCESSOR,
+        )
+
+    # endregion ACCESS GROUP CACHE
     # region DEPENDENCIES
 
     def setup_dependent_group_memberships(self):
@@ -712,11 +901,10 @@ if __name__ == "__main__":
     for _infra in _infras:
 
         _config = CPGDatasetConfig(
-            **{
-                "dataset": "fewgenomes",
-                "hail_service_account_test": "fewgenomes-test@service-account",
-                "hail_service_account_standard": "fewgenomes-standard@service-account",
-                "hail_service_account_full": "fewgenomes-full@service-account",
-            }
+            dataset="fewgenomes",
+            deploy_locations=['dev'],
+            hail_service_account_test="fewgenomes-test@service-account",
+            hail_service_account_standard="fewgenomes-standard@service-account",
+            hail_service_account_full="fewgenomes-full@service-account",
         )
         CPGInfrastructure(_infra, _config).main()

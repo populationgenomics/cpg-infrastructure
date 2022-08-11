@@ -9,7 +9,9 @@ class CPGDatasetComponents(Enum):
     SPARK = "spark"
     CROMWELL = "cromwell"
     NOTEBOOKS = "notebooks"
+    HAIL_ACCOUNTS = "hail-accounts"
     SAMPLE_METADATA = "sample_metadata"
+    CONTAINER_REGISTRY = 'container-registry'
 
     @staticmethod
     def default_component_for_infrastructure():
@@ -19,6 +21,7 @@ class CPGDatasetComponents(Enum):
             "gcp": list(CPGDatasetComponents),
             "azure": [
                 CPGDatasetComponents.STORAGE,
+                CPGDatasetComponents.HAIL_ACCOUNTS,
                 # CPGDatasetComponents.SAMPLE_METADATA,
             ],
         }
