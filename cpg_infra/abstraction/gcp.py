@@ -1,3 +1,4 @@
+import base64
 from functools import lru_cache
 from typing import Any, Callable
 
@@ -202,7 +203,7 @@ class GcpInfrastructure(CloudInfraBase):
         return gcp.serviceaccount.Key(
             resource_key,
             service_account_id=self.get_member_key(account),
-        )
+        ).private_key.apply(lambda s: base64.b64decode(s).decode('utf-8'))
 
     def create_group(self, name: str) -> Any:
         mail = f"{name}@populationgenomics.org.au"
@@ -240,7 +241,7 @@ class GcpInfrastructure(CloudInfraBase):
                 ),
             ),
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_secretmanager]),
-            project=project or self.project
+            project=project or self.project,
         )
 
     def add_secret_member(
@@ -267,15 +268,6 @@ class GcpInfrastructure(CloudInfraBase):
             member=self.get_member_key(member),
         )
 
-    def prepare_secret_contents(self, value, processor: Callable[[Any], Any]):
-        _processor = processor or (lambda el: el)
-        if isinstance(value, str):
-            return _processor(value)
-        elif isinstance(value, gcp.serviceaccount.Key):
-            return value.private_key.apply(_processor)
-        else:
-            raise ValueError(f'Unknown secret contents type {type(value)}')
-
     def add_secret_version(
         self,
         resource_key: str,
@@ -284,9 +276,7 @@ class GcpInfrastructure(CloudInfraBase):
         processor: Callable[[Any], Any] = None,
     ):
         return gcp.secretmanager.SecretVersion(
-            resource_key,
-            secret=secret.id,
-            secret_data=self.prepare_secret_contents(contents, processor),
+            resource_key, secret=secret.id, secret_data=contents
         )
 
     def add_member_to_container_registry(

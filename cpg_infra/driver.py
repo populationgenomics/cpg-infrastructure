@@ -90,9 +90,7 @@ class CPGInfrastructure:
     def deploy_all_from_config(config: CPGDatasetConfig):
         infra_map = {c.name(): c for c in CloudInfraBase.__subclasses__()}
 
-        for infra_obj in [
-            infra_map[n] for n in config.deploy_locations
-        ]:
+        for infra_obj in [infra_map[n] for n in config.deploy_locations]:
             CPGInfrastructure(infra_obj, config).main()
 
     def __init__(self, infra, config: CPGDatasetConfig):
@@ -288,22 +286,24 @@ class CPGInfrastructure:
         if not self.should_setup_storage:
             return
 
-        self.infra.give_member_ability_to_list_buckets('project-buckets-lister', self.access_group)
-        self.setup_archive_bucket_permissions()
-        self.setup_main_bucket_permissions()
-        self.setup_main_tmp_bucket()
-        self.setup_main_analysis_bucket()
-        self.setup_main_web_bucket_permissions()
-        self.setup_main_upload_buckets_permissions()
-        self.setup_test_buckets_permissions()
+        self.infra.give_member_ability_to_list_buckets(
+            'project-buckets-lister', self.access_group
+        )
+        self.setup_storage_archive_bucket_permissions()
+        self.setup_storage_main_bucket_permissions()
+        self.setup_storage_main_tmp_bucket()
+        self.setup_storage_main_analysis_bucket()
+        self.setup_storage_main_web_bucket_permissions()
+        self.setup_storage_main_upload_buckets_permissions()
+        self.setup_storage_test_buckets_permissions()
 
         if self.config.enable_release:
-            self.setup_release_bucket_permissions()
+            self.setup_storage_release_bucket_permissions()
 
         if isinstance(self.infra, GcpInfrastructure):
-            self.setup_gcp_requester_pays_access()
+            self.setup_storage_gcp_requester_pays_access()
 
-    def setup_gcp_requester_pays_access(self):
+    def setup_storage_gcp_requester_pays_access(self):
         """
         Allows the usage of requester-pays buckets for
         access + test + standard + full groups
@@ -320,10 +320,10 @@ class CPGInfrastructure:
             self.infra.add_project_role(
                 f'{key}-serviceusage-consumer',
                 role='roles/serviceusage.serviceUsageConsumer',
-                member=account
+                member=account,
             )
 
-    def setup_archive_bucket_permissions(self):
+    def setup_storage_archive_bucket_permissions(self):
         self.infra.add_member_to_bucket(
             'full-archive-bucket-admin',
             self.archive_bucket,
@@ -344,7 +344,7 @@ class CPGInfrastructure:
 
     # region MAIN BUCKETS
 
-    def setup_main_bucket_permissions(self):
+    def setup_storage_main_bucket_permissions(self):
         # access has list permission
 
         self.infra.add_member_to_bucket(
@@ -368,7 +368,7 @@ class CPGInfrastructure:
             BucketPermission.MUTATE,
         )
 
-    def setup_main_tmp_bucket(self):
+    def setup_storage_main_tmp_bucket(self):
         self.infra.add_member_to_bucket(
             "standard-main-tmp-bucket-view-create",
             self.main_tmp_bucket,
@@ -383,7 +383,7 @@ class CPGInfrastructure:
             BucketPermission.MUTATE,
         )
 
-    def setup_main_analysis_bucket(self):
+    def setup_storage_main_analysis_bucket(self):
         self.infra.add_member_to_bucket(
             "access-group-main-analysis-bucket-viewer",
             self.main_analysis_bucket,
@@ -404,7 +404,7 @@ class CPGInfrastructure:
             BucketPermission.MUTATE,
         )
 
-    def setup_main_web_bucket_permissions(self):
+    def setup_storage_main_web_bucket_permissions(self):
         self.infra.add_member_to_bucket(
             "access-group-main-web-bucket-viewer",
             self.main_web_bucket,
@@ -434,7 +434,7 @@ class CPGInfrastructure:
             BucketPermission.MUTATE,
         )
 
-    def setup_main_upload_buckets_permissions(self):
+    def setup_storage_main_upload_buckets_permissions(self):
         for bname, main_upload_bucket in self.main_upload_buckets.items():
 
             # main_upload SA has ADMIN
@@ -469,7 +469,6 @@ class CPGInfrastructure:
                 member=self.access_group,
                 membership=BucketPermission.READ,
             )
-
 
     @property
     @lru_cache()
@@ -523,7 +522,7 @@ class CPGInfrastructure:
     # endregion MAIN BUCKETS
     # region TEST BUCKETS
 
-    def setup_test_buckets_permissions(self):
+    def setup_storage_test_buckets_permissions(self):
         """
         Test bucket permissions are much more uniform,
         so just work out some more generic mechanism
@@ -602,7 +601,7 @@ class CPGInfrastructure:
     # endregion TEST BUCKETS
     # region RELEASE BUCKETS
 
-    def setup_release_bucket_permissions(self):
+    def setup_storage_release_bucket_permissions(self):
         self.infra.add_member_to_bucket(
             'access-group-release-bucket-viewer',
             self.release_bucket,
@@ -664,10 +663,7 @@ class CPGInfrastructure:
 
     def setup_hail_wheels_bucket_permissions(self):
 
-        keys = {
-            'access-group': self.access_group,
-            **self.hail_accounts_by_access_level
-        }
+        keys = {'access-group': self.access_group, **self.hail_accounts_by_access_level}
 
         for key, group in keys.items():
             self.infra.add_member_to_bucket(
@@ -733,15 +729,17 @@ class CPGInfrastructure:
             self._GCP_setup_cromwell()
 
     def setup_cromwell_credentials(self):
-        for access_level, cromwell_account in self.cromwell_machine_accounts_by_access_level.items():
+        for (
+            access_level,
+            cromwell_account,
+        ) in self.cromwell_machine_accounts_by_access_level.items():
             secret = self.infra.create_secret(
                 f'cromwell-service-account-{access_level}-secret',
                 project=ANALYSIS_RUNNER_PROJECT,
             )
 
             credentials = self.infra.get_credentials_for_machine_account(
-                f'cromwell-service-account-{access_level}-key',
-                cromwell_account
+                f'cromwell-service-account-{access_level}-key', cromwell_account
             )
 
             # add credentials to the secret
@@ -749,8 +747,6 @@ class CPGInfrastructure:
                 f'cromwell-service-account-{access_level}-secret-version',
                 secret=secret,
                 contents=credentials,
-                processor=lambda s: base64.b64decode(s).decode('utf-8')
-
             )
 
             # allow the analysis-runner to view the secret
@@ -825,10 +821,15 @@ class CPGInfrastructure:
             for access_level, spark_account in spark_accounts.items():
                 # allow the spark_account to run jobs
                 self.infra.add_member_to_dataproc_api(
-                    f'dataproc-service-account-{access_level}-dataproc-worker', spark_account, 'worker'
+                    f'dataproc-service-account-{access_level}-dataproc-worker',
+                    spark_account,
+                    'worker',
                 )
 
-            for access_level, hail_account in self.hail_accounts_by_access_level.items():
+            for (
+                access_level,
+                hail_account,
+            ) in self.hail_accounts_by_access_level.items():
 
                 # Allow hail account to create a cluster
                 self.infra.add_member_to_dataproc_api(
@@ -978,7 +979,7 @@ class CPGInfrastructure:
 
         container_registries = [
             (ANALYSIS_RUNNER_PROJECT, ANALYSIS_RUNNER_CONTAINER_REGISTRY_NAME),
-            (CPG_COMMON_PROJECT, CPG_COMMON_CONTAINER_REGISTRY_NAME)
+            (CPG_COMMON_PROJECT, CPG_COMMON_CONTAINER_REGISTRY_NAME),
         ]
 
         kinds = {
@@ -1029,16 +1030,20 @@ class CPGInfrastructure:
             self.notebook_account,
         )
 
-        if not isinstance(self.infra, GcpInfrastructure):
+        if isinstance(self.infra, GcpInfrastructure):
+            self.infra.add_project_role(
+                'notebook-account-compute-admin',
+                project=NOTEBOOKS_PROJECT,
+                role='roles/compute.admin',
+                member=self.notebook_account,
+            )
+        elif isinstance(self.infra, DevInfra):
+            pass
+        else:
             # TODO: How to abstract compute.admin on project
-            raise NotImplementedError
-
-        self.infra.add_project_role(
-            'notebook-account-compute-admin',
-            project=NOTEBOOKS_PROJECT,
-            role='roles/compute.admin',
-            member=self.notebook_account,
-        )
+            raise NotImplementedError(
+                f'No implementation for compute.admin for notebook account on {self.infra.name()}'
+            )
 
     @property
     @lru_cache()
@@ -1064,21 +1069,18 @@ class CPGInfrastructure:
             f'analysis-runner-access-invoker',
             project=ANALYSIS_RUNNER_PROJECT,
             service=ANALYSIS_RUNNER_CLOUD_RUN_INSTANCE_NAME,
-            member=self.access_group
+            member=self.access_group,
         )
 
     def setup_analysis_runner_config_access(self):
-        keys = {
-            'access-group': self.access_group,
-            **self.hail_accounts_by_access_level
-        }
+        keys = {'access-group': self.access_group, **self.hail_accounts_by_access_level}
 
         for key, group in keys.items():
             self.infra.add_member_to_bucket(
                 f'{key}-analysis-runner-config-viewer',
                 bucket=ANALYSIS_RUNNER_CONFIG_BUCKET_NAME,
                 member=self.access_group,
-                membership=BucketPermission.READ
+                membership=BucketPermission.READ,
             )
 
     # endregion ANALYSIS RUNNER
@@ -1181,7 +1183,6 @@ class CPGInfrastructure:
                 member=group,
                 membership=BucketPermission.READ,
             )
-
 
     # endregion REFERENCE
     # region DEPENDENCIES

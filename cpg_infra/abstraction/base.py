@@ -114,7 +114,7 @@ class CloudInfraBase(ABC):
 
     # region MACHINE ACCOUNTS
     @abstractmethod
-    def create_machine_account(self, name: str) -> Any:
+    def create_machine_account(self, name: str, project: str = None) -> Any:
         """
         Generate a non-person account with some name
         :param project:
@@ -171,7 +171,6 @@ class CloudInfraBase(ABC):
         resource_key: str,
         secret: Any,
         contents: Any,
-        processor: Callable[[Any], Any] = None,
     ):
         pass
 
@@ -194,6 +193,7 @@ class CloudInfraBase(ABC):
 
 
 class DevInfra(CloudInfraBase):
+
     @staticmethod
     def name():
         return 'dev'
@@ -203,6 +203,9 @@ class DevInfra(CloudInfraBase):
 
     def bucket_rule_temporary(self, days=TMP_BUCKET_PERIOD_IN_DAYS) -> Any:
         return f"RULE:tmp={days}d"
+
+    def bucket_rule_archive(self, days=ARCHIVE_PERIOD_IN_DAYS) -> Any:
+        return f'RULE:archive={days}d'
 
     def create_bucket(
         self,
@@ -228,6 +231,9 @@ class DevInfra(CloudInfraBase):
     ) -> Any:
         print(f"Allow {member} to access {machine_account}")
 
+    def get_credentials_for_machine_account(self, resource_key, account):
+        return f'{resource_key} :: {account}.CREDENTIALS'
+
     def create_group(self, name: str) -> Any:
         print(f"Creating Group: {name}")
         return name + "@populationgenomics.org.au"
@@ -244,7 +250,14 @@ class DevInfra(CloudInfraBase):
     ) -> Any:
         print(f"{resource_key} :: Allow {member} to read secret {secret}")
 
+    def add_secret_version(self, resource_key: str, secret: Any, contents: Any, processor: Callable[[Any], Any] = None):
+        _processor = processor or (lambda el: el)
+        return f'{resource_key} :: {secret}.add_version("{_processor(contents)}")'
+
     def add_member_to_container_registry(
         self, resource_key: str, registry, member, membership, project=None
     ) -> Any:
-        pass
+        return f'{resource_key} :: Add {member} to CONTAINER registry {registry}'
+
+    def give_member_ability_to_list_buckets(self, resource_key: str, member, project: str = None):
+        return f'{resource_key} :: {member} can list buckets'
