@@ -12,7 +12,7 @@ from typing import Type, Any, Iterator, Iterable
 from inspect import isclass
 from collections import defaultdict, namedtuple
 
-from functools import lru_cache
+from functools import lru_cache, cached_property
 
 import pulumi
 
@@ -154,13 +154,11 @@ class CPGInfrastructure:
 
     # region MACHINE ACCOUNTS
 
-    @property
-    @lru_cache()
+    @cached_property
     def main_upload_account(self):
         return self.infra.create_machine_account("main-upload")
 
-    @property
-    @lru_cache()
+    @cached_property
     def working_machine_accounts_by_type(
         self,
     ) -> dict[str, list[tuple[AccessLevel, Any]]]:
@@ -198,8 +196,7 @@ class CPGInfrastructure:
 
         return machine_accounts
 
-    @property
-    @lru_cache()
+    @cached_property
     def deployment_accounts_by_access_level(self):
         accounts = {
             'test': self.config.deployment_service_account_test,
@@ -221,23 +218,19 @@ class CPGInfrastructure:
         if isinstance(self.infra, GcpInfrastructure):
             self.setup_gcp_monitoring_access()
 
-    @property
-    @lru_cache
+    @cached_property
     def access_group(self):
         return self.create_group("access")
 
-    @property
-    @lru_cache()
+    @cached_property
     def web_access_group(self):
         return self.create_group("web-access")
 
-    @property
-    @lru_cache()
+    @cached_property
     def release_access_group(self):
         return self.create_group('release-access')
 
-    @property
-    @lru_cache()
+    @cached_property
     def access_level_groups(self) -> dict[AccessLevel, Any]:
         return {al: self.create_group(al) for al in ACCESS_LEVELS}
 
@@ -331,8 +324,7 @@ class CPGInfrastructure:
             BucketPermission.MUTATE,
         )
 
-    @property
-    @lru_cache()
+    @cached_property
     def archive_bucket(self):
         return self.infra.create_bucket(
             'archive',
@@ -470,15 +462,13 @@ class CPGInfrastructure:
                 membership=BucketPermission.READ,
             )
 
-    @property
-    @lru_cache()
+    @cached_property
     def main_bucket(self):
         return self.infra.create_bucket(
             "main", lifecycle_rules=[self.infra.bucket_rule_undelete()]
         )
 
-    @property
-    @lru_cache()
+    @cached_property
     def main_tmp_bucket(self):
         return self.infra.create_bucket(
             "main-tmp",
@@ -486,22 +476,19 @@ class CPGInfrastructure:
             versioning=False,
         )
 
-    @property
-    @lru_cache()
+    @cached_property
     def main_analysis_bucket(self):
         return self.infra.create_bucket(
             "main-analysis", lifecycle_rules=[self.infra.bucket_rule_undelete()]
         )
 
-    @property
-    @lru_cache()
+    @cached_property
     def main_web_bucket(self):
         return self.infra.create_bucket(
             "main-web", lifecycle_rules=[self.infra.bucket_rule_undelete()]
         )
 
-    @property
-    @lru_cache()
+    @cached_property
     def main_upload_buckets(self) -> dict[str, Any]:
         main_upload_undelete = self.infra.bucket_rule_undelete(days=30)
         main_upload_buckets = {
@@ -561,29 +548,25 @@ class CPGInfrastructure:
             membership=BucketPermission.READ,
         )
 
-    @property
-    @lru_cache()
+    @cached_property
     def test_bucket(self):
         return self.infra.create_bucket(
             "test", lifecycle_rules=[self.infra.bucket_rule_undelete()]
         )
 
-    @property
-    @lru_cache()
+    @cached_property
     def test_analysis_bucket(self):
         return self.infra.create_bucket(
             "test-analysis", lifecycle_rules=[self.infra.bucket_rule_undelete()]
         )
 
-    @property
-    @lru_cache()
+    @cached_property
     def test_web_bucket(self):
         return self.infra.create_bucket(
             "test-web", lifecycle_rules=[self.infra.bucket_rule_undelete()]
         )
 
-    @property
-    @lru_cache()
+    @cached_property
     def test_tmp_bucket(self):
         return self.infra.create_bucket(
             "test-tmp",
@@ -591,8 +574,7 @@ class CPGInfrastructure:
             versioning=False,
         )
 
-    @property
-    @lru_cache()
+    @cached_property
     def test_upload_bucket(self):
         return self.infra.create_bucket(
             "test-upload", lifecycle_rules=[self.infra.bucket_rule_undelete()]
@@ -623,8 +605,7 @@ class CPGInfrastructure:
             BucketPermission.MUTATE,
         )
 
-    @property
-    @lru_cache()
+    @cached_property
     def release_bucket(self):
         return self.infra.create_bucket(
             'release-requester-pays',
@@ -673,8 +654,7 @@ class CPGInfrastructure:
                 membership=BucketPermission.READ,
             )
 
-    @property
-    @lru_cache()
+    @cached_property
     def hail_accounts_by_access_level(self):
         if not self.should_setup_hail:
             return {}
@@ -686,8 +666,7 @@ class CPGInfrastructure:
         assert all(ac is not None for ac in accounts.values())
         return accounts
 
-    @property
-    @lru_cache()
+    @cached_property
     def hail_bucket(self):
         return self.infra.create_bucket(
             'hail', lifecycle_rules=[self.infra.bucket_rule_temporary()]
@@ -768,8 +747,7 @@ class CPGInfrastructure:
                     membership=SecretMembership.ACCESSOR,
                 )
 
-    @property
-    @lru_cache()
+    @cached_property
     def cromwell_machine_accounts_by_access_level(self) -> dict[AccessLevel, Any]:
         if not self.should_setup_cromwell:
             return {}
@@ -845,8 +823,7 @@ class CPGInfrastructure:
                     role='worker',
                 )
 
-    @property
-    @lru_cache()
+    @cached_property
     def dataproc_machine_accounts_by_access_level(self) -> dict[AccessLevel, Any]:
         if not self.should_setup_spark:
             return {}
@@ -873,8 +850,7 @@ class CPGInfrastructure:
             # we'll do some custom stuff here :)
             raise NotImplementedError
 
-    @property
-    @lru_cache()
+    @cached_property
     def sample_metadata_groups(self) -> dict[str, any]:
         if not self.should_setup_sample_metadata:
             return {}
@@ -1045,8 +1021,7 @@ class CPGInfrastructure:
                 f'No implementation for compute.admin for notebook account on {self.infra.name()}'
             )
 
-    @property
-    @lru_cache()
+    @cached_property
     def notebook_account(self):
         return self.infra.create_machine_account(
             f'notebook-{self.config.dataset}', project=NOTEBOOKS_PROJECT
