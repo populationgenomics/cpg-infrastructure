@@ -133,7 +133,7 @@ class GcpInfrastructure(CloudInfraBase):
             return member.name
 
         if isinstance(member, gcp.cloudidentity.Group):
-            return pulumi.Output.concat('group:', member.group_key.id)
+            return member.group_key.id
 
         if isinstance(member, gcp.storage.Bucket):
             return member.name
@@ -145,6 +145,15 @@ class GcpInfrastructure(CloudInfraBase):
             return member
 
         raise NotImplementedError(f"Not valid for type {type(member)}")
+
+    def get_secret_key(self, secret):
+        if isinstance(secret, gcp.secretmanager.Secret):
+            return secret.id
+
+        if isinstance(secret, str):
+            return secret
+
+        raise NotImplementedError(f"Not valid for type {type(secret)}")
 
     def bucket_membership_to_role(self, membership: BucketPermission):
         # TODO: fix organization id

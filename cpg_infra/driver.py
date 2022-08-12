@@ -644,7 +644,7 @@ class CPGInfrastructure:
 
     def setup_hail_wheels_bucket_permissions(self):
 
-        keys = {'access-group': self.access_group, **self.hail_accounts_by_access_level}
+        keys = {'access-group': self.access_group, **self.access_level_groups}
 
         for key, group in keys.items():
             self.infra.add_member_to_bucket(
@@ -713,7 +713,7 @@ class CPGInfrastructure:
             cromwell_account,
         ) in self.cromwell_machine_accounts_by_access_level.items():
             secret = self.infra.create_secret(
-                f'cromwell-service-account-{access_level}-secret',
+                f'{self.config.dataset}-cromwell-{access_level}-key',
                 project=ANALYSIS_RUNNER_PROJECT,
             )
 
@@ -734,6 +734,7 @@ class CPGInfrastructure:
                 secret=secret,
                 member=ANALYSIS_RUNNER_SERVICE_ACCOUNT,
                 membership=SecretMembership.ACCESSOR,
+                project=ANALYSIS_RUNNER_PROJECT,
             )
 
             # Allow the Hail service account to access its corresponding cromwell key
@@ -867,7 +868,6 @@ class CPGInfrastructure:
         assert isinstance(self.infra, GcpInfrastructure)
 
         for sm_type, group in self.sample_metadata_groups.items():
-            print(f'SM_CLOUDRUN_INVOKER :: {sm_type}', flush=True)
             self.infra.add_cloudrun_invoker(
                 f'sample-metadata-{sm_type}-cloudrun-invoker',
                 service=SAMPLE_METADATA_SERVICE_NAME,
@@ -1054,7 +1054,7 @@ class CPGInfrastructure:
             self.infra.add_member_to_bucket(
                 f'{key}-analysis-runner-config-viewer',
                 bucket=ANALYSIS_RUNNER_CONFIG_BUCKET_NAME,
-                member=self.access_group,
+                member=group,
                 membership=BucketPermission.READ,
             )
 
@@ -1066,14 +1066,14 @@ class CPGInfrastructure:
         self.setup_group_cache_web_access_group()
         self.setup_group_cache_sample_metadata_secrets()
 
-    def _setup_group_cache_secret(self, group, key, secret_name: str = None):
+    def _setup_group_cache_secret(self, *, group, key, secret_name: str = None):
         self.infra.add_group_member(
             f"{key}-group-cache-membership",
             group,
             ACCESS_GROUP_CACHE_SERVICE_ACCOUNT,
         )
         group_cache_secret = self.infra.create_secret(
-            secret_name or f'{key}-group-cache-secret'
+            secret_name or f'{key}-group-cache-secret',
         )
         # Modify access_group_cache secret
         self.infra.add_secret_member(
@@ -1096,7 +1096,11 @@ class CPGInfrastructure:
 
         for key, group in groups_to_cache.items():
 
-            secret = self._setup_group_cache_secret(self.access_group, key)
+            secret = self._setup_group_cache_secret(
+                group=self.access_group,
+                key=key,
+                secret_name=f'{self.config.dataset}-{key}-members-cache',
+            )
 
             # analysis-runner view contents of secrets
             self.infra.add_secret_member(
@@ -1116,7 +1120,7 @@ class CPGInfrastructure:
         """
         for key, sm_group in self.sample_metadata_groups.items():
             secret = self._setup_group_cache_secret(
-                sm_group,
+                group=sm_group,
                 key=f'sample-metadata-{key}',
                 # oops, shouldn't have included the dataset in the original
                 # secret name, will be fixed by the new group-cache anyway
@@ -1132,7 +1136,11 @@ class CPGInfrastructure:
 
     def setup_group_cache_web_access_group(self):
         # Allow list of access-group
-        secret = self._setup_group_cache_secret(self.web_access_group, 'web-access')
+        secret = self._setup_group_cache_secret(
+            group=self.web_access_group,
+            key='web-access',
+            secret_name=f'{self.config.dataset}-web-access-members-cache'
+        )
 
         self.infra.add_secret_member(
             'web-server-web-access-group-cache-secret-accessor',
