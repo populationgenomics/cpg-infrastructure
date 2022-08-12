@@ -150,7 +150,7 @@ class CPGInfrastructure:
 
         self.setup_reference()
 
-        self.setup_group_caches()
+        self.setup_group_cache()
 
     # region MACHINE ACCOUNTS
 
@@ -212,7 +212,7 @@ class CPGInfrastructure:
 
     def setup_access_groups(self):
         self.setup_access_level_group_memberships()
-        self.setup_dependent_group_memberships()
+        self.setup_setup_dependencies_group_memberships()
         self.setup_access_level_group_outputs()
 
         if isinstance(self.infra, GcpInfrastructure):
@@ -990,9 +990,9 @@ class CPGInfrastructure:
     # region NOTEBOOKS
 
     def setup_notebooks(self):
-        self.setup_notebook_account()
+        self.setup_notebooks_account_permissions()
 
-    def setup_notebook_account(self):
+    def setup_notebooks_account_permissions(self):
 
         # allow access group to use notebook account
         self.infra.add_member_to_machine_account_access(
@@ -1061,10 +1061,10 @@ class CPGInfrastructure:
     # endregion ANALYSIS RUNNER
     # region ACCESS GROUP CACHE
 
-    def setup_group_caches(self):
-        self.setup_access_group_cache()
-        self.setup_web_access_group_cache()
-        self.setup_sample_metadata_access_secrets()
+    def setup_group_cache(self):
+        self.setup_group_cache_access_group()
+        self.setup_group_cache_web_access_group()
+        self.setup_group_cache_sample_metadata_secrets()
 
     def _setup_group_cache_secret(self, group, key, secret_name: str = None):
         self.infra.add_group_member(
@@ -1085,7 +1085,7 @@ class CPGInfrastructure:
 
         return group_cache_secret
 
-    def setup_access_group_cache(self):
+    def setup_group_cache_access_group(self):
         # Allow list of access-group
 
         groups_to_cache = {
@@ -1106,7 +1106,7 @@ class CPGInfrastructure:
                 SecretMembership.ACCESSOR,
             )
 
-    def setup_sample_metadata_access_secrets(self):
+    def setup_group_cache_sample_metadata_secrets(self):
         """
         sample-metadata-main-read-group-cache-secret
         sample-metadata-main-write-group-cache-secret
@@ -1130,7 +1130,7 @@ class CPGInfrastructure:
                 SecretMembership.ACCESSOR,
             )
 
-    def setup_web_access_group_cache(self):
+    def setup_group_cache_web_access_group(self):
         # Allow list of access-group
         secret = self._setup_group_cache_secret(self.web_access_group, 'web-access')
 
@@ -1162,7 +1162,10 @@ class CPGInfrastructure:
     # endregion REFERENCE
     # region DEPENDENCIES
 
-    def setup_dependent_group_memberships(self):
+    def setup_dependencies(self):
+        self.setup_setup_dependencies_group_memberships()
+
+    def setup_setup_dependencies_group_memberships(self):
         for access_level, primary_access_group in self.access_level_groups.items():
             for dependency in self.config.depends_on:
                 dependency_group_id = self.get_pulumi_stack(dependency).get_output(
@@ -1176,13 +1179,14 @@ class CPGInfrastructure:
                     primary_access_group,
                 )
 
+    # endregion DEPENDENCIES
+    # region UTILS
+
     @staticmethod
     @lru_cache()
     def get_pulumi_stack(dependency_name: str):
         return pulumi.StackReference(dependency_name)
 
-    # endregion DEPENDENCIES
-    # region UTILS
     @staticmethod
     def _get_name_from_external_sa(email: str, suffix=".iam.gserviceaccount.com"):
         """

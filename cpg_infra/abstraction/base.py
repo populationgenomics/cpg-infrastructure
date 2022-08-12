@@ -114,7 +114,9 @@ class CloudInfraBase(ABC):
 
     # region MACHINE ACCOUNTS
     @abstractmethod
-    def create_machine_account(self, name: str, project: str = None) -> Any:
+    def create_machine_account(
+        self, name: str, project: str = None, *, resource_key: str = None
+    ) -> Any:
         """
         Generate a non-person account with some name
         :param project:
@@ -193,7 +195,6 @@ class CloudInfraBase(ABC):
 
 
 class DevInfra(CloudInfraBase):
-
     @staticmethod
     def name():
         return 'dev'
@@ -250,7 +251,13 @@ class DevInfra(CloudInfraBase):
     ) -> Any:
         print(f"{resource_key} :: Allow {member} to read secret {secret}")
 
-    def add_secret_version(self, resource_key: str, secret: Any, contents: Any, processor: Callable[[Any], Any] = None):
+    def add_secret_version(
+        self,
+        resource_key: str,
+        secret: Any,
+        contents: Any,
+        processor: Callable[[Any], Any] = None,
+    ):
         _processor = processor or (lambda el: el)
         return f'{resource_key} :: {secret}.add_version("{_processor(contents)}")'
 
@@ -259,5 +266,7 @@ class DevInfra(CloudInfraBase):
     ) -> Any:
         return f'{resource_key} :: Add {member} to CONTAINER registry {registry}'
 
-    def give_member_ability_to_list_buckets(self, resource_key: str, member, project: str = None):
+    def give_member_ability_to_list_buckets(
+        self, resource_key: str, member, project: str = None
+    ):
         return f'{resource_key} :: {member} can list buckets'

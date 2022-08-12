@@ -130,7 +130,7 @@ class GcpInfrastructure(CloudInfraBase):
 
     def get_member_key(self, member):
         if isinstance(member, gcp.serviceaccount.Account):
-            return pulumi.Output.concat("serviceAccount:", member.email)
+            return member.name
 
         if isinstance(member, gcp.cloudidentity.Group):
             return pulumi.Output.concat('group:', member.group_key.id)
@@ -171,15 +171,17 @@ class GcpInfrastructure(CloudInfraBase):
         self, resource_key: str, member, project: str = None
     ):
         gcp.projects.IAMMember(
-            'project-buckets-lister',
+            resource_key,
             role=self.bucket_membership_to_role(BucketPermission.LIST),
             member=self.get_member_key(member),
             project=project or self.project,
         )
 
-    def create_machine_account(self, name: str, project: str = None) -> Any:
+    def create_machine_account(
+        self, name: str, project: str = None, *, resource_key: str = None
+    ) -> Any:
         return gcp.serviceaccount.Account(
-            f'service-account-{name}',
+            resource_key or f'service-account-{name}',
             account_id=name,
             display_name=name,
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
@@ -192,9 +194,6 @@ class GcpInfrastructure(CloudInfraBase):
         gcp.serviceaccount.IAMMember(
             resource_key,
             service_account_id=self.get_member_key(machine_account),
-            # pulumi.Output.concat(
-            #     'projects/', project_id, '/serviceAccounts/', service_account
-            # ),
             role="roles/iam.serviceAccountUser",
             member=self.get_member_key(member),
         )
