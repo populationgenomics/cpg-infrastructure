@@ -6,12 +6,10 @@ Still to address:
 gcp:cloudidentity:GroupMembership  access-group-cache-standard-access-level-group-membership
 gcp:cloudidentity:GroupMembership  access-group-cache-standard-access-level-group-membership
 """
-import base64
 import re
-from typing import Type, Any, Iterator, Iterable
 from inspect import isclass
+from typing import Type, Any, Iterator, Iterable
 from collections import defaultdict, namedtuple
-
 from functools import lru_cache, cached_property
 
 import pulumi
@@ -190,7 +188,7 @@ class CPGInfrastructure:
 
     def working_machine_accounts_by_access_level(self):
         machine_accounts: dict[AccessLevel, list[Any]] = defaultdict(list)
-        for kind, values in self.working_machine_accounts_by_type.items():
+        for _, values in self.working_machine_accounts_by_type.items():
             for access_level, machine_account in values:
                 machine_accounts[access_level].append(machine_account)
 
@@ -840,7 +838,7 @@ class CPGInfrastructure:
 
     def setup_sample_metadata(self):
         if not self.should_setup_sample_metadata:
-            return {}
+            return
 
         self.setup_sample_metadata_access_permissions()
 
