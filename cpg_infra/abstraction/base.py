@@ -223,7 +223,9 @@ class DevInfra(CloudInfraBase):
     def add_member_to_bucket(self, resource_key: str, bucket, member, membership):
         print(f"{resource_key} :: Add {member} to {bucket}")
 
-    def create_machine_account(self, name: str, project: str = None) -> Any:
+    def create_machine_account(
+        self, name: str, project: str = None, *, resource_key: str = None
+    ) -> Any:
         print(f"Creating SA: {name}")
         return name + "@generated.service-account"
 

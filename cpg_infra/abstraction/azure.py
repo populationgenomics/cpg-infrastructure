@@ -6,6 +6,7 @@ from cpg_infra.abstraction.base import (
     CloudInfraBase,
     UNDELETE_PERIOD_IN_DAYS,
     TMP_BUCKET_PERIOD_IN_DAYS,
+    SecretMembership,
 )
 from cpg_infra.config import CPGDatasetConfig
 
@@ -49,9 +50,10 @@ class AzureInfra(CloudInfraBase):
         self,
         name: str,
         lifecycle_rules: list,
-        unique=False,
-        requester_pays=False,
-        versioning=True,
+        unique: bool = False,
+        requester_pays: bool = False,
+        versioning: bool = True,
+        project: str = None,
     ) -> Any:
         return az.storage.BlobContainer(
             f"bucket-{name}",
@@ -71,7 +73,9 @@ class AzureInfra(CloudInfraBase):
             role_assignment_name='Storage Blob Data Contributor',
         )
 
-    def create_machine_account(self, name: str, project=None) -> Any:
+    def create_machine_account(
+        self, name: str, project: str = None, *, resource_key: str = None
+    ) -> Any:
         application = az.batch.Application(
             f'application-{name}',
             account_name=name,
@@ -91,10 +95,17 @@ class AzureInfra(CloudInfraBase):
     def add_group_member(self, resource_key: str, group, member) -> Any:
         pass
 
-    def create_secret(self, name: str) -> Any:
+    def create_secret(self, name: str, project: str = None) -> Any:
         pass
 
-    def add_secret_member(self, resource_key: str, secret, member, membership) -> Any:
+    def add_secret_member(
+        self,
+        resource_key: str,
+        secret,
+        member,
+        membership: SecretMembership,
+        project: str = None,
+    ) -> Any:
         pass
 
     def add_member_to_container_registry(self, resource_key: str, registry, member, membership, project=None) -> Any:

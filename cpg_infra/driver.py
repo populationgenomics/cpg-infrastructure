@@ -54,7 +54,7 @@ ACCESS_GROUP_CACHE_SERVICE_ACCOUNT = (
 )
 HAIL_WHEEL_BUCKET_NAME = "cpg-hail-ci"
 NOTEBOOKS_PROJECT = "notebooks-314505"
-CROMWELL_ACCESS_GROUP_ID = "groups/03cqmetx2922fyu"
+CROMWELL_ACCESS_GROUP_ID = 'groups/03cqmetx2922fyu'
 CROMWELL_RUNNER_ACCOUNT = "cromwell-runner@cromwell-305305.iam.gserviceaccount.com"
 
 SAMPLE_METADATA_PROJECT = "sample-metadata"
@@ -189,7 +189,7 @@ class CPGInfrastructure:
                 yield kind, access_level, machine_account
 
     def working_machine_accounts_by_access_level(self):
-        machine_accounts: dict[AccessLevel, list[any]] = defaultdict(list)
+        machine_accounts: dict[AccessLevel, list[Any]] = defaultdict(list)
         for kind, values in self.working_machine_accounts_by_type.items():
             for access_level, machine_account in values:
                 machine_accounts[access_level].append(machine_account)
@@ -852,7 +852,7 @@ class CPGInfrastructure:
             raise NotImplementedError
 
     @cached_property
-    def sample_metadata_groups(self) -> dict[str, any]:
+    def sample_metadata_groups(self) -> dict[str, Any]:
         if not self.should_setup_sample_metadata:
             return {}
 
@@ -1097,7 +1097,7 @@ class CPGInfrastructure:
         for key, group in groups_to_cache.items():
 
             secret = self._setup_group_cache_secret(
-                group=self.access_group,
+                group=group,
                 key=key,
                 secret_name=f'{self.config.dataset}-{key}-members-cache',
             )
