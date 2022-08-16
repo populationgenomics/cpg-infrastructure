@@ -14,7 +14,7 @@ from cpg_infra.abstraction.base import (
     SecretMembership,
     ContainerRegistryMembership,
 )
-from cpg_infra.config import CPGDatasetConfig, CPGDatasetComponents, DOMAIN
+from cpg_infra.config import CPGDatasetConfig, DOMAIN
 
 GCP_CUSTOMER_ID = "C010ys3gt"
 
@@ -28,8 +28,8 @@ class GcpInfrastructure(CloudInfraBase):
         super().__init__(config)
 
         self.region = "australia-southeast1"
-        self.project = gcp.organizations.get_project().project_id
         self.organization = gcp.organizations.get_organization(domain=DOMAIN)
+        self.project = gcp.organizations.get_project().project_id
 
         self._svc_cloudresourcemanager = gcp.projects.Service(
             "cloudresourcemanager-service",
@@ -40,6 +40,15 @@ class GcpInfrastructure(CloudInfraBase):
         self._svc_cloudidentity = gcp.projects.Service(
             "cloudidentity-service",
             service="cloudidentity.googleapis.com",
+            disable_on_destroy=False,
+            opts=pulumi.resource.ResourceOptions(
+                depends_on=[self._svc_cloudresourcemanager]
+            ),
+        )
+
+        self._svc_iam = gcp.projects.Service(
+            'iam-service',
+            service='iam.googleapis.com',
             disable_on_destroy=False,
             opts=pulumi.resource.ResourceOptions(
                 depends_on=[self._svc_cloudresourcemanager]
@@ -61,16 +70,17 @@ class GcpInfrastructure(CloudInfraBase):
             ),
         )
 
-        self._svc_dataproc = None
-        if CPGDatasetComponents.SPARK in self.components:
-            self._svc_dataproc = gcp.projects.Service(
-                "dataproc-service",
-                service="dataproc.googleapis.com",
-                disable_on_destroy=False,
-                opts=pulumi.resource.ResourceOptions(
-                    depends_on=[self._svc_cloudresourcemanager]
-                ),
-            )
+    @property
+    @lru_cache()
+    def _svc_dataproc(self):
+        return gcp.projects.Service(
+            "dataproc-service",
+            service="dataproc.googleapis.com",
+            disable_on_destroy=False,
+            opts=pulumi.resource.ResourceOptions(
+                depends_on=[self._svc_cloudresourcemanager]
+            ),
+        )
 
     @property
     @lru_cache
@@ -130,21 +140,57 @@ class GcpInfrastructure(CloudInfraBase):
 
     def get_member_key(self, member):
         if isinstance(member, gcp.serviceaccount.Account):
-            return member.name
+            return pulumi.Output.concat('serviceAccount:', member.email)
 
         if isinstance(member, gcp.cloudidentity.Group):
-            return member.group_key.id
+            return pulumi.Output.concat('group:', member.group_key.id)
 
         if isinstance(member, gcp.storage.Bucket):
             return member.name
 
         if isinstance(member, str):
+            if member.endswith('.iam.gserviceaccount.com') and not member.startswith(
+                'serviceAccount:'
+            ):
+                return f'serviceAccount:{member}'
+
             return member
 
         if isinstance(member, pulumi.Output):
             return member
 
-        raise NotImplementedError(f"Not valid for type {type(member)}")
+        raise NotImplementedError(f"Invalid member type {type(member)}")
+
+    def get_preferred_group_membership_key(self, member):
+        if isinstance(member, gcp.cloudidentity.Group):
+            return member.group_key.id
+        if isinstance(member, gcp.serviceaccount.Account):
+            return member.email
+        if isinstance(member, str):
+            return member
+
+        raise NotImplementedError(f"Invalid preferred GroupMembership type {type(member)}")
+
+    def get_group_key(self, group):
+        if isinstance(group, (gcp.serviceaccount.Account, gcp.storage.Bucket)):
+            raise ValueError(f'Incorrect type for group key: {type(group)}')
+
+        if isinstance(group, gcp.cloudidentity.Group):
+            return group.id
+            # return pulumi.Output.concat('group:', group.group_key.id)
+
+        if isinstance(group, str):
+            if group.endswith('@populationgenomics.org.au') and not group.startswith(
+                'group:'
+            ):
+                return f'group:{group}'
+
+            return group
+
+        if isinstance(group, pulumi.Output):
+            return group
+
+        raise NotImplementedError(f"Not valid for type {type(group)}")
 
     def get_secret_key(self, secret):
         if isinstance(secret, gcp.secretmanager.Secret):
@@ -174,6 +220,7 @@ class GcpInfrastructure(CloudInfraBase):
             bucket=self.get_member_key(bucket),
             member=self.get_member_key(member),
             role=self.bucket_membership_to_role(membership),
+            opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
         )
 
     def give_member_ability_to_list_buckets(
@@ -184,6 +231,7 @@ class GcpInfrastructure(CloudInfraBase):
             role=self.bucket_membership_to_role(BucketPermission.LIST),
             member=self.get_member_key(member),
             project=project or self.project,
+            opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
         )
 
     def create_machine_account(
@@ -192,9 +240,9 @@ class GcpInfrastructure(CloudInfraBase):
         return gcp.serviceaccount.Account(
             resource_key or f'service-account-{name}',
             account_id=name,
-            display_name=name,
-            opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
-            project=project or self.project,
+            # display_name=name,
+            opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_iam]),
+            project=project,
         )
 
     def add_member_to_machine_account_access(
@@ -202,15 +250,18 @@ class GcpInfrastructure(CloudInfraBase):
     ) -> Any:
         gcp.serviceaccount.IAMMember(
             resource_key,
-            service_account_id=self.get_member_key(machine_account),
+            service_account_id=machine_account.name,
             role="roles/iam.serviceAccountUser",
             member=self.get_member_key(member),
+            opts=pulumi.resource.ResourceOptions(
+                depends_on=[self._svc_cloudidentity, self._svc_iam]
+            ),
         )
 
     def get_credentials_for_machine_account(self, resource_key, account):
         return gcp.serviceaccount.Key(
             resource_key,
-            service_account_id=self.get_member_key(account),
+            service_account_id=account.email,
         ).private_key.apply(lambda s: base64.b64decode(s).decode('utf-8'))
 
     def create_group(self, name: str) -> Any:
@@ -227,9 +278,9 @@ class GcpInfrastructure(CloudInfraBase):
     def add_group_member(self, resource_key: str, group, member) -> Any:
         gcp.cloudidentity.GroupMembership(
             resource_key,
-            group=self.get_member_key(group),
+            group=self.get_group_key(group),
             preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
-                id=self.get_member_key(member)
+                id=self.get_preferred_group_membership_key(member)
             ),
             roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name="MEMBER")],
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
@@ -343,7 +394,7 @@ class GcpInfrastructure(CloudInfraBase):
         )
 
     def add_project_role(
-        self, resource_key: str, *, member: any, role: str, project: str = None
+        self, resource_key: str, *, member: Any, role: str, project: str = None
     ):
         gcp.projects.IAMMember(
             resource_key,
