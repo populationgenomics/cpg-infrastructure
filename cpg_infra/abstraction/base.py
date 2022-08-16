@@ -26,15 +26,15 @@ ARCHIVE_PERIOD_IN_DAYS = 30
 
 
 class SecretMembership(Enum):
-    ACCESSOR = "accessor"
-    ADMIN = "admin"
+    ACCESSOR = 'accessor'
+    ADMIN = 'admin'
 
 
 class BucketPermission(Enum):
-    LIST = "list"
-    READ = "read"
-    APPEND = "append"
-    MUTATE = "mutate"
+    LIST = 'list'
+    READ = 'read'
+    APPEND = 'append'
+    MUTATE = 'mutate'
 
 
 class ContainerRegistryMembership(Enum):
@@ -200,10 +200,10 @@ class DevInfra(CloudInfraBase):
         return 'dev'
 
     def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
-        return f"RULE:undelete={days}d"
+        return f'RULE:undelete={days}d'
 
     def bucket_rule_temporary(self, days=TMP_BUCKET_PERIOD_IN_DAYS) -> Any:
-        return f"RULE:tmp={days}d"
+        return f'RULE:tmp={days}d'
 
     def bucket_rule_archive(self, days=ARCHIVE_PERIOD_IN_DAYS) -> Any:
         return f'RULE:archive={days}d'
@@ -218,40 +218,40 @@ class DevInfra(CloudInfraBase):
         project: str = None,
     ) -> Any:
         print(f'Create bucket: {name} w/ rules: {", ".join(lifecycle_rules)}')
-        return f"BUCKET://{name}"
+        return f'BUCKET://{name}'
 
     def add_member_to_bucket(self, resource_key: str, bucket, member, membership):
-        print(f"{resource_key} :: Add {member} to {bucket}")
+        print(f'{resource_key} :: Add {member} to {bucket}')
 
     def create_machine_account(
         self, name: str, project: str = None, *, resource_key: str = None
     ) -> Any:
-        print(f"Creating SA: {name}")
-        return name + "@generated.service-account"
+        print(f'Creating SA: {name}')
+        return name + '@generated.service-account'
 
     def add_member_to_machine_account_access(
         self, resource_key: str, machine_account, member
     ) -> Any:
-        print(f"Allow {member} to access {machine_account}")
+        print(f'Allow {member} to access {machine_account}')
 
     def get_credentials_for_machine_account(self, resource_key, account):
         return f'{resource_key} :: {account}.CREDENTIALS'
 
     def create_group(self, name: str) -> Any:
-        print(f"Creating Group: {name}")
-        return name + "@populationgenomics.org.au"
+        print(f'Creating Group: {name}')
+        return name + '@populationgenomics.org.au'
 
     def add_group_member(self, resource_key: str, group, member) -> Any:
-        print(f"{resource_key} :: Add {member} to {group}")
+        print(f'{resource_key} :: Add {member} to {group}')
 
     def create_secret(self, name: str, project: str = None) -> Any:
-        print(f"Creating secret: {name}")
-        return f"SECRET:{name}"
+        print(f'Creating secret: {name}')
+        return f'SECRET:{name}'
 
     def add_secret_member(
         self, resource_key: str, secret, member, membership, project: str = None
     ) -> Any:
-        print(f"{resource_key} :: Allow {member} to read secret {secret}")
+        print(f'{resource_key} :: Allow {member} to read secret {secret}')
 
     def add_secret_version(
         self,

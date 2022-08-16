@@ -13,6 +13,7 @@ from cpg_infra.driver import CPGInfrastructure, CPGDatasetConfig
 # debugpy.wait_for_client()
 # print("Attached to debugpy!")
 
+
 def from_pulumi():
     pconfig = pulumi.Config()
     config = CPGDatasetConfig.from_pulumi(pconfig, dataset=pulumi.get_stack())

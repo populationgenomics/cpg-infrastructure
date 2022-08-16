@@ -15,8 +15,8 @@ class AzureInfra(CloudInfraBase):
     def __init__(self, config: CPGDatasetConfig):
         super().__init__(config)
 
-        self.resource_group_name = f"cpg-{self.dataset}"
-        self.storage_account_name = f"cpg-{self.dataset}"
+        self.resource_group_name = f'cpg-{self.dataset}'
+        self.storage_account_name = f'cpg-{self.dataset}'
 
         self._storage_account = None
         self._resource_group = None
@@ -28,7 +28,7 @@ class AzureInfra(CloudInfraBase):
     @property
     def resource_group(self):
         if not self._resource_group:
-            self._resource_group = az.resources.ResourceGroup("resource_group")
+            self._resource_group = az.resources.ResourceGroup('resource_group')
 
         return self._resource_group
 
@@ -36,7 +36,7 @@ class AzureInfra(CloudInfraBase):
     def storage_account(self):
         if not self._storage_account:
             self._storage_account = az.storage.Account(
-                "cpg-" + self.dataset, resource_group=self.resource_group
+                'cpg-' + self.dataset, resource_group=self.resource_group
             )
         return self._storage_account
 
@@ -56,7 +56,7 @@ class AzureInfra(CloudInfraBase):
         project: str = None,
     ) -> Any:
         return az.storage.BlobContainer(
-            f"bucket-{name}",
+            f'bucket-{name}',
             resource_group_name=self.resource_group_name,
             account_name=self.storage_account_name,
             container_name=name,
@@ -108,5 +108,7 @@ class AzureInfra(CloudInfraBase):
     ) -> Any:
         pass
 
-    def add_member_to_container_registry(self, resource_key: str, registry, member, membership, project=None) -> Any:
+    def add_member_to_container_registry(
+        self, resource_key: str, registry, member, membership, project=None
+    ) -> Any:
         pass

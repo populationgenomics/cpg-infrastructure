@@ -27,51 +27,51 @@ from cpg_infra.abstraction.base import (
 )
 from cpg_infra.config import CPGDatasetConfig, CPGDatasetComponents
 
-DOMAIN = "populationgenomics.org.au"
-CUSTOMER_ID = "C010ys3gt"
-REGION = "australia-southeast1"
+DOMAIN = 'populationgenomics.org.au'
+CUSTOMER_ID = 'C010ys3gt'
+REGION = 'australia-southeast1'
 
-ANALYSIS_RUNNER_PROJECT = "analysis-runner"
+ANALYSIS_RUNNER_PROJECT = 'analysis-runner'
 ANALYSIS_RUNNER_CONTAINER_REGISTRY_NAME = 'images'
 ANALYSIS_RUNNER_CLOUD_RUN_INSTANCE_NAME = 'server'
 ANALYSIS_RUNNER_SERVICE_ACCOUNT = (
-    "analysis-runner-server@analysis-runner.iam.gserviceaccount.com"
+    'analysis-runner-server@analysis-runner.iam.gserviceaccount.com'
 )
 ANALYSIS_RUNNER_LOGGER_SERVICE_ACCOUNT = (
-    "sample-metadata@analysis-runner.iam.gserviceaccount.com"
+    'sample-metadata@analysis-runner.iam.gserviceaccount.com'
 )
-ANALYSIS_RUNNER_CONFIG_BUCKET_NAME = "cpg-config"
+ANALYSIS_RUNNER_CONFIG_BUCKET_NAME = 'cpg-config'
 
-CPG_COMMON_PROJECT = "cpg-common"
+CPG_COMMON_PROJECT = 'cpg-common'
 CPG_COMMON_CONTAINER_REGISTRY_NAME = 'images'
-REFERENCE_BUCKET_NAME = "cpg-reference"
+REFERENCE_BUCKET_NAME = 'cpg-reference'
 
 WEB_SERVER_SERVICE_ACCOUNT = (
-    "serviceAccount:web-server@analysis-runner.iam.gserviceaccount.com"
+    'serviceAccount:web-server@analysis-runner.iam.gserviceaccount.com'
 )
 ACCESS_GROUP_CACHE_SERVICE_ACCOUNT = (
-    "access-group-cache@analysis-runner.iam.gserviceaccount.com"
+    'access-group-cache@analysis-runner.iam.gserviceaccount.com'
 )
-HAIL_WHEEL_BUCKET_NAME = "cpg-hail-ci"
-NOTEBOOKS_PROJECT = "notebooks-314505"
+HAIL_WHEEL_BUCKET_NAME = 'cpg-hail-ci'
+NOTEBOOKS_PROJECT = 'notebooks-314505'
 CROMWELL_ACCESS_GROUP_ID = 'groups/03cqmetx2922fyu'
-CROMWELL_RUNNER_ACCOUNT = "cromwell-runner@cromwell-305305.iam.gserviceaccount.com"
+CROMWELL_RUNNER_ACCOUNT = 'cromwell-runner@cromwell-305305.iam.gserviceaccount.com'
 
-SAMPLE_METADATA_PROJECT = "sample-metadata"
+SAMPLE_METADATA_PROJECT = 'sample-metadata'
 SAMPLE_METADATA_SERVICE_NAME = 'sample-metadata-api'
 SAMPLE_METADATA_API_SERVICE_ACCOUNT = (
-    "serviceAccount:sample-metadata-api@sample-metadata.iam.gserviceaccount.com"
+    'serviceAccount:sample-metadata-api@sample-metadata.iam.gserviceaccount.com'
 )
 
 SampleMetadataAccessorMembership = namedtuple(
-    "SampleMetadataAccessorMembership",
-    ["name", "member", "permissions"],
+    'SampleMetadataAccessorMembership',
+    ['name', 'member', 'permissions'],
 )
 
-SM_TEST_READ = "test-read"
-SM_TEST_WRITE = "test-write"
-SM_MAIN_READ = "main-read"
-SM_MAIN_WRITE = "main-write"
+SM_TEST_READ = 'test-read'
+SM_TEST_WRITE = 'test-write'
+SM_MAIN_READ = 'main-read'
+SM_MAIN_WRITE = 'main-write'
 SAMPLE_METADATA_PERMISSIONS = [
     SM_TEST_READ,
     SM_TEST_WRITE,
@@ -81,8 +81,8 @@ SAMPLE_METADATA_PERMISSIONS = [
 
 
 AccessLevel = str
-ACCESS_LEVELS: Iterable[AccessLevel] = ("test", "standard", "full")
-NON_NAME_REGEX = re.compile(r"[^A-Za-z0-9_-]")
+ACCESS_LEVELS: Iterable[AccessLevel] = ('test', 'standard', 'full')
+NON_NAME_REGEX = re.compile(r'[^A-Za-z0-9_-]')
 
 
 class CPGInfrastructure:
@@ -156,7 +156,7 @@ class CPGInfrastructure:
 
     @cached_property
     def main_upload_account(self):
-        return self.infra.create_machine_account("main-upload")
+        return self.infra.create_machine_account('main-upload')
 
     @cached_property
     def working_machine_accounts_by_type(
@@ -220,11 +220,11 @@ class CPGInfrastructure:
 
     @cached_property
     def access_group(self):
-        return self.create_group("access")
+        return self.create_group('access')
 
     @cached_property
     def web_access_group(self):
-        return self.create_group("web-access")
+        return self.create_group('web-access')
 
     @cached_property
     def release_access_group(self):
@@ -236,7 +236,7 @@ class CPGInfrastructure:
 
     @staticmethod
     def get_group_output_name(*, dataset: str, kind: str):
-        return f"{dataset}-{kind}-group-id"
+        return f'{dataset}-{kind}-group-id'
 
     def setup_access_level_group_outputs(self):
 
@@ -248,7 +248,7 @@ class CPGInfrastructure:
         for kind, group in kinds.items():
             pulumi.export(
                 self.get_group_output_name(dataset=self.config.dataset, kind=kind),
-                group.id if hasattr(group, "id") else group,
+                group.id if hasattr(group, 'id') else group,
             )
 
     def setup_access_level_group_memberships(self):
@@ -259,7 +259,7 @@ class CPGInfrastructure:
         ) in self.working_machine_accounts_kind_al_account_gen():
             group = self.access_level_groups[access_level]
             self.infra.add_group_member(
-                f"{kind}-{access_level}-access-level-group-membership",
+                f'{kind}-{access_level}-access-level-group-membership',
                 group=group,
                 member=machine_account,
             )
@@ -340,65 +340,65 @@ class CPGInfrastructure:
         # access has list permission
 
         self.infra.add_member_to_bucket(
-            "project-buckets-lister",
+            'project-buckets-lister',
             self.main_bucket,
             self.access_group,
             BucketPermission.LIST,
         )
 
         self.infra.add_member_to_bucket(
-            "standard-main-bucket-view-create",
+            'standard-main-bucket-view-create',
             self.main_bucket,
-            self.access_level_groups["standard"],
+            self.access_level_groups['standard'],
             BucketPermission.APPEND,
         )
 
         self.infra.add_member_to_bucket(
-            "full-main-bucket-admin",
+            'full-main-bucket-admin',
             self.main_bucket,
-            self.access_level_groups["full"],
+            self.access_level_groups['full'],
             BucketPermission.MUTATE,
         )
 
     def setup_storage_main_tmp_bucket(self):
         self.infra.add_member_to_bucket(
-            "standard-main-tmp-bucket-view-create",
+            'standard-main-tmp-bucket-view-create',
             self.main_tmp_bucket,
-            self.access_level_groups["standard"],
+            self.access_level_groups['standard'],
             BucketPermission.APPEND,
         )
 
         self.infra.add_member_to_bucket(
-            "full-main-tmp-bucket-admin",
+            'full-main-tmp-bucket-admin',
             self.main_tmp_bucket,
-            self.access_level_groups["full"],
+            self.access_level_groups['full'],
             BucketPermission.MUTATE,
         )
 
     def setup_storage_main_analysis_bucket(self):
         self.infra.add_member_to_bucket(
-            "access-group-main-analysis-bucket-viewer",
+            'access-group-main-analysis-bucket-viewer',
             self.main_analysis_bucket,
             self.access_group,
             BucketPermission.READ,
         )
         self.infra.add_member_to_bucket(
-            "standard-main-analysis-bucket-view-create",
+            'standard-main-analysis-bucket-view-create',
             self.main_analysis_bucket,
-            self.access_level_groups["standard"],
+            self.access_level_groups['standard'],
             BucketPermission.APPEND,
         )
 
         self.infra.add_member_to_bucket(
-            "full-main-analysis-bucket-admin",
+            'full-main-analysis-bucket-admin',
             self.main_analysis_bucket,
-            self.access_level_groups["full"],
+            self.access_level_groups['full'],
             BucketPermission.MUTATE,
         )
 
     def setup_storage_main_web_bucket_permissions(self):
         self.infra.add_member_to_bucket(
-            "access-group-main-web-bucket-viewer",
+            'access-group-main-web-bucket-viewer',
             self.main_web_bucket,
             self.access_group,
             BucketPermission.READ,
@@ -406,23 +406,23 @@ class CPGInfrastructure:
 
         # web-server
         self.infra.add_member_to_bucket(
-            "web-server-main-web-bucket-viewer",
+            'web-server-main-web-bucket-viewer',
             self.main_web_bucket,
             WEB_SERVER_SERVICE_ACCOUNT,
             BucketPermission.READ,
         )
 
         self.infra.add_member_to_bucket(
-            "standard-main-web-bucket-view-create",
+            'standard-main-web-bucket-view-create',
             self.main_web_bucket,
-            self.access_level_groups["standard"],
+            self.access_level_groups['standard'],
             BucketPermission.APPEND,
         )
 
         self.infra.add_member_to_bucket(
-            "full-main-web-bucket-admin",
+            'full-main-web-bucket-admin',
             self.main_web_bucket,
-            self.access_level_groups["full"],
+            self.access_level_groups['full'],
             BucketPermission.MUTATE,
         )
 
@@ -431,7 +431,7 @@ class CPGInfrastructure:
 
             # main_upload SA has ADMIN
             self.infra.add_member_to_bucket(
-                f"main-upload-service-account-{bname}-bucket-creator",
+                f'main-upload-service-account-{bname}-bucket-creator',
                 bucket=main_upload_bucket,
                 member=self.main_upload_account,
                 membership=BucketPermission.MUTATE,
@@ -439,7 +439,7 @@ class CPGInfrastructure:
 
             # full GROUP has ADMIN
             self.infra.add_member_to_bucket(
-                f"full-{bname}-bucket-admin",
+                f'full-{bname}-bucket-admin',
                 bucket=main_upload_bucket,
                 member=self.access_level_groups['full'],
                 membership=BucketPermission.MUTATE,
@@ -447,7 +447,7 @@ class CPGInfrastructure:
 
             # standard GROUP has READ
             self.infra.add_member_to_bucket(
-                f"standard-{bname}-bucket-viewer",
+                f'standard-{bname}-bucket-viewer',
                 bucket=main_upload_bucket,
                 member=self.access_level_groups['standard'],
                 membership=BucketPermission.READ,
@@ -465,13 +465,13 @@ class CPGInfrastructure:
     @cached_property
     def main_bucket(self):
         return self.infra.create_bucket(
-            "main", lifecycle_rules=[self.infra.bucket_rule_undelete()]
+            'main', lifecycle_rules=[self.infra.bucket_rule_undelete()]
         )
 
     @cached_property
     def main_tmp_bucket(self):
         return self.infra.create_bucket(
-            "main-tmp",
+            'main-tmp',
             lifecycle_rules=[self.infra.bucket_rule_temporary()],
             versioning=False,
         )
@@ -479,21 +479,21 @@ class CPGInfrastructure:
     @cached_property
     def main_analysis_bucket(self):
         return self.infra.create_bucket(
-            "main-analysis", lifecycle_rules=[self.infra.bucket_rule_undelete()]
+            'main-analysis', lifecycle_rules=[self.infra.bucket_rule_undelete()]
         )
 
     @cached_property
     def main_web_bucket(self):
         return self.infra.create_bucket(
-            "main-web", lifecycle_rules=[self.infra.bucket_rule_undelete()]
+            'main-web', lifecycle_rules=[self.infra.bucket_rule_undelete()]
         )
 
     @cached_property
     def main_upload_buckets(self) -> dict[str, Any]:
         main_upload_undelete = self.infra.bucket_rule_undelete(days=30)
         main_upload_buckets = {
-            "main-upload": self.infra.create_bucket(
-                "main-upload", lifecycle_rules=[main_upload_undelete]
+            'main-upload': self.infra.create_bucket(
+                'main-upload', lifecycle_rules=[main_upload_undelete]
             )
         }
 
@@ -528,7 +528,7 @@ class CPGInfrastructure:
             test_bucket_admins: list[tuple[str, Any]] = [
                 (f'access-group-{bucket_name}-bucket-admin', self.access_group),
                 *[
-                    (f"{access_level}-{bucket_name}-bucket-admin", group)
+                    (f'{access_level}-{bucket_name}-bucket-admin', group)
                     for access_level, group in self.access_level_groups.items()
                 ],
             ]
@@ -551,25 +551,25 @@ class CPGInfrastructure:
     @cached_property
     def test_bucket(self):
         return self.infra.create_bucket(
-            "test", lifecycle_rules=[self.infra.bucket_rule_undelete()]
+            'test', lifecycle_rules=[self.infra.bucket_rule_undelete()]
         )
 
     @cached_property
     def test_analysis_bucket(self):
         return self.infra.create_bucket(
-            "test-analysis", lifecycle_rules=[self.infra.bucket_rule_undelete()]
+            'test-analysis', lifecycle_rules=[self.infra.bucket_rule_undelete()]
         )
 
     @cached_property
     def test_web_bucket(self):
         return self.infra.create_bucket(
-            "test-web", lifecycle_rules=[self.infra.bucket_rule_undelete()]
+            'test-web', lifecycle_rules=[self.infra.bucket_rule_undelete()]
         )
 
     @cached_property
     def test_tmp_bucket(self):
         return self.infra.create_bucket(
-            "test-tmp",
+            'test-tmp',
             lifecycle_rules=[self.infra.bucket_rule_temporary()],
             versioning=False,
         )
@@ -577,7 +577,7 @@ class CPGInfrastructure:
     @cached_property
     def test_upload_bucket(self):
         return self.infra.create_bucket(
-            "test-upload", lifecycle_rules=[self.infra.bucket_rule_undelete()]
+            'test-upload', lifecycle_rules=[self.infra.bucket_rule_undelete()]
         )
 
     # endregion TEST BUCKETS
@@ -754,7 +754,7 @@ class CPGInfrastructure:
             return {}
 
         accounts = {
-            access_level: self.infra.create_machine_account(f"cromwell-{access_level}")
+            access_level: self.infra.create_machine_account(f'cromwell-{access_level}')
             for access_level in ACCESS_LEVELS
         }
         return accounts
@@ -830,7 +830,7 @@ class CPGInfrastructure:
             return {}
 
         accounts = {
-            access_level: self.infra.create_machine_account(f"dataproc-{access_level}")
+            access_level: self.infra.create_machine_account(f'dataproc-{access_level}')
             for access_level in ACCESS_LEVELS
         }
         return accounts
@@ -857,7 +857,7 @@ class CPGInfrastructure:
             return {}
 
         sm_groups = {
-            key: self.create_group(f"sample-metadata-{key}")
+            key: self.create_group(f'sample-metadata-{key}')
             for key in SAMPLE_METADATA_PERMISSIONS
         }
 
@@ -887,28 +887,28 @@ class CPGInfrastructure:
             return
         sm_access_levels: list[SampleMetadataAccessorMembership] = [
             SampleMetadataAccessorMembership(
-                name="human",
+                name='human',
                 member=self.access_group,
                 permissions=(SM_MAIN_READ, SM_TEST_READ, SM_TEST_WRITE),
             ),
             SampleMetadataAccessorMembership(
-                name="test",
-                member=self.access_level_groups["test"],
+                name='test',
+                member=self.access_level_groups['test'],
                 permissions=(SM_MAIN_READ, SM_TEST_READ, SM_TEST_WRITE),
             ),
             SampleMetadataAccessorMembership(
-                name="standard",
-                member=self.access_level_groups["standard"],
+                name='standard',
+                member=self.access_level_groups['standard'],
                 permissions=(SM_MAIN_READ, SM_MAIN_WRITE),
             ),
             SampleMetadataAccessorMembership(
-                name="full",
-                member=self.access_level_groups["full"],
+                name='full',
+                member=self.access_level_groups['full'],
                 permissions=SAMPLE_METADATA_PERMISSIONS,
             ),
             # allow the analysis-runner logging cloud function to update the sample-metadata project
             SampleMetadataAccessorMembership(
-                name="analysis-runner-logger",
+                name='analysis-runner-logger',
                 member=ANALYSIS_RUNNER_LOGGER_SERVICE_ACCOUNT,
                 permissions=SAMPLE_METADATA_PERMISSIONS,
             ),
@@ -966,8 +966,8 @@ class CPGInfrastructure:
         for kind, account in kinds.items():
 
             # Allow the service accounts to pull images. Note that the global project will
-            # refer to the dataset, but the Docker images are stored in the "analysis-runner"
-            # and "cpg-common" projects' Artifact Registry repositories.
+            # refer to the dataset, but the Docker images are stored in the 'analysis-runner'
+            # and 'cpg-common' projects' Artifact Registry repositories.
             for project, registry_name in container_registries:
                 self.infra.add_member_to_container_registry(
                     f'{kind}-images-reader-in-{project}',
@@ -1068,7 +1068,7 @@ class CPGInfrastructure:
 
     def _setup_group_cache_secret(self, *, group, key, secret_name: str = None):
         self.infra.add_group_member(
-            f"{key}-group-cache-membership",
+            f'{key}-group-cache-membership',
             group,
             ACCESS_GROUP_CACHE_SERVICE_ACCOUNT,
         )
@@ -1139,7 +1139,7 @@ class CPGInfrastructure:
         secret = self._setup_group_cache_secret(
             group=self.web_access_group,
             key='web-access',
-            secret_name=f'{self.config.dataset}-web-access-members-cache'
+            secret_name=f'{self.config.dataset}-web-access-members-cache',
         )
 
         self.infra.add_secret_member(
@@ -1182,7 +1182,7 @@ class CPGInfrastructure:
 
                 # add this dataset to dependencies membership
                 self.infra.add_group_member(
-                    f"{dependency}-{access_level}-access-level-group",
+                    f'{dependency}-{access_level}-access-level-group',
                     dependency_group_id,
                     primary_access_group,
                 )
@@ -1196,7 +1196,7 @@ class CPGInfrastructure:
         return pulumi.StackReference(dependency_name)
 
     @staticmethod
-    def _get_name_from_external_sa(email: str, suffix=".iam.gserviceaccount.com"):
+    def _get_name_from_external_sa(email: str, suffix='.iam.gserviceaccount.com'):
         """
         Convert service account email to name + some filtering.
 
@@ -1212,18 +1212,18 @@ class CPGInfrastructure:
         if email.endswith(suffix):
             base = email[: -len(suffix)]
         else:
-            base = email.split("@")[0]
+            base = email.split('@')[0]
 
-        return NON_NAME_REGEX.sub("-", base).replace("--", "-")
+        return NON_NAME_REGEX.sub('-', base).replace('--', '-')
 
     # endregion UTILS
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
 
     class MyMocks(pulumi.runtime.Mocks):
         def new_resource(self, args: pulumi.runtime.MockResourceArgs):
-            return [args.name + "_id", args.inputs]
+            return [args.name + '_id', args.inputs]
 
         def call(self, args: pulumi.runtime.MockCallArgs):
             return {}
@@ -1242,10 +1242,10 @@ if __name__ == "__main__":
     for _infra in _infras:
 
         _config = CPGDatasetConfig(
-            dataset="fewgenomes",
+            dataset='fewgenomes',
             deploy_locations=['dev'],
-            hail_service_account_test="fewgenomes-test@service-account",
-            hail_service_account_standard="fewgenomes-standard@service-account",
-            hail_service_account_full="fewgenomes-full@service-account",
+            hail_service_account_test='fewgenomes-test@service-account',
+            hail_service_account_standard='fewgenomes-standard@service-account',
+            hail_service_account_full='fewgenomes-full@service-account',
         )
         CPGInfrastructure(_infra, _config).main()
