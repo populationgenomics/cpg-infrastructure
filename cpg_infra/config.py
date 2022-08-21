@@ -4,6 +4,147 @@ from enum import Enum
 DOMAIN = "populationgenomics.org.au"
 
 
+class DeserializableDataclass:
+    def __post_init__(self):
+        """
+        Do correct initialization of subclasses where appropriate
+        """
+        fields = {field.name: field.type for field in dataclasses.fields(type(self))}
+
+        from types import UnionType
+
+        for fieldname, ftype in fields.items():
+            value = self.__dict__.get(fieldname)
+            if not value:
+                continue
+            dtypes = []
+            if isinstance(ftype, UnionType):
+                is_already_correct_type = False
+                for dtype in ftype.__args__:
+                    if dtype and issubclass(dtype, DeserializableDataclass):
+                        dtypes.append(dtype)
+                    elif dtype and isinstance(value, dtype):
+                        is_already_correct_type = True
+                if is_already_correct_type:
+                    continue
+
+            elif issubclass(ftype, DeserializableDataclass):
+                dtypes.append(ftype)
+
+            e = None
+            for dtype in dtypes:
+                if not isinstance(value, dict):
+                    raise ValueError('Expected ')
+                try:
+                    self.__dict__[fieldname] = dtype(**value)
+                    e = None
+                    break
+                except TypeError as exc:
+                    e = exc
+
+            if e:
+                raise e
+
+
+@dataclasses.dataclass(frozen=True)
+class CPGInfrastructureConfig(DeserializableDataclass):
+    @dataclasses.dataclass(frozen=True)
+    class GCP(DeserializableDataclass):
+        customer_id: str
+        common_artifact_registry_project: str
+        common_artifact_registry_name: str
+        reference_bucket_name: str
+        config_bucket_name: str
+
+    @dataclasses.dataclass(frozen=True)
+    class Hail(DeserializableDataclass):
+        @dataclasses.dataclass(frozen=True)
+        class GCP(DeserializableDataclass):
+            wheel_bucket_name: str
+
+        gcp: GCP
+
+    @dataclasses.dataclass(frozen=True)
+    class AnalysisRunner(DeserializableDataclass):
+        @dataclasses.dataclass(frozen=True)
+        class GCP(DeserializableDataclass):
+            project: str
+            cloud_run_instance_name: str
+            server_machine_account: str
+            logger_machine_account: str
+            container_registry_name: str
+
+        gcp: GCP
+
+    @dataclasses.dataclass(frozen=True)
+    class WebService(DeserializableDataclass):
+        @dataclasses.dataclass(frozen=True)
+        class GCP(DeserializableDataclass):
+            server_machine_account: str
+
+        gcp: GCP
+
+    # temporary
+    @dataclasses.dataclass(frozen=True)
+    class AccessGroupCache(DeserializableDataclass):
+        process_machine_account: str
+
+    @dataclasses.dataclass(frozen=True)
+    class Notebooks(DeserializableDataclass):
+        @dataclasses.dataclass(frozen=True)
+        class GCP(DeserializableDataclass):
+            project: str
+
+        gcp: GCP
+
+    @dataclasses.dataclass(frozen=True)
+    class Cromwell(DeserializableDataclass):
+        @dataclasses.dataclass(frozen=True)
+        class GCP(DeserializableDataclass):
+            access_group_id: str
+            runner_machine_account: str
+
+        gcp: GCP
+
+    @dataclasses.dataclass(frozen=True)
+    class SampleMetadata(DeserializableDataclass):
+        @dataclasses.dataclass(frozen=True)
+        class GCP(DeserializableDataclass):
+            project: str
+            service_name: str
+            machine_account: str
+
+        gcp: GCP
+
+    domain: str
+    dataset_storage_prefix: str
+
+    gcp: GCP | None
+    hail: Hail | None
+    analysis_runner: AnalysisRunner | None
+    web_service: WebService
+    notebooks: Notebooks | None
+    cromwell: Cromwell | None
+    sample_metadata: SampleMetadata | None
+
+    # temporary
+    access_group_cache: AccessGroupCache
+
+    @staticmethod
+    def from_toml(path):
+        import toml
+
+        with open(path) as f:
+            d = toml.load(f)
+        return CPGInfrastructureConfig.from_dict(d)
+
+    @staticmethod
+    def from_dict(d):
+        if 'infrastructure' in d:
+            d = d['infrastructure']
+        return CPGInfrastructureConfig(**d)
+
+
 class CPGDatasetComponents(Enum):
     STORAGE = "storage"
     SPARK = "spark"
@@ -29,7 +170,7 @@ class CPGDatasetComponents(Enum):
 
 
 @dataclasses.dataclass(frozen=True)
-class CPGDatasetConfig:
+class CPGDatasetConfig(DeserializableDataclass):
     # duh
     dataset: str
 

@@ -1,0 +1,42 @@
+[infrastructure]
+domain = "populationgenomics.org.au"
+dataset_storage_prefix = "cpg-"
+
+[infrastructure.gcp]
+customer_id = "C010ys3gt"
+reference_bucket_name = "cpg-reference"
+config_bucket_name = "cpg-config"
+
+# [project-id, registry-name]
+common_artifact_registry_project = "cpg-common"
+common_artifact_registry_name = "images"
+
+[infrastructure.hail.gcp]
+wheel_bucket_name = "cpg-hail-ci"
+
+
+[infrastructure.analysis_runner]
+[infrastructure.analysis_runner.gcp]
+project = "analysis-runner"
+cloud_run_instance_name = "server"
+server_machine_account = "analysis-runner-server@analysis-runner.iam.gserviceaccount.com"
+logger_machine_account = "sample-metadata@analysis-runner.iam.gserviceaccount.com"
+container_registry_name = "images"
+
+[infrastructure.web_service.gcp]
+server_machine_account = "web-server@analysis-runner.iam.gserviceaccount.com"
+
+[infrastructure.access_group_cache]
+process_machine_account = "access-group-cache@analysis-runner.iam.gserviceaccount.com"
+
+[infrastructure.notebooks.gcp]
+project = "notebooks-314505"
+
+[infrastructure.cromwell.gcp]
+access_group_id = "groups/03cqmetx2922fyu"
+runner_machine_account = "cromwell-runner@cromwell-305305.iam.gserviceaccount.com"
+
+[infrastructure.sample_metadata.gcp]
+project = "sample-metadata"
+service_name = "sample-metadata-api"
+machine_account = "sample-metadata-api@sample-metadata.iam.gserviceaccount.com"
