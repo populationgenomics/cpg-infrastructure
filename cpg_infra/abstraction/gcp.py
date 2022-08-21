@@ -14,7 +14,7 @@ from cpg_infra.abstraction.base import (
     SecretMembership,
     ContainerRegistryMembership,
 )
-from cpg_infra.config import CPGDatasetConfig, DOMAIN
+from cpg_infra.config import CPGDatasetConfig, DOMAIN, CPGInfrastructureConfig
 
 GCP_CUSTOMER_ID = 'C010ys3gt'
 
@@ -24,8 +24,10 @@ class GcpInfrastructure(CloudInfraBase):
     def name():
         return 'gcp'
 
-    def __init__(self, config: CPGDatasetConfig):
-        super().__init__(config)
+    def __init__(
+        self, config: CPGInfrastructureConfig, dataset_config: CPGDatasetConfig
+    ):
+        super().__init__(config, dataset_config)
 
         self.region = 'australia-southeast1'
         self.organization = gcp.organizations.get_organization(domain=DOMAIN)
@@ -125,7 +127,9 @@ class GcpInfrastructure(CloudInfraBase):
     ) -> Any:
         unique_bucket_name = name
         if not unique:
-            unique_bucket_name = f'cpg-{self.dataset}-{name}'
+            unique_bucket_name = (
+                f'{self.config.dataset_storage_prefix}{self.dataset}-{name}'
+            )
         return gcp.storage.Bucket(
             unique_bucket_name,
             name=unique_bucket_name,

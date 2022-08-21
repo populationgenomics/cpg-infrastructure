@@ -18,7 +18,11 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Any, Callable
 
-from cpg_infra.config import CPGDatasetConfig, CPGDatasetComponents
+from cpg_infra.config import (
+    CPGDatasetConfig,
+    CPGDatasetComponents,
+    CPGInfrastructureConfig,
+)
 
 UNDELETE_PERIOD_IN_DAYS = 30
 TMP_BUCKET_PERIOD_IN_DAYS = 8  # tmp content gets deleted afterwards.
@@ -43,10 +47,13 @@ class ContainerRegistryMembership(Enum):
 
 
 class CloudInfraBase(ABC):
-    def __init__(self, config: CPGDatasetConfig):
+    def __init__(
+        self, config: CPGInfrastructureConfig, dataset_config: CPGDatasetConfig
+    ):
         super().__init__()
-        self.dataset = config.dataset
-        self.components = config.components.get(
+        self.config = config
+        self.dataset = dataset_config.dataset
+        self.components = dataset_config.components.get(
             self.name(),
             CPGDatasetComponents.default_component_for_infrastructure()[self.name()],
         )

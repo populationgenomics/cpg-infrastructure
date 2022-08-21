@@ -1,3 +1,4 @@
+from functools import lru_cache
 from typing import Any
 
 import pulumi_azure_native as az
@@ -8,37 +9,33 @@ from cpg_infra.abstraction.base import (
     TMP_BUCKET_PERIOD_IN_DAYS,
     SecretMembership,
 )
-from cpg_infra.config import CPGDatasetConfig
+from cpg_infra.config import CPGInfrastructureConfig, CPGDatasetConfig
 
 
 class AzureInfra(CloudInfraBase):
-    def __init__(self, config: CPGDatasetConfig):
-        super().__init__(config)
+    def __init__(
+        self, config: CPGInfrastructureConfig, dataset_config: CPGDatasetConfig
+    ):
+        super().__init__(config, dataset_config)
 
-        self.resource_group_name = f'cpg-{self.dataset}'
-        self.storage_account_name = f'cpg-{self.dataset}'
-
-        self._storage_account = None
-        self._resource_group = None
+        self.resource_group_name = f'{config.dataset_storage_prefix}{self.dataset}'
+        self.storage_account_name = f'{config.dataset_storage_prefix}{self.dataset}'
 
     @staticmethod
     def name():
         return 'azure'
 
     @property
+    @lru_cache()
     def resource_group(self):
-        if not self._resource_group:
-            self._resource_group = az.resources.ResourceGroup('resource_group')
-
-        return self._resource_group
+        return az.resources.ResourceGroup('resource_group')
 
     @property
+    @lru_cache()
     def storage_account(self):
-        if not self._storage_account:
-            self._storage_account = az.storage.Account(
-                'cpg-' + self.dataset, resource_group=self.resource_group
-            )
-        return self._storage_account
+        return az.storage.Account(
+            'cpg-' + self.dataset, resource_group=self.resource_group
+        )
 
     def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
         pass
