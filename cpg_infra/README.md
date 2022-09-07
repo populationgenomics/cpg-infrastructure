@@ -6,7 +6,6 @@ Date: August, 2022
 
 To manage infrastructure across GCP and Azure, as suggested by Greg Smith (Microsoft), we should write an abstraction on top of Pulumi for spinning up infrastructure in GCP and Azure without having to duplicate the “infrastructure design”.
 
-
 ## Proposed process
 
 To manage this process in a controlled way, without requiring massive code reviews, here is an proposal for the implementation process:
@@ -28,6 +27,7 @@ To manage this process in a controlled way, without requiring massive code revie
 Currently it's in a DEV state, it won't create any Pulumi state and there is a logger if you run:
 
 ```shell
+export CPG_CONFIG_PATH=$(readlink -f cpg_infra/cpg.toml)
 python -m cpg_infra.driver
 # prints what resources it would create here (no Pulumi used for now)
 ```
