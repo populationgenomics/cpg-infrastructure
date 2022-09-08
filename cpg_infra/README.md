@@ -32,6 +32,22 @@ python -m cpg_infra.driver
 # prints what resources it would create here (no Pulumi used for now)
 ```
 
+## Running pulumi
+
+First, ensure that the pulumi venv contains all the required
+dependencies. To do so from the root folder run:
+
+```shell
+cpg_infra/venv/bin/python -m pip install -r cpg_infra/requirements.txt
+cpg_infra/venv/bin/python -m pip install -r cpg_infra/requirements-dev.txt
+```
+
+In order to deploy a particular pulumi stack run the following
+
+```shell
+pulumi up -s [stack] --config-file ../stack/Pulumi.[stack].yaml
+```
+
 ### Motiviations
 
 This abstraction is still trying to address a number of difficult problems:
