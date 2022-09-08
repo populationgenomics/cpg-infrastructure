@@ -57,6 +57,16 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         config_bucket_name: str
 
     @dataclasses.dataclass(frozen=True)
+    class Azure(DeserializableDataclass):
+        # TODO: azure specific configuration options
+        # customer_id: str
+        # common_artifact_registry_project: str
+        # common_artifact_registry_name: str
+        # reference_bucket_name: str
+        # config_bucket_name: str
+        pass
+
+    @dataclasses.dataclass(frozen=True)
     class Hail(DeserializableDataclass):
         @dataclasses.dataclass(frozen=True)
         class GCP(DeserializableDataclass):
@@ -130,6 +140,8 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     # temporary
     access_group_cache: AccessGroupCache
 
+    azure: Azure | None = None
+    
     @staticmethod
     def from_toml(path):
         import toml
@@ -163,7 +175,7 @@ class CPGDatasetComponents(Enum):
             "gcp": list(CPGDatasetComponents),
             "azure": [
                 CPGDatasetComponents.STORAGE,
-                CPGDatasetComponents.HAIL_ACCOUNTS,
+                # CPGDatasetComponents.HAIL_ACCOUNTS,
                 # CPGDatasetComponents.SAMPLE_METADATA,
             ],
         }

@@ -6,6 +6,7 @@ import pulumi_azure_native as az
 from cpg_infra.abstraction.base import (
     CloudInfraBase,
     UNDELETE_PERIOD_IN_DAYS,
+    ARCHIVE_PERIOD_IN_DAYS,
     TMP_BUCKET_PERIOD_IN_DAYS,
     SecretMembership,
 )
@@ -27,21 +28,42 @@ class AzureInfra(CloudInfraBase):
 
     @property
     @lru_cache()
+    def subscription(self):
+        return az.subscription.Subscription(self.dataset)
+
+    @property
+    @lru_cache()
     def resource_group(self):
-        return az.resources.ResourceGroup('resource_group')
+        return az.resources.ResourceGroup('resource_group', subscription=self.subscription)
 
     @property
     @lru_cache()
     def storage_account(self):
         return az.storage.Account(
-            'cpg-' + self.dataset, resource_group=self.resource_group
+            self.storage_account_name, resource_group=self.resource_group
         )
 
     def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
-        pass
+        return az.storage.BucketLifecycleRuleArgs(
+            action=az.storage.BucketLifecycleRuleActionArgs(type='Delete'),
+            condition=az.storage.BucketLifecycleRuleConditionArgs(
+                days_since_noncurrent_time=days, with_state='ARCHIVED'
+            ),
+        )
+
+    def bucket_rule_archive(self, days=ARCHIVE_PERIOD_IN_DAYS) -> Any:
+        return az.storage.BucketLifecycleRuleArgs(
+            action=az.storage.BucketLifecycleRuleActionArgs(
+                type='SetStorageClass', storage_class='ARCHIVE'
+            ),
+            condition=az.storage.BucketLifecycleRuleConditionArgs(age=days),
+        )
 
     def bucket_rule_temporary(self, days=TMP_BUCKET_PERIOD_IN_DAYS) -> Any:
-        pass
+        return az.storage.BucketLifecycleRuleArgs(
+            action=az.storage.BucketLifecycleRuleActionArgs(type='Delete'),
+            condition=az.storage.BucketLifecycleRuleConditionArgs(age=days),
+        )
 
     def create_bucket(
         self,
@@ -53,7 +75,14 @@ class AzureInfra(CloudInfraBase):
         project: str = None,
     ) -> Any:
         return az.storage.BlobContainer(
-            f'bucket-{name}',
+            f'{name}',
+            location=self.region,
+            uniform_bucket_level_access=True,
+            versioning=az.storage.BucketVersioningArgs(enabled=versioning),
+            labels={'bucket': name},
+            lifecycle_rules=lifecycle_rules,
+            requester_pays=requester_pays,
+            project=project or self.project,
             resource_group_name=self.resource_group_name,
             account_name=self.storage_account_name,
             container_name=name,
