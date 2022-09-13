@@ -51,6 +51,9 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     @dataclasses.dataclass(frozen=True)
     class GCP(DeserializableDataclass):
         customer_id: str
+        billing_project_id: str
+        billing_account_id: int
+        budget_notification_pubsub: str | None
         common_artifact_registry_project: str
         common_artifact_registry_name: str
         reference_bucket_name: str
@@ -118,6 +121,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
 
     domain: str
     dataset_storage_prefix: str
+    budget_currency: str
 
     gcp: GCP | None
     hail: Hail | None
@@ -129,6 +133,14 @@ class CPGInfrastructureConfig(DeserializableDataclass):
 
     # temporary
     access_group_cache: AccessGroupCache
+
+    # When resources are renamed, it can be useful to explicitly apply changes in two
+    # phases: delete followed by create; that's opposite of the default create followed by
+    # delete, which can end up with missing permissions. To implement the first phase
+    # (delete), simply change this to "True", then revert to reapply group memberships
+    disable_group_memberships: bool = False
+
+    budget_notification_thresholds: list[float] = dataclasses.field(default_factory=lambda: [0.5, 0.9, 1.0])
 
     @staticmethod
     def from_toml(path):
@@ -163,7 +175,7 @@ class CPGDatasetComponents(Enum):
             "gcp": list(CPGDatasetComponents),
             "azure": [
                 CPGDatasetComponents.STORAGE,
-                CPGDatasetComponents.HAIL_ACCOUNTS,
+                # CPGDatasetComponents.HAIL_ACCOUNTS,
                 # CPGDatasetComponents.SAMPLE_METADATA,
             ],
         }
@@ -187,7 +199,8 @@ class CPGDatasetConfig(DeserializableDataclass):
 
     # creates a release requester-pays bucket
     enable_release: bool = False
-
+    enable_shared_project: bool = False
+    shared_project_budget: int = None
     # give access for this dataset to access any other it depends on
     depends_on: list[str] = dataclasses.field(default_factory=list)
 
