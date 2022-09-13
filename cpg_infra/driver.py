@@ -59,7 +59,10 @@ class CpgDatasetInfrastructure:
             CpgDatasetInfrastructure(config, infra_obj, dataset_config).main()
 
     def __init__(
-        self, config: CPGInfrastructureConfig, infra, dataset_config: CPGDatasetConfig
+        self,
+        config: CPGInfrastructureConfig,
+        infra: CloudInfraBase | Type[CloudInfraBase],
+        dataset_config: CPGDatasetConfig,
     ):
         self.config = config
         self.dataset_config: CPGDatasetConfig = dataset_config
@@ -114,6 +117,8 @@ class CpgDatasetInfrastructure:
             self.setup_notebooks()
         if self.should_setup_container_registry:
             self.setup_container_registry()
+        if self.dataset_config.enable_shared_project:
+            self.setup_shared_project()
 
         if self.should_setup_analysis_runner:
             self.setup_analysis_runner()
@@ -238,6 +243,21 @@ class CpgDatasetInfrastructure:
 
     def setup_gcp_monitoring_access(self):
         assert isinstance(self.infra, GcpInfrastructure)
+
+        self.infra.add_project_role(
+            'project-compute-viewer',
+            role='roles/compute.viewer',
+            member=self.access_group,
+            project=self.infra.project_id,
+        )
+
+        self.infra.add_project_role(
+            'project-logging-viewer',
+            role='roles/logging.viewer',
+            member=self.access_group,
+            project=self.infra.project_id,
+        )
+
         self.infra.add_project_role(
             'project-monitoring-viewer',
             member=self.access_group,
@@ -301,7 +321,7 @@ class CpgDatasetInfrastructure:
         return self.infra.create_bucket(
             'archive',
             lifecycle_rules=[
-                self.infra.bucket_rule_archive(),
+                self.infra.bucket_rule_archive(days=self.dataset_config.archive_age),
                 self.infra.bucket_rule_undelete(),
             ],
         )
@@ -310,13 +330,6 @@ class CpgDatasetInfrastructure:
 
     def setup_storage_main_bucket_permissions(self):
         # access has list permission
-
-        self.infra.add_member_to_bucket(
-            'project-buckets-lister',
-            self.main_bucket,
-            self.access_group,
-            BucketPermission.LIST,
-        )
 
         self.infra.add_member_to_bucket(
             'standard-main-bucket-view-create',
@@ -580,7 +593,7 @@ class CpgDatasetInfrastructure:
     @cached_property
     def release_bucket(self):
         return self.infra.create_bucket(
-            'release-requester-pays',
+            'release',
             lifecycle_rules=[self.infra.bucket_rule_undelete()],
         )
 
@@ -774,7 +787,7 @@ class CpgDatasetInfrastructure:
                 self.infra.add_member_to_dataproc_api(
                     f'dataproc-service-account-{access_level}-dataproc-worker',
                     spark_account,
-                    'worker',
+                    f'{self.infra.organization.id}/roles/DataprocWorkerWithoutStorageAccess',
                 )
 
             for (
@@ -793,8 +806,15 @@ class CpgDatasetInfrastructure:
                 self.infra.add_member_to_dataproc_api(
                     f'hail-service-account-{access_level}-dataproc-worker',
                     account=hail_account,
-                    role='worker',
+                    role=f'{self.infra.organization.id}/roles/DataprocWorkerWithoutStorageAccess',
                 )
+
+        self.infra.add_project_role(
+            'project-dataproc-viewer',
+            role='roles/dataproc.viewer',
+            member=self.access_group,
+            project=self.infra.project_id,
+        )
 
     @cached_property
     def dataproc_machine_accounts_by_access_level(self) -> dict[AccessLevel, Any]:
@@ -1027,7 +1047,7 @@ class CpgDatasetInfrastructure:
         )
 
     def setup_analysis_runner_config_access(self):
-        keys = {'access-group': self.access_group, **self.hail_accounts_by_access_level}
+        keys = {'access-group': self.access_group, **self.access_level_groups}
 
         for key, group in keys.items():
             self.infra.add_member_to_bucket(
@@ -1038,6 +1058,57 @@ class CpgDatasetInfrastructure:
             )
 
     # endregion ANALYSIS RUNNER
+
+    # region SHARED PROJECT
+
+    def setup_shared_project(self):
+        if not self.dataset_config.enable_shared_project:
+            return
+
+        if not self.dataset_config.enable_release:
+            raise ValueError(
+                'Requested shared project, but no bucket is available to share.'
+            )
+
+        if not self.dataset_config.shared_project_budget:
+            raise ValueError(
+                'Requested shared project, but the dataset configuration option '
+                '"shared_project_budget" was not specified.'
+            )
+
+        shared_buckets = {'release': self.release_bucket}
+
+        project_name = f'{self.infra.get_dataset_project_id()}-shared'
+
+        shared_project = self.infra.create_project(project_name)
+        self.infra.create_fixed_budget(
+            f'{self.dataset_config.dataset}-shared-budget',
+            project=shared_project, budget=self.dataset_config.shared_project_budget
+        )
+
+        shared_ma = self.infra.create_machine_account(
+            'shared',
+            project=shared_project,
+        )
+
+        if isinstance(self.infra, GcpInfrastructure):
+            self.infra.add_project_role(
+                # Allow the usage of requester-pays buckets.
+                'shared-project-serviceusage-consumer',
+                role='roles/serviceusage.serviceUsageConsumer',
+                member=shared_ma,
+            )
+
+        for bname, bucket in shared_buckets.items():
+            self.infra.add_member_to_bucket(
+                f'{bname}-shared-membership',
+                bucket=bucket,
+                member=shared_ma,
+                membership=BucketPermission.READ,
+            )
+
+    # endregion SHARED PROJECT
+
     # region ACCESS GROUP CACHE
 
     def setup_group_cache(self):
@@ -1047,7 +1118,7 @@ class CpgDatasetInfrastructure:
 
     def _setup_group_cache_secret(self, *, group, key, secret_name: str = None):
         self.infra.add_group_member(
-            f'{key}-group-cache-membership',
+            f'group-cache-{key}-membership',
             group,
             self.config.access_group_cache.process_machine_account,  # ACCESS_GROUP_CACHE_SERVICE_ACCOUNT,
         )
@@ -1062,32 +1133,35 @@ class CpgDatasetInfrastructure:
             SecretMembership.ADMIN,
         )
 
+        self.infra.add_secret_member(
+            f'{key}-group-cache-secret-accessor',
+            group_cache_secret,
+            self.config.access_group_cache.process_machine_account,  # ACCESS_GROUP_CACHE_SERVICE_ACCOUNT,
+            SecretMembership.ACCESSOR,
+        )
+
         return group_cache_secret
 
     def setup_group_cache_access_group(self):
         # Allow list of access-group
 
-        groups_to_cache = {
-            'access': self.access_group,
-            # are the test, standard, full access-group caches used anywhere?
-            **self.access_level_groups,
-        }
-
-        for key, group in groups_to_cache.items():
-
-            secret = self._setup_group_cache_secret(
+        for key, group in self.access_level_groups.items():
+            # setup secret
+            _ = self._setup_group_cache_secret(
                 group=group,
                 key=key,
                 secret_name=f'{self.dataset_config.dataset}-{key}-members-cache',
             )
 
-            # analysis-runner view contents of secrets
-            self.infra.add_secret_member(
-                f'analysis-runner-{key}-group-cache-secret-accessor',
-                secret,
-                self.config.analysis_runner.gcp.server_machine_account,  # ANALYSIS_RUNNER_SERVICE_ACCOUNT,
-                SecretMembership.ACCESSOR,
-            )
+        # analysis-runner view contents of access-groups
+
+        access_secret = self._setup_group_cache_secret(group=self.access_group, key='access', secret_name=f'{self.dataset_config.dataset}-access-members-cache')
+        self.infra.add_secret_member(
+            f'analysis-runner-access-group-cache-secret-accessor',
+            access_secret,
+            self.config.analysis_runner.gcp.server_machine_account,  # ANALYSIS_RUNNER_SERVICE_ACCOUNT,
+            SecretMembership.ACCESSOR,
+        )
 
     def setup_group_cache_sample_metadata_secrets(self):
         """
