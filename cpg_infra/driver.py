@@ -1,3 +1,4 @@
+# pylint: disable=import-error,too-many-public-methods,missing-function-docstring
 """
 CPG Dataset infrastructure
 """
@@ -16,7 +17,7 @@ from cpg_infra.abstraction.base import (
     CloudInfraBase,
     DevInfra,
     SecretMembership,
-    BucketPermission,
+    BucketMembership,
     ContainerRegistryMembership,
 )
 from cpg_infra.config import (
@@ -49,6 +50,11 @@ NON_NAME_REGEX = re.compile(r'[^A-Za-z0-9_-]')
 
 
 class CpgDatasetInfrastructure:
+    """
+    Logic for building infrastructure for a single dataset
+    for one infrastructure object.
+    """
+
     @staticmethod
     def deploy_all_from_config(
         config: CPGInfrastructureConfig, dataset_config: CPGDatasetConfig
@@ -313,7 +319,7 @@ class CpgDatasetInfrastructure:
             'full-archive-bucket-admin',
             self.archive_bucket,
             self.access_level_groups['full'],
-            BucketPermission.MUTATE,
+            BucketMembership.MUTATE,
         )
 
     @cached_property
@@ -335,14 +341,14 @@ class CpgDatasetInfrastructure:
             'standard-main-bucket-view-create',
             self.main_bucket,
             self.access_level_groups['standard'],
-            BucketPermission.APPEND,
+            BucketMembership.APPEND,
         )
 
         self.infra.add_member_to_bucket(
             'full-main-bucket-admin',
             self.main_bucket,
             self.access_level_groups['full'],
-            BucketPermission.MUTATE,
+            BucketMembership.MUTATE,
         )
 
     def setup_storage_main_tmp_bucket(self):
@@ -350,14 +356,14 @@ class CpgDatasetInfrastructure:
             'standard-main-tmp-bucket-view-create',
             self.main_tmp_bucket,
             self.access_level_groups['standard'],
-            BucketPermission.APPEND,
+            BucketMembership.APPEND,
         )
 
         self.infra.add_member_to_bucket(
             'full-main-tmp-bucket-admin',
             self.main_tmp_bucket,
             self.access_level_groups['full'],
-            BucketPermission.MUTATE,
+            BucketMembership.MUTATE,
         )
 
     def setup_storage_main_analysis_bucket(self):
@@ -365,20 +371,20 @@ class CpgDatasetInfrastructure:
             'access-group-main-analysis-bucket-viewer',
             self.main_analysis_bucket,
             self.access_group,
-            BucketPermission.READ,
+            BucketMembership.READ,
         )
         self.infra.add_member_to_bucket(
             'standard-main-analysis-bucket-view-create',
             self.main_analysis_bucket,
             self.access_level_groups['standard'],
-            BucketPermission.APPEND,
+            BucketMembership.APPEND,
         )
 
         self.infra.add_member_to_bucket(
             'full-main-analysis-bucket-admin',
             self.main_analysis_bucket,
             self.access_level_groups['full'],
-            BucketPermission.MUTATE,
+            BucketMembership.MUTATE,
         )
 
     def setup_storage_main_web_bucket_permissions(self):
@@ -386,7 +392,7 @@ class CpgDatasetInfrastructure:
             'access-group-main-web-bucket-viewer',
             self.main_web_bucket,
             self.access_group,
-            BucketPermission.READ,
+            BucketMembership.READ,
         )
 
         # web-server
@@ -394,21 +400,21 @@ class CpgDatasetInfrastructure:
             'web-server-main-web-bucket-viewer',
             self.main_web_bucket,
             self.config.web_service.gcp.server_machine_account,  # WEB_SERVER_SERVICE_ACCOUNT,
-            BucketPermission.READ,
+            BucketMembership.READ,
         )
 
         self.infra.add_member_to_bucket(
             'standard-main-web-bucket-view-create',
             self.main_web_bucket,
             self.access_level_groups['standard'],
-            BucketPermission.APPEND,
+            BucketMembership.APPEND,
         )
 
         self.infra.add_member_to_bucket(
             'full-main-web-bucket-admin',
             self.main_web_bucket,
             self.access_level_groups['full'],
-            BucketPermission.MUTATE,
+            BucketMembership.MUTATE,
         )
 
     def setup_storage_main_upload_buckets_permissions(self):
@@ -419,7 +425,7 @@ class CpgDatasetInfrastructure:
                 f'main-upload-service-account-{bname}-bucket-creator',
                 bucket=main_upload_bucket,
                 member=self.main_upload_account,
-                membership=BucketPermission.MUTATE,
+                membership=BucketMembership.MUTATE,
             )
 
             # full GROUP has ADMIN
@@ -427,7 +433,7 @@ class CpgDatasetInfrastructure:
                 f'full-{bname}-bucket-admin',
                 bucket=main_upload_bucket,
                 member=self.access_level_groups['full'],
-                membership=BucketPermission.MUTATE,
+                membership=BucketMembership.MUTATE,
             )
 
             # standard GROUP has READ
@@ -435,7 +441,7 @@ class CpgDatasetInfrastructure:
                 f'standard-{bname}-bucket-viewer',
                 bucket=main_upload_bucket,
                 member=self.access_level_groups['standard'],
-                membership=BucketPermission.READ,
+                membership=BucketMembership.READ,
             )
 
             # access GROUP has VIEWER
@@ -444,7 +450,7 @@ class CpgDatasetInfrastructure:
                 f'access-group-{bname}-bucket-viewer',
                 bucket=main_upload_bucket,
                 member=self.access_group,
-                membership=BucketPermission.READ,
+                membership=BucketMembership.READ,
             )
 
     @cached_property
@@ -522,7 +528,7 @@ class CpgDatasetInfrastructure:
                     resource_key,
                     bucket,
                     group,
-                    BucketPermission.MUTATE,
+                    BucketMembership.MUTATE,
                 )
 
         # give web-server access to test-bucket
@@ -530,7 +536,7 @@ class CpgDatasetInfrastructure:
             'web-server-test-web-bucket-viewer',
             bucket=self.test_web_bucket,
             member=self.config.web_service.gcp.server_machine_account,  # WEB_SERVER_SERVICE_ACCOUNT,
-            membership=BucketPermission.READ,
+            membership=BucketMembership.READ,
         )
 
     @cached_property
@@ -573,21 +579,21 @@ class CpgDatasetInfrastructure:
             'access-group-release-bucket-viewer',
             self.release_bucket,
             self.access_group,
-            BucketPermission.READ,
+            BucketMembership.READ,
         )
 
         self.infra.add_member_to_bucket(
             'release-access-group-release-bucket-viewer',
             self.release_bucket,
             self.release_access_group,
-            BucketPermission.READ,
+            BucketMembership.READ,
         )
 
         self.infra.add_member_to_bucket(
             'full-release-bucket-admin',
             self.release_bucket,
             self.access_level_groups['full'],
-            BucketPermission.MUTATE,
+            BucketMembership.MUTATE,
         )
 
     @cached_property
@@ -616,7 +622,7 @@ class CpgDatasetInfrastructure:
                 f'hail-service-account-{access_level}-hail-bucket-admin',
                 self.hail_bucket,
                 hail_machine_account,
-                BucketPermission.MUTATE,
+                BucketMembership.MUTATE,
             )
 
         # The analysis-runner also needs Hail bucket access for compiled code.
@@ -624,7 +630,7 @@ class CpgDatasetInfrastructure:
             'analysis-runner-hail-bucket-admin',
             bucket=self.hail_bucket,
             member=self.config.analysis_runner.gcp.server_machine_account,  # ANALYSIS_RUNNER_SERVICE_ACCOUNT,
-            membership=BucketPermission.MUTATE,
+            membership=BucketMembership.MUTATE,
         )
 
     def setup_hail_wheels_bucket_permissions(self):
@@ -636,7 +642,7 @@ class CpgDatasetInfrastructure:
                 f'{key}-hail-wheels-viewer',
                 bucket=self.config.hail.gcp.wheel_bucket_name,  # HAIL_WHEEL_BUCKET_NAME,
                 member=group,
-                membership=BucketPermission.READ,
+                membership=BucketMembership.READ,
             )
 
     @cached_property
@@ -690,7 +696,7 @@ class CpgDatasetInfrastructure:
             )
 
         if isinstance(self.infra, GcpInfrastructure):
-            self._GCP_setup_cromwell()
+            self._gcp_setup_cromwell()
 
     def setup_cromwell_credentials(self):
         for (
@@ -744,7 +750,7 @@ class CpgDatasetInfrastructure:
         }
         return accounts
 
-    def _GCP_setup_cromwell(self):
+    def _gcp_setup_cromwell(self):
         assert isinstance(self.infra, GcpInfrastructure)
 
         # Add Hail service accounts to (premade) Cromwell access group.
@@ -1054,7 +1060,7 @@ class CpgDatasetInfrastructure:
                 f'{key}-analysis-runner-config-viewer',
                 bucket=self.config.gcp.config_bucket_name,  # ANALYSIS_RUNNER_CONFIG_BUCKET_NAME,
                 member=group,
-                membership=BucketPermission.READ,
+                membership=BucketMembership.READ,
             )
 
     # endregion ANALYSIS RUNNER
@@ -1083,7 +1089,8 @@ class CpgDatasetInfrastructure:
         shared_project = self.infra.create_project(project_name)
         self.infra.create_fixed_budget(
             f'{self.dataset_config.dataset}-shared-budget',
-            project=shared_project, budget=self.dataset_config.shared_project_budget
+            project=shared_project,
+            budget=self.dataset_config.shared_project_budget,
         )
 
         shared_ma = self.infra.create_machine_account(
@@ -1104,7 +1111,7 @@ class CpgDatasetInfrastructure:
                 f'{bname}-shared-membership',
                 bucket=bucket,
                 member=shared_ma,
-                membership=BucketPermission.READ,
+                membership=BucketMembership.READ,
             )
 
     # endregion SHARED PROJECT
@@ -1155,7 +1162,11 @@ class CpgDatasetInfrastructure:
 
         # analysis-runner view contents of access-groups
 
-        access_secret = self._setup_group_cache_secret(group=self.access_group, key='access', secret_name=f'{self.dataset_config.dataset}-access-members-cache')
+        access_secret = self._setup_group_cache_secret(
+            group=self.access_group,
+            key='access',
+            secret_name=f'{self.dataset_config.dataset}-access-members-cache',
+        )
         self.infra.add_secret_member(
             f'analysis-runner-access-group-cache-secret-accessor',
             access_secret,
@@ -1217,7 +1228,7 @@ class CpgDatasetInfrastructure:
                 f'{kind}-reference-bucket-viewer',
                 bucket=self.config.gcp.reference_bucket_name,  # REFERENCE_BUCKET_NAME,
                 member=group,
-                membership=BucketPermission.READ,
+                membership=BucketMembership.READ,
             )
 
     # endregion REFERENCE
@@ -1273,18 +1284,6 @@ class CpgDatasetInfrastructure:
 
 
 if __name__ == '__main__':
-
-    class MyMocks(pulumi.runtime.Mocks):
-        def new_resource(self, args: pulumi.runtime.MockResourceArgs):
-            return [args.name + '_id', args.inputs]
-
-        def call(self, args: pulumi.runtime.MockCallArgs):
-            return {}
-
-    pulumi.runtime.set_mocks(
-        MyMocks(),
-        preview=False,  # Sets the flag `dry_run`, which is true at runtime during a preview.
-    )
 
     locations: list[Type[CloudInfraBase]] = [
         DevInfra,

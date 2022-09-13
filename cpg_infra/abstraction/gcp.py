@@ -1,7 +1,11 @@
+# pylint: disable=missing-class-docstring,missing-function-docstring,too-many-public-methods
+"""
+GCP implementation for abstract infrastructure
+"""
 import base64
 from datetime import date
 from functools import cached_property
-from typing import Any, Callable
+from typing import Any
 
 import pulumi
 import pulumi_gcp as gcp
@@ -11,11 +15,11 @@ from cpg_infra.abstraction.base import (
     UNDELETE_PERIOD_IN_DAYS,
     ARCHIVE_PERIOD_IN_DAYS,
     TMP_BUCKET_PERIOD_IN_DAYS,
-    BucketPermission,
+    BucketMembership,
     SecretMembership,
     ContainerRegistryMembership,
 )
-from cpg_infra.config import CPGDatasetConfig, DOMAIN, CPGInfrastructureConfig
+from cpg_infra.config import CPGDatasetConfig, CPGInfrastructureConfig
 
 GCP_CUSTOMER_ID = 'C010ys3gt'
 
@@ -31,7 +35,7 @@ class GcpInfrastructure(CloudInfraBase):
         super().__init__(config, dataset_config)
 
         self.region = 'australia-southeast1'
-        self.organization = gcp.organizations.get_organization(domain=DOMAIN)
+        self.organization = gcp.organizations.get_organization(domain=config.domain)
         self.project_id = gcp.organizations.get_project().project_id
 
         self._svc_cloudresourcemanager = gcp.projects.Service(
@@ -163,7 +167,14 @@ class GcpInfrastructure(CloudInfraBase):
             **kwargs,
         )
 
-    def create_fixed_budget(self, resource_key: str, *, project, budget: int, start_date: date = date(2022, 1, 1)):
+    def create_fixed_budget(
+        self,
+        resource_key: str,
+        *,
+        project,
+        budget: int,
+        start_date: date = date(2022, 1, 1),
+    ):
         return self.create_budget(
             resource_key=resource_key,
             project=project,
@@ -304,19 +315,20 @@ class GcpInfrastructure(CloudInfraBase):
 
         raise NotImplementedError(f'Not valid for type {type(secret)}')
 
-    def bucket_membership_to_role(self, membership: BucketPermission):
-        # TODO: fix organization id
-        if membership == BucketPermission.MUTATE:
+    def bucket_membership_to_role(self, membership: BucketMembership):
+        if membership == BucketMembership.MUTATE:
             return 'roles/storage.admin'
-        if membership == BucketPermission.APPEND:
+        if membership == BucketMembership.APPEND:
             return f'{self.organization.id}/roles/StorageViewerAndCreator'
-        if membership == BucketPermission.READ:
+        if membership == BucketMembership.READ:
             return f'{self.organization.id}/roles/StorageObjectAndBucketViewer'
-        if membership == BucketPermission.LIST:
+        if membership == BucketMembership.LIST:
             return f'{self.organization.id}/roles/StorageLister'
 
+        raise ValueError(f'Unrecognised bucket membership type {membership}')
+
     def add_member_to_bucket(
-        self, resource_key: str, bucket, member, membership: BucketPermission
+        self, resource_key: str, bucket, member, membership: BucketMembership
     ) -> Any:
         gcp.storage.BucketIAMMember(
             resource_key,
@@ -331,7 +343,7 @@ class GcpInfrastructure(CloudInfraBase):
     ):
         gcp.projects.IAMMember(
             resource_key,
-            role=self.bucket_membership_to_role(BucketPermission.LIST),
+            role=self.bucket_membership_to_role(BucketMembership.LIST),
             member=self.get_member_key(member),
             project=project or self.project_id,
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
@@ -348,9 +360,11 @@ class GcpInfrastructure(CloudInfraBase):
             project=project,
         )
 
+    # pylint: disable=unused-argument
     def add_member_to_machine_account_access(
         self, resource_key: str, machine_account, member, project: str = None
     ) -> Any:
+        # TODO: action project here
         gcp.serviceaccount.IAMMember(
             resource_key,
             service_account_id=machine_account.name,
@@ -438,7 +452,6 @@ class GcpInfrastructure(CloudInfraBase):
         resource_key: str,
         secret: Any,
         contents: Any,
-        processor: Callable[[Any], Any] = None,
     ):
         return gcp.secretmanager.SecretVersion(
             resource_key, secret=secret.id, secret_data=contents

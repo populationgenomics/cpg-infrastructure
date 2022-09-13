@@ -1,3 +1,5 @@
+# pylint: disable=import-error
+#
 """
 Pulumi stack to set up buckets and permission groups.
 

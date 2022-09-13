@@ -1,4 +1,8 @@
-from functools import lru_cache
+# pylint: disable=missing-class-docstring, missing-function-docstring
+"""
+Azure implementation for abstract infrastructure
+"""
+from functools import cached_property
 from typing import Any
 
 import pulumi_azure_native as az
@@ -25,13 +29,11 @@ class AzureInfra(CloudInfraBase):
     def name():
         return 'azure'
 
-    @property
-    @lru_cache()
+    @cached_property
     def resource_group(self):
         return az.resources.ResourceGroup('resource_group')
 
-    @property
-    @lru_cache()
+    @cached_property
     def storage_account(self):
         return az.storage.Account(
             'cpg-' + self.dataset, resource_group=self.resource_group

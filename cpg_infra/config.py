@@ -1,7 +1,14 @@
+# pylint: disable=missing-function-docstring,missing-class-docstring,invalid-name
+"""
+This module contains all the configuration objects that are used to
+describe the CPG infrastructure, including what's required from a
+specific dataset.
+"""
+
 import dataclasses
 from enum import Enum
-
-DOMAIN = "populationgenomics.org.au"
+from types import UnionType
+import toml
 
 
 class DeserializableDataclass:
@@ -10,8 +17,6 @@ class DeserializableDataclass:
         Do correct initialization of subclasses where appropriate
         """
         fields = {field.name: field.type for field in dataclasses.fields(type(self))}
-
-        from types import UnionType
 
         for fieldname, ftype in fields.items():
             value = self.__dict__.get(fieldname)
@@ -48,6 +53,11 @@ class DeserializableDataclass:
 
 @dataclasses.dataclass(frozen=True)
 class CPGInfrastructureConfig(DeserializableDataclass):
+    """
+    Configuration that describes all variables
+    required to instantiate the CPG infrastructure
+    """
+
     @dataclasses.dataclass(frozen=True)
     class GCP(DeserializableDataclass):
         customer_id: str
@@ -137,16 +147,16 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     # When resources are renamed, it can be useful to explicitly apply changes in two
     # phases: delete followed by create; that's opposite of the default create followed by
     # delete, which can end up with missing permissions. To implement the first phase
-    # (delete), simply change this to "True", then revert to reapply group memberships
+    # (delete), simply change this to 'True', then revert to reapply group memberships
     disable_group_memberships: bool = False
 
-    budget_notification_thresholds: list[float] = dataclasses.field(default_factory=lambda: [0.5, 0.9, 1.0])
+    budget_notification_thresholds: list[float] = dataclasses.field(
+        default_factory=lambda: [0.5, 0.9, 1.0]
+    )
 
     @staticmethod
     def from_toml(path):
-        import toml
-
-        with open(path) as f:
+        with open(path, encoding='utf-8') as f:
             d = toml.load(f)
         return CPGInfrastructureConfig.from_dict(d)
 
@@ -158,12 +168,16 @@ class CPGInfrastructureConfig(DeserializableDataclass):
 
 
 class CPGDatasetComponents(Enum):
-    STORAGE = "storage"
-    SPARK = "spark"
-    CROMWELL = "cromwell"
-    NOTEBOOKS = "notebooks"
-    HAIL_ACCOUNTS = "hail-accounts"
-    SAMPLE_METADATA = "sample_metadata"
+    """
+    The specific components that make up the dataset infrastructure
+    """
+
+    STORAGE = 'storage'
+    SPARK = 'spark'
+    CROMWELL = 'cromwell'
+    NOTEBOOKS = 'notebooks'
+    HAIL_ACCOUNTS = 'hail-accounts'
+    SAMPLE_METADATA = 'sample_metadata'
     CONTAINER_REGISTRY = 'container-registry'
     ANALYSIS_RUNNER = 'analysis-runner'
 
@@ -171,9 +185,9 @@ class CPGDatasetComponents(Enum):
     def default_component_for_infrastructure():
 
         return {
-            "dev": list(CPGDatasetComponents),
-            "gcp": list(CPGDatasetComponents),
-            "azure": [
+            'dev': list(CPGDatasetComponents),
+            'gcp': list(CPGDatasetComponents),
+            'azure': [
                 CPGDatasetComponents.STORAGE,
                 # CPGDatasetComponents.HAIL_ACCOUNTS,
                 # CPGDatasetComponents.SAMPLE_METADATA,
@@ -183,6 +197,11 @@ class CPGDatasetComponents(Enum):
 
 @dataclasses.dataclass(frozen=True)
 class CPGDatasetConfig(DeserializableDataclass):
+    """
+    Configuration that describes the minimum information
+    required to construct the dataset infrastructure
+    """
+
     # duh
     dataset: str
 
@@ -219,11 +238,15 @@ class CPGDatasetConfig(DeserializableDataclass):
 
     @classmethod
     def from_pulumi(cls, config, **kwargs):
+        """
+        From a pulumi config, construct this class.
+        This will call specific get_bool, get_object, get methods where appropriate
+        """
         fields = {field.name: field.type for field in dataclasses.fields(cls)}
         d = {**kwargs}
         for fieldname, ftype in fields.items():
 
-            if any(str(ftype).startswith(ext + "[") for ext in ("list", "dict")):
+            if any(str(ftype).startswith(ext + '[') for ext in ('list', 'dict')):
                 value = config.get_object(fieldname)
             elif ftype == bool:
                 value = config.get_bool(fieldname)
