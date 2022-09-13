@@ -1,5 +1,5 @@
 from functools import lru_cache
-from typing import Any
+from typing import Any, Callable
 
 import pulumi_azure_native as az
 
@@ -44,25 +44,51 @@ class AzureInfra(CloudInfraBase):
         )
 
     def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
-        return az.storage.BucketLifecycleRuleArgs(
-            action=az.storage.BucketLifecycleRuleActionArgs(type='Delete'),
-            condition=az.storage.BucketLifecycleRuleConditionArgs(
-                days_since_noncurrent_time=days, with_state='ARCHIVED'
+        return az.storage.ManagementPolicyRuleArgs(
+            name='bucket-rule-undelete',
+            type='LifeCycle',
+            definition=az.storage.ManagementPolicyDefinitionArgs(
+                actions=az.storage.ManagementPolicyActionArgs(
+                    base_blob=az.storage.ManagementPolicyBaseBlobArgs(
+                        delete=az.storage.DateAfterModificationArgs(
+                            days_after_modification_greater_than=days,
+                        ),
+                    )
+                ),
+                filters=az.storage.ManagementPolicyFilterArgs(
+                    blob_types=['ARCHIVED']
+                )
             ),
         )
 
     def bucket_rule_archive(self, days=ARCHIVE_PERIOD_IN_DAYS) -> Any:
-        return az.storage.BucketLifecycleRuleArgs(
-            action=az.storage.BucketLifecycleRuleActionArgs(
-                type='SetStorageClass', storage_class='ARCHIVE'
+        return az.storage.ManagementPolicyRuleArgs(
+            name='bucket-rule-archive',
+            type='LifeCycle',
+            definition=az.storage.ManagementPolicyDefinitionArgs(
+                actions=az.storage.ManagementPolicyActionArgs(
+                    base_blob=az.storage.ManagementPolicyBaseBlobArgs(
+                        tier_to_archive=az.storage.DateAfterModificationArgs(
+                            days_after_modification_greater_than=days,
+                        )
+                    )
+                )
             ),
-            condition=az.storage.BucketLifecycleRuleConditionArgs(age=days),
         )
 
     def bucket_rule_temporary(self, days=TMP_BUCKET_PERIOD_IN_DAYS) -> Any:
-        return az.storage.BucketLifecycleRuleArgs(
-            action=az.storage.BucketLifecycleRuleActionArgs(type='Delete'),
-            condition=az.storage.BucketLifecycleRuleConditionArgs(age=days),
+        return az.storage.ManagementPolicyRuleArgs(
+            name='bucket-rule-tmp',
+            type='LifeCycle',
+            definition=az.storage.ManagementPolicyDefinitionArgs(
+                actions=az.storage.ManagementPolicyActionArgs(
+                    base_blob=az.storage.ManagementPolicyBaseBlobArgs(
+                       delete=az.storage.DateAfterModificationArgs(
+                            days_after_modification_greater_than=days,
+                        ),
+                    )
+                )
+            ),
         )
 
     def create_bucket(
@@ -74,17 +100,43 @@ class AzureInfra(CloudInfraBase):
         versioning: bool = True,
         project: str = None,
     ) -> Any:
+        # Policies are set at the storage account level
+        # the rules are generated using other function calls
+        # e.g. bucket_rule_archive
+        # They are then passed here to apply to a particular 'bucket'
+        # (azure blob container)
+        # So first we modify to filter the rule to apply only to the
+        # new bucket
+        bucket_filter = az.storage.ManagementPolicyFilterArgs(
+            prefix_match=name
+        )
+
+        def apply_filter(rule):
+            rule.definition.filters = bucket_filter
+            return rule
+
+        lifecycle_rules = map(apply_filter, lifecycle_rules)
+
+        # Set storage account versioning and lifecycle rules
+        self.storage_account.ManagementPolicy(
+            f'{name}-management-policy',
+            account_name=self.storage_account.name,
+            resource_group_name=self.resource_group.name,
+            policy=az.storage.ManagementPolicySchemaArgs(
+                rules=lifecycle_rules
+            )
+        )
+
         return az.storage.BlobContainer(
             f'{name}',
             location=self.region,
             uniform_bucket_level_access=True,
-            versioning=az.storage.BucketVersioningArgs(enabled=versioning),
             labels={'bucket': name},
-            lifecycle_rules=lifecycle_rules,
+            versioning=versioning,
             requester_pays=requester_pays,
             project=project or self.project,
-            resource_group_name=self.resource_group_name,
-            account_name=self.storage_account_name,
+            resource_group_name=self.resource_group.name,
+            account_name=self.storage_account.name,
             container_name=name,
         )
 
@@ -115,6 +167,9 @@ class AzureInfra(CloudInfraBase):
     ) -> Any:
         pass
 
+    def get_credentials_for_machine_account(self, resource_key, account):
+        pass
+
     def create_group(self, name: str) -> Any:
         pass
 
@@ -134,7 +189,21 @@ class AzureInfra(CloudInfraBase):
     ) -> Any:
         pass
 
+    def add_secret_version(
+        self,
+        resource_key: str,
+        secret: Any,
+        contents: Any,
+        processor: Callable[[Any], Any] = None,
+    ):
+        pass
+
     def add_member_to_container_registry(
         self, resource_key: str, registry, member, membership, project=None
     ) -> Any:
+        pass
+
+    def give_member_ability_to_list_buckets(
+        self, resource_key: str, member, project: str = None
+    ):
         pass
