@@ -1,3 +1,4 @@
+# pylint: disable=missing-timeout
 #!/usr/bin/env python3
 
 """
