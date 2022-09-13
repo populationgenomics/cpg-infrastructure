@@ -15,6 +15,7 @@ Some challenges I forsee with this abstraction:
 """
 
 from abc import ABC, abstractmethod
+from datetime import date
 from enum import Enum
 from typing import Any, Callable
 
@@ -63,6 +64,26 @@ class CloudInfraBase(ABC):
     def name():
         pass
 
+    # region PROJECT
+    @abstractmethod
+    def get_dataset_project_id(self):
+        pass
+
+    @abstractmethod
+    def create_project(self, name):
+        pass
+
+    @abstractmethod
+    def create_monthly_budget(self, resource_key: str, *, project, budget):
+        pass
+
+    @abstractmethod
+    def create_fixed_budget(self, resource_key: str, *, project, budget, start_date: date = date(2022, 1, 1)):
+        pass
+
+    # region PROJECT
+
+    # region BUCKET
     @abstractmethod
     def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
         """
@@ -78,10 +99,6 @@ class CloudInfraBase(ABC):
     @abstractmethod
     def bucket_rule_archive(self, days=ARCHIVE_PERIOD_IN_DAYS) -> Any:
         pass
-
-    @abstractmethod
-
-    # region BUCKET
 
     @abstractmethod
     def create_bucket(
@@ -205,6 +222,19 @@ class DevInfra(CloudInfraBase):
     @staticmethod
     def name():
         return 'dev'
+
+    def get_dataset_project_id(self):
+        return self.dataset
+
+    def create_project(self, name):
+        print(f'Creating project: {name}')
+        return f'Project: {name}'
+
+    def create_monthly_budget(self, project, budget):
+        print(f'Create monthly budget for {project}: ${budget} {self.config.budget_currency}')
+
+    def create_fixed_budget(self, project, budget, start_date: date = date(2022, 1, 1)):
+        print(f'Create fixed budget for {project}: ${budget} {self.config.budget_currency} (from {date})')
 
     def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
         return f'RULE:undelete={days}d'

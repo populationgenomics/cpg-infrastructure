@@ -1,5 +1,6 @@
 import base64
-from functools import lru_cache
+from datetime import date
+from functools import cached_property
 from typing import Any, Callable
 
 import pulumi
@@ -31,7 +32,7 @@ class GcpInfrastructure(CloudInfraBase):
 
         self.region = 'australia-southeast1'
         self.organization = gcp.organizations.get_organization(domain=DOMAIN)
-        self.project = gcp.organizations.get_project().project_id
+        self.project_id = gcp.organizations.get_project().project_id
 
         self._svc_cloudresourcemanager = gcp.projects.Service(
             'cloudresourcemanager-service',
@@ -42,15 +43,6 @@ class GcpInfrastructure(CloudInfraBase):
         self._svc_cloudidentity = gcp.projects.Service(
             'cloudidentity-service',
             service='cloudidentity.googleapis.com',
-            disable_on_destroy=False,
-            opts=pulumi.resource.ResourceOptions(
-                depends_on=[self._svc_cloudresourcemanager]
-            ),
-        )
-
-        self._svc_iam = gcp.projects.Service(
-            'iam-service',
-            service='iam.googleapis.com',
             disable_on_destroy=False,
             opts=pulumi.resource.ResourceOptions(
                 depends_on=[self._svc_cloudresourcemanager]
@@ -72,8 +64,11 @@ class GcpInfrastructure(CloudInfraBase):
             ),
         )
 
-    @property
-    @lru_cache()
+    def get_dataset_project_id(self):
+        return self.project_id
+
+    # region SERVICES
+    @cached_property
     def _svc_dataproc(self):
         return gcp.projects.Service(
             'dataproc-service',
@@ -84,14 +79,116 @@ class GcpInfrastructure(CloudInfraBase):
             ),
         )
 
-    @property
-    @lru_cache
+    @cached_property
     def _svc_lifescienceapi(self):
         return gcp.projects.Service(
             'lifesciences-service',
             service='lifesciences.googleapis.com',
             disable_on_destroy=False,
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_serviceusage]),
+        )
+
+    @cached_property
+    def _svc_cloudbilling(self):
+        return gcp.projects.Service(
+            'cloudbilling-service',
+            service='cloudbilling.googleapis.com',
+            disable_on_destroy=False,
+            project=self.project_id,
+            opts=pulumi.resource.ResourceOptions(
+                depends_on=[self._svc_cloudresourcemanager]
+            ),
+        )
+
+    @cached_property
+    def _svc_cloudbillingbudgets(self):
+        return gcp.projects.Service(
+            'cloudbillingbudgets-service',
+            service='billingbudgets.googleapis.com',
+            disable_on_destroy=False,
+            project=self.project_id,
+            opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudbilling]),
+        )
+
+    @cached_property
+    def _svc_iam(self):
+        return gcp.projects.Service(
+            'iam-service',
+            service='iam.googleapis.com',
+            disable_on_destroy=False,
+            opts=pulumi.resource.ResourceOptions(
+                depends_on=[self._svc_cloudresourcemanager]
+            ),
+        )
+
+    # endregion SERVICES
+
+    def create_project(self, name):
+        return gcp.organizations.Project(
+            f'{name}-project',
+            org_id=self.organization.org_id,
+            project_id=name,
+            name=name,
+            billing_account=self.config.gcp.billing_account_id,
+            opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudbilling]),
+        )
+
+    def create_budget(self, resource_key: str, *, project, budget: int, budget_filter):
+        kwargs = {}
+        if self.config.gcp.budget_notification_pubsub:
+            kwargs['threshold_rules'] = [
+                gcp.billing.BudgetThresholdRuleArgs(threshold_percent=threshold)
+                for threshold in self.config.budget_notification_thresholds
+            ]
+            kwargs['all_updates_rule'] = gcp.billing.BudgetAllUpdatesRuleArgs(
+                pubsub_topic=self.config.gcp.budget_notification_pubsub,
+                schema_version='1.0',
+            )
+
+        gcp.billing.Budget(
+            resource_key,
+            amount=gcp.billing.BudgetAmountArgs(
+                specified_amount=gcp.billing.BudgetAmountSpecifiedAmountArgs(
+                    units=str(budget),
+                    currency_code=self.config.budget_currency,
+                    nanos=0,
+                )
+            ),
+            billing_account=self.config.gcp.billing_account_id,
+            display_name=project.name,
+            budget_filter=budget_filter,
+            opts=pulumi.resource.ResourceOptions(
+                depends_on=[self._svc_cloudbillingbudgets]
+            ),
+            **kwargs,
+        )
+
+    def create_fixed_budget(self, resource_key: str, *, project, budget: int, start_date: date = date(2022, 1, 1)):
+        return self.create_budget(
+            resource_key=resource_key,
+            project=project,
+            budget=budget,
+            budget_filter=gcp.billing.BudgetBudgetFilterArgs(
+                projects=[pulumi.Output.concat('projects/', project.number)],
+                # this budget applies for all time and doesn't reset
+                custom_period=gcp.billing.BudgetBudgetFilterCustomPeriodArgs(
+                    # arbitrary start date before all shared projects
+                    start_date=gcp.billing.BudgetBudgetFilterCustomPeriodStartDateArgs(
+                        year=start_date.year, month=start_date.month, day=start_date.day
+                    )
+                ),
+            ),
+        )
+
+    def create_monthly_budget(self, resource_key: str, *, project, budget: int):
+        return self.create_budget(
+            resource_key=resource_key,
+            project=project,
+            budget=budget,
+            budget_filter=gcp.billing.BudgetBudgetFilterArgs(
+                projects=[pulumi.Output.concat('projects/', project.number)],
+                calendar_period='month',
+            ),
         )
 
     def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
@@ -139,7 +236,7 @@ class GcpInfrastructure(CloudInfraBase):
             labels={'bucket': unique_bucket_name},
             lifecycle_rules=lifecycle_rules,
             requester_pays=requester_pays,
-            project=project or self.project,
+            project=project or self.project_id,
         )
 
     def get_member_key(self, member):
@@ -236,7 +333,7 @@ class GcpInfrastructure(CloudInfraBase):
             resource_key,
             role=self.bucket_membership_to_role(BucketPermission.LIST),
             member=self.get_member_key(member),
-            project=project or self.project,
+            project=project or self.project_id,
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
         )
 
@@ -282,6 +379,9 @@ class GcpInfrastructure(CloudInfraBase):
         )
 
     def add_group_member(self, resource_key: str, group, member) -> Any:
+        if self.config.disable_group_memberships:
+            return
+
         gcp.cloudidentity.GroupMembership(
             resource_key,
             group=self.get_group_key(group),
@@ -306,7 +406,7 @@ class GcpInfrastructure(CloudInfraBase):
                 ),
             ),
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_secretmanager]),
-            project=project or self.project,
+            project=project or self.project_id,
         )
 
     def add_secret_member(
@@ -327,7 +427,7 @@ class GcpInfrastructure(CloudInfraBase):
 
         gcp.secretmanager.SecretIamMember(
             resource_key,
-            project=project or self.project,
+            project=project or self.project_id,
             secret_id=secret.id,
             role=role,
             member=self.get_member_key(member),
@@ -357,7 +457,7 @@ class GcpInfrastructure(CloudInfraBase):
 
         gcp.artifactregistry.RepositoryIamMember(
             resource_key,
-            project=project or self.project,
+            project=project or self.project_id,
             location=self.region,
             repository=registry,
             role=role,
@@ -371,19 +471,20 @@ class GcpInfrastructure(CloudInfraBase):
             resource_key,
             role='roles/lifesciences.workflowsRunner',
             member=self.get_member_key(account),
-            project=self.project,
+            project=self.project_id,
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_lifescienceapi]),
         )
 
     #
     def add_member_to_dataproc_api(self, resource_key: str, account, role: str):
-        assert role in ('worker', 'admin')
+        if role in ('worker', 'admin'):
+            role = f'roles/dataproc.{role}'
 
         gcp.projects.IAMMember(
             resource_key,
-            role=f'roles/dataproc.{role}',
+            role=role,
             member=self.get_member_key(account),
-            project=self.project,
+            project=self.project_id,
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_dataproc]),
         )
 
@@ -404,7 +505,7 @@ class GcpInfrastructure(CloudInfraBase):
     ):
         gcp.projects.IAMMember(
             resource_key,
-            project=project or self.project,
+            project=project or self.project_id,
             role=role,
             member=self.get_member_key(member),
         )
