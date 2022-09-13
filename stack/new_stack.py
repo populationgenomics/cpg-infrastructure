@@ -1,5 +1,5 @@
-# pylint: disable=missing-timeout
 #!/usr/bin/env python3
+# pylint: disable=missing-timeout
 
 """
 Create GCP project + stack file for Pulumi
