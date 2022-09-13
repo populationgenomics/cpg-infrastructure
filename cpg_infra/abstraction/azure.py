@@ -19,8 +19,8 @@ class AzureInfra(CloudInfraBase):
     ):
         super().__init__(config, dataset_config)
 
-        self.resource_group_name = f'{config.dataset_storage_prefix}{self.dataset}'
-        self.storage_account_name = f'{config.dataset_storage_prefix}{self.dataset}'
+        self._resource_group_name = f'{config.dataset_storage_prefix}{self.dataset}'
+        self._storage_account_name = f'{config.dataset_storage_prefix}{self.dataset}'
 
     @staticmethod
     def name():
@@ -29,37 +29,35 @@ class AzureInfra(CloudInfraBase):
     @property
     @lru_cache()
     def subscription(self):
-        return az.subscription.Subscription(self.dataset)
+        return az.apimanagement.Subscription(
+            resource_name=self.dataset,
+            display_name=self.dataset,
+            resource_group_name=self.resource_group_name,
+            scope='/subscriptions',
+            service_name=self.dataset,
+        )
 
     @property
     @lru_cache()
     def resource_group(self):
-        return az.resources.ResourceGroup('resource_group', subscription=self.subscription)
+        return az.resources.ResourceGroup(self._resource_group_name, subscription=self.subscription)
 
     @property
     @lru_cache()
     def storage_account(self):
-        return az.storage.Account(
-            self.storage_account_name, resource_group=self.resource_group
+        return az.storage.StorageAccount(
+            self._storage_account_name, resource_group=self.resource_group
         )
 
     def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
-        return az.storage.ManagementPolicyRuleArgs(
-            name='bucket-rule-undelete',
-            type='LifeCycle',
-            definition=az.storage.ManagementPolicyDefinitionArgs(
-                actions=az.storage.ManagementPolicyActionArgs(
-                    base_blob=az.storage.ManagementPolicyBaseBlobArgs(
-                        delete=az.storage.DateAfterModificationArgs(
-                            days_after_modification_greater_than=days,
-                        ),
-                    )
-                ),
-                filters=az.storage.ManagementPolicyFilterArgs(
-                    blob_types=['ARCHIVED']
-                )
-            ),
+        az.storage.BlobServiceProperties(
+            "storage_account_undelete_rule",
+            account_name=self.storage_account.name,
+            blob_services_name="default",
+            delete_retention_policy=az.storage.DeleteRetentionPolicyArgs(days=days, enabled=True),
+            resource_group_name=self.resource_group.name
         )
+        return None
 
     def bucket_rule_archive(self, days=ARCHIVE_PERIOD_IN_DAYS) -> Any:
         return az.storage.ManagementPolicyRuleArgs(
@@ -83,7 +81,7 @@ class AzureInfra(CloudInfraBase):
             definition=az.storage.ManagementPolicyDefinitionArgs(
                 actions=az.storage.ManagementPolicyActionArgs(
                     base_blob=az.storage.ManagementPolicyBaseBlobArgs(
-                       delete=az.storage.DateAfterModificationArgs(
+                        delete=az.storage.DateAfterModificationArgs(
                             days_after_modification_greater_than=days,
                         ),
                     )
@@ -115,6 +113,7 @@ class AzureInfra(CloudInfraBase):
             rule.definition.filters = bucket_filter
             return rule
 
+        lifecycle_rules = filter(lambda x: x, lifecycle_rules)
         lifecycle_rules = map(apply_filter, lifecycle_rules)
 
         # Set storage account versioning and lifecycle rules
@@ -158,7 +157,7 @@ class AzureInfra(CloudInfraBase):
             f'application-{name}',
             account_name=name,
             display_name=name,
-            resource_group_name=self.resource_group_name,
+            resource_group_name=self.resource_group.name,
         )
         return application
 

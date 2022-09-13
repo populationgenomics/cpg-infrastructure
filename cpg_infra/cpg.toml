@@ -7,6 +7,9 @@ customer_id = "C010ys3gt"
 reference_bucket_name = "cpg-reference"
 config_bucket_name = "cpg-config"
 
+[infrastructure.azure]
+subscription_id = ""
+
 # [project-id, registry-name]
 common_artifact_registry_project = "cpg-common"
 common_artifact_registry_name = "images"
