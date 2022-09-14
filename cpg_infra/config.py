@@ -58,13 +58,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
 
     @dataclasses.dataclass(frozen=True)
     class Azure(DeserializableDataclass):
-        # TODO: azure specific configuration options
-        # customer_id: str
-        # common_artifact_registry_project: str
-        # common_artifact_registry_name: str
-        # reference_bucket_name: str
-        # config_bucket_name: str
-        pass
+        subscription_id: str
 
     @dataclasses.dataclass(frozen=True)
     class Hail(DeserializableDataclass):

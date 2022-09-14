@@ -29,7 +29,7 @@ class AzureInfra(CloudInfraBase):
     @property
     @lru_cache()
     def subscription(self):
-        return az.apimanagement.Subscription(
+        return az.subscription.(
             resource_name=self.dataset,
             display_name=self.dataset,
             resource_group_name=self.resource_group_name,
