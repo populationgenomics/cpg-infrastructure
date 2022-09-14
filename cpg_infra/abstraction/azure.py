@@ -1,8 +1,13 @@
-from functools import lru_cache
+# pylint: disable=missing-class-docstring, missing-function-docstring
+"""
+Azure implementation for abstract infrastructure
+"""
 from typing import Any, Callable
+from functools import cached_property
 
 import pulumi_azure_native as az
 
+from cpg_infra.config import CPGInfrastructureConfig, CPGDatasetConfig
 from cpg_infra.abstraction.base import (
     CloudInfraBase,
     UNDELETE_PERIOD_IN_DAYS,
@@ -10,7 +15,6 @@ from cpg_infra.abstraction.base import (
     TMP_BUCKET_PERIOD_IN_DAYS,
     SecretMembership,
 )
-from cpg_infra.config import CPGInfrastructureConfig, CPGDatasetConfig
 
 
 class AzureInfra(CloudInfraBase):
@@ -27,9 +31,9 @@ class AzureInfra(CloudInfraBase):
         return 'azure'
 
     @property
-    @lru_cache()
+    @cached_property
     def subscription(self):
-        return az.subscription.(
+        return az.subscription.Subscription(
             resource_name=self.dataset,
             display_name=self.dataset,
             resource_group_name=self.resource_group_name,
@@ -38,12 +42,11 @@ class AzureInfra(CloudInfraBase):
         )
 
     @property
-    @lru_cache()
+    @cached_property
     def resource_group(self):
         return az.resources.ResourceGroup(self._resource_group_name, subscription=self.subscription)
 
-    @property
-    @lru_cache()
+    @cached_property
     def storage_account(self):
         return az.storage.StorageAccount(
             self._storage_account_name, resource_group=self.resource_group

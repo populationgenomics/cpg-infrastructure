@@ -1,3 +1,4 @@
+# pylint: disable=missing-function-docstring,unnecessary-pass
 """
 Generic Infrastructure abstraction that relies on each to be subclassed
 by an equivalent GCP / Azure implementation.
@@ -15,6 +16,7 @@ Some challenges I forsee with this abstraction:
 """
 
 from abc import ABC, abstractmethod
+from datetime import date
 from enum import Enum
 from typing import Any, Callable
 
@@ -30,11 +32,15 @@ ARCHIVE_PERIOD_IN_DAYS = 30
 
 
 class SecretMembership(Enum):
+    """Secret membership pattern"""
+
     ACCESSOR = 'accessor'
     ADMIN = 'admin'
 
 
-class BucketPermission(Enum):
+class BucketMembership(Enum):
+    """Membership type for a bucket"""
+
     LIST = 'list'
     READ = 'read'
     APPEND = 'append'
@@ -42,11 +48,23 @@ class BucketPermission(Enum):
 
 
 class ContainerRegistryMembership(Enum):
+    """Container registry membership type"""
+
     READER = 'reader'
     APPEND = 'append'
 
 
 class CloudInfraBase(ABC):
+    """
+    Base class for interacting with a specific cloud. ALL methods
+    should be implemented to ensure the driver works correctly.
+
+    This class was designed to work with Pulumi, ie: all these methods
+    ensure resources are created (and take no action if they're already created).
+    Resources should be able to determine the unique key, but all memberships
+    require the driver to specify a unique key to link memberships.
+    """
+
     def __init__(
         self, config: CPGInfrastructureConfig, dataset_config: CPGDatasetConfig
     ):
@@ -63,6 +81,28 @@ class CloudInfraBase(ABC):
     def name():
         pass
 
+    # region PROJECT
+    @abstractmethod
+    def get_dataset_project_id(self):
+        pass
+
+    @abstractmethod
+    def create_project(self, name):
+        pass
+
+    @abstractmethod
+    def create_monthly_budget(self, resource_key: str, *, project, budget):
+        pass
+
+    @abstractmethod
+    def create_fixed_budget(
+        self, resource_key: str, *, project, budget, start_date: date = date(2022, 1, 1)
+    ):
+        pass
+
+    # region PROJECT
+
+    # region BUCKET
     @abstractmethod
     def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
         """
@@ -78,10 +118,6 @@ class CloudInfraBase(ABC):
     @abstractmethod
     def bucket_rule_archive(self, days=ARCHIVE_PERIOD_IN_DAYS) -> Any:
         pass
-
-    @abstractmethod
-
-    # region BUCKET
 
     @abstractmethod
     def create_bucket(
@@ -102,7 +138,7 @@ class CloudInfraBase(ABC):
 
     @abstractmethod
     def add_member_to_bucket(
-        self, resource_key: str, bucket, member, membership: BucketPermission
+        self, resource_key: str, bucket, member, membership: BucketMembership
     ) -> Any:
         """
         Add some member to a bucket.
@@ -147,14 +183,9 @@ class CloudInfraBase(ABC):
         """
         Create a GROUP, which is a proxy for a number of members
         """
-        pass
 
     @abstractmethod
     def add_group_member(self, resource_key: str, group, member) -> Any:
-        """
-        Add some member to a GROUP
-        Note: You MUST specify a unique resource_key
-        """
         pass
 
     # SECRETS
@@ -202,9 +233,30 @@ class CloudInfraBase(ABC):
 
 
 class DevInfra(CloudInfraBase):
+    """Dev infrastructure (just prints resources)"""
+
     @staticmethod
     def name():
         return 'dev'
+
+    def get_dataset_project_id(self):
+        return self.dataset
+
+    def create_project(self, name):
+        print(f'Creating project: {name}')
+        return f'Project: {name}'
+
+    def create_monthly_budget(self, resource_key: str, *, project, budget):
+        print(
+            f'{resource_key} :: Create monthly budget for {project}: ${budget} {self.config.budget_currency}'
+        )
+
+    def create_fixed_budget(
+        self, resource_key: str, *, project, budget, start_date: date = date(2022, 1, 1)
+    ):
+        print(
+            f'{resource_key} :: Create fixed budget for {project}: ${budget} {self.config.budget_currency} (from {date})'
+        )
 
     def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
         return f'RULE:undelete={days}d'
