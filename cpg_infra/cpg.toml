@@ -16,6 +16,9 @@ config_bucket_name = "cpg-config"
 common_artifact_registry_project = "cpg-common"
 common_artifact_registry_name = "images"
 
+[infrastructure.azure]
+subscription_id = "3546205e-2aa2-42ca-aa95-1daf546e7de1"
+
 [infrastructure.hail.gcp]
 wheel_bucket_name = "cpg-hail-ci"
 

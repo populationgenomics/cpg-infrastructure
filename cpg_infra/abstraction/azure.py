@@ -26,7 +26,8 @@ class AzureInfra(CloudInfraBase):
     ):
         super().__init__(config, dataset_config)
 
-        self.subscription = dataset_config.azure.subscription_id
+        self.region = 'australiaeast'
+        self.subscription = config.azure.subscription_id
         self._resource_group_name = f'{config.dataset_storage_prefix}{self.dataset}'
         self._storage_account_name = f'{config.dataset_storage_prefix}{self.dataset}'
 
@@ -37,16 +38,20 @@ class AzureInfra(CloudInfraBase):
     def get_dataset_project_id(self):
         return self.dataset
 
-    @property
     @cached_property
     def resource_group(self):
-        return az.resources.ResourceGroup(self._resource_group_name)
+        return az.resources.ResourceGroup(
+            self._resource_group_name,
+            location=self.region
+        )
 
-    @property
     @cached_property
     def storage_account(self):
         return az.storage.StorageAccount(
-            self._storage_account_name, resource_group=self.resource_group
+            self._storage_account_name,
+            resource_group_name=self.resource_group.name,
+            kind="StorageV2",
+            sku=az.storage.SkuArgs(name="Standard_LRS")
         )
 
     def create_project(self, name):
@@ -196,7 +201,8 @@ class AzureInfra(CloudInfraBase):
         # So first we modify to filter the rule to apply only to the
         # new bucket
         bucket_filter = az.storage.ManagementPolicyFilterArgs(
-            prefix_match=name
+            prefix_match=name,
+            blob_types=["blockBlob"]
         )
 
         def apply_filter(rule):

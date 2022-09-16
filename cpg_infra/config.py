@@ -72,8 +72,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     @dataclasses.dataclass(frozen=True)
     class Azure(DeserializableDataclass):
         # TODO: Azure specific config
-        # subscription_id: str
-        pass
+        subscription_id: str
 
     @dataclasses.dataclass(frozen=True)
     class Hail(DeserializableDataclass):
