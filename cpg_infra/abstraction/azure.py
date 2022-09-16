@@ -2,6 +2,8 @@
 """
 Azure implementation for abstract infrastructure
 """
+from datetime import date
+
 from typing import Any, Callable
 from functools import cached_property
 
@@ -16,13 +18,15 @@ from cpg_infra.abstraction.base import (
     SecretMembership,
 )
 
-
+AZURE_BILLING_START_DATE = "2017-06-01T00:00:00Z"
+AZURE_BILLING_EXPIRY_DATE = "3141-25-09T00:00:00Z"
 class AzureInfra(CloudInfraBase):
     def __init__(
         self, config: CPGInfrastructureConfig, dataset_config: CPGDatasetConfig
     ):
         super().__init__(config, dataset_config)
 
+        self.subscription = dataset_config.azure.subscription_id
         self._resource_group_name = f'{config.dataset_storage_prefix}{self.dataset}'
         self._storage_account_name = f'{config.dataset_storage_prefix}{self.dataset}'
 
@@ -30,26 +34,109 @@ class AzureInfra(CloudInfraBase):
     def name():
         return 'azure'
 
-    @property
-    @cached_property
-    def subscription(self):
-        return az.subscription.Subscription(
-            resource_name=self.dataset,
-            display_name=self.dataset,
-            resource_group_name=self.resource_group_name,
-            scope='/subscriptions',
-            service_name=self.dataset,
-        )
+    def get_dataset_project_id(self):
+        return self.dataset
 
     @property
     @cached_property
     def resource_group(self):
-        return az.resources.ResourceGroup(self._resource_group_name, subscription=self.subscription)
+        return az.resources.ResourceGroup(self._resource_group_name)
 
+    @property
     @cached_property
     def storage_account(self):
         return az.storage.StorageAccount(
             self._storage_account_name, resource_group=self.resource_group
+        )
+
+    def create_project(self, name):
+        # TODO: re-work creating shared projects in Azure
+        return az.resources.ResourceGroup(name)
+
+    def create_budget(self, resource_key: str, *, project, budget: int, budget_filter: az.consumption.BudgetArgs):
+        kwargs = {}
+        # TODO: setup Azure notifications for budget rules
+        # if self.config.gcp.budget_notification_pubsub:
+        #     kwargs['threshold_rules'] = [
+        #         gcp.billing.BudgetThresholdRuleArgs(threshold_percent=threshold)
+        #         for threshold in self.config.budget_notification_thresholds
+        #     ]
+        #     kwargs['all_updates_rule'] = gcp.billing.BudgetAllUpdatesRuleArgs(
+        #         pubsub_topic=self.config.gcp.budget_notification_pubsub,
+        #         schema_version='1.0',
+        #     )
+
+        filters = budget_filter.pop('filter')
+        kwargs = dict(kwargs, dict(budget_filter))
+        
+        az.consumption.Budget(
+            resource_key,
+            budget_name=f'{project.name}-budget',
+            amount=budget,
+            category="Cost",
+            scope=f"/subscriptions/{self.subscription}/",
+            budget_filter=filters,
+            **kwargs,
+        )
+
+    def create_fixed_budget(
+        self,
+        resource_key: str,
+        *,
+        project,
+        budget: int,
+        start_date: date = date(2022, 1, 1),
+    ):
+        filters=az.consumption.BudgetFilterArgs(
+            and_=[
+                az.consumption.BudgetFilterPropertiesArgs(
+                    dimensions=az.consumption.BudgetComparisonExpressionArgs(
+                        name="ResourceId",
+                        operator="In",
+                        values=[project.id],
+                    ),
+                )
+            ]
+        )
+        return self.create_budget(
+            resource_key=resource_key,
+            project=project,
+            budget=budget,
+            budget_filter=az.consumption.BudgetArgs(
+                time_grain= 'Annually',
+                time_period= az.consumption.BudgetTimePeriodArgs(
+                    start_date=str(start_date),
+                    end_date= AZURE_BILLING_EXPIRY_DATE
+                ),
+                filter=filters
+            )
+        )
+
+    def create_monthly_budget(self, resource_key: str, *, project, budget: int):
+        # No start date here thats an issue
+        filters=az.consumption.BudgetFilterArgs(
+            and_=[
+                az.consumption.BudgetFilterPropertiesArgs(
+                    dimensions=az.consumption.BudgetComparisonExpressionArgs(
+                        name="ResourceId",
+                        operator="In",
+                        values=[project.id],
+                    ),
+                )
+            ]
+        )
+        return self.create_budget(
+            resource_key=resource_key,
+            project=project,
+            budget=budget,
+            budget_filter=az.consumption.BudgetArgs(
+                time_grain='Monthly',
+                time_period=az.consumption.BudgetTimePeriodArgs(
+                    start_date=AZURE_BILLING_START_DATE,
+                    end_date=AZURE_BILLING_EXPIRY_DATE
+                ),
+                filter=filters
+            )
         )
 
     def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
