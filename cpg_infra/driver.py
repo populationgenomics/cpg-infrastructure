@@ -193,7 +193,7 @@ class CpgDatasetInfrastructure:
 
     def setup_access_groups(self):
         self.setup_access_level_group_memberships()
-        self.setup_setup_dependencies_group_memberships()
+        self.setup_dependencies_group_memberships()
         self.setup_access_level_group_outputs()
 
         if isinstance(self.infra, GcpInfrastructure):
@@ -1238,9 +1238,15 @@ class CpgDatasetInfrastructure:
     # region DEPENDENCIES
 
     def setup_dependencies(self):
-        self.setup_setup_dependencies_group_memberships()
+        self.setup_dependencies_group_memberships()
 
-    def setup_setup_dependencies_group_memberships(self):
+    def setup_dependencies_group_memberships(self):
+
+        dependencies = self.dataset_config.depends_on
+
+        if self.dataset_config.dataset != self.config.reference_dataset:
+            dependencies.append(self.config.reference_dataset)
+
         for access_level, primary_access_group in self.access_level_groups.items():
             for dependency in self.dataset_config.depends_on:
                 dependency_group_id = self.get_pulumi_stack(dependency).get_output(

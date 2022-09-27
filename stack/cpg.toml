@@ -2,6 +2,7 @@
 domain = "populationgenomics.org.au"
 dataset_storage_prefix = "cpg-"
 budget_currency = "AUD"
+reference_dataset = "reference"
 
 #disable_group_memberships = "true"
 

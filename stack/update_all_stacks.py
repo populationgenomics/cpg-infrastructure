@@ -20,6 +20,8 @@ for filename in glob.glob('Pulumi.*.yaml'):
         # Parse the string representation of the list.
         deps[dataset] = yaml.safe_load(deps[dataset])
 
+deps['reference'] = list(set(deps.keys()) - {'reference'})
+
 env = dict(os.environ, PULUMI_CONFIG_PASSPHRASE=get_pulumi_config_passphrase())
 for dataset in graphlib.TopologicalSorter(deps).static_order():
     print(f'Updating {dataset}...')

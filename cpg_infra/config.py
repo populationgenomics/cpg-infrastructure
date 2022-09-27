@@ -132,6 +132,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     domain: str
     dataset_storage_prefix: str
     budget_currency: str
+    reference_dataset: str
 
     gcp: GCP | None
     hail: Hail | None
