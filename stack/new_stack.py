@@ -46,7 +46,7 @@ from google.cloud.billing.budgets_v1 import (
 from google.api_core.client_options import ClientOptions
 from google.api_core.exceptions import GoogleAPICallError
 from google.type.money_pb2 import Money
-from stack_utils import get_pulumi_config_passphrase    # pylint: disable=import-error
+from stack_utils import get_pulumi_config_passphrase  # pylint: disable=import-error
 from sample_metadata.apis import ProjectApi
 
 

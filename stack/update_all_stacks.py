@@ -8,7 +8,7 @@ import os
 import subprocess
 import yaml
 
-from stack_utils import get_pulumi_config_passphrase    # pylint: disable=import-error
+from stack_utils import get_pulumi_config_passphrase  # pylint: disable=import-error
 
 deps = {}
 for filename in glob.glob('Pulumi.*.yaml'):
