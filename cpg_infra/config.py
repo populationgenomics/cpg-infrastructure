@@ -11,6 +11,12 @@ from types import UnionType
 import toml
 
 
+# If we serialize the pulumi configurations + any other TOMLs
+# we can tell quickly if the configuration is correct and complete
+# and make it simpler for tasks to use the correct keys.
+# We have a __post_init__ here to ensure that subdictionaries are
+# parsed into the structure we want, and because the python.dataclasses
+# won't do that automatically for us :(
 class DeserializableDataclass:
     def __post_init__(self):
         """
@@ -23,10 +29,13 @@ class DeserializableDataclass:
             if not value:
                 continue
             dtypes = []
+            # determine which type we should try to parse the value as
+            # handle unions (eg: None | DType)
             if isinstance(ftype, UnionType):
                 is_already_correct_type = False
                 for dtype in ftype.__args__:
                     if dtype and issubclass(dtype, DeserializableDataclass):
+                        # It's a DeserializableDataclass :)
                         dtypes.append(dtype)
                     elif dtype and isinstance(value, dtype):
                         is_already_correct_type = True
@@ -37,9 +46,10 @@ class DeserializableDataclass:
                 dtypes.append(ftype)
 
             e = None
+            # try to see if the value will parse as one of the detected DTypes
             for dtype in dtypes:
                 if not isinstance(value, dict):
-                    raise ValueError('Expected ')
+                    raise ValueError(f'Expected {value} to be a dictionary to parse, got {type(value)}.')
                 try:
                     self.__dict__[fieldname] = dtype(**value)
                     e = None
