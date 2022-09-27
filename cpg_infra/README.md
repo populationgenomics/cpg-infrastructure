@@ -1,7 +1,7 @@
 # CPG Infrastructure abstraction
 
 This module allows spinning up infrastructure on multiple clouds (GCP + Azure),
-by providing a rudimentary abstraction. We have one implementation of an 
+by providing a rudimentary abstraction. We have one implementation of an
 infrastructure in the `cpg_infra.driver` module.
 
 We currently treat a dataset as a separate stack
@@ -22,7 +22,7 @@ python -m cpg_infra.driver
 # prints what resources it would create here (no Pulumi used for now)
 ```
 
-### Motivations
+## Motivations
 
 This abstraction is trying to address a number of difficult problems:
 

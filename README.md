@@ -19,7 +19,6 @@ cd stack
 pulumi up -s [stack]
 ```
 
-
 ## Context
 
 Date: August, 2022
