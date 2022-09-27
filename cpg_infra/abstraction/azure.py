@@ -54,6 +54,9 @@ class AzureInfra(CloudInfraBase):
             sku=az.storage.SkuArgs(name="Standard_LRS")
         )
 
+    def _sanatize(self, name):
+        return ''.join(word.title() for word in name.split('-'))
+
     def create_project(self, name):
         # TODO: re-work creating shared projects in Azure
         return az.resources.ResourceGroup(name)
@@ -213,7 +216,7 @@ class AzureInfra(CloudInfraBase):
         lifecycle_rules = map(apply_filter, lifecycle_rules)
 
         # Set storage account versioning and lifecycle rules
-        self.storage_account.ManagementPolicy(
+        az.storage.ManagementPolicy(
             f'{name}-management-policy',
             account_name=self.storage_account.name,
             resource_group_name=self.resource_group.name,
@@ -224,15 +227,12 @@ class AzureInfra(CloudInfraBase):
 
         return az.storage.BlobContainer(
             f'{name}',
-            location=self.region,
-            uniform_bucket_level_access=True,
-            labels={'bucket': name},
-            versioning=versioning,
-            requester_pays=requester_pays,
-            project=project or self.project,
-            resource_group_name=self.resource_group.name,
             account_name=self.storage_account.name,
+            resource_group_name=project or self.resource_group.name,
             container_name=name,
+            metadata={'bucket': name},
+            public_access=az.storage.PublicAccess.BLOB,
+            # TODO: work out requester_pays in Azure
         )
 
     def add_member_to_bucket(
@@ -240,8 +240,8 @@ class AzureInfra(CloudInfraBase):
     ) -> Any:
         az.authorization.RoleAssignment(
             resource_key,
-            scope=bucket.id,
-            principal_id=member.id,
+            scope=bucket,
+            principal_id=member,
             role_definition_id='Contributor',
             role_assignment_name='Storage Blob Data Contributor',
         )
@@ -250,10 +250,10 @@ class AzureInfra(CloudInfraBase):
         self, name: str, project: str = None, *, resource_key: str = None
     ) -> Any:
         application = az.batch.Application(
-            f'application-{name}',
-            account_name=name,
+            resource_key or f'service-account-{name}',
             display_name=name,
-            resource_group_name=self.resource_group.name,
+            account_name=self._sanatize(name),
+            resource_group_name=project or self.resource_group.name,
         )
         return application
 
@@ -266,7 +266,12 @@ class AzureInfra(CloudInfraBase):
         pass
 
     def create_group(self, name: str) -> Any:
-        pass
+        mail = f'{name}@populationgenomics.org.au'
+        return az.management.ManagementGroup(
+            name,
+            display_name=name,
+            group_id=mail,
+        )
 
     def add_group_member(self, resource_key: str, group, member) -> Any:
         pass

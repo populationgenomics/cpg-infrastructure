@@ -2,6 +2,8 @@
 """
 This file is run by Pulumi to generate the infrastructure for a dataset
 """
+
+import time
 import pulumi
 from cpg_utils.config import get_config
 
@@ -29,13 +31,21 @@ def from_pulumi():
     CpgDatasetInfrastructure.deploy_all_from_config(config, dataset_config)
 
 
+def wait(seconds):
+    while seconds >= 0:
+        if debugpy.is_client_connected():
+            break
+        time.sleep(1)
+        seconds -= 1
+
 if __name__ == '__main__':
     import debugpy
 
-    debugpy.listen(("localhost", 5678))
-    print("debugpy is listening, attach by pressing F5 or ►")
+    # debugpy.listen(("localhost", 5678))
+    # print("debugpy is listening, attach by pressing F5 or ►")
 
-    debugpy.wait_for_client()
-    print("Attached to debugpy!")
+    # wait(10)
+    # debugpy.wait_for_client()
+    # print("Attached to debugpy!")
 
     from_pulumi()
