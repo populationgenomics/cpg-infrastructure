@@ -204,10 +204,9 @@ class CPGDatasetConfig(DeserializableDataclass):
 
     dataset: str
 
-    # hail accounts
-    hail_service_account_test: str
-    hail_service_account_standard: str
-    hail_service_account_full: str
+    gcp_hail_service_account_test: str
+    gcp_hail_service_account_standard: str
+    gcp_hail_service_account_full: str
 
     deployment_service_account_test: str | None = None
     deployment_service_account_standard: str | None = None

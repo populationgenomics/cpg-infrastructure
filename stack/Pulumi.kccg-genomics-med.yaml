@@ -4,9 +4,9 @@ config:
   datasets:customer_id: C010ys3gt
   datasets:depends_on: '["nagim"]'
   datasets:enable_release: "false"
-  datasets:hail_service_account_full: kccg-genomics-med-full-914@hail-295901.iam.gserviceaccount.com
-  datasets:hail_service_account_standard: kccg-genomics-med-standard-304@hail-295901.iam.gserviceaccount.com
-  datasets:hail_service_account_test: kccg-genomics-med-test-791@hail-295901.iam.gserviceaccount.com
+  datasets:gcp_hail_service_account_full: kccg-genomics-med-full-914@hail-295901.iam.gserviceaccount.com
+  datasets:gcp_hail_service_account_standard: kccg-genomics-med-standard-304@hail-295901.iam.gserviceaccount.com
+  datasets:gcp_hail_service_account_test: kccg-genomics-med-test-791@hail-295901.iam.gserviceaccount.com
   gcp:billing_project: kccg-genomics-med
   gcp:project: kccg-genomics-med
   gcp:user_project_override: "true"
