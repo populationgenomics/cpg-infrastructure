@@ -19,7 +19,6 @@ common_artifact_registry_name = "images"
 [infrastructure.hail.gcp]
 wheel_bucket_name = "cpg-hail-ci"
 
-[infrastructure.analysis_runner]
 [infrastructure.analysis_runner.gcp]
 project = "analysis-runner"
 cloud_run_instance_name = "server"
