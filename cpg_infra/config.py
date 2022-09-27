@@ -185,7 +185,7 @@ class CPGDatasetComponents(Enum):
     def default_component_for_infrastructure():
 
         return {
-            'dev': list(CPGDatasetComponents),
+            'dry-run': list(CPGDatasetComponents),
             'gcp': list(CPGDatasetComponents),
             'azure': [
                 CPGDatasetComponents.STORAGE,
@@ -202,7 +202,6 @@ class CPGDatasetConfig(DeserializableDataclass):
     required to construct the dataset infrastructure
     """
 
-    # duh
     dataset: str
 
     # hail accounts

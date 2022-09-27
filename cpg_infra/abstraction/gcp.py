@@ -21,8 +21,6 @@ from cpg_infra.abstraction.base import (
 )
 from cpg_infra.config import CPGDatasetConfig, CPGInfrastructureConfig
 
-GCP_CUSTOMER_ID = 'C010ys3gt'
-
 
 class GcpInfrastructure(CloudInfraBase):
     @staticmethod
@@ -388,7 +386,7 @@ class GcpInfrastructure(CloudInfraBase):
             display_name=name,
             group_key=gcp.cloudidentity.GroupGroupKeyArgs(id=mail),
             labels={'cloudidentity.googleapis.com/groups.discussion_forum': ''},
-            parent=f'customers/{GCP_CUSTOMER_ID}',
+            parent=f'customers/{self.config.gcp.customer_id}',
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
         )
 
