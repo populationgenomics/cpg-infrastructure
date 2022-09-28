@@ -2,7 +2,6 @@ encryptionsalt: v1:j1IHxCoYZJM=:v1:XMHb5JzRLZxqR4Au:HXBmc/RTWRVWNS69OjnT90TJ2+et
 config:
   datasets:archive_age: "90"
   datasets:customer_id: C010ys3gt
-  datasets:depends_on: '["nagim"]'
   datasets:enable_release: "false"
   datasets:gcp_hail_service_account_full: kccg-genomics-med-full-914@hail-295901.iam.gserviceaccount.com
   datasets:gcp_hail_service_account_standard: kccg-genomics-med-standard-304@hail-295901.iam.gserviceaccount.com

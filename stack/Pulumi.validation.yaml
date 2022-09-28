@@ -2,7 +2,7 @@ encryptionsalt: v1:goH1L3CvAZg=:v1:8NScnITVPYGpUfMH:KXDgnEo80i2nMt25U+VSgBriPyEZ
 config:
   datasets:archive_age: "90"
   datasets:customer_id: C010ys3gt
-  datasets:enable_release: "false"
+  datasets:enable_release: "true"
   datasets:gcp_hail_service_account_full: validation-full-567@hail-295901.iam.gserviceaccount.com
   datasets:gcp_hail_service_account_standard: validation-standard-575@hail-295901.iam.gserviceaccount.com
   datasets:gcp_hail_service_account_test: validation-test-067@hail-295901.iam.gserviceaccount.com

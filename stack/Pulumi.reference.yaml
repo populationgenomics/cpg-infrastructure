@@ -1,0 +1,11 @@
+encryptionsalt: v1:DunweHhmzCI=:v1:tygBZgKrbXA/zgii:KKS16pfoL346CorH2EwN4I7g+siePA==
+config:
+  datasets:archive_age: "90"
+  datasets:customer_id: C010ys3gt
+  datasets:enable_release: "false"
+  datasets:gcp_hail_service_account_full: reference-full-612@hail-295901.iam.gserviceaccount.com
+  datasets:gcp_hail_service_account_standard: reference-standard-424@hail-295901.iam.gserviceaccount.com
+  datasets:gcp_hail_service_account_test: reference-test-306@hail-295901.iam.gserviceaccount.com
+  gcp:billing_project: reference-762817
+  gcp:project: reference-762817
+  gcp:user_project_override: "true"
