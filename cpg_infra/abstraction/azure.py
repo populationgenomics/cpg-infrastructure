@@ -8,6 +8,7 @@ from typing import Any, Callable
 from functools import lru_cache, cached_property
 
 import pulumi_azure_native as az
+import pulumi_azuread as azuread
 
 from cpg_infra.config import CPGInfrastructureConfig, CPGDatasetConfig
 from cpg_infra.abstraction.base import (
@@ -51,8 +52,9 @@ class AzureInfra(CloudInfraBase):
         return az.storage.StorageAccount(
             self._storage_account_name,
             resource_group_name=self.resource_group.name,
+            location=self.region,
             kind="StorageV2",
-            sku=az.storage.SkuArgs(name="Standard_LRS")
+            sku=az.storage.SkuArgs(name="Standard_LRS"),
         )
 
     def _sanatize(self, name):
@@ -259,7 +261,7 @@ class AzureInfra(CloudInfraBase):
             resource_key or f'service-account-{name}',
             display_name=name,
             account_name=self._sanatize(name),
-            resource_group_name=project or self.resource_group.name,
+            resource_group_name=self.resource_group.name,
         )
         return application
 
