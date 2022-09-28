@@ -5,7 +5,7 @@ Azure implementation for abstract infrastructure
 from datetime import date
 
 from typing import Any, Callable
-from functools import cached_property
+from functools import lru_cache, cached_property
 
 import pulumi_azure_native as az
 
@@ -26,6 +26,7 @@ class AzureInfra(CloudInfraBase):
     ):
         super().__init__(config, dataset_config)
 
+        self.prefix = config.dataset_storage_prefix
         self.region = 'australiaeast'
         self.subscription = config.azure.subscription_id
         self._resource_group_name = f'{config.dataset_storage_prefix}{self.dataset}'
@@ -147,14 +148,19 @@ class AzureInfra(CloudInfraBase):
             )
         )
 
-    def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
+    @lru_cache
+    def _undelete(self, days=UNDELETE_PERIOD_IN_DAYS):
         az.storage.BlobServiceProperties(
-            "storage_account_undelete_rule",
-            account_name=self.storage_account.name,
-            blob_services_name="default",
+            f'{self._storage_account_name}-{days}day-undelete-rule',
+            account_name=self._storage_account_name,
+            blob_services_name='default',
             delete_retention_policy=az.storage.DeleteRetentionPolicyArgs(days=days, enabled=True),
-            resource_group_name=self.resource_group.name
+            resource_group_name=self._resource_group_name
         )
+
+    def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
+        if not self._undelete(days):
+            self._undelete(days)
         return None
 
     def bucket_rule_archive(self, days=ARCHIVE_PERIOD_IN_DAYS) -> Any:
@@ -204,7 +210,7 @@ class AzureInfra(CloudInfraBase):
         # So first we modify to filter the rule to apply only to the
         # new bucket
         bucket_filter = az.storage.ManagementPolicyFilterArgs(
-            prefix_match=name,
+            prefix_match=[name],
             blob_types=["blockBlob"]
         )
 
@@ -213,7 +219,7 @@ class AzureInfra(CloudInfraBase):
             return rule
 
         lifecycle_rules = filter(lambda x: x, lifecycle_rules)
-        lifecycle_rules = map(apply_filter, lifecycle_rules)
+        lifecycle_rules = list(map(apply_filter, lifecycle_rules))
 
         # Set storage account versioning and lifecycle rules
         az.storage.ManagementPolicy(
