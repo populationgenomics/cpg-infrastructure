@@ -17,7 +17,7 @@ Structure:
 To develop, you can run the driver file directly, which given a config TOML, will print infrastructure to the console.
 
 ```shell
-export CPG_CONFIG_PATH=$(readlink -f cpg_infra/cpg.toml)
+export CPG_CONFIG_PATH=$(readlink -f stack/cpg.toml)
 python -m cpg_infra.driver
 # prints what resources it would create here (no Pulumi used for now)
 ```
@@ -28,8 +28,9 @@ First, ensure that the pulumi venv contains all the required
 dependencies. To do so from the root folder run:
 
 ```shell
-cpg_infra/venv/bin/python -m pip install -r cpg_infra/requirements.txt
-cpg_infra/venv/bin/python -m pip install -r cpg_infra/requirements-dev.txt
+stack/venv/bin/python -m pip install -r stack/requirements.txt
+stack/venv/bin/python -m pip install -r stack/requirements-dev.txt
+stack/venv/bin/python -m pip install -e ./
 ```
 
 In order to deploy a particular pulumi stack run the following

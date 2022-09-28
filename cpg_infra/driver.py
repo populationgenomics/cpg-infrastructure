@@ -1244,8 +1244,8 @@ class CpgDatasetInfrastructure:
 
         dependencies = self.dataset_config.depends_on
 
-        if self.dataset_config.dataset != self.config.reference_dataset:
-            dependencies.append(self.config.reference_dataset)
+        # if self.dataset_config.dataset != self.config.reference_dataset:
+        #     dependencies.append(self.config.reference_dataset)
 
         for access_level, primary_access_group in self.access_level_groups.items():
             for dependency in self.dataset_config.depends_on:

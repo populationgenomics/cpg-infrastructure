@@ -26,8 +26,8 @@ class AzureInfra(CloudInfraBase):
     ):
         super().__init__(config, dataset_config)
 
-        self.prefix = config.dataset_storage_prefix
         self.region = 'australiaeast'
+        self.prefix = config.dataset_storage_prefix
         self.subscription = config.azure.subscription_id
         self._resource_group_name = f'{config.dataset_storage_prefix}{self.dataset}'
         self._storage_account_name = f'{config.dataset_storage_prefix}{self.dataset}'
@@ -151,11 +151,11 @@ class AzureInfra(CloudInfraBase):
     @lru_cache
     def _undelete(self, days=UNDELETE_PERIOD_IN_DAYS):
         az.storage.BlobServiceProperties(
-            f'{self._storage_account_name}-{days}day-undelete-rule',
-            account_name=self._storage_account_name,
+            f'{self.storage_account.name}-{days}day-undelete-rule',
+            account_name=self.storage_account.name,
             blob_services_name='default',
             delete_retention_policy=az.storage.DeleteRetentionPolicyArgs(days=days, enabled=True),
-            resource_group_name=self._resource_group_name
+            resource_group_name=self.resource_group.name
         )
 
     def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
