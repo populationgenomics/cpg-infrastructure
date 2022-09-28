@@ -1,3 +1,4 @@
+# pylint: disable=import-error
 """Copies Hail tokens from Kubernetes to the Google Secret Manager."""
 
 import base64
