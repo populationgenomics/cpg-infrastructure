@@ -3,144 +3,115 @@
         "automated-interpretation-pipeline",
         "fewgenomes",
         "gatk-sv",
-        "rare-disease",
-        "sample-metadata"
-    ],
-    "ag-hidden": [
-        "sample-metadata",
         "rare-disease"
     ],
-    "amp-pd": [],
+    "ag-hidden": [
+        "automated-interpretation-pipeline",
+        "rare-disease"
+    ],
     "ancestry": [
         "ancestry"
     ],
     "bioheart": [
-        "sample-metadata"
     ],
     "brain-malf": [
         "automated-interpretation-pipeline",
-        "sample-metadata",
         "rare-disease"
     ],
     "circa": [
-        "automated-interpretation-pipeline",
-        "sample-metadata"
+        "automated-interpretation-pipeline"
     ],
     "constraint": [
-        "sample-metadata",
         "structural-constraint"
     ],
     "epileptic-enceph": [
         "automated-interpretation-pipeline",
-        "sample-metadata",
         "rare-disease"
     ],
     "fewgenomes": [
         "automated-interpretation-pipeline",
-        "analysis-runner",
         "fewgenomes",
         "images",
         "joint-calling",
         "production-pipelines",
         "rare-disease",
-        "sample-metadata",
         "sv-workflows"
     ],
     "flinders-ophthal": [
-        "sample-metadata"
     ],
     "gtex": [
-        "sample-metadata"
     ],
     "heartkids": [
-        "sample-metadata"
+        "automated-interpretation-pipeline"
     ],
     "hereditary-neuro": [
-        "automated-interpretation-pipeline",
-        "sample-metadata"
+        "automated-interpretation-pipeline"
     ],
     "hgdp": [
         "hgdp"
     ],
     "ibmdx": [
-        "sample-metadata"
     ],
     "kccg-genomics-med": [
-        "sample-metadata",
-        "cromwell-kccg-mutect2-chip",
-        "analysis-runner"
+        "cromwell-kccg-mutect2-chip"
     ],
     "kidgen": [
-        "sample-metadata",
+        "automated-interpretation-pipeline",
         "rare-disease"
     ],
     "leukodystrophies": [
         "automated-interpretation-pipeline",
-        "sample-metadata",
         "rare-disease"
     ],
     "mcri-lrp": [
-        "sample-metadata"
     ],
     "mgrb": [
-        "sample-metadata"
     ],
     "mito-disease": [
         "automated-interpretation-pipeline",
-        "sample-metadata",
         "rare-disease"
     ],
-    "nagim": [
-        "sample-metadata"
-    ],
     "ohmr3-mendelian": [
-        "automated-interpretation-pipeline",
-        "sample-metadata"
+        "automated-interpretation-pipeline"
     ],
     "ohmr4-epilepsy": [
-        "automated-interpretation-pipeline",
-        "sample-metadata"
+        "automated-interpretation-pipeline"
     ],
     "perth-neuro": [
-        "automated-interpretation-pipeline",
-        "sample-metadata"
+        "automated-interpretation-pipeline"
     ],
     "prophecy": [
-        "sample-metadata",
         "production-pipelines",
         "joint-calling",
-        "gatk-sv"
+        "gatk-sv",
+        "large-cohort-pipeline"
     ],
     "ravenscroft-arch": [
-        "automated-interpretation-pipeline",
-        "sample-metadata"
+        "automated-interpretation-pipeline"
     ],
     "ravenscroft-rdstudy": [
-        "automated-interpretation-pipeline",
-        "sample-metadata"
+        "automated-interpretation-pipeline"
     ],
     "rdnow": [
         "automated-interpretation-pipeline"
     ],
+    "reference": [
+    ],
     "schr-neuro": [
-        "automated-interpretation-pipeline",
-        "sample-metadata"
+        "automated-interpretation-pipeline"
     ],
     "seqr": [
         "hail-elasticsearch-pipelines",
-        "sample-metadata",
-        "production-pipelines"
+        "production-pipelines",
+        "rare-disease"
     ],
     "sgs-somatic-mtn": [
-        "sample-metadata",
         "sgs-somatic-mutation"
     ],
     "thousand-genomes": [
-        "analysis-runner",
         "cuKING",
         "joint-calling",
         "production-pipelines",
-        "sample-metadata",
         "sv-workflows",
         "thousand-genomes"
     ],
@@ -151,17 +122,21 @@
         "tob-wgs",
         "sv-workflows",
         "production-pipelines",
-        "sample-metadata"
+        "cellregmap-pipeline"
     ],
     "tx-adapt": [
-        "sample-metadata",
         "tx-adapt"
     ],
+    "udn-aus": [
+    ],
+    "udn-aus-training": [
+    ],
     "validation": [
-        "sample-metadata",
+        "automated-interpretation-pipeline",
         "production-pipelines",
         "joint-calling",
         "gatk-sv",
-        "rare-disease"
+        "rare-disease",
+        "large-cohort-pipeline"
     ]
 }
