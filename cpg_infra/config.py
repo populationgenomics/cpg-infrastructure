@@ -49,7 +49,9 @@ class DeserializableDataclass:
             # try to see if the value will parse as one of the detected DTypes
             for dtype in dtypes:
                 if not isinstance(value, dict):
-                    raise ValueError(f'Expected {value} to be a dictionary to parse, got {type(value)}.')
+                    raise ValueError(
+                        f'Expected {value} to be a dictionary to parse, got {type(value)}.'
+                    )
                 try:
                     self.__dict__[fieldname] = dtype(**value)
                     e = None
