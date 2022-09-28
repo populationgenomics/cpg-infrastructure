@@ -1,0 +1,11 @@
+encryptionsalt: v1:xGWSQxHXU4c=:v1:FOwxOMHaLTGOTlrH:q1uyutU+QQeCrhZBsz4/5+SBRRsRhA==
+config:
+  datasets:archive_age: "90"
+  datasets:customer_id: C010ys3gt
+  datasets:enable_release: "false"
+  datasets:gcp_hail_service_account_full: udn-aus-full-991@hail-295901.iam.gserviceaccount.com
+  datasets:gcp_hail_service_account_standard: udn-aus-standard-850@hail-295901.iam.gserviceaccount.com
+  datasets:gcp_hail_service_account_test: udn-aus-test-603@hail-295901.iam.gserviceaccount.com
+  gcp:billing_project: udn-aus
+  gcp:project: udn-aus
+  gcp:user_project_override: "true"

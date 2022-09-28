@@ -232,12 +232,12 @@ class CloudInfraBase(ABC):
 # DEV OVERRIDE
 
 
-class DevInfra(CloudInfraBase):
-    """Dev infrastructure (just prints resources)"""
+class DryRunInfra(CloudInfraBase):
+    """DryRun infrastructure (just prints resources)"""
 
     @staticmethod
     def name():
-        return 'dev'
+        return 'dry-run'
 
     def get_dataset_project_id(self):
         return self.dataset

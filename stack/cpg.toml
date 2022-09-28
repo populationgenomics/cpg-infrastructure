@@ -2,6 +2,7 @@
 domain = "populationgenomics.org.au"
 dataset_storage_prefix = "cpg-"
 budget_currency = "AUD"
+reference_dataset = "reference"
 
 #disable_group_memberships = "true"
 
@@ -22,7 +23,6 @@ subscription_id = "3546205e-2aa2-42ca-aa95-1daf546e7de1"
 [infrastructure.hail.gcp]
 wheel_bucket_name = "cpg-hail-ci"
 
-[infrastructure.analysis_runner]
 [infrastructure.analysis_runner.gcp]
 project = "analysis-runner"
 cloud_run_instance_name = "server"

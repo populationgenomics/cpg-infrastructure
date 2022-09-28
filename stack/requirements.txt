@@ -1,7 +1,5 @@
-pulumi>=2.0.0,<3.0.0
-pulumi-gcp>=4.0.0,<5.0.0
-google-cloud-billing-budgets==1.5.1
-requests==2.27.1
-PyYAML==5.4.1
-click==8.0.3
-sample-metadata==4.9.1
+pulumi==3.37.2
+pulumi-gcp==6.32.0
+pulumi-azure-native==1.67.0
+toml==0.10.2
+cpg-utils

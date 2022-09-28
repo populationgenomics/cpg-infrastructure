@@ -13,10 +13,10 @@ with open('cpg_infra/README.md', encoding='utf-8') as f:
 setuptools.setup(
     name='cpg-infra',
     version='0.1.0',
-    description='CPG Infrastructure as code',
+    description='CPG Infrastructure',
     long_description=long_description,
     long_description_content_type='text/markdown',
-    url='https://github.com/populationgenomics/cpg_infrastructure',
+    url='https://github.com/populationgenomics/cpg-infrastructure',
     license='MIT',
     packages=[
         'cpg_infra',

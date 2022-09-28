@@ -15,7 +15,7 @@ from cpg_infra.abstraction.azure import AzureInfra
 from cpg_infra.abstraction.gcp import GcpInfrastructure
 from cpg_infra.abstraction.base import (
     CloudInfraBase,
-    DevInfra,
+    DryRunInfra,
     SecretMembership,
     BucketMembership,
     ContainerRegistryMembership,
@@ -46,7 +46,7 @@ SAMPLE_METADATA_PERMISSIONS = [
 
 AccessLevel = str
 ACCESS_LEVELS: Iterable[AccessLevel] = ('test', 'standard', 'full')
-NON_NAME_REGEX = re.compile(r'[^A-Za-z0-9_-]')
+NON_NAME_REGEX = re.compile(r'[^A-Za-z\d_-]')
 
 
 class CpgDatasetInfrastructure:
@@ -193,7 +193,7 @@ class CpgDatasetInfrastructure:
 
     def setup_access_groups(self):
         self.setup_access_level_group_memberships()
-        self.setup_setup_dependencies_group_memberships()
+        self.setup_dependencies_group_memberships()
         self.setup_access_level_group_outputs()
 
         if isinstance(self.infra, GcpInfrastructure):
@@ -220,6 +220,9 @@ class CpgDatasetInfrastructure:
         return f'{dataset}-{kind}-group-id'
 
     def setup_access_level_group_outputs(self):
+
+        if isinstance(self.infra, DryRunInfra):
+            return
 
         kinds = {
             'access': self.access_group,
@@ -650,9 +653,9 @@ class CpgDatasetInfrastructure:
         if not self.should_setup_hail:
             return {}
         accounts = {
-            'test': self.dataset_config.hail_service_account_test,
-            'standard': self.dataset_config.hail_service_account_standard,
-            'full': self.dataset_config.hail_service_account_full,
+            'test': self.dataset_config.gcp_hail_service_account_test,
+            'standard': self.dataset_config.gcp_hail_service_account_standard,
+            'full': self.dataset_config.gcp_hail_service_account_full,
         }
         assert all(ac is not None for ac in accounts.values())
         return accounts
@@ -815,12 +818,12 @@ class CpgDatasetInfrastructure:
                     role=f'{self.infra.organization.id}/roles/DataprocWorkerWithoutStorageAccess',
                 )
 
-        self.infra.add_project_role(
-            'project-dataproc-viewer',
-            role='roles/dataproc.viewer',
-            member=self.access_group,
-            project=self.infra.project_id,
-        )
+            self.infra.add_project_role(
+                'project-dataproc-viewer',
+                role='roles/dataproc.viewer',
+                member=self.access_group,
+                project=self.infra.project_id,
+            )
 
     @cached_property
     def dataproc_machine_accounts_by_access_level(self) -> dict[AccessLevel, Any]:
@@ -907,7 +910,7 @@ class CpgDatasetInfrastructure:
             # allow the analysis-runner logging cloud function to update the sample-metadata project
             SampleMetadataAccessorMembership(
                 name='analysis-runner-logger',
-                member=self.config.analysis_runner.gcp.logger_machine_account,  # ANALYSIS_RUNNER_LOGGER_SERVICE_ACCOUNT,
+                member=self.config.analysis_runner.gcp.logger_machine_account,
                 permissions=SAMPLE_METADATA_PERMISSIONS,
             ),
         ]
@@ -1017,7 +1020,7 @@ class CpgDatasetInfrastructure:
                 role='roles/compute.admin',
                 member=self.notebook_account,
             )
-        elif isinstance(self.infra, DevInfra):
+        elif isinstance(self.infra, DryRunInfra):
             pass
         else:
             # TODO: How to abstract compute.admin on project
@@ -1235,9 +1238,15 @@ class CpgDatasetInfrastructure:
     # region DEPENDENCIES
 
     def setup_dependencies(self):
-        self.setup_setup_dependencies_group_memberships()
+        self.setup_dependencies_group_memberships()
 
-    def setup_setup_dependencies_group_memberships(self):
+    def setup_dependencies_group_memberships(self):
+
+        dependencies = self.dataset_config.depends_on
+
+        if self.dataset_config.dataset != self.config.reference_dataset:
+            dependencies.append(self.config.reference_dataset)
+
         for access_level, primary_access_group in self.access_level_groups.items():
             for dependency in self.dataset_config.depends_on:
                 dependency_group_id = self.get_pulumi_stack(dependency).get_output(
@@ -1286,7 +1295,7 @@ class CpgDatasetInfrastructure:
 if __name__ == '__main__':
 
     locations: list[Type[CloudInfraBase]] = [
-        DevInfra,
+        DryRunInfra,
         # GcpInfrastructure,
         # AzureInfra,
     ]
@@ -1296,9 +1305,9 @@ if __name__ == '__main__':
 
         _config = CPGDatasetConfig(
             dataset='fewgenomes',
-            deploy_locations=['dev'],
-            hail_service_account_test='fewgenomes-test@service-account',
-            hail_service_account_standard='fewgenomes-standard@service-account',
-            hail_service_account_full='fewgenomes-full@service-account',
+            deploy_locations=['dry-run'],
+            gcp_hail_service_account_test='fewgenomes-test@service-account',
+            gcp_hail_service_account_standard='fewgenomes-standard@service-account',
+            gcp_hail_service_account_full='fewgenomes-full@service-account',
         )
         CpgDatasetInfrastructure(infra_config, location, _config).main()

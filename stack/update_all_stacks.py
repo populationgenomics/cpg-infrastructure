@@ -8,7 +8,7 @@ import os
 import subprocess
 import yaml
 
-from stack_utils import get_pulumi_config_passphrase
+from stack_utils import get_pulumi_config_passphrase  # pylint: disable=import-error
 
 deps = {}
 for filename in glob.glob('Pulumi.*.yaml'):
@@ -19,6 +19,8 @@ for filename in glob.glob('Pulumi.*.yaml'):
     if deps[dataset]:
         # Parse the string representation of the list.
         deps[dataset] = yaml.safe_load(deps[dataset])
+
+deps['reference'] = list(set(deps.keys()) - {'reference'})
 
 env = dict(os.environ, PULUMI_CONFIG_PASSPHRASE=get_pulumi_config_passphrase())
 for dataset in graphlib.TopologicalSorter(deps).static_order():
