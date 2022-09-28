@@ -7,6 +7,11 @@ import kubernetes.config
 import yaml
 from google.cloud import secretmanager
 
+# List of repos that are allowed for *all* datasets.
+ALWAYS_ALLOWED_REPOS = [
+    'analysis-runner',
+    'sample-metadata',
+]
 
 # dataset -> list of git repos
 with open('repository-map.json', encoding='utf-8') as allowed_repo_file:
@@ -63,7 +68,10 @@ def main():
 
     config = {}
     for dataset, allowed_repos in ALLOWED_REPOS.items():
-        entries = {'projectId': get_project_id(dataset), 'allowedRepos': allowed_repos}
+        entries = {
+            'projectId': get_project_id(dataset),
+            'allowedRepos': list(set(ALWAYS_ALLOWED_REPOS + allowed_repos)),
+        }
         for access_level in 'test', 'standard', 'full':
             hail_user = get_hail_user(dataset, access_level)
             entries[f'{access_level}Token'] = get_token(hail_user)

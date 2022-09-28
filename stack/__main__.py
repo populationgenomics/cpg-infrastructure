@@ -432,10 +432,17 @@ def main():  # pylint: disable=too-many-locals,too-many-branches
         access_group_cache_secrets[group_prefix] = access_secret
 
     gcp.secretmanager.SecretIamMember(
-        'analyis-runner-access-group-cache-secret-accessor',
+        'analysis-runner-access-group-cache-secret-accessor',
         secret_id=access_group_cache_secrets['access'].id,
         role='roles/secretmanager.secretAccessor',
         member=f'serviceAccount:{ANALYSIS_RUNNER_SERVICE_ACCOUNT}',
+        opts=pulumi.resource.ResourceOptions(
+            aliases=[
+                pulumi.resource.Alias(
+                    'analyis-runner-access-group-cache-secret-accessor'
+                )
+            ],
+        ),
     )
 
     gcp.secretmanager.SecretIamMember(
