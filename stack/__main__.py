@@ -24,13 +24,13 @@ def from_pulumi():
 
 
 if __name__ == '__main__':
-    import debugpy
+    # import debugpy
 
-    debugpy.listen(("localhost", 5678))
-    print("debugpy is listening, attach by pressing F5 or ►")
+    # debugpy.listen(("localhost", 5678))
+    # print("debugpy is listening, attach by pressing F5 or ►")
 
-    debugpy.wait_for_client()
-    print("Attached to debugpy!")
+    # debugpy.wait_for_client()
+    # print("Attached to debugpy!")
 
     from_pulumi()
 

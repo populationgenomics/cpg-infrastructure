@@ -44,8 +44,16 @@ class AzureInfra(CloudInfraBase):
 
     @cached_property
     def resource_group(self):
+        # management_group = azure_native.management.ManagementGroup("managementGroup",
+        #     details=azure_native.management.CreateManagementGroupDetailsArgs(
+        #         parent=azure_native.management.CreateParentGroupInfoArgs(
+        #             id="/providers/Microsoft.Management/managementGroups/RootGroup",
+        #         ),
+        #     ),
+        #     display_name="ChildGroup",
+        #     group_id="ChildGroup")
         return az.resources.ResourceGroup(
-            self._resource_group_name, location=self.region
+            self._resource_group_name, location=self.region,
         )
 
     @cached_property
@@ -231,15 +239,7 @@ class AzureInfra(CloudInfraBase):
         lifecycle_rules = filter(lambda x: x, lifecycle_rules)
         lifecycle_rules = list(map(apply_filter, lifecycle_rules))
 
-        # Set storage account versioning and lifecycle rules
-        az.storage.ManagementPolicy(
-            f'{name}-management-policy',
-            account_name=self.storage_account.name,
-            resource_group_name=self.resource_group.name,
-            policy=az.storage.ManagementPolicySchemaArgs(rules=lifecycle_rules),
-        )
-
-        return az.storage.BlobContainer(
+        blob = az.storage.BlobContainer(
             f'{name}',
             account_name=self.storage_account.name,
             resource_group_name=project or self.resource_group.name,
@@ -249,27 +249,34 @@ class AzureInfra(CloudInfraBase):
             # TODO: work out requester_pays in Azure
         )
 
+        # Set storage account versioning and lifecycle rules
+        az.storage.ManagementPolicy(
+            f'{name}-management-policy',
+            account_name=self.storage_account.name,
+            resource_group_name=self.resource_group.name,
+            policy=az.storage.ManagementPolicySchemaArgs(rules=lifecycle_rules),
+        )
+
     def add_member_to_bucket(
         self, resource_key: str, bucket, member, membership
     ) -> Any:
-        az.authorization.RoleAssignment(
-            resource_key,
-            scope=bucket,
-            principal_id=member,
-            role_definition_id='Contributor',
-            role_assignment_name='Storage Blob Data Contributor',
-        )
+        pass
+        # az.authorization.RoleAssignment(
+        #     resource_key,
+        #     scope=bucket.id,
+        #     principal_id=member,
+        #     role_definition_id='Contributor',
+        #     role_assignment_name='Storage Blob Data Contributor',
+        # )
 
     def create_machine_account(
         self, name: str, project: str = None, *, resource_key: str = None
     ) -> Any:
-        application = az.batch.Application(
+        # Ignore project, not relevent for AzureAD
+        return azuread.Application(
             resource_key or f'service-account-{name}',
-            display_name=name,
-            account_name=self._sanatize(name),
-            resource_group_name=self.resource_group.name,
+            display_name=f'{self.dataset}-{name}',
         )
-        return application
 
     def add_member_to_machine_account_access(
         self, resource_key: str, machine_account, member

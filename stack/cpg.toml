@@ -1,6 +1,6 @@
 [infrastructure]
 domain = "populationgenomics.org.au"
-dataset_storage_prefix = "cpg-"
+dataset_storage_prefix = "cpg"
 budget_currency = "AUD"
 reference_dataset = "reference"
 

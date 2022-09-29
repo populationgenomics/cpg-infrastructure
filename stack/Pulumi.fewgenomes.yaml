@@ -6,6 +6,10 @@ config:
   datasets:gcp_hail_service_account_full: fewgenomes-full-915@hail-295901.iam.gserviceaccount.com
   datasets:gcp_hail_service_account_standard: fewgenomes-standard-737@hail-295901.iam.gserviceaccount.com
   datasets:gcp_hail_service_account_test: fewgenomes-test-126@hail-295901.iam.gserviceaccount.com
+  azure-native:tenantId: a744336e-0ec4-40f1-891f-6c8ccaf8e267
+  azure-native:subscriptionId: 3546205e-2aa2-42ca-aa95-1daf546e7de1
   # gcp:billing_project: fewgenomes
   # gcp:project: fewgenomes
   # gcp:user_project_override: "true"
+  # azure-native:clientId <clientID>
+  # azure-native:clientSecret <clientSecret> --secret
