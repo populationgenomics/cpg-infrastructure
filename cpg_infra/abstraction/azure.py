@@ -31,7 +31,6 @@ class AzureInfra(CloudInfraBase):
 
         self.region = 'australiaeast'
         self.prefix = config.dataset_storage_prefix
-        self.subscription = config.azure.subscription_id
         self._resource_group_name = f'{config.dataset_storage_prefix}{self.dataset}'
         self._storage_account_name = f'{config.dataset_storage_prefix}{self.dataset}'
 
