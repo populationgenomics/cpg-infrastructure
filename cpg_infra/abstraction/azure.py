@@ -21,6 +21,8 @@ from cpg_infra.abstraction.base import (
 
 AZURE_BILLING_START_DATE = "2017-06-01T00:00:00Z"
 AZURE_BILLING_EXPIRY_DATE = "3141-25-09T00:00:00Z"
+
+
 class AzureInfra(CloudInfraBase):
     def __init__(
         self, config: CPGInfrastructureConfig, dataset_config: CPGDatasetConfig
@@ -43,8 +45,7 @@ class AzureInfra(CloudInfraBase):
     @cached_property
     def resource_group(self):
         return az.resources.ResourceGroup(
-            self._resource_group_name,
-            location=self.region
+            self._resource_group_name, location=self.region
         )
 
     @cached_property
@@ -64,7 +65,14 @@ class AzureInfra(CloudInfraBase):
         # TODO: re-work creating shared projects in Azure
         return az.resources.ResourceGroup(name)
 
-    def create_budget(self, resource_key: str, *, project, budget: int, budget_filter: az.consumption.BudgetArgs):
+    def create_budget(
+        self,
+        resource_key: str,
+        *,
+        project,
+        budget: int,
+        budget_filter: az.consumption.BudgetArgs,
+    ):
         kwargs = {}
         # TODO: setup Azure notifications for budget rules
         # if self.config.gcp.budget_notification_pubsub:
@@ -79,7 +87,7 @@ class AzureInfra(CloudInfraBase):
 
         filters = budget_filter.pop('filter')
         kwargs = dict(kwargs, dict(budget_filter))
-        
+
         az.consumption.Budget(
             resource_key,
             budget_name=f'{project.name}-budget',
@@ -98,7 +106,7 @@ class AzureInfra(CloudInfraBase):
         budget: int,
         start_date: date = date(2022, 1, 1),
     ):
-        filters=az.consumption.BudgetFilterArgs(
+        filters = az.consumption.BudgetFilterArgs(
             and_=[
                 az.consumption.BudgetFilterPropertiesArgs(
                     dimensions=az.consumption.BudgetComparisonExpressionArgs(
@@ -114,18 +122,17 @@ class AzureInfra(CloudInfraBase):
             project=project,
             budget=budget,
             budget_filter=az.consumption.BudgetArgs(
-                time_grain= 'Annually',
-                time_period= az.consumption.BudgetTimePeriodArgs(
-                    start_date=str(start_date),
-                    end_date= AZURE_BILLING_EXPIRY_DATE
+                time_grain='Annually',
+                time_period=az.consumption.BudgetTimePeriodArgs(
+                    start_date=str(start_date), end_date=AZURE_BILLING_EXPIRY_DATE
                 ),
-                filter=filters
-            )
+                filter=filters,
+            ),
         )
 
     def create_monthly_budget(self, resource_key: str, *, project, budget: int):
         # No start date here thats an issue
-        filters=az.consumption.BudgetFilterArgs(
+        filters = az.consumption.BudgetFilterArgs(
             and_=[
                 az.consumption.BudgetFilterPropertiesArgs(
                     dimensions=az.consumption.BudgetComparisonExpressionArgs(
@@ -144,10 +151,10 @@ class AzureInfra(CloudInfraBase):
                 time_grain='Monthly',
                 time_period=az.consumption.BudgetTimePeriodArgs(
                     start_date=AZURE_BILLING_START_DATE,
-                    end_date=AZURE_BILLING_EXPIRY_DATE
+                    end_date=AZURE_BILLING_EXPIRY_DATE,
                 ),
-                filter=filters
-            )
+                filter=filters,
+            ),
         )
 
     @lru_cache
@@ -156,8 +163,10 @@ class AzureInfra(CloudInfraBase):
             f'{self.storage_account.name}-{days}day-undelete-rule',
             account_name=self.storage_account.name,
             blob_services_name='default',
-            delete_retention_policy=az.storage.DeleteRetentionPolicyArgs(days=days, enabled=True),
-            resource_group_name=self.resource_group.name
+            delete_retention_policy=az.storage.DeleteRetentionPolicyArgs(
+                days=days, enabled=True
+            ),
+            resource_group_name=self.resource_group.name,
         )
 
     def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
@@ -212,8 +221,7 @@ class AzureInfra(CloudInfraBase):
         # So first we modify to filter the rule to apply only to the
         # new bucket
         bucket_filter = az.storage.ManagementPolicyFilterArgs(
-            prefix_match=[name],
-            blob_types=["blockBlob"]
+            prefix_match=[name], blob_types=["blockBlob"]
         )
 
         def apply_filter(rule):
@@ -228,9 +236,7 @@ class AzureInfra(CloudInfraBase):
             f'{name}-management-policy',
             account_name=self.storage_account.name,
             resource_group_name=self.resource_group.name,
-            policy=az.storage.ManagementPolicySchemaArgs(
-                rules=lifecycle_rules
-            )
+            policy=az.storage.ManagementPolicySchemaArgs(rules=lifecycle_rules),
         )
 
         return az.storage.BlobContainer(
@@ -274,11 +280,11 @@ class AzureInfra(CloudInfraBase):
         pass
 
     def create_group(self, name: str) -> Any:
-        mail = f'{name}@populationgenomics.org.au'
-        return az.management.ManagementGroup(
+        mail = f'@{name}populationgenomics.org.au'
+        return azuread.Group(
             name,
             display_name=name,
-            group_id=mail,
+            security_enabled=True,
         )
 
     def add_group_member(self, resource_key: str, group, member) -> Any:
