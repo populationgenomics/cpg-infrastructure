@@ -216,7 +216,6 @@ class CloudInfraBase(ABC):
         resource_key: str,
         secret: Any,
         contents: Any,
-        processor: Callable[[Any], Any] = None,
     ):
         pass
 

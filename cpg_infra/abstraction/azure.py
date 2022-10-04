@@ -17,6 +17,7 @@ from cpg_infra.abstraction.base import (
     ARCHIVE_PERIOD_IN_DAYS,
     TMP_BUCKET_PERIOD_IN_DAYS,
     SecretMembership,
+    BucketMembership,
 )
 
 AZURE_BILLING_START_DATE = '2017-06-01T00:00:00Z'
@@ -30,11 +31,12 @@ class AzureInfra(CloudInfraBase):
         super().__init__(config, dataset_config)
 
         self.region = 'australiaeast'
-        self.prefix = config.dataset_storage_prefix
-        self._resource_group_name = f'{config.dataset_storage_prefix}{self.dataset}'
-        self._storage_account_name = f'{config.dataset_storage_prefix}{self.dataset}'
+        self.prefix = config.dataset_storage_prefix.replace('-', '')
+        self._resource_group_name = f'{self.prefix}{self.dataset}'
+        self._storage_account_name = f'{self.prefix}{self.dataset}'
         self.storage_account_lifecycle_rules = []
-        self.storage_account_undelete_rule = False
+        self.storage_account_undelete_rule = None
+        self.subscription = az.authorization.GetClientConfigResult.subscription_id
 
     def finalise(self):
         """The azure storage account has a single management policy, and all the
@@ -42,7 +44,7 @@ class AzureInfra(CloudInfraBase):
 
         self._create_management_policy()
         if self.storage_account_undelete_rule:
-            self._undelete()
+            self._undelete(self.storage_account_undelete_rule)
 
     @staticmethod
     def name():
@@ -80,7 +82,7 @@ class AzureInfra(CloudInfraBase):
         )
 
     def create_project(self, name):
-        # TODO: re-work creating shared projects in Azure
+        # TODO: Check if this will be final implementation of shared projects in az
         return az.resources.ResourceGroup(name)
 
     def create_budget(
@@ -187,7 +189,15 @@ class AzureInfra(CloudInfraBase):
         )
 
     def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
-        self.storage_account_undelete_rule = True
+        """
+        These rules cannot be applied on a per bucket basis.
+        Instead, a delete retention policy applies to all blobs within a
+        Storage Account.
+        This function sets the number of days for the delete retention policy.
+        This service property gets applied and activated during
+        finalise()
+        """
+        self.storage_account_undelete_rule = days
 
     def bucket_rule_archive(self, days=ARCHIVE_PERIOD_IN_DAYS) -> Any:
         # TODO: Remove filters here on account of it being applied consistently in create_bucket function
@@ -260,21 +270,41 @@ class AzureInfra(CloudInfraBase):
             resource_group_name=project or self.resource_group.name,
             container_name=name,
             metadata={'bucket': name},
-            public_access=az.storage.PublicAccess.BLOB,
             # TODO: work out requester_pays in Azure
         )
+
+    def bucket_membership_to_role(self, membership: BucketMembership):
+        if membership == BucketMembership.MUTATE:
+            return f'/subscriptions/{self.subscription}/providers/Microsoft.Authorization/roleDefinitions/0b5fe924-9a61-425c-96af-cfe6e287ca2d'
+        if membership == BucketMembership.APPEND:
+            return f'/subscriptions/{self.subscription}/providers/Microsoft.Authorization/roleDefinitions/0b5fe924-9a61-425c-96af-cfe6e287ca2d'
+        if membership == BucketMembership.READ or BucketMembership.LIST:
+            return f'/subscriptions/{self.subscription}/providers/Microsoft.Authorization/roleDefinitions/0b5fe924-9a61-425c-96af-cfe6e287ca2d'
+
+        raise ValueError(f'Unrecognised bucket membership type {membership}')
 
     def add_member_to_bucket(
         self, resource_key: str, bucket, member, membership
     ) -> Any:
-        pass
-        # az.authorization.RoleAssignment(
-        #     resource_key,
-        #     scope=bucket.id,
-        #     principal_id=member,
-        #     role_definition_id='Contributor',
-        #     role_assignment_name='Storage Blob Data Contributor',
-        # )
+        resource_provider_namespace = 'Microsoft.Storage'
+        parent_resource_path = 'storageAccounts'
+        resource_type = 'Microsoft.ContainerInstance'
+        # TODO: Fix this.
+        scope = (
+            f'/subscriptions/{self.subscription}/resourceGroups/{self.resource_group.name}'
+            f'/providers/{resource_provider_namespace}/{parent_resource_path}/'
+            f'{self.storage_account.name}/{resource_type}/{bucket}'
+        )
+
+        principal_type = 'User' if 'User' in str(type(member)) else 'Group'
+
+        return az.authorization.RoleAssignment(
+            resource_key,
+            scope=scope,
+            principal_id=member,
+            principal_type=principal_type,
+            role_definition_id=self.bucket_membership_to_role(membership),
+        )
 
     def create_machine_account(
         self, name: str, project: str = None, *, resource_key: str = None
@@ -321,7 +351,6 @@ class AzureInfra(CloudInfraBase):
         resource_key: str,
         secret: Any,
         contents: Any,
-        processor: Callable[[Any], Any] = None,
     ):
         pass
 

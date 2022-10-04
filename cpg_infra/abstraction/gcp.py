@@ -453,7 +453,6 @@ class GcpInfrastructure(CloudInfraBase):
         resource_key: str,
         secret: Any,
         contents: Any,
-        processor: Callable[[Any], Any] = None,
     ):
         return gcp.secretmanager.SecretVersion(
             resource_key, secret=secret.id, secret_data=contents
