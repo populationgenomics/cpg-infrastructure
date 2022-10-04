@@ -560,7 +560,7 @@ def create_stack(
             if not mismatched_keys:
                 return
 
-            warning = " | ".join(
+            warning = ' | '.join(
                 f'{k}: {config_a.get(k)} != {config_b.get(k)}' for k in mismatched_keys
             )
             message = f'The pulumi stack file already exists and is not identical ({warning}), do you want to recreate it?'
