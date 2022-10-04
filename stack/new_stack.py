@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# pylint: disable=missing-timeout
 
 """
 Create GCP project + stack file for Pulumi
@@ -17,7 +16,8 @@ Example usage:
         --dataset $DATASET \
         --perform-all --no-commit \
         --deploy-stack \
-        --generate-service-account-key
+        --generate-service-account-key \
+        --add-to-seqr-stack
 """
 
 # pylint: disable=unreachable,too-many-arguments,no-name-in-module,import-error,too-many-lines
@@ -46,7 +46,7 @@ from google.cloud.billing.budgets_v1 import (
 from google.api_core.client_options import ClientOptions
 from google.api_core.exceptions import GoogleAPICallError
 from google.type.money_pb2 import Money
-from stack_utils import get_pulumi_config_passphrase  # pylint: disable=import-error
+from stack_utils import get_pulumi_config_passphrase
 from sample_metadata.apis import ProjectApi
 
 
@@ -58,10 +58,22 @@ ORGANIZATION_ID = '648561325637'
 BILLING_ACCOUNT_ID = '01D012-20A6A2-CBD343'
 BILLING_PROJECT_ID = 'billing-admin-290403'
 HAIL_PROJECT = 'hail-295901'
+BILLING_AGGREGATOR_USERNAME = 'aggregate-billing'
 
 HAIL_AUTH_URL = 'https://auth.hail.populationgenomics.org.au'
+HAIL_BATCH_URL = 'https://batch.hail.populationgenomics.org.au'
 HAIL_CREATE_USER_PATH = HAIL_AUTH_URL + '/api/v1alpha/users/{username}/create'
 HAIL_GET_USER_PATH = HAIL_AUTH_URL + '/api/v1alpha/users/{username}'
+HAIL_GET_BILLING_PROJECT_PATH = (
+    HAIL_BATCH_URL + '/api/v1alpha/billing_projects/{billing_project}'
+)
+HAIL_CREATE_BILLING_PROJECT_PATH = (
+    HAIL_BATCH_URL + '/api/v1alpha/billing_projects/{billing_project}/create'
+)
+HAIL_ADD_USER_TO_BILLING_PROJECT_PATH = (
+    HAIL_BATCH_URL + '/api/v1alpha/billing_projects/{billing_project}/users/{user}/add'
+)
+
 
 logging.basicConfig(level=logging.INFO)
 
@@ -81,6 +93,7 @@ logging.basicConfig(level=logging.INFO)
 @click.option('--create-gcp-project', required=False, is_flag=True)
 @click.option('--setup-gcp-billing', required=False, is_flag=True)
 @click.option('--create-hail-service-accounts', required=False, is_flag=True)
+@click.option('--configure-hail-batch-project', required=False, is_flag=True)
 @click.option('--create-pulumi-stack', required=False, is_flag=True)
 @click.option('--add-to-seqr-stack', required=False, is_flag=True)
 @click.option('--deploy-stack', required=False, is_flag=True, help='Runs `pulumi up`')
@@ -97,6 +110,7 @@ def main(
     create_gcp_project=False,
     setup_gcp_billing=False,
     create_hail_service_accounts=False,
+    configure_hail_batch_project=False,
     create_pulumi_stack=False,
     add_to_seqr_stack=False,
     deploy_stack=False,
@@ -110,6 +124,7 @@ def main(
         create_gcp_project = True
         setup_gcp_billing = True
         create_hail_service_accounts = True
+        configure_hail_batch_project = True
         create_pulumi_stack = True
         create_sample_metadata_project = True
 
@@ -149,6 +164,9 @@ def main(
 
     if create_hail_service_accounts:
         create_hail_accounts(dataset)
+
+    if configure_hail_batch_project:
+        setup_hail_batch_billing_project(dataset)
 
     if create_gcp_project:
         # True if created, else False if it already existed
@@ -321,6 +339,59 @@ def get_hail_service_accounts(dataset: str):
     return hail_client_emails_by_level
 
 
+def setup_hail_batch_billing_project(project: str):
+    """
+    (If required) Create a Hail batch billing project
+    (If required) Add standard + aggregator users to batch billing project
+
+    Subsequent runs of this method produces no action.
+    """
+    hail_auth_token = _get_hail_auth_token()
+
+    # determine list of users we want in batch billing_project
+    usernames = set(_get_standard_hail_account_names(project))
+    if BILLING_AGGREGATOR_USERNAME:
+        usernames.add(BILLING_AGGREGATOR_USERNAME)
+
+    url = HAIL_GET_BILLING_PROJECT_PATH.format(billing_project=project)
+    resp = requests.get(
+        url,
+        headers={'Authorization': f'Bearer {hail_auth_token}'},
+    )
+
+    usernames_already_in_project = set()
+    # it throws a 403 user error, but may as well check for 404 too
+    if resp.status_code in (403, 404):
+        _hail_batch_create_billing_project(project, hail_auth_token=hail_auth_token)
+    else:
+        # check for any other batch errors
+        resp.raise_for_status()
+        usernames_already_in_project = set(resp.json()['users'])
+
+    for username in usernames - usernames_already_in_project:
+        _hail_batch_add_user_to_billing_project(project, username, hail_auth_token)
+
+
+def _hail_batch_create_billing_project(project, hail_auth_token):
+    url = HAIL_CREATE_BILLING_PROJECT_PATH.format(billing_project=project)
+    resp = requests.post(
+        url,
+        headers={'Authorization': f'Bearer {hail_auth_token}'},
+    )
+    resp.raise_for_status()
+
+
+def _hail_batch_add_user_to_billing_project(billing_project, username, hail_auth_token):
+    url = HAIL_ADD_USER_TO_BILLING_PROJECT_PATH.format(
+        billing_project=billing_project, user=username
+    )
+    resp = requests.post(
+        url,
+        headers={'Authorization': f'Bearer {hail_auth_token}'},
+    )
+    resp.raise_for_status()
+
+
 def _kubectl_hail_token_command(project, access_level: str):
     return f"kubectl get secret {project}-{access_level}-gsa-key -o json | jq '.data | map_values(@base64d)'"
 
@@ -373,17 +444,24 @@ def _create_hail_service_account(username, hail_auth_token):
     post_resp.raise_for_status()
 
 
+def _get_standard_hail_account_names(dataset):
+    username_suffixes = ['-test', '-standard', '-full']
+    return [dataset + suffix for suffix in username_suffixes]
+
+
+def _get_hail_auth_token():
+    with open(os.path.expanduser('~/.hail/tokens.json'), encoding='utf-8') as f:
+        return json.load(f)['default']
+
+
 def create_hail_accounts(dataset):
     """
     Create 3 service accounts ${ds}-{test,standard,full} in Hail Batch
     """
     # Based on: https://github.com/hail-is/hail/pull/11249
-    with open(os.path.expanduser('~/.hail/tokens.json'), encoding='utf-8') as f:
-        hail_auth_token = json.load(f)['default']
 
-    username_suffixes = ['-test', '-standard', '-full']
-    potential_usernames = [dataset + suffix for suffix in username_suffixes]
-
+    hail_auth_token = _get_hail_auth_token()
+    potential_usernames = _get_standard_hail_account_names(dataset)
     # check if it exists
     usernames = []
     for username in potential_usernames:
@@ -417,17 +495,14 @@ def create_stack(
     """
     Generate Pulumi.{dataset}.yaml pulumi stack file, with required params
     """
-    if os.path.exists(pulumi_config_fn):
-        if not click.confirm(
-            'The pulumi stack file already existed, do you want to recreate it?'
-        ):
-            return
 
     branch_name = f'add-{dataset}-stack'
     if should_commit:
-        current_branch = subprocess.check_output(
-            ['git', 'rev-parse', '--abbrev-ref', 'HEAD']
-        ).decode()
+        current_branch = (
+            subprocess.check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD'])
+            .decode()
+            .strip()
+        )
         if current_branch != 'main':
             should_continue = click.confirm(
                 f'Expected branch to be "main", got "{current_branch}". '
@@ -454,13 +529,36 @@ def create_stack(
         'config': {
             'datasets:archive_age': '90',
             'datasets:customer_id': 'C010ys3gt',
-            'datasets:enable_release': create_release_buckets,
+            # kludge: this makes the comparison with on disk yaml happier
+            'datasets:enable_release': str(create_release_buckets).lower(),
             'gcp:billing_project': gcp_project,
             'gcp:project': gcp_project,
             'gcp:user_project_override': 'true',
             **formed_hail_config,
         },
     }
+
+    if os.path.exists(pulumi_config_fn):
+
+        with open(pulumi_config_fn, 'r', encoding='utf-8') as fp:
+            existing_config = yaml.load(fp, Loader=yaml.FullLoader)
+
+            config_a = pulumi_stack['config']
+            config_b = existing_config['config']
+            keys_to_check = set(list(config_a.keys()) + list(config_b.keys()))
+            mismatched_keys = [
+                k for k in keys_to_check if config_a.get(k) != config_b.get(k)
+            ]
+
+            if not mismatched_keys:
+                return
+
+            warning = " | ".join(
+                f'{k}: {config_a.get(k)} != {config_b.get(k)}' for k in mismatched_keys
+            )
+            message = f'The pulumi stack file already exists and is not identical ({warning}), do you want to recreate it?'
+            if not click.confirm(message):
+                return
 
     with open(pulumi_config_fn, 'w+', encoding='utf-8') as fp:
         logging.info(f'Writing to {pulumi_config_fn}')
@@ -550,7 +648,7 @@ def add_dataset_to_tokens(dataset: str):
     if dataset in d:
         # It's already there!
         return False
-    d[dataset] = ['sample-metadata']
+    d[dataset] = []
 
     with open('../tokens/repository-map.json', 'w+', encoding='utf-8') as f:
         json.dump(d, f, indent=4, sort_keys=True)
