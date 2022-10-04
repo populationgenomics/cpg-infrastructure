@@ -1,4 +1,4 @@
-# pylint: disable=missing-class-docstring, missing-function-docstring
+# pylint: disable=missing-class-docstring, missing-function-docstring,too-many-public-methods
 """
 Azure implementation for abstract infrastructure
 """
@@ -19,8 +19,8 @@ from cpg_infra.abstraction.base import (
     SecretMembership,
 )
 
-AZURE_BILLING_START_DATE = "2017-06-01T00:00:00Z"
-AZURE_BILLING_EXPIRY_DATE = "3141-25-09T00:00:00Z"
+AZURE_BILLING_START_DATE = '2017-06-01T00:00:00Z'
+AZURE_BILLING_EXPIRY_DATE = '3141-25-09T00:00:00Z'
 
 
 class AzureInfra(CloudInfraBase):
@@ -61,8 +61,8 @@ class AzureInfra(CloudInfraBase):
             self._storage_account_name,
             resource_group_name=self.resource_group.name,
             location=self.region,
-            kind="StorageV2",
-            sku=az.storage.SkuArgs(name="Standard_LRS"),
+            kind='StorageV2',
+            sku=az.storage.SkuArgs(name='Standard_LRS'),
         )
 
     def _create_management_policy(self):
@@ -75,9 +75,6 @@ class AzureInfra(CloudInfraBase):
             ),
             management_policy_name='default',
         )
-
-    def _sanatize(self, name):
-        return ''.join(word.title() for word in name.split('-'))
 
     def create_project(self, name):
         # TODO: re-work creating shared projects in Azure
@@ -110,8 +107,8 @@ class AzureInfra(CloudInfraBase):
             resource_key,
             budget_name=f'{project.name}-budget',
             amount=budget,
-            category="Cost",
-            scope=f"/subscriptions/{self.subscription}/",
+            category='Cost',
+            scope=f'/subscriptions/{self.subscription}/',
             budget_filter=filters,
             **kwargs,
         )
@@ -128,8 +125,8 @@ class AzureInfra(CloudInfraBase):
             and_=[
                 az.consumption.BudgetFilterPropertiesArgs(
                     dimensions=az.consumption.BudgetComparisonExpressionArgs(
-                        name="ResourceId",
-                        operator="In",
+                        name='ResourceId',
+                        operator='In',
                         values=[project.id],
                     ),
                 )
@@ -154,8 +151,8 @@ class AzureInfra(CloudInfraBase):
             and_=[
                 az.consumption.BudgetFilterPropertiesArgs(
                     dimensions=az.consumption.BudgetComparisonExpressionArgs(
-                        name="ResourceId",
-                        operator="In",
+                        name='ResourceId',
+                        operator='In',
                         values=[project.id],
                     ),
                 )
@@ -190,7 +187,6 @@ class AzureInfra(CloudInfraBase):
     def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
         if not self._undelete(days):
             self._undelete(days)
-        return None
 
     def bucket_rule_archive(self, days=ARCHIVE_PERIOD_IN_DAYS) -> Any:
         # TODO: Remove filters here on account of it being applied consistently in create_bucket function
@@ -206,8 +202,8 @@ class AzureInfra(CloudInfraBase):
                     )
                 ),
                 filters=az.storage.ManagementPolicyFilterArgs(
-                    blob_types=["blockBlob"],
-                    prefix_match=["olcmtestcontainer1"],
+                    blob_types=['blockBlob'],
+                    prefix_match=['olcmtestcontainer1'],
                 ),
             ),
         )
@@ -244,7 +240,7 @@ class AzureInfra(CloudInfraBase):
         # So first we modify to filter the rule to apply only to the
         # new bucket
         bucket_filter = az.storage.ManagementPolicyFilterArgs(
-            prefix_match=[name], blob_types=["blockBlob"]
+            prefix_match=[name], blob_types=['blockBlob']
         )
 
         def apply_filter(rule):
@@ -255,7 +251,9 @@ class AzureInfra(CloudInfraBase):
         lifecycle_rules = filter(lambda x: x, lifecycle_rules)
         lifecycle_rules = list(map(apply_filter, lifecycle_rules))
 
-        blob = az.storage.BlobContainer(
+        self.storage_account_lifecycle_rules.extend(lifecycle_rules)
+
+        return az.storage.BlobContainer(
             f'{name}',
             account_name=self.storage_account.name,
             resource_group_name=project or self.resource_group.name,
@@ -264,8 +262,6 @@ class AzureInfra(CloudInfraBase):
             public_access=az.storage.PublicAccess.BLOB,
             # TODO: work out requester_pays in Azure
         )
-
-        self.storage_account_lifecycle_rules.extend(lifecycle_rules)
 
     def add_member_to_bucket(
         self, resource_key: str, bucket, member, membership
@@ -289,7 +285,7 @@ class AzureInfra(CloudInfraBase):
         )
 
     def add_member_to_machine_account_access(
-        self, resource_key: str, machine_account, member
+        self, resource_key: str, machine_account, member, project: str = None
     ) -> Any:
         pass
 
@@ -297,7 +293,6 @@ class AzureInfra(CloudInfraBase):
         pass
 
     def create_group(self, name: str) -> Any:
-        mail = f'@{name}populationgenomics.org.au'
         return azuread.Group(
             name,
             display_name=name,

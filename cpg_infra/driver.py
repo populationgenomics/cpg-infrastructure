@@ -1246,11 +1246,12 @@ class CpgDatasetInfrastructure:
 
         dependencies = self.dataset_config.depends_on
 
+        # TODO: Fix adding reference project as a dependency
         # if self.dataset_config.dataset != self.config.reference_dataset:
         #     dependencies.append(self.config.reference_dataset)
 
         for access_level, primary_access_group in self.access_level_groups.items():
-            for dependency in self.dataset_config.depends_on:
+            for dependency in dependencies:
                 dependency_group_id = self.get_pulumi_stack(dependency).get_output(
                     self.get_group_output_name(dataset=dependency, kind=access_level),
                 )

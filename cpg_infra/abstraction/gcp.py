@@ -1,11 +1,11 @@
-# pylint: disable=missing-class-docstring,missing-function-docstring,too-many-public-methods
+# pylint: disable=missing-class-docstring,missing-function-docstring,too-many-public-methods,no-self-use
 """
 GCP implementation for abstract infrastructure
 """
 import base64
 from datetime import date
 from functools import cached_property
-from typing import Any
+from typing import Any, Callable
 
 import pulumi
 import pulumi_gcp as gcp
@@ -453,6 +453,7 @@ class GcpInfrastructure(CloudInfraBase):
         resource_key: str,
         secret: Any,
         contents: Any,
+        processor: Callable[[Any], Any] = None,
     ):
         return gcp.secretmanager.SecretVersion(
             resource_key, secret=secret.id, secret_data=contents
