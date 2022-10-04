@@ -5,7 +5,7 @@ Azure implementation for abstract infrastructure
 from datetime import date
 
 from typing import Any, Callable
-from functools import lru_cache, cached_property
+from functools import cached_property
 
 import pulumi_azure_native as az
 import pulumi_azuread as azuread
