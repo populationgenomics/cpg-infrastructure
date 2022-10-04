@@ -5,7 +5,7 @@ GCP implementation for abstract infrastructure
 import base64
 from datetime import date
 from functools import cached_property
-from typing import Any, Callable
+from typing import Any
 
 import pulumi
 import pulumi_gcp as gcp

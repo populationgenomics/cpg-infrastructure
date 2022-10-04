@@ -4,7 +4,7 @@ Azure implementation for abstract infrastructure
 """
 from datetime import date
 
-from typing import Any, Callable
+from typing import Any
 from functools import cached_property
 
 import pulumi_azure_native as az
