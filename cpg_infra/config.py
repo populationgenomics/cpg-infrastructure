@@ -152,7 +152,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     reference_dataset: str
 
     gcp: GCP | None
-    azure: Azure | None
+    # azure: Azure | None
     hail: Hail | None
     analysis_runner: AnalysisRunner | None
     web_service: WebService

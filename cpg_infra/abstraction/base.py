@@ -76,6 +76,10 @@ class CloudInfraBase(ABC):
             CPGDatasetComponents.default_component_for_infrastructure()[self.name()],
         )
 
+    @abstractmethod
+    def finalise(self):
+        pass
+
     @staticmethod
     @abstractmethod
     def name():
@@ -183,6 +187,7 @@ class CloudInfraBase(ABC):
         """
         Create a GROUP, which is a proxy for a number of members
         """
+        pass
 
     @abstractmethod
     def add_group_member(self, resource_key: str, group, member) -> Any:

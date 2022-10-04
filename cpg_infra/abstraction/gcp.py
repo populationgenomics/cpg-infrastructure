@@ -66,6 +66,9 @@ class GcpInfrastructure(CloudInfraBase):
             ),
         )
 
+    def finalise(self):
+        pass
+
     def get_dataset_project_id(self):
         return self.project_id
 

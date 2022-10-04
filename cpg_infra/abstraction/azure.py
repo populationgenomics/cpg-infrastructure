@@ -33,6 +33,13 @@ class AzureInfra(CloudInfraBase):
         self.prefix = config.dataset_storage_prefix
         self._resource_group_name = f'{config.dataset_storage_prefix}{self.dataset}'
         self._storage_account_name = f'{config.dataset_storage_prefix}{self.dataset}'
+        self.storage_account_lifecycle_rules = []
+
+    def finalise(self):
+        """The azure storage account has a single management policy, and all the
+        lifecycle rules need to be applied at once"""
+
+        self._create_management_policy()
 
     @staticmethod
     def name():
@@ -43,16 +50,9 @@ class AzureInfra(CloudInfraBase):
 
     @cached_property
     def resource_group(self):
-        # management_group = azure_native.management.ManagementGroup("managementGroup",
-        #     details=azure_native.management.CreateManagementGroupDetailsArgs(
-        #         parent=azure_native.management.CreateParentGroupInfoArgs(
-        #             id="/providers/Microsoft.Management/managementGroups/RootGroup",
-        #         ),
-        #     ),
-        #     display_name="ChildGroup",
-        #     group_id="ChildGroup")
         return az.resources.ResourceGroup(
-            self._resource_group_name, location=self.region,
+            self._resource_group_name,
+            location=self.region,
         )
 
     @cached_property
@@ -63,6 +63,17 @@ class AzureInfra(CloudInfraBase):
             location=self.region,
             kind="StorageV2",
             sku=az.storage.SkuArgs(name="Standard_LRS"),
+        )
+
+    def _create_management_policy(self):
+        return az.storage.ManagementPolicy(
+            f'{self.storage_account.name}-management-policy',
+            account_name=self.storage_account.name,
+            resource_group_name=self.resource_group.name,
+            policy=az.storage.ManagementPolicySchemaArgs(
+                rules=self.storage_account_lifecycle_rules,
+            ),
+            management_policy_name='default',
         )
 
     def _sanatize(self, name):
@@ -182,9 +193,10 @@ class AzureInfra(CloudInfraBase):
         return None
 
     def bucket_rule_archive(self, days=ARCHIVE_PERIOD_IN_DAYS) -> Any:
+        # TODO: Remove filters here on account of it being applied consistently in create_bucket function
         return az.storage.ManagementPolicyRuleArgs(
             name='bucket-rule-archive',
-            type='LifeCycle',
+            type='Lifecycle',
             definition=az.storage.ManagementPolicyDefinitionArgs(
                 actions=az.storage.ManagementPolicyActionArgs(
                     base_blob=az.storage.ManagementPolicyBaseBlobArgs(
@@ -192,14 +204,18 @@ class AzureInfra(CloudInfraBase):
                             days_after_modification_greater_than=days,
                         )
                     )
-                )
+                ),
+                filters=az.storage.ManagementPolicyFilterArgs(
+                    blob_types=["blockBlob"],
+                    prefix_match=["olcmtestcontainer1"],
+                ),
             ),
         )
 
     def bucket_rule_temporary(self, days=TMP_BUCKET_PERIOD_IN_DAYS) -> Any:
         return az.storage.ManagementPolicyRuleArgs(
             name='bucket-rule-tmp',
-            type='LifeCycle',
+            type='Lifecycle',
             definition=az.storage.ManagementPolicyDefinitionArgs(
                 actions=az.storage.ManagementPolicyActionArgs(
                     base_blob=az.storage.ManagementPolicyBaseBlobArgs(
@@ -233,6 +249,7 @@ class AzureInfra(CloudInfraBase):
 
         def apply_filter(rule):
             rule.definition.filters = bucket_filter
+            rule.name = f'{name}-{rule.name}'
             return rule
 
         lifecycle_rules = filter(lambda x: x, lifecycle_rules)
@@ -248,13 +265,7 @@ class AzureInfra(CloudInfraBase):
             # TODO: work out requester_pays in Azure
         )
 
-        # Set storage account versioning and lifecycle rules
-        az.storage.ManagementPolicy(
-            f'{name}-management-policy',
-            account_name=self.storage_account.name,
-            resource_group_name=self.resource_group.name,
-            policy=az.storage.ManagementPolicySchemaArgs(rules=lifecycle_rules),
-        )
+        self.storage_account_lifecycle_rules.extend(lifecycle_rules)
 
     def add_member_to_bucket(
         self, resource_key: str, bucket, member, membership

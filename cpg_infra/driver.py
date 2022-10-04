@@ -133,6 +133,8 @@ class CpgDatasetInfrastructure:
 
         self.setup_group_cache()
 
+        self.infra.finalise()
+
     # region MACHINE ACCOUNTS
 
     @cached_property
