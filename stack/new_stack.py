@@ -61,6 +61,7 @@ HAIL_PROJECT = 'hail-295901'
 HAIL_AUTH_URL = 'https://auth.hail.populationgenomics.org.au'
 HAIL_CREATE_USER_PATH = HAIL_AUTH_URL + '/api/v1alpha/users/{username}/create'
 HAIL_GET_USER_PATH = HAIL_AUTH_URL + '/api/v1alpha/users/{username}'
+TIMEOUT = 5000
 
 logging.basicConfig(level=logging.INFO)
 
@@ -327,8 +328,7 @@ def _kubectl_hail_token_command(project, access_level: str):
 def _check_if_hail_account_exists(username, hail_auth_token):
     url = HAIL_GET_USER_PATH.format(username=username)
     resp = requests.get(
-        url,
-        headers={'Authorization': f'Bearer {hail_auth_token}'},
+        url, headers={'Authorization': f'Bearer {hail_auth_token}'}, timeout=TIMEOUT
     )
 
     if resp.status_code == 404:
@@ -344,8 +344,7 @@ def _check_if_hail_account_is_active(username, hail_auth_token) -> bool:
 
     url = HAIL_GET_USER_PATH.format(username=username)
     resp = requests.get(
-        url,
-        headers={'Authorization': f'Bearer {hail_auth_token}'},
+        url, headers={'Authorization': f'Bearer {hail_auth_token}'}, timeout=TIMEOUT
     )
 
     if not resp.ok:
@@ -368,6 +367,7 @@ def _create_hail_service_account(username, hail_auth_token):
                 'is_service_account': True,
             }
         ),
+        timeout=TIMEOUT,
     )
     post_resp.raise_for_status()
 

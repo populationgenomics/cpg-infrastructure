@@ -1,4 +1,4 @@
-# pylint: disable=missing-class-docstring,missing-function-docstring,too-many-public-methods,no-self-use
+# pylint: disable=missing-class-docstring,missing-function-docstring,too-many-public-methods
 """
 GCP implementation for abstract infrastructure
 """
