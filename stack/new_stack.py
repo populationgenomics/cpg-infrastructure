@@ -53,6 +53,7 @@ from sample_metadata.apis import ProjectApi
 TRUTHY_VALUES = ('y', '1', 't')
 DATASET_REGEX = r'^[a-z][a-z0-9-]{1,15}[a-z]$'
 GCP_PROJECT_REGEX = r'^[a-z0-9-_]{6,30}$'
+TIMEOUT = 10    # seconds
 
 ORGANIZATION_ID = '648561325637'
 BILLING_ACCOUNT_ID = '01D012-20A6A2-CBD343'
@@ -357,6 +358,7 @@ def setup_hail_batch_billing_project(project: str):
     resp = requests.get(
         url,
         headers={'Authorization': f'Bearer {hail_auth_token}'},
+        timeout=TIMEOUT
     )
 
     usernames_already_in_project = set()
@@ -377,6 +379,7 @@ def _hail_batch_create_billing_project(project, hail_auth_token):
     resp = requests.post(
         url,
         headers={'Authorization': f'Bearer {hail_auth_token}'},
+        timeout=TIMEOUT
     )
     resp.raise_for_status()
 
@@ -388,6 +391,7 @@ def _hail_batch_add_user_to_billing_project(billing_project, username, hail_auth
     resp = requests.post(
         url,
         headers={'Authorization': f'Bearer {hail_auth_token}'},
+        timeout=TIMEOUT
     )
     resp.raise_for_status()
 
@@ -401,6 +405,7 @@ def _check_if_hail_account_exists(username, hail_auth_token):
     resp = requests.get(
         url,
         headers={'Authorization': f'Bearer {hail_auth_token}'},
+        timeout=TIMEOUT
     )
 
     if resp.status_code == 404:
@@ -418,6 +423,7 @@ def _check_if_hail_account_is_active(username, hail_auth_token) -> bool:
     resp = requests.get(
         url,
         headers={'Authorization': f'Bearer {hail_auth_token}'},
+        timeout=TIMEOUT
     )
 
     if not resp.ok:
@@ -440,6 +446,7 @@ def _create_hail_service_account(username, hail_auth_token):
                 'is_service_account': True,
             }
         ),
+        timeout=TIMEOUT
     )
     post_resp.raise_for_status()
 
