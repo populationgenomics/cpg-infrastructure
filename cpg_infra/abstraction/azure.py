@@ -34,12 +34,15 @@ class AzureInfra(CloudInfraBase):
         self._resource_group_name = f'{config.dataset_storage_prefix}{self.dataset}'
         self._storage_account_name = f'{config.dataset_storage_prefix}{self.dataset}'
         self.storage_account_lifecycle_rules = []
+        self.storage_account_undelete_rule = False
 
     def finalise(self):
         """The azure storage account has a single management policy, and all the
         lifecycle rules need to be applied at once"""
 
         self._create_management_policy()
+        if self.storage_account_undelete_rule:
+            self._undelete()
 
     @staticmethod
     def name():
@@ -172,7 +175,6 @@ class AzureInfra(CloudInfraBase):
             ),
         )
 
-    @lru_cache
     def _undelete(self, days=UNDELETE_PERIOD_IN_DAYS):
         az.storage.BlobServiceProperties(
             f'{self.storage_account.name}-{days}day-undelete-rule',
@@ -185,8 +187,7 @@ class AzureInfra(CloudInfraBase):
         )
 
     def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
-        if not self._undelete(days):
-            self._undelete(days)
+        self.storage_account_undelete_rule = True
 
     def bucket_rule_archive(self, days=ARCHIVE_PERIOD_IN_DAYS) -> Any:
         # TODO: Remove filters here on account of it being applied consistently in create_bucket function
