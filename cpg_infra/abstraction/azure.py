@@ -7,6 +7,7 @@ from datetime import date
 from typing import Any
 from functools import cached_property
 
+from pulumi import Output
 import pulumi_azure_native as az
 import pulumi_azuread as azuread
 
@@ -36,7 +37,10 @@ class AzureInfra(CloudInfraBase):
         self._storage_account_name = f'{self.prefix}{self.dataset}'
         self.storage_account_lifecycle_rules = []
         self.storage_account_undelete_rule = None
-        self.subscription = az.authorization.GetClientConfigResult.subscription_id
+        
+        data = az.authorization.get_client_config()
+        self.subscription = '/subscriptions/' + data.subscription_id
+        self.tenant = data.tenant_id
 
     def finalise(self):
         """The azure storage account has a single management policy, and all the
@@ -113,7 +117,7 @@ class AzureInfra(CloudInfraBase):
             budget_name=f'{project.name}-budget',
             amount=budget,
             category='Cost',
-            scope=f'/subscriptions/{self.subscription}/',
+            scope=self.subscription,
             budget_filter=filters,
             **kwargs,
         )
@@ -274,34 +278,29 @@ class AzureInfra(CloudInfraBase):
         )
 
     def bucket_membership_to_role(self, membership: BucketMembership):
-        if membership == BucketMembership.MUTATE:
-            return f'/subscriptions/{self.subscription}/providers/Microsoft.Authorization/roleDefinitions/0b5fe924-9a61-425c-96af-cfe6e287ca2d'
-        if membership == BucketMembership.APPEND:
-            return f'/subscriptions/{self.subscription}/providers/Microsoft.Authorization/roleDefinitions/0b5fe924-9a61-425c-96af-cfe6e287ca2d'
+        if membership == BucketMembership.MUTATE or membership == BucketMembership.APPEND:
+            return f'{self.subscription}/providers/Microsoft.Authorization/roleDefinitions/ba92f5b4-2d11-453d-a403-e96b0029c9fe'
         if membership == BucketMembership.READ or BucketMembership.LIST:
-            return f'/subscriptions/{self.subscription}/providers/Microsoft.Authorization/roleDefinitions/0b5fe924-9a61-425c-96af-cfe6e287ca2d'
+            return f'{self.subscription}/providers/Microsoft.Authorization/roleDefinitions/2a2b9908-6ea1-4ae2-8e65-a410df84e7d1'
 
         raise ValueError(f'Unrecognised bucket membership type {membership}')
 
     def add_member_to_bucket(
         self, resource_key: str, bucket, member, membership
     ) -> Any:
-        resource_provider_namespace = 'Microsoft.Storage'
-        parent_resource_path = 'storageAccounts'
-        resource_type = 'Microsoft.ContainerInstance'
-        # TODO: Fix this.
-        scope = (
-            f'/subscriptions/{self.subscription}/resourceGroups/{self.resource_group.name}'
-            f'/providers/{resource_provider_namespace}/{parent_resource_path}/'
-            f'{self.storage_account.name}/{resource_type}/{bucket}'
-        )
+        if hasattr(member, 'principal_id'):
+            principal_type = 'ServicePrincipal'
+        elif isinstance(member, azuread.group.Group):
+            principal_type = 'Group' 
+        else:
+            principal_type = 'User'
 
-        principal_type = 'User' if 'User' in str(type(member)) else 'Group'
+        pid = member.principal_id if hasattr(member, 'principal_id') else member.id
 
         return az.authorization.RoleAssignment(
             resource_key,
-            scope=scope,
-            principal_id=member,
+            scope=bucket.id,
+            principal_id=pid,
             principal_type=principal_type,
             role_definition_id=self.bucket_membership_to_role(membership),
         )
@@ -309,10 +308,10 @@ class AzureInfra(CloudInfraBase):
     def create_machine_account(
         self, name: str, project: str = None, *, resource_key: str = None
     ) -> Any:
-        # Ignore project, not relevent for AzureAD
-        return azuread.Application(
+        return az.managedidentity.UserAssignedIdentity(
             resource_key or f'service-account-{name}',
-            display_name=f'{self.dataset}-{name}',
+            location=self.region,
+            resource_group_name=self.resource_group.name,
         )
 
     def add_member_to_machine_account_access(

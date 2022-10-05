@@ -8,8 +8,8 @@ from typing import Type, Any, Iterator, Iterable
 from collections import defaultdict, namedtuple
 from functools import lru_cache, cached_property
 
-import cpg_utils.config
 import pulumi
+import cpg_utils.config
 
 from cpg_infra.abstraction.azure import AzureInfra
 from cpg_infra.abstraction.gcp import GcpInfrastructure
@@ -401,12 +401,13 @@ class CpgDatasetInfrastructure:
         )
 
         # web-server
-        self.infra.add_member_to_bucket(
-            'web-server-main-web-bucket-viewer',
-            self.main_web_bucket,
-            self.config.web_service.gcp.server_machine_account,  # WEB_SERVER_SERVICE_ACCOUNT,
-            BucketMembership.READ,
-        )
+        if not isinstance(self.infra, AzureInfra):
+            self.infra.add_member_to_bucket(
+                'web-server-main-web-bucket-viewer',
+                self.main_web_bucket,
+                self.config.web_service.gcp.server_machine_account,  # WEB_SERVER_SERVICE_ACCOUNT,
+                BucketMembership.READ,
+            )
 
         self.infra.add_member_to_bucket(
             'standard-main-web-bucket-view-create',
@@ -537,12 +538,13 @@ class CpgDatasetInfrastructure:
                 )
 
         # give web-server access to test-bucket
-        self.infra.add_member_to_bucket(
-            'web-server-test-web-bucket-viewer',
-            bucket=self.test_web_bucket,
-            member=self.config.web_service.gcp.server_machine_account,  # WEB_SERVER_SERVICE_ACCOUNT,
-            membership=BucketMembership.READ,
-        )
+        if not isinstance(self.infra, AzureInfra):
+            self.infra.add_member_to_bucket(
+                'web-server-test-web-bucket-viewer',
+                bucket=self.test_web_bucket,
+                member=self.config.web_service.gcp.server_machine_account,  # WEB_SERVER_SERVICE_ACCOUNT,
+                membership=BucketMembership.READ,
+            )
 
     @cached_property
     def test_bucket(self):
@@ -1228,13 +1230,14 @@ class CpgDatasetInfrastructure:
             **self.access_level_groups,
         }
 
-        for kind, group in kinds.items():
-            self.infra.add_member_to_bucket(
-                f'{kind}-reference-bucket-viewer',
-                bucket=self.config.gcp.reference_bucket_name,  # REFERENCE_BUCKET_NAME,
-                member=group,
-                membership=BucketMembership.READ,
-            )
+        if isinstance(self.infra, GcpInfrastructure):
+            for kind, group in kinds.items():
+                self.infra.add_member_to_bucket(
+                    f'{kind}-reference-bucket-viewer',
+                    bucket=self.config.gcp.reference_bucket_name,  # REFERENCE_BUCKET_NAME,
+                    member=group,
+                    membership=BucketMembership.READ,
+                )
 
     # endregion REFERENCE
     # region DEPENDENCIES
