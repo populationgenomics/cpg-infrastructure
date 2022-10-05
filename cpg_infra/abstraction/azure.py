@@ -7,7 +7,6 @@ from datetime import date
 from typing import Any
 from functools import cached_property
 
-from pulumi import Output
 import pulumi_azure_native as az
 import pulumi_azuread as azuread
 
@@ -37,7 +36,7 @@ class AzureInfra(CloudInfraBase):
         self._storage_account_name = f'{self.prefix}{self.dataset}'
         self.storage_account_lifecycle_rules = []
         self.storage_account_undelete_rule = None
-        
+
         data = az.authorization.get_client_config()
         self.subscription = '/subscriptions/' + data.subscription_id
         self.tenant = data.tenant_id
@@ -278,9 +277,9 @@ class AzureInfra(CloudInfraBase):
         )
 
     def bucket_membership_to_role(self, membership: BucketMembership):
-        if membership == BucketMembership.MUTATE or membership == BucketMembership.APPEND:
+        if membership in (BucketMembership.MUTATE, BucketMembership.APPEND):
             return f'{self.subscription}/providers/Microsoft.Authorization/roleDefinitions/ba92f5b4-2d11-453d-a403-e96b0029c9fe'
-        if membership == BucketMembership.READ or BucketMembership.LIST:
+        if membership in (BucketMembership.READ, BucketMembership.LIST):
             return f'{self.subscription}/providers/Microsoft.Authorization/roleDefinitions/2a2b9908-6ea1-4ae2-8e65-a410df84e7d1'
 
         raise ValueError(f'Unrecognised bucket membership type {membership}')
@@ -291,7 +290,7 @@ class AzureInfra(CloudInfraBase):
         if hasattr(member, 'principal_id'):
             principal_type = 'ServicePrincipal'
         elif isinstance(member, azuread.group.Group):
-            principal_type = 'Group' 
+            principal_type = 'Group'
         else:
             principal_type = 'User'
 
