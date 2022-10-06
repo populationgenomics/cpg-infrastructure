@@ -9,6 +9,7 @@ import dataclasses
 from enum import Enum
 from types import UnionType
 import toml
+from typing import get_origin, get_args
 
 
 # If we serialize the pulumi configurations + any other TOMLs
@@ -33,7 +34,7 @@ class DeserializableDataclass:
             # handle unions (eg: None | DType)
             if isinstance(ftype, UnionType):
                 is_already_correct_type = False
-                for dtype in ftype.__args__:
+                for dtype in get_args(ftype):
                     if dtype and issubclass(dtype, DeserializableDataclass):
                         # It's a DeserializableDataclass :)
                         dtypes.append(dtype)
@@ -256,17 +257,54 @@ class CPGDatasetConfig(DeserializableDataclass):
         fields = {field.name: field.type for field in dataclasses.fields(cls)}
         d = {**kwargs}
         for fieldname, ftype in fields.items():
-
-            if any(str(ftype).startswith(ext + '[') for ext in ('list', 'dict')):
-                value = config.get_object(fieldname)
-            elif ftype == bool:
-                value = config.get_bool(fieldname)
-            else:
-                value = config.get(fieldname)
-                if value:
-                    value = ftype(value)
-
+            value = parse_value_from_type(config, fieldname, ftype)
             if value:
                 d[fieldname] = value
 
         return cls(**d)
+
+
+def parse_value_from_type(config, fieldname, ftype):
+    if ftype is None:
+        return None
+    if ftype in (list, dict) or get_origin(ftype) in (list, dict):
+        ftype_type = ftype if ftype in (list, dict) else get_origin(ftype)
+        value = config.get_object(fieldname)
+
+        if value and type(value) == ftype_type:
+            return value
+        elif value:
+            print(f'{fieldname} :: {value} ({type(value)}) was parsed, but was not of type {ftype}')
+
+        return None
+
+    if isinstance(ftype, UnionType) == UnionType:
+        for inner_type in get_args(ftype):
+            value = parse_value_from_type(config, fieldname, inner_type)
+            if value:
+                return value
+
+        return None
+
+    if ftype == bool:
+        return config.get_bool(fieldname)
+
+    value = config.get(fieldname)
+    if value is None:
+        return value
+
+    inner_types = get_args(ftype)
+    if inner_types:
+        for inner_type in inner_types:
+            value = parse_value_from_type(config, fieldname, inner_type)
+            if value:
+                return value
+    else:
+        try:
+            value = ftype(value)
+            if value:
+                return value
+        except (ValueError, TypeError):
+            return None
+
+    return None
