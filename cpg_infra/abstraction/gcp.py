@@ -132,7 +132,9 @@ class GcpInfrastructure(CloudInfraBase):
             project_id=name,
             name=name,
             billing_account=self.config.gcp.billing_account_id,
-            opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudbilling]),
+            opts=pulumi.resource.ResourceOptions(
+                depends_on=[self._svc_cloudbilling], protect=True
+            ),
         )
 
     def create_budget(self, resource_key: str, *, project, budget: int, budget_filter):
@@ -350,6 +352,10 @@ class GcpInfrastructure(CloudInfraBase):
     def create_machine_account(
         self, name: str, project: str = None, *, resource_key: str = None
     ) -> Any:
+
+        if project and isinstance(project, gcp.organizations.Project):
+            project = project.project_id
+
         return gcp.serviceaccount.Account(
             resource_key or f'service-account-{name}',
             account_id=name,

@@ -184,9 +184,7 @@ class CpgDatasetInfrastructure:
             'standard': self.dataset_config.deployment_service_account_standard,
             'full': self.dataset_config.deployment_service_account_full,
         }
-        if any(ac is None for ac in accounts.values()):
-            return {}
-        return accounts
+        return {k: v for k, v in accounts.items() if v}
 
     # endregion MACHINE ACCOUNTS
     # region ACCESS GROUPS
@@ -604,6 +602,7 @@ class CpgDatasetInfrastructure:
         return self.infra.create_bucket(
             'release',
             lifecycle_rules=[self.infra.bucket_rule_undelete()],
+            requester_pays=True,
         )
 
     # endregion RELEASE BUCKETS
@@ -1099,6 +1098,7 @@ class CpgDatasetInfrastructure:
         shared_ma = self.infra.create_machine_account(
             'shared',
             project=shared_project,
+            resource_key='budget-shared-service-account',
         )
 
         if isinstance(self.infra, GcpInfrastructure):
@@ -1107,6 +1107,7 @@ class CpgDatasetInfrastructure:
                 'shared-project-serviceusage-consumer',
                 role='roles/serviceusage.serviceUsageConsumer',
                 member=shared_ma,
+                project=shared_project,
             )
 
         for bname, bucket in shared_buckets.items():

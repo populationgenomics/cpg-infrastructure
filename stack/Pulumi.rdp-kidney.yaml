@@ -3,9 +3,9 @@ config:
   datasets:archive_age: "90"
   datasets:customer_id: C010ys3gt
   datasets:enable_release: "false"
-  datasets:hail_service_account_full: rdp-kidney-full-872@hail-295901.iam.gserviceaccount.com
-  datasets:hail_service_account_standard: rdp-kidney-standard-302@hail-295901.iam.gserviceaccount.com
-  datasets:hail_service_account_test: rdp-kidney-test-527@hail-295901.iam.gserviceaccount.com
+  datasets:gcp_hail_service_account_full: rdp-kidney-full-872@hail-295901.iam.gserviceaccount.com
+  datasets:gcp_hail_service_account_standard: rdp-kidney-standard-302@hail-295901.iam.gserviceaccount.com
+  datasets:gcp_hail_service_account_test: rdp-kidney-test-527@hail-295901.iam.gserviceaccount.com
   gcp:billing_project: rdp-kidney
   gcp:project: rdp-kidney
   gcp:user_project_override: "true"

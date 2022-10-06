@@ -22,8 +22,12 @@ for filename in glob.glob('Pulumi.*.yaml'):
 
 deps['reference'] = list(set(deps.keys()) - {'reference'})
 
-env = dict(os.environ, PULUMI_CONFIG_PASSPHRASE=get_pulumi_config_passphrase())
+env = dict(
+    os.environ,
+    PULUMI_CONFIG_PASSPHRASE=get_pulumi_config_passphrase(),
+    CPG_CONFIG_PATH=os.path.abspath('cpg.toml'),
+)
+
 for dataset in graphlib.TopologicalSorter(deps).static_order():
     print(f'Updating {dataset}...')
-    subprocess.check_call(['pulumi', 'stack', 'select', dataset], env=env)
-    subprocess.check_call(['pulumi', 'up', '-y'], env=env)
+    subprocess.check_call(['pulumi', 'up', '--stack', dataset, '-y'], env=env)
