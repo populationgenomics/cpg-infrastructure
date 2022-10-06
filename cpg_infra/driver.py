@@ -1248,9 +1248,17 @@ class CpgDatasetInfrastructure:
         if self.dataset_config.dataset != self.config.reference_dataset:
             dependencies.append(self.config.reference_dataset)
 
-        for access_level, primary_access_group in self.access_level_groups.items():
-            for dependency in dependencies:
-                dependency_group_id = self.get_pulumi_stack(dependency).get_output(
+        for dependency in dependencies:
+            dependent_stack = self.get_pulumi_stack(dependency)
+
+            self.infra.add_group_member(
+                f'{dependency}-access-group',
+                dependent_stack.get_output(self.get_group_output_name(dataset=dependency, kind='access')),
+                self.access_group
+            )
+
+            for access_level, primary_access_group in self.access_level_groups.items():
+                dependency_group_id = dependent_stack.get_output(
                     self.get_group_output_name(dataset=dependency, kind=access_level),
                 )
 
