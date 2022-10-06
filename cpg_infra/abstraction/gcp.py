@@ -352,6 +352,10 @@ class GcpInfrastructure(CloudInfraBase):
     def create_machine_account(
         self, name: str, project: str = None, *, resource_key: str = None
     ) -> Any:
+
+        if project and isinstance(project, gcp.organizations.Project):
+            project = project.project_id
+
         return gcp.serviceaccount.Account(
             resource_key or f'service-account-{name}',
             account_id=name,
