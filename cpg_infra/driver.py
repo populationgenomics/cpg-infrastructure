@@ -602,7 +602,7 @@ class CpgDatasetInfrastructure:
         return self.infra.create_bucket(
             'release',
             lifecycle_rules=[self.infra.bucket_rule_undelete()],
-            requester_pays=True
+            requester_pays=True,
         )
 
     # endregion RELEASE BUCKETS
@@ -1098,7 +1098,7 @@ class CpgDatasetInfrastructure:
         shared_ma = self.infra.create_machine_account(
             'shared',
             project=shared_project,
-            resource_key='budget-shared-service-account'
+            resource_key='budget-shared-service-account',
         )
 
         if isinstance(self.infra, GcpInfrastructure):

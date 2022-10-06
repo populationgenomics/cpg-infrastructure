@@ -1,4 +1,4 @@
-# pylint: disable=missing-function-docstring,missing-class-docstring,invalid-name
+# pylint: disable=missing-function-docstring,missing-class-docstring,invalid-name,too-many-return-statements
 """
 This module contains all the configuration objects that are used to
 describe the CPG infrastructure, including what's required from a
@@ -8,8 +8,8 @@ specific dataset.
 import dataclasses
 from enum import Enum
 from types import UnionType
-import toml
 from typing import get_origin, get_args
+import toml
 
 
 # If we serialize the pulumi configurations + any other TOMLs
@@ -267,14 +267,17 @@ class CPGDatasetConfig(DeserializableDataclass):
 def parse_value_from_type(config, fieldname, ftype):
     if ftype is None:
         return None
+
     if ftype in (list, dict) or get_origin(ftype) in (list, dict):
         ftype_type = ftype if ftype in (list, dict) else get_origin(ftype)
         value = config.get_object(fieldname)
 
-        if value and type(value) == ftype_type:
+        if value and isinstance(value, ftype_type):
             return value
-        elif value:
-            print(f'{fieldname} :: {value} ({type(value)}) was parsed, but was not of type {ftype}')
+        if value:
+            print(
+                f'{fieldname} :: {value} ({type(value)}) was parsed, but was not of type {ftype}'
+            )
 
         return None
 
@@ -305,6 +308,6 @@ def parse_value_from_type(config, fieldname, ftype):
             if value:
                 return value
         except (ValueError, TypeError):
-            return None
+            pass
 
     return None
