@@ -1253,8 +1253,10 @@ class CpgDatasetInfrastructure:
 
             self.infra.add_group_member(
                 f'{dependency}-access-group',
-                dependent_stack.get_output(self.get_group_output_name(dataset=dependency, kind='access')),
-                self.access_group
+                dependent_stack.get_output(
+                    self.get_group_output_name(dataset=dependency, kind='access')
+                ),
+                self.access_group,
             )
 
             for access_level, primary_access_group in self.access_level_groups.items():
