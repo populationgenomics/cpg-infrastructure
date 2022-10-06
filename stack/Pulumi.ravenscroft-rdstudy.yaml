@@ -4,7 +4,7 @@ config:
   datasets:customer_id: C010ys3gt
   datasets:enable_release: "true"
   datasets:enable_shared_project: "true"
-  datasets:shared_budget: 50
+  datasets:shared_project_budget: 50
   datasets:gcp_hail_service_account_full: ravenscroft-rd-full-143@hail-295901.iam.gserviceaccount.com
   datasets:gcp_hail_service_account_standard: ravenscroft-rd-standard-839@hail-295901.iam.gserviceaccount.com
   datasets:gcp_hail_service_account_test: ravenscroft-rd-test-046@hail-295901.iam.gserviceaccount.com
