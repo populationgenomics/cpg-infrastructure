@@ -132,7 +132,9 @@ class GcpInfrastructure(CloudInfraBase):
             project_id=name,
             name=name,
             billing_account=self.config.gcp.billing_account_id,
-            opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudbilling]),
+            opts=pulumi.resource.ResourceOptions(
+                depends_on=[self._svc_cloudbilling], protect=True
+            ),
         )
 
     def create_budget(self, resource_key: str, *, project, budget: int, budget_filter):
