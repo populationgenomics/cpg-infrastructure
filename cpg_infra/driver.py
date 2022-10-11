@@ -190,6 +190,7 @@ class CpgDatasetInfrastructure:
     # region ACCESS GROUPS
 
     def setup_access_groups(self):
+        self.setup_web_access_group_memberships()
         self.setup_access_level_group_memberships()
         self.setup_dependencies_group_memberships()
         self.setup_access_level_group_outputs()
@@ -216,6 +217,13 @@ class CpgDatasetInfrastructure:
     @staticmethod
     def get_group_output_name(*, dataset: str, kind: str):
         return f'{dataset}-{kind}-group-id'
+
+    def setup_web_access_group_memberships(self):
+        self.infra.add_group_member(
+            'web-access-group-access-group-membership',
+            group=self.web_access_group,
+            member=self.access_group,
+        )
 
     def setup_access_level_group_outputs(self):
 
