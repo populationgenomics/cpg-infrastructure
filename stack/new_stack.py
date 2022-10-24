@@ -27,6 +27,7 @@ import json
 import logging
 import subprocess
 import time
+from enum import Enum
 
 import yaml
 import click
@@ -48,6 +49,10 @@ from google.type.money_pb2 import Money
 from stack_utils import get_pulumi_config_passphrase  # pylint: disable=import-error
 from sample_metadata.apis import ProjectApi
 
+class Cloud(Enum):
+    AZURE = 'azure'
+    GCP = 'gcp'
+
 
 TRUTHY_VALUES = ('y', '1', 't')
 DATASET_REGEX = r'^[a-z][a-z0-9-]{1,15}[a-z]$'
@@ -56,11 +61,18 @@ GCP_PROJECT_REGEX = r'^[a-z0-9-_]{6,30}$'
 ORGANIZATION_ID = '648561325637'
 BILLING_ACCOUNT_ID = '01D012-20A6A2-CBD343'
 BILLING_PROJECT_ID = 'billing-admin-290403'
-HAIL_PROJECT = 'hail-295901'
+GCP_HAIL_PROJECT = 'hail-295901'
 
-HAIL_AUTH_URL = 'https://auth.hail.populationgenomics.org.au'
-HAIL_CREATE_USER_PATH = HAIL_AUTH_URL + '/api/v1alpha/users/{username}/create'
-HAIL_GET_USER_PATH = HAIL_AUTH_URL + '/api/v1alpha/users/{username}'
+AZURE_POPGEN_TENANT = 'a744336e-0ec4-40f1-891f-6c8ccaf8e267'
+AZURE_HAIL_SUBSCRIPTION = '2a974991-7c24-48c2-871f-5f7969a2b0c0'
+
+HAIL_AUTH_URL = {
+    Cloud.GCP: 'https://auth.hail.populationgenomics.org.au',
+    Cloud.AZURE: 'https://auth.azhail.popgen.rocks'
+}
+
+HAIL_CREATE_USER_PATH = '{HAIL_AUTH_URL[cloud.value]}/api/v1alpha/users/{username}/create'
+HAIL_GET_USER_PATH = '{HAIL_AUTH_URL[cloud.value]}/api/v1alpha/users/{username}'
 TIMEOUT = 5000
 
 logging.basicConfig(level=logging.INFO)
@@ -68,59 +80,54 @@ logging.basicConfig(level=logging.INFO)
 
 @click.command()
 @click.option('--dataset')
-@click.option('--gcp-project', required=False, help='If different to the dataset name')
-@click.option('--budget', type=int, help='Monthly budget in whole AUD', default=100)
-@click.option('--add-random-digits-to-gcp-id', required=False, is_flag=True)
-@click.option('--create-release-buckets', required=False, is_flag=True)
-@click.option(
-    '--perform-all',
-    required=False,
-    is_flag=True,
-    help='Set-up GCP project + billing, deploy stack and create SM project',
-)
-@click.option('--create-gcp-project', required=False, is_flag=True)
-@click.option('--setup-gcp-billing', required=False, is_flag=True)
+@click.option('--clouds', help='Cloud platforms to setup stack file for deployment', default=[Cloud.GCP.value], multiple=True, type=click.Choice([e.value for e in Cloud]))
+@click.option('--project-id', required=False, help='If different to the dataset name')
 @click.option('--create-hail-service-accounts', required=False, is_flag=True)
-@click.option('--create-pulumi-stack', required=False, is_flag=True)
-@click.option('--add-to-seqr-stack', required=False, is_flag=True)
+@click.option('--add-as-seqr-dependency', required=False, is_flag=True)
 @click.option('--deploy-stack', required=False, is_flag=True, help='Runs `pulumi up`')
-@click.option('--create-sample-metadata-project', required=False, is_flag=True)
 @click.option('--generate-service-account-key', required=False, is_flag=True)
-@click.option('--no-commit', required=False, is_flag=True)
+@click.option('--add-random-digits-to-gcp-id', required=False, is_flag=True)
+@click.option('--budget', type=list[int], help='Monthly budget in whole AUD, order corresponds to cloud', default=[100])
+@click.option('--create-release-buckets', required=False, is_flag=True)
 def main(
     dataset: str,
-    gcp_project: str = None,
-    budget: int = 100,
-    add_random_digits_to_gcp_id=False,
-    create_release_buckets=False,
-    perform_all=False,
-    create_gcp_project=False,
-    setup_gcp_billing=False,
+    clouds: list[str],
+    project_id: str = None,
     create_hail_service_accounts=False,
-    create_pulumi_stack=False,
-    add_to_seqr_stack=False,
+    add_as_seqr_dependency=False,
     deploy_stack=False,
-    create_sample_metadata_project=False,
     generate_service_account_key=False,
-    no_commit=False,
+    add_random_digits_to_gcp_id=False,
+    budget=[100],
+    create_release_buckets=False,
 ):
     """Function that coordinates creating a project"""
 
-    if perform_all:
-        create_gcp_project = True
-        setup_gcp_billing = True
-        create_hail_service_accounts = True
-        create_pulumi_stack = True
-        create_sample_metadata_project = True
-
+    clouds = [Cloud(c) for c in clouds]
     dataset = dataset.lower()
-    _gcp_project = gcp_project
-    if not gcp_project:
+
+    budgets = {}
+    if len(budget) == len(clouds):
+        budgets = dict(zip(clouds, budget))
+    elif len(budget) == 1:
+        budgets = {c: budget[0] for c in clouds}
+    else:
+        raise ValueError(
+            f'The budget array length must be exactly 1 or exactly len(clouds)'
+        )
+
+
+    # TODO: eventually remove when gcp_project_id not required by Metamist
+    assert Cloud.GCP in clouds
+
+    _gcp_project = project_id
+    _azure_project = dataset
+    if not project_id:
+        project_id = dataset
         suffix = ''
         if add_random_digits_to_gcp_id:
             suffix = '-' + str(random.randint(100000, 999999))
         _gcp_project = dataset + suffix
-    _gcp_project = _gcp_project.lower()
 
     if len(dataset) > 17:
         raise ValueError(
@@ -144,44 +151,40 @@ def main(
         raise Exception(
             f'You should run this in the analysis-runner/stack directory, got {os.getcwd()}'
         )
-
-    logging.info(f'Creating dataset "{dataset}" with GCP id {_gcp_project}.')
+    
+    # TODO: create azure subscription for the resource group
+    az_subscription = None #TODO
+    
+    # TODO: check that the project name is value for azure resource group
 
     if create_hail_service_accounts:
-        create_hail_accounts(dataset)
+        for c in clouds:
+            create_hail_accounts(dataset, cloud=c)
 
-    if create_gcp_project:
+    if Cloud.GCP in clouds:
         # True if created, else False if it already existed
-        created_gcp_project = create_project(project_id=_gcp_project)
+        created_gcp_project = create_gcp_project(project_id=_gcp_project)
         if created_gcp_project:
-            assign_billing_account(_gcp_project)
+            assign_gcp_billing_account(_gcp_project)
+            create_gcp_budget(_gcp_project, amount=budgets[Cloud.GCP])
 
-            if setup_gcp_billing:
-                create_budget(_gcp_project, amount=budget)
+    if Cloud.AZURE in clouds:
+        # TODO: the above, but for Azure
+        pass
 
-    if create_sample_metadata_project:
-        papi = ProjectApi()
-        projects = papi.get_all_projects()
-        already_created = any(p.get('dataset') == dataset for p in projects)
-        if not already_created:
-            logging.info('Setting up sample-metadata project')
-            papi.create_project(
-                name=dataset,
-                dataset=dataset,
-                gcp_id=_gcp_project,
-                create_test_project=True,
-            )
+    logging.info(f'Creating dataset "{dataset}" with GCP id {_gcp_project} and AZURE id {az_subscription}.')
+
+    create_sample_metadata_project(dataset, _gcp_project)
 
     pulumi_config_fn = f'Pulumi.{dataset}.yaml'
-    if create_pulumi_stack:
-        create_stack(
-            pulumi_config_fn=pulumi_config_fn,
-            gcp_project=_gcp_project,
-            add_to_seqr_stack=add_to_seqr_stack,
-            dataset=dataset,
-            create_release_buckets=create_release_buckets,
-            should_commit=not no_commit,
-        )
+    create_stack(
+        pulumi_config_fn=pulumi_config_fn,
+        az_subscription=az_subscription,
+        gcp_project=_gcp_project,
+        add_as_seqr_dependency=add_as_seqr_dependency,
+        dataset=dataset,
+        create_release_buckets=create_release_buckets,
+    )
 
     if not os.path.exists(pulumi_config_fn):
         raise ValueError(f'Expected to find {pulumi_config_fn}, but it did not exist')
@@ -193,7 +196,7 @@ def main(
         if rc != 0:
             raise ValueError(f'The stack {dataset} did not deploy correctly')
 
-        if add_to_seqr_stack:
+        if add_as_seqr_dependency:
             rc = subprocess.call(['pulumi', 'stack', 'select', 'seqr'], env=env)
             rc_seqr = subprocess.call(['pulumi', 'up', '-y'], env=env)
             if rc_seqr != 0:
@@ -202,8 +205,21 @@ def main(
     if generate_service_account_key:
         generate_upload_account_json(dataset=dataset, gcp_project=_gcp_project)
 
+ 
+def create_sample_metadata_project(dataset, _gcp_project):
+    papi = ProjectApi()
+    projects = papi.get_all_projects()
+    already_created = any(p.get('dataset') == dataset for p in projects)
+    if not already_created:
+        logging.info('Setting up sample-metadata project')
+        papi.create_project(
+            name=dataset,
+            dataset=dataset,
+            gcp_id=_gcp_project,
+            create_test_project=True,
+        )
 
-def create_project(
+def create_gcp_project(
     project_id, organisation_id=ORGANIZATION_ID, return_if_already_exists=True
 ):
     """Call subprocess.check_output to create project under an organisation"""
@@ -237,7 +253,7 @@ def create_project(
     return True
 
 
-def assign_billing_account(project_id, billing_account_id=BILLING_ACCOUNT_ID):
+def assign_gcp_billing_account(project_id, billing_account_id=BILLING_ACCOUNT_ID):
     """
     Assign a billing account to a GCP project
     """
@@ -257,7 +273,7 @@ def assign_billing_account(project_id, billing_account_id=BILLING_ACCOUNT_ID):
     logging.info(f'Assigned a billing account to {project_id}.')
 
 
-def create_budget(project_id: str, amount=100):
+def create_gcp_budget(project_id: str, amount=100):
     """
     Create a monthly budget for the project_id
     """
@@ -298,25 +314,37 @@ def create_budget(project_id: str, amount=100):
 
 def get_hail_service_accounts(dataset: str):
     """Get hail service accounts from kubectl"""
-    subprocess.check_output(
-        [
+    setup_cluster = {
+        Cloud.AZURE: [
+            'az',
+            'aks',
+            'get-credentials',
+            '--name vdc',
+            '--resource-group hail',
+            f'--subscription {AZURE_HAIL_SUBSCRIPTION}'
+        ],
+        Cloud.GCP: [
             'gcloud',
-            f'--project={HAIL_PROJECT}',
+            f'--project={GCP_HAIL_PROJECT}',
             'container',
             'clusters',
             'get-credentials',
             'vdc',
             '--zone=australia-southeast1-b',
         ]
-    )
+    }
+
     hail_client_emails_by_level = {}
-    for access_level in ('test', 'standard', 'full'):
-        hail_token = subprocess.check_output(
-            _kubectl_hail_token_command(dataset, access_level), shell=True
-        ).decode()
-        # The hail_token from kubectl looks like: { "key.json": "<service-account-json-string>" }
-        sa_key = json.loads(json.loads(hail_token)['key.json'])
-        hail_client_emails_by_level[access_level] = sa_key['client_email']
+    for cloud in Cloud:
+        subprocess.check_output(setup_cluster[cloud])
+
+        for access_level in ('test', 'standard', 'full'):
+            hail_token = subprocess.check_output(
+                _kubectl_hail_token_command(dataset, access_level), shell=True
+            ).decode()
+            # The hail_token from kubectl looks like: { "key.json": "<service-account-json-string>" }
+            sa_key = json.loads(json.loads(hail_token)['key.json'])
+            hail_client_emails_by_level[cloud][access_level] = sa_key['client_email']
 
     return hail_client_emails_by_level
 
@@ -325,8 +353,8 @@ def _kubectl_hail_token_command(project, access_level: str):
     return f"kubectl get secret {project}-{access_level}-gsa-key -o json | jq '.data | map_values(@base64d)'"
 
 
-def _check_if_hail_account_exists(username, hail_auth_token):
-    url = HAIL_GET_USER_PATH.format(username=username)
+def _check_if_hail_account_exists(username, hail_auth_token, cloud: Cloud = Cloud.GCP):
+    url = HAIL_GET_USER_PATH.format(username=username, cloud=cloud, HAIL_AUTH_URL=HAIL_AUTH_URL)
     resp = requests.get(
         url, headers={'Authorization': f'Bearer {hail_auth_token}'}, timeout=TIMEOUT
     )
@@ -354,8 +382,8 @@ def _check_if_hail_account_is_active(username, hail_auth_token) -> bool:
     return j['state'] == 'active'
 
 
-def _create_hail_service_account(username, hail_auth_token):
-    url = HAIL_CREATE_USER_PATH.format(username=username)
+def _create_hail_service_account(username, hail_auth_token, cloud: Cloud = Cloud.GCP):
+    url = HAIL_CREATE_USER_PATH.format(username=username, cloud=cloud, HAIL_AUTH_URL=HAIL_AUTH_URL)
     post_resp = requests.post(
         url=url,
         headers={'Authorization': f'Bearer {hail_auth_token}'},
@@ -372,13 +400,15 @@ def _create_hail_service_account(username, hail_auth_token):
     post_resp.raise_for_status()
 
 
-def create_hail_accounts(dataset):
+def create_hail_accounts(dataset, cloud: Cloud = Cloud.GCP):
     """
     Create 3 service accounts ${ds}-{test,standard,full} in Hail Batch
     """
     # Based on: https://github.com/hail-is/hail/pull/11249
     with open(os.path.expanduser('~/.hail/tokens.json'), encoding='utf-8') as f:
-        hail_auth_token = json.load(f)['default']
+        if not cloud:
+            cloud = 'default'
+        hail_auth_token = json.load(f)[cloud.value]
 
     username_suffixes = ['-test', '-standard', '-full']
     potential_usernames = [dataset + suffix for suffix in username_suffixes]
@@ -386,11 +416,11 @@ def create_hail_accounts(dataset):
     # check if it exists
     usernames = []
     for username in potential_usernames:
-        if not _check_if_hail_account_exists(username, hail_auth_token=hail_auth_token):
+        if not _check_if_hail_account_exists(username, hail_auth_token=hail_auth_token, cloud=cloud):
             usernames.append(username)
 
     for username in usernames:
-        _create_hail_service_account(username, hail_auth_token=hail_auth_token)
+        _create_hail_service_account(username, hail_auth_token=hail_auth_token, cloud=cloud)
 
     # wait for all to be done
 
@@ -408,10 +438,10 @@ def create_hail_accounts(dataset):
 def create_stack(
     pulumi_config_fn: str,
     gcp_project: str,
+    az_subscription: str,
     dataset: str,
-    add_to_seqr_stack: bool,
+    add_as_seqr_dependency: bool,
     create_release_buckets: bool,
-    should_commit=True,
 ):
     """
     Generate Pulumi.{dataset}.yaml pulumi stack file, with required params
@@ -423,18 +453,15 @@ def create_stack(
             return
 
     branch_name = f'add-{dataset}-stack'
-    if should_commit:
-        current_branch = subprocess.check_output(
-            ['git', 'rev-parse', '--abbrev-ref', 'HEAD']
-        ).decode()
-        if current_branch != 'main':
-            should_continue = click.confirm(
-                f'Expected branch to be "main", got "{current_branch}". '
-                'Do you want to continue (and branch from this branch) (y/n)? '
-            )
-            if not should_continue:
-                raise SystemExit
-        elif current_branch != branch_name:
+    current_branch = subprocess.check_output(
+        ['git', 'rev-parse', '--abbrev-ref', 'HEAD']
+    ).decode()
+    if current_branch != 'main':
+        should_continue = click.confirm(
+            f'Expected branch to be "main", got "{current_branch}". '
+            'Do you want to continue (and branch from this branch) (y/n)? '
+        )
+        if should_continue:
             try:
                 subprocess.check_output(['git', 'checkout', '-b', branch_name])
             except subprocess.CalledProcessError:
@@ -442,23 +469,33 @@ def create_stack(
                     f'There was an issue checking out the new branch {branch_name}'
                 )
                 raise
-
+            
     hail_client_emails_by_level = get_hail_service_accounts(dataset=dataset)
 
     formed_hail_config = {
-        f'datasets:hail_service_account_{access_level}': value
-        for access_level, value in hail_client_emails_by_level.items()
+        f'datasets:{cloud}_hail_service_account_{access_level}': account
+        for cloud, data in hail_client_emails_by_level.items()
+        for access_level, account in data
     }
+    
+    base_config = {
+        'gcp:billing_project': gcp_project,
+        'gcp:project': gcp_project,
+        'gcp:user_project_override': 'true',
+        'datasets:archive_age': '90',
+        'datasets:customer_id': 'C010ys3gt',
+        'datasets:enable_release': create_release_buckets,
+        **formed_hail_config,
+    }
+
+    if az_subscription:
+        base_config.update({
+            'azure-native:tenantId': AZURE_POPGEN_TENANT,
+            'azure-native:subscriptionId': az_subscription,
+        })
+
     pulumi_stack = {
-        'config': {
-            'datasets:archive_age': '90',
-            'datasets:customer_id': 'C010ys3gt',
-            'datasets:enable_release': create_release_buckets,
-            'gcp:billing_project': gcp_project,
-            'gcp:project': gcp_project,
-            'gcp:user_project_override': 'true',
-            **formed_hail_config,
-        },
+        'config': base_config,
     }
 
     with open(pulumi_config_fn, 'w+', encoding='utf-8') as fp:
@@ -467,7 +504,7 @@ def create_stack(
 
     files_to_add = [pulumi_config_fn]
 
-    if add_to_seqr_stack:
+    if add_as_seqr_dependency:
         add_dataset_to_seqr_depends_on(dataset)
         files_to_add.append('Pulumi.seqr.yaml')
 
@@ -478,24 +515,7 @@ def create_stack(
     env = {**os.environ, 'PULUMI_CONFIG_PASSPHRASE': get_pulumi_config_passphrase()}
     subprocess.check_output(['pulumi', 'stack', 'select', '--create', dataset], env=env)
 
-    if should_commit:
-        logging.info('Preparing git commit')
-
-        subprocess.check_output(['git', 'add', *files_to_add])
-
-        default_commit_message = f'Adds {dataset} dataset'
-        commit_message = str(
-            input(f'Commit message (default="{default_commit_message}"): ')
-        )
-        subprocess.check_output(
-            ['git', 'commit', '-m', commit_message or default_commit_message]
-        )
-        logging.info(
-            f'Created stack, you can push this with:\n\n'
-            f'\tgit push --set-upstream origin {branch_name}'
-        )
-    else:
-        logging.info(
+    logging.info(
             f"""
 Created stack {dataset}, you can commit and push this with:
 
