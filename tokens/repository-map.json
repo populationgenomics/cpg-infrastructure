@@ -119,6 +119,7 @@
         "production-pipelines",
         "joint-calling",
         "gatk-sv",
-        "large-cohort-pipeline"
+        "large-cohort-pipeline",
+        "rare-disease"
     ]
 }
