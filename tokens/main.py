@@ -55,7 +55,7 @@ def get_hail_user(dataset: str, access_level: str):
     """
     with open(f'../stack/Pulumi.{dataset}.yaml', encoding='utf-8') as f:
         config = yaml.safe_load(f)['config']
-        key = f'datasets:hail_service_account_{access_level}'
+        key = f'datasets:gcp_hail_service_account_{access_level}'
         # removes -\d{3}@hail-295901.iam.gserviceaccount.com
         service_account_name = config[key][:-40]
         return service_account_name
