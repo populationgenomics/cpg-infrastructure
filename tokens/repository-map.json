@@ -2,21 +2,17 @@
     "acute-care": [
         "automated-interpretation-pipeline",
         "fewgenomes",
-        "gatk-sv",
-        "rare-disease"
+        "gatk-sv"
     ],
     "ag-hidden": [
-        "automated-interpretation-pipeline",
-        "rare-disease"
+        "automated-interpretation-pipeline"
     ],
     "ancestry": [
         "ancestry"
     ],
-    "bioheart": [
-    ],
+    "bioheart": [],
     "brain-malf": [
-        "automated-interpretation-pipeline",
-        "rare-disease"
+        "automated-interpretation-pipeline"
     ],
     "circa": [
         "automated-interpretation-pipeline"
@@ -25,8 +21,7 @@
         "structural-constraint"
     ],
     "epileptic-enceph": [
-        "automated-interpretation-pipeline",
-        "rare-disease"
+        "automated-interpretation-pipeline"
     ],
     "fewgenomes": [
         "automated-interpretation-pipeline",
@@ -34,13 +29,10 @@
         "images",
         "joint-calling",
         "production-pipelines",
-        "rare-disease",
         "sv-workflows"
     ],
-    "flinders-ophthal": [
-    ],
-    "gtex": [
-    ],
+    "flinders-ophthal": [],
+    "gtex": [],
     "heartkids": [
         "automated-interpretation-pipeline"
     ],
@@ -50,26 +42,20 @@
     "hgdp": [
         "hgdp"
     ],
-    "ibmdx": [
-    ],
+    "ibmdx": [],
     "kccg-genomics-med": [
         "cromwell-kccg-mutect2-chip"
     ],
     "kidgen": [
-        "automated-interpretation-pipeline",
-        "rare-disease"
+        "automated-interpretation-pipeline"
     ],
     "leukodystrophies": [
-        "automated-interpretation-pipeline",
-        "rare-disease"
+        "automated-interpretation-pipeline"
     ],
-    "mcri-lrp": [
-    ],
-    "mgrb": [
-    ],
+    "mcri-lrp": [],
+    "mgrb": [],
     "mito-disease": [
-        "automated-interpretation-pipeline",
-        "rare-disease"
+        "automated-interpretation-pipeline"
     ],
     "ohmr3-mendelian": [
         "automated-interpretation-pipeline"
@@ -96,15 +82,13 @@
         "automated-interpretation-pipeline"
     ],
     "rdp-kidney": [],
-    "reference": [
-    ],
+    "reference": [],
     "schr-neuro": [
         "automated-interpretation-pipeline"
     ],
     "seqr": [
         "hail-elasticsearch-pipelines",
-        "production-pipelines",
-        "rare-disease"
+        "production-pipelines"
     ],
     "sgs-somatic-mtn": [
         "sgs-somatic-mutation"
@@ -128,16 +112,13 @@
     "tx-adapt": [
         "tx-adapt"
     ],
-    "udn-aus": [
-    ],
-    "udn-aus-training": [
-    ],
+    "udn-aus": [],
+    "udn-aus-training": [],
     "validation": [
         "automated-interpretation-pipeline",
         "production-pipelines",
         "joint-calling",
         "gatk-sv",
-        "rare-disease",
         "large-cohort-pipeline"
     ]
 }

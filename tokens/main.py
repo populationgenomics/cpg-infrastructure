@@ -12,6 +12,7 @@ from google.cloud import secretmanager
 ALWAYS_ALLOWED_REPOS = [
     'analysis-runner',
     'sample-metadata',
+    "production-pipelines"
 ]
 
 # dataset -> list of git repos
