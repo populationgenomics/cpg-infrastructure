@@ -9,10 +9,7 @@ import yaml
 from google.cloud import secretmanager
 
 # List of repos that are allowed for *all* datasets.
-ALWAYS_ALLOWED_REPOS = [
-    'analysis-runner',
-    'sample-metadata',
-]
+ALWAYS_ALLOWED_REPOS = ['analysis-runner', 'sample-metadata', 'production-pipelines']
 
 # dataset -> list of git repos
 with open('repository-map.json', encoding='utf-8') as allowed_repo_file:
