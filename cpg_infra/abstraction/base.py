@@ -29,7 +29,7 @@ from cpg_infra.config import (
 UNDELETE_PERIOD_IN_DAYS = 30
 TMP_BUCKET_PERIOD_IN_DAYS = 8  # tmp content gets deleted afterwards.
 ARCHIVE_PERIOD_IN_DAYS = 30
-
+BUCKET_DELETE_INCOMPLETE_UPLOAD_PERIOD_IN_DAYS = 7
 
 class SecretMembership(Enum):
     """Secret membership pattern"""
