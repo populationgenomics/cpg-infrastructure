@@ -229,7 +229,7 @@ class GcpInfrastructure(CloudInfraBase):
         self, days=BUCKET_DELETE_INCOMPLETE_UPLOAD_PERIOD_IN_DAYS
     ):
         """
-        Life cycle rule that deletes incomplete multipart uploads after n days
+        Lifecycle rule that deletes incomplete multipart uploads after n days
         """
         return gcp.storage.BucketLifecycleRuleArgs(
             action=gcp.storage.BucketLifecycleRuleActionArgs(
