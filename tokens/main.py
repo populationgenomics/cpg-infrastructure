@@ -3,12 +3,12 @@
 
 import base64
 import json
+from pathlib import Path
 
 import kubernetes.client
 import kubernetes.config
 import yaml
 from google.cloud import secretmanager
-from pathlib import Path
 
 # List of repos that are allowed for *all* datasets.
 ALWAYS_ALLOWED_REPOS = ['analysis-runner', 'sample-metadata', 'production-pipelines']
