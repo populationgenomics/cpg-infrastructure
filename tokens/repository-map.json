@@ -37,7 +37,8 @@
         "automated-interpretation-pipeline"
     ],
     "hereditary-neuro": [
-        "automated-interpretation-pipeline"
+        "automated-interpretation-pipeline",
+        "sv-workflows"
     ],
     "hgdp": [
         "hgdp"
