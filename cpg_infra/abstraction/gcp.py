@@ -252,11 +252,6 @@ class GcpInfrastructure(CloudInfraBase):
             unique_bucket_name = (
                 f'{self.config.dataset_storage_prefix}{self.dataset}-{name}'
             )
-        # duplicate the array to avoid adding the lifecycle rule to an existing list
-        _lifecycle_rules = [
-            *lifecycle_rules,
-            self.bucket_rule_abort_incomplete_multipart_upload(),
-        ]
 
         return gcp.storage.Bucket(
             unique_bucket_name,
@@ -265,7 +260,11 @@ class GcpInfrastructure(CloudInfraBase):
             uniform_bucket_level_access=True,
             versioning=gcp.storage.BucketVersioningArgs(enabled=versioning),
             labels={'bucket': unique_bucket_name},
-            lifecycle_rules=_lifecycle_rules,
+            # duplicate the array to avoid adding the lifecycle rule to an existing list
+            lifecycle_rules=[
+                *lifecycle_rules,
+                self.bucket_rule_abort_incomplete_multipart_upload(),
+            ],
             requester_pays=requester_pays,
             project=project or self.project_id,
         )
