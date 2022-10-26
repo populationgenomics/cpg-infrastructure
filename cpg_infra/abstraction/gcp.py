@@ -252,9 +252,11 @@ class GcpInfrastructure(CloudInfraBase):
             unique_bucket_name = (
                 f'{self.config.dataset_storage_prefix}{self.dataset}-{name}'
             )
-
-        _lifecycle_rules = list(lifecycle_rules or [])
-        _lifecycle_rules.append(self.bucket_rule_abort_incomplete_multipart_upload())
+        # duplicate the array to avoid adding the lifecycle rule to an existing list
+        _lifecycle_rules = [
+            *lifecycle_rules,
+            self.bucket_rule_abort_incomplete_multipart_upload(),
+        ]
 
         return gcp.storage.Bucket(
             unique_bucket_name,
