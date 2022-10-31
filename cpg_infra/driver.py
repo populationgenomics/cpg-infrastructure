@@ -2,6 +2,7 @@
 """
 CPG Dataset infrastructure
 """
+import graphlib
 import re
 from inspect import isclass
 from typing import Type, Any, Iterator, Iterable
@@ -56,25 +57,44 @@ class CpgDatasetInfrastructure:
     """
 
     @staticmethod
-    def deploy_all_from_config(
-        config: CPGInfrastructureConfig, dataset_config: CPGDatasetConfig
+    def deploy_all_from_dataset_configs(
+        config: CPGInfrastructureConfig, dataset_config: dict[str, Any]
     ):
-        infra_map = {c.name(): c for c in CloudInfraBase.__subclasses__()}
+        infra_map: dict[str, Type[CloudInfraBase]] = {
+            c.name(): c for c in CloudInfraBase.__subclasses__()
+        }
 
-        for infra_obj in [infra_map[n] for n in dataset_config.deploy_locations]:
-            CpgDatasetInfrastructure(config, infra_obj, dataset_config).main()
+        # load datasets
+        datasets = {
+            k: CPGDatasetConfig(dataset=k, **v) for k, v in dataset_config.items()
+        }
+        deps = {k: v.depends_on for k, v in datasets.items()}
+        deps['reference'] = list(set(deps.keys()) - {'reference'})
+
+        for dataset in graphlib.TopologicalSorter(deps).static_order():
+            dataset_config = datasets[dataset]
+
+            for deploy_location in dataset_config.deploy_locations:
+                print(f'Will load {dataset} @ {deploy_location}')
+
+                InfraClass = infra_map[deploy_location]
+                resource_prefix = f'{dataset}-{InfraClass.name()}-'
+                infra_obj = InfraClass(
+                    config=config,
+                    dataset_config=dataset_config,
+                    resource_prefix=resource_prefix,
+                )
+                CpgDatasetInfrastructure(config, infra_obj, dataset_config).main()
 
     def __init__(
         self,
         config: CPGInfrastructureConfig,
-        infra: CloudInfraBase | Type[CloudInfraBase],
+        infra: CloudInfraBase,
         dataset_config: CPGDatasetConfig,
     ):
         self.config = config
         self.dataset_config: CPGDatasetConfig = dataset_config
-        self.infra: CloudInfraBase = (
-            infra(self.config, self.dataset_config) if isclass(infra) else infra
-        )
+        self.infra: CloudInfraBase = infra
         self.components: list[CPGDatasetComponents] = dataset_config.components.get(
             self.infra.name(),
             CPGDatasetComponents.default_component_for_infrastructure()[
@@ -659,11 +679,14 @@ class CpgDatasetInfrastructure:
     def hail_accounts_by_access_level(self):
         if not self.should_setup_hail:
             return {}
-        accounts = {
-            'test': self.dataset_config.gcp_hail_service_account_test,
-            'standard': self.dataset_config.gcp_hail_service_account_standard,
-            'full': self.dataset_config.gcp_hail_service_account_full,
-        }
+
+        accounts = {}
+        if isinstance(self.infra, GcpInfrastructure):
+            accounts = {
+                'test': self.dataset_config.gcp.hail_service_account_test,
+                'standard': self.dataset_config.gcp.hail_service_account_standard,
+                'full': self.dataset_config.gcp.hail_service_account_full,
+            }
         assert all(ac is not None for ac in accounts.values())
         return accounts
 
@@ -1325,8 +1348,16 @@ if __name__ == '__main__':
         _config = CPGDatasetConfig(
             dataset='fewgenomes',
             deploy_locations=['dry-run'],
-            gcp_hail_service_account_test='fewgenomes-test@service-account',
-            gcp_hail_service_account_standard='fewgenomes-standard@service-account',
-            gcp_hail_service_account_full='fewgenomes-full@service-account',
+            gcp=CPGDatasetConfig.Gcp(
+                project='test-project',
+                hail_service_account_test='fewgenomes-test@service-account',
+                hail_service_account_standard='fewgenomes-standard@service-account',
+                hail_service_account_full='fewgenomes-full@service-account',
+            ),
         )
-        CpgDatasetInfrastructure(infra_config, location, _config).main()
+
+        CpgDatasetInfrastructure(
+            config=infra_config,
+            infra=location(infra_config, _config, ''),
+            dataset_config=_config,
+        ).main()

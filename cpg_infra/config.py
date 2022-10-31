@@ -217,11 +217,19 @@ class CPGDatasetConfig(DeserializableDataclass):
     required to construct the dataset infrastructure
     """
 
+    @dataclasses.dataclass(frozen=True)
+    class Gcp(DeserializableDataclass):
+        project: str
+
+        hail_service_account_test: str
+        hail_service_account_standard: str
+        hail_service_account_full: str
+
+        region: str | None = None
+
     dataset: str
 
-    gcp_hail_service_account_test: str
-    gcp_hail_service_account_standard: str
-    gcp_hail_service_account_full: str
+    gcp: Gcp
 
     deployment_service_account_test: str | None = None
     deployment_service_account_standard: str | None = None
@@ -248,6 +256,7 @@ class CPGDatasetConfig(DeserializableDataclass):
     )
 
     archive_age: int = 30
+
 
     @classmethod
     def from_pulumi(cls, config, **kwargs):
