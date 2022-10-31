@@ -74,6 +74,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     @dataclasses.dataclass(frozen=True)
     class GCP(DeserializableDataclass):
         customer_id: str
+        region: str
         billing_project_id: str
         billing_account_id: int
         budget_notification_pubsub: str | None

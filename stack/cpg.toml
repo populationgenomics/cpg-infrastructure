@@ -7,6 +7,7 @@ reference_dataset = "reference"
 #disable_group_memberships = "true"
 
 [infrastructure.gcp]
+region = "australia-southeast1"
 customer_id = "C010ys3gt"
 billing_account_id = '01D012-20A6A2-CBD343'
 billing_project_id = 'billing-admin-290403'

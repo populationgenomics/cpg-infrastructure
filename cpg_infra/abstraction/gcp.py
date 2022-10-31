@@ -33,7 +33,7 @@ class GcpInfrastructure(CloudInfraBase):
     ):
         super().__init__(config, dataset_config)
 
-        self.region = 'australia-southeast1'
+        self.region = dataset_config.gcp.region or config.gcp.region
         self.organization = gcp.organizations.get_organization(domain=config.domain)
         self.project_id = gcp.organizations.get_project().project_id
 
