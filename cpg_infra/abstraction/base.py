@@ -67,7 +67,7 @@ class CloudInfraBase(ABC):
     """
 
     def __init__(
-        self, config: CPGInfrastructureConfig, dataset_config: CPGDatasetConfig
+        self, config: CPGInfrastructureConfig, dataset_config: CPGDatasetConfig, resource_prefix: str
     ):
         super().__init__()
         self.config = config
@@ -76,6 +76,7 @@ class CloudInfraBase(ABC):
             self.name(),
             CPGDatasetComponents.default_component_for_infrastructure()[self.name()],
         )
+        self.resource_prefix = resource_prefix
 
     @staticmethod
     @abstractmethod

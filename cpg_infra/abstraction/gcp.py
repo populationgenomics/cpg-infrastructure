@@ -29,22 +29,22 @@ class GcpInfrastructure(CloudInfraBase):
         return 'gcp'
 
     def __init__(
-        self, config: CPGInfrastructureConfig, dataset_config: CPGDatasetConfig
+        self, config: CPGInfrastructureConfig, dataset_config: CPGDatasetConfig, resource_prefix: str
     ):
-        super().__init__(config, dataset_config)
+        super().__init__(config=config, dataset_config=dataset_config, resource_prefix=resource_prefix)
 
         self.region = dataset_config.gcp.region or config.gcp.region
         self.organization = gcp.organizations.get_organization(domain=config.domain)
-        self.project_id = gcp.organizations.get_project().project_id
+        self.project_id = dataset_config.gcp.project
 
         self._svc_cloudresourcemanager = gcp.projects.Service(
-            'cloudresourcemanager-service',
+            f'{resource_prefix}cloudresourcemanager-service',
             service='cloudresourcemanager.googleapis.com',
             disable_on_destroy=False,
         )
 
         self._svc_cloudidentity = gcp.projects.Service(
-            'cloudidentity-service',
+            f'{resource_prefix}cloudidentity-service',
             service='cloudidentity.googleapis.com',
             disable_on_destroy=False,
             opts=pulumi.resource.ResourceOptions(
@@ -53,13 +53,13 @@ class GcpInfrastructure(CloudInfraBase):
         )
 
         self._svc_serviceusage = gcp.projects.Service(
-            'serviceusage-service',
+            f'{resource_prefix}serviceusage-service',
             service='serviceusage.googleapis.com',
             disable_on_destroy=False,
         )
 
         self._svc_secretmanager = gcp.projects.Service(
-            'secretmanager-service',
+            f'{resource_prefix}secretmanager-service',
             service='secretmanager.googleapis.com',
             disable_on_destroy=False,
             opts=pulumi.resource.ResourceOptions(
@@ -74,7 +74,7 @@ class GcpInfrastructure(CloudInfraBase):
     @cached_property
     def _svc_dataproc(self):
         return gcp.projects.Service(
-            'dataproc-service',
+            f'{self.resource_prefix}dataproc-service',
             service='dataproc.googleapis.com',
             disable_on_destroy=False,
             opts=pulumi.resource.ResourceOptions(
@@ -85,7 +85,7 @@ class GcpInfrastructure(CloudInfraBase):
     @cached_property
     def _svc_lifescienceapi(self):
         return gcp.projects.Service(
-            'lifesciences-service',
+            f'{self.resource_prefix}lifesciences-service',
             service='lifesciences.googleapis.com',
             disable_on_destroy=False,
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_serviceusage]),
@@ -94,7 +94,7 @@ class GcpInfrastructure(CloudInfraBase):
     @cached_property
     def _svc_cloudbilling(self):
         return gcp.projects.Service(
-            'cloudbilling-service',
+            f'{self.resource_prefix}cloudbilling-service',
             service='cloudbilling.googleapis.com',
             disable_on_destroy=False,
             project=self.project_id,
@@ -106,7 +106,7 @@ class GcpInfrastructure(CloudInfraBase):
     @cached_property
     def _svc_cloudbillingbudgets(self):
         return gcp.projects.Service(
-            'cloudbillingbudgets-service',
+            f'{self.resource_prefix}cloudbillingbudgets-service',
             service='billingbudgets.googleapis.com',
             disable_on_destroy=False,
             project=self.project_id,
@@ -116,7 +116,7 @@ class GcpInfrastructure(CloudInfraBase):
     @cached_property
     def _svc_iam(self):
         return gcp.projects.Service(
-            'iam-service',
+            f'{self.resource_prefix}iam-service',
             service='iam.googleapis.com',
             disable_on_destroy=False,
             opts=pulumi.resource.ResourceOptions(
@@ -151,7 +151,7 @@ class GcpInfrastructure(CloudInfraBase):
             )
 
         gcp.billing.Budget(
-            resource_key,
+            self.resource_prefix + resource_key,
             amount=gcp.billing.BudgetAmountArgs(
                 specified_amount=gcp.billing.BudgetAmountSpecifiedAmountArgs(
                     units=str(budget),
@@ -177,8 +177,7 @@ class GcpInfrastructure(CloudInfraBase):
         start_date: date = date(2022, 1, 1),
     ):
         return self.create_budget(
-            resource_key=resource_key,
-            project=project,
+            resource_key=self.resource_prefix + resource_key,
             budget=budget,
             budget_filter=gcp.billing.BudgetBudgetFilterArgs(
                 projects=[pulumi.Output.concat('projects/', project.number)],
@@ -194,8 +193,7 @@ class GcpInfrastructure(CloudInfraBase):
 
     def create_monthly_budget(self, resource_key: str, *, project, budget: int):
         return self.create_budget(
-            resource_key=resource_key,
-            project=project,
+            resource_key=self.resource_prefix + resource_key,
             budget=budget,
             budget_filter=gcp.billing.BudgetBudgetFilterArgs(
                 projects=[pulumi.Output.concat('projects/', project.number)],
@@ -350,7 +348,7 @@ class GcpInfrastructure(CloudInfraBase):
         self, resource_key: str, bucket, member, membership: BucketMembership
     ) -> Any:
         gcp.storage.BucketIAMMember(
-            resource_key,
+            self.resource_prefix + resource_key,
             bucket=self.get_member_key(bucket),
             member=self.get_member_key(member),
             role=self.bucket_membership_to_role(membership),
@@ -361,7 +359,7 @@ class GcpInfrastructure(CloudInfraBase):
         self, resource_key: str, member, project: str = None
     ):
         gcp.projects.IAMMember(
-            resource_key,
+            self.resource_prefix + resource_key,
             role=self.bucket_membership_to_role(BucketMembership.LIST),
             member=self.get_member_key(member),
             project=project or self.project_id,
@@ -376,7 +374,7 @@ class GcpInfrastructure(CloudInfraBase):
             project = project.project_id
 
         return gcp.serviceaccount.Account(
-            resource_key or f'service-account-{name}',
+            self.resource_prefix + (resource_key or f'service-account-{name}'),
             account_id=name,
             # display_name=name,
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_iam]),
@@ -389,7 +387,7 @@ class GcpInfrastructure(CloudInfraBase):
     ) -> Any:
         # TODO: action project here
         gcp.serviceaccount.IAMMember(
-            resource_key,
+            self.resource_prefix + resource_key,
             service_account_id=machine_account.name,
             role='roles/iam.serviceAccountUser',
             member=self.get_member_key(member),
@@ -400,14 +398,14 @@ class GcpInfrastructure(CloudInfraBase):
 
     def get_credentials_for_machine_account(self, resource_key, account):
         return gcp.serviceaccount.Key(
-            resource_key,
+            self.resource_prefix + resource_key,
             service_account_id=account.email,
         ).private_key.apply(lambda s: base64.b64decode(s).decode('utf-8'))
 
     def create_group(self, name: str) -> Any:
         mail = f'{name}@populationgenomics.org.au'
         return gcp.cloudidentity.Group(
-            name,
+            self.resource_prefix + name,
             display_name=name,
             group_key=gcp.cloudidentity.GroupGroupKeyArgs(id=mail),
             labels={'cloudidentity.googleapis.com/groups.discussion_forum': ''},
@@ -420,7 +418,7 @@ class GcpInfrastructure(CloudInfraBase):
             return
 
         gcp.cloudidentity.GroupMembership(
-            resource_key,
+            self.resource_prefix + resource_key,
             group=self.get_group_key(group),
             preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
                 id=self.get_preferred_group_membership_key(member)
@@ -431,7 +429,7 @@ class GcpInfrastructure(CloudInfraBase):
 
     def create_secret(self, name: str, project: str = None) -> Any:
         return gcp.secretmanager.Secret(
-            name,
+            self.resource_prefix + name,
             secret_id=name,
             replication=gcp.secretmanager.SecretReplicationArgs(
                 user_managed=gcp.secretmanager.SecretReplicationUserManagedArgs(
@@ -463,7 +461,7 @@ class GcpInfrastructure(CloudInfraBase):
             raise ValueError(f'Unrecognised secret membership type: {membership}')
 
         gcp.secretmanager.SecretIamMember(
-            resource_key,
+            self.resource_prefix + resource_key,
             project=project or self.project_id,
             secret_id=secret.id,
             role=role,
@@ -477,7 +475,7 @@ class GcpInfrastructure(CloudInfraBase):
         contents: Any,
     ):
         return gcp.secretmanager.SecretVersion(
-            resource_key, secret=secret.id, secret_data=contents
+            self.resource_prefix + resource_key, secret=secret.id, secret_data=contents
         )
 
     def add_member_to_container_registry(
@@ -492,7 +490,7 @@ class GcpInfrastructure(CloudInfraBase):
             raise ValueError(f'Unrecognised group membership type: {membership}')
 
         gcp.artifactregistry.RepositoryIamMember(
-            resource_key,
+            self.resource_prefix + resource_key,
             project=project or self.project_id,
             location=self.region,
             repository=registry,
@@ -504,7 +502,7 @@ class GcpInfrastructure(CloudInfraBase):
 
     def add_member_to_lifescience_api(self, resource_key: str, account):
         gcp.projects.IAMMember(
-            resource_key,
+            self.resource_prefix + resource_key,
             role='roles/lifesciences.workflowsRunner',
             member=self.get_member_key(account),
             project=self.project_id,
@@ -517,7 +515,7 @@ class GcpInfrastructure(CloudInfraBase):
             role = f'roles/dataproc.{role}'
 
         gcp.projects.IAMMember(
-            resource_key,
+            self.resource_prefix + resource_key,
             role=role,
             member=self.get_member_key(account),
             project=self.project_id,
@@ -528,9 +526,9 @@ class GcpInfrastructure(CloudInfraBase):
         self, resource_key: str, *, service: str, project: str, member
     ):
         gcp.cloudrun.IamMember(
-            resource_key,
+            self.resource_prefix + resource_key,
             location=self.region,
-            project=project,
+            project=project or self.project_id,
             service=service,
             role='roles/run.invoker',
             member=self.get_member_key(member),
@@ -540,7 +538,7 @@ class GcpInfrastructure(CloudInfraBase):
         self, resource_key: str, *, member: Any, role: str, project: str = None
     ):
         gcp.projects.IAMMember(
-            resource_key,
+            self.resource_prefix + resource_key,
             project=project or self.project_id,
             role=role,
             member=self.get_member_key(member),
