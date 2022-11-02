@@ -5,6 +5,7 @@ config:
   datasets:gcp_hail_service_account_full: fewgenomes-full-915@hail-295901.iam.gserviceaccount.com
   datasets:gcp_hail_service_account_standard: fewgenomes-standard-737@hail-295901.iam.gserviceaccount.com
   datasets:gcp_hail_service_account_test: fewgenomes-test-126@hail-295901.iam.gserviceaccount.com
+  datasets:create_container_registry: "true"
   gcp:billing_project: fewgenomes
   gcp:project: fewgenomes
   gcp:user_project_override: "true"
