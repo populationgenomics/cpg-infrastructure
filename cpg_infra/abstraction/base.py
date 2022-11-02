@@ -1,4 +1,4 @@
-# pylint: disable=missing-function-docstring,unnecessary-pass
+# pylint: disable=missing-function-docstring,unnecessary-pass,too-many-public-methods
 """
 Generic Infrastructure abstraction that relies on each to be subclassed
 by an equivalent GCP / Azure implementation.

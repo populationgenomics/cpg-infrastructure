@@ -988,7 +988,6 @@ class CpgDatasetInfrastructure:
                     membership=ContainerRegistryMembership.APPEND,
                 )
 
-
     def setup_inherited_container_registries(self):
         """
         Setup permissions for cpg-common + analysis-runner artifact registries
