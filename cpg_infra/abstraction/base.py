@@ -229,6 +229,10 @@ class CloudInfraBase(ABC):
         # TODO: this might need more thought
         pass
 
+    @abstractmethod
+    def create_container_registry(self, name: str):
+        pass
+
 
 # DEV OVERRIDE
 

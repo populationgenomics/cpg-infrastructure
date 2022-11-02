@@ -480,6 +480,17 @@ class GcpInfrastructure(CloudInfraBase):
             resource_key, secret=secret.id, secret_data=contents
         )
 
+    # region CONTAINER REGISTRY
+
+    def create_container_registry(self, name: str):
+        return gcp.artifactregistry.Repository(
+            'artifact-registry-' + name,
+            repository_id=name,
+            project=self.project_id,
+            format='DOCKER',
+            location=self.region,
+        )
+
     def add_member_to_container_registry(
         self, resource_key: str, registry, member, membership, project=None
     ) -> Any:
@@ -499,6 +510,8 @@ class GcpInfrastructure(CloudInfraBase):
             role=role,
             member=self.get_member_key(member),
         )
+
+    # endregion CONTAINER REGISTRY
 
     # region GCP SPECIFIC
 

@@ -960,7 +960,41 @@ class CpgDatasetInfrastructure:
         + cpg-common container registries
         :return:
         """
+        self.setup_dataset_container_registry()
+        self.setup_inherited_container_registries()
 
+    def setup_dataset_container_registry(self):
+        """
+        If required, setup a container registry for a dataset
+        :return:
+        """
+        if not self.dataset_config.create_container_registry:
+            return
+
+        # mostly because this current format requires the project_id
+        custom_container_registry = self.infra.create_container_registry('images')
+        for kind, account in self.access_level_groups:
+            self.infra.add_member_to_container_registry(
+                f'test-images-reader-in-container-registry',
+                registry=custom_container_registry,
+                member=account,
+                membership=ContainerRegistryMembership.READER,
+            )
+            if kind in ('standard', 'full'):
+                self.infra.add_member_to_container_registry(
+                    f'{kind}-images-writer-in-container-registry',
+                    registry=custom_container_registry,
+                    member=account,
+                    membership=ContainerRegistryMembership.APPEND,
+                )
+
+
+    def setup_inherited_container_registries(self):
+        """
+        Setup permissions for cpg-common + analysis-runner artifact registries
+        """
+        # TODO: This will eventually be mostly solved by the cpg-common
+        #       dataset with permissions through inheritance.
         container_registries = [
             (
                 self.config.analysis_runner.gcp.project,
@@ -991,14 +1025,14 @@ class CpgDatasetInfrastructure:
                     membership=ContainerRegistryMembership.READER,
                 )
 
-            if kind in ('full', 'standard'):
-                self.infra.add_member_to_container_registry(
-                    f'{kind}-images-writer-in-cpg-common',
-                    registry=self.config.gcp.common_artifact_registry_name,
-                    project=self.config.gcp.common_artifact_registry_project,
-                    member=account,
-                    membership=ContainerRegistryMembership.APPEND,
-                )
+        for kind in ('full', 'standard'):
+            self.infra.add_member_to_container_registry(
+                f'{kind}-images-writer-in-cpg-common',
+                registry=self.config.gcp.common_artifact_registry_name,
+                project=self.config.gcp.common_artifact_registry_project,
+                member=self.access_level_groups[kind],
+                membership=ContainerRegistryMembership.APPEND,
+            )
 
     # endregion CONTAINER REGISTRY
     # region NOTEBOOKS
