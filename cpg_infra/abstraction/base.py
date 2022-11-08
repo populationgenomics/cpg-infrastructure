@@ -1,4 +1,4 @@
-# pylint: disable=missing-function-docstring,unnecessary-pass
+# pylint: disable=missing-function-docstring,unnecessary-pass,too-many-public-methods
 """
 Generic Infrastructure abstraction that relies on each to be subclassed
 by an equivalent GCP / Azure implementation.
@@ -52,7 +52,7 @@ class ContainerRegistryMembership(Enum):
     """Container registry membership type"""
 
     READER = 'reader'
-    APPEND = 'append'
+    WRITER = 'writer'
 
 
 class CloudInfraBase(ABC):
@@ -227,6 +227,10 @@ class CloudInfraBase(ABC):
         project: str = None,
     ) -> Any:
         # TODO: this might need more thought
+        pass
+
+    @abstractmethod
+    def create_container_registry(self, name: str):
         pass
 
 
