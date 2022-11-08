@@ -22,6 +22,8 @@ from cpg_infra.config import CPGInfrastructureConfig, CPGDatasetConfig
 
 
 class AWSInfra(CloudInfraBase):
+    """AWS implementation for cloud abstraction"""
+
     @staticmethod
     def name():
         return 'aws'
@@ -73,6 +75,10 @@ class AWSInfra(CloudInfraBase):
             unique_bucket_name = (
                 f'{self.config.dataset_storage_prefix}{self.dataset}-{name}'
             )
+
+        # todo: remove this when lifecycle rules are correct
+        lifecycle_rules = [l for l in lifecycle_rules if l]
+
         return aws.s3.Bucket(
             unique_bucket_name,
             bucket=unique_bucket_name,
@@ -135,6 +141,9 @@ class AWSInfra(CloudInfraBase):
         return aws.secretsmanager.SecretVersion(
             resource_key, secret_id=secret.id, secret_string=contents
         )
+
+    def create_container_registry(self, name: str):
+        return aws.ecr.Repository(name)
 
     def add_member_to_container_registry(
         self,
