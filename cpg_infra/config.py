@@ -226,6 +226,8 @@ class CPGDatasetConfig(DeserializableDataclass):
     deployment_service_account_standard: str | None = None
     deployment_service_account_full: str | None = None
 
+    create_container_registry: bool = False
+
     deploy_locations: list[str] = dataclasses.field(default_factory=lambda: ['gcp'])
 
     # creates a release requester-pays bucket
