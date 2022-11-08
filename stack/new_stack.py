@@ -64,7 +64,9 @@ BILLING_PROJECT_ID = 'billing-admin-290403'
 GCP_HAIL_PROJECT = 'hail-295901'
 
 AZURE_POPGEN_TENANT = 'a744336e-0ec4-40f1-891f-6c8ccaf8e267'
-AZURE_HAIL_SUBSCRIPTION = '2a974991-7c24-48c2-871f-5f7969a2b0c0'
+AZURE_ENROLLMENT_ACCOUNT_ID = '/providers/Microsoft.Billing/billingAccounts/75463289/enrollmentAccounts/302404'
+AZURE_CPG_MANAGEMENT_GROUP = '/providers/Microsoft.Management/managementGroups/centre_for_population_genomics'
+AZURE_LOCATION = 'australia-east'
 
 HAIL_AUTH_URL = {
     Cloud.GCP: 'https://auth.hail.populationgenomics.org.au',
@@ -121,6 +123,11 @@ def main(
     # TODO: eventually remove when gcp_project_id not required by Metamist
     assert Cloud.GCP in clouds
 
+    if Cloud.AZURE in clouds and not az_subscription_id:
+        raise ValueError(
+            f'Cannot create stack with cloud AZURE without az_subscription_id'
+        )   
+
     _gcp_project = project_id
     _azure_project = project_id
     if not project_id:
@@ -165,12 +172,8 @@ def main(
             gcp_create_budget(_gcp_project, amount=budgets[Cloud.GCP])
 
     if Cloud.AZURE in clouds:
-        # TODO: the above, but for Azure
-        # az_subscription = create_azure_subscription(_azure_project)
-
-        if az_subscription_id:
-            az_create_resource_group(_azure_project, az_subscription_id)
-            az_create_budget(_azure_project, amount=budgets[Cloud.AZURE])
+        az_create_resource_group(_azure_project, az_subscription_id)
+        # az_create_budget(_azure_project, amount=budgets[Cloud.AZURE])
 
     logging.info(f'Creating dataset "{dataset}" with GCP id {_gcp_project} and AZURE id {az_subscription_id}.')
 
@@ -207,6 +210,7 @@ def main(
 
  
 def create_sample_metadata_project(dataset, _gcp_project):
+    """Create the metamist project"""
     papi = ProjectApi()
     projects = papi.get_all_projects()
     already_created = any(p.get('dataset') == dataset for p in projects)
@@ -218,18 +222,6 @@ def create_sample_metadata_project(dataset, _gcp_project):
             gcp_id=_gcp_project,
             create_test_project=True,
         )
-
-def create_azure_subscription(_azure_project):
-    # TODO: fix billing scope
-    return subprocess.check_output([
-        'az',
-        'account',
-        'create',
-        f'--name "{_azure_project}"',
-        '--billing-scope "/providers/Microsoft.Billing/billingAccounts/1234567/enrollmentAccounts/654321"',
-        f'--display-name "{_azure_project}"',
-        '--workload "Production"'
-    ])
     
 
 def gcp_create_project(
@@ -266,6 +258,7 @@ def gcp_create_project(
     return True
 
 def az_set_subscription(az_subscription_id):
+    """Given an azure subscription id set the subscription"""
     command = [
         'az',
         'account',
@@ -277,6 +270,7 @@ def az_set_subscription(az_subscription_id):
     logging.info(f'Set az cli to subscription {az_subscription_id}.')
 
 def az_create_resource_group(_azure_project, az_subscription_id):
+    """Create a resoure group withing the subscription"""
     az_set_subscription(az_subscription_id)
     command = [
         'az',
@@ -285,10 +279,11 @@ def az_create_resource_group(_azure_project, az_subscription_id):
         '--name',
         _azure_project,
         '--location',
-        'westus'
+        AZURE_LOCATION
     ]
-    subprocess.check_output(command)
+    out = subprocess.check_output(command)
     logging.info(f'Created resource group {_azure_project} in {az_subscription_id}.')
+    return out
 
 
 def gcp_assign_billing_account(project_id, billing_account_id=BILLING_ACCOUNT_ID):
@@ -349,8 +344,8 @@ def gcp_create_budget(project_id: str, amount=100):
 
     return True
 
-def az_create_budget(project_id: str, amount=100):
-    logging.warn(f'az_create_budget Not Implemented')
+# def az_create_budget(project_id: str, amount=100):
+#     logging.warn(f'az_create_budget Not Implemented')
 
 def get_hail_service_accounts(dataset: str):
     """Get hail service accounts from kubectl"""
