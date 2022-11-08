@@ -1,0 +1,11 @@
+encryptionsalt: v1:cJIQrWShmGw=:v1:VRnUDISHYs9NiAR3:cOsjyPo/iXBFpY2k+mkDSCMoaVSLsw==
+config:
+  datasets:archive_age: "90"
+  datasets:customer_id: C010ys3gt
+  datasets:enable_release: "false"
+  datasets:gcp_hail_service_account_full: ourdna-browser-full-872@hail-295901.iam.gserviceaccount.com
+  datasets:gcp_hail_service_account_standard: ourdna-browser-standard-810@hail-295901.iam.gserviceaccount.com
+  datasets:gcp_hail_service_account_test: ourdna-browser-test-528@hail-295901.iam.gserviceaccount.com
+  gcp:billing_project: ourdna-browser
+  gcp:project: ourdna-browser
+  gcp:user_project_override: "true"
