@@ -52,7 +52,7 @@ class ContainerRegistryMembership(Enum):
     """Container registry membership type"""
 
     READER = 'reader'
-    APPEND = 'append'
+    WRITER = 'writer'
 
 
 class CloudInfraBase(ABC):

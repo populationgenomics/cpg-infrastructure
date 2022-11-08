@@ -961,7 +961,7 @@ class CpgDatasetInfrastructure:
         :return:
         """
         self.setup_dataset_container_registry()
-        self.setup_inherited_container_registries()
+        self.setup_legacy_container_registries()
 
     def setup_dataset_container_registry(self):
         """
@@ -985,10 +985,10 @@ class CpgDatasetInfrastructure:
                     f'{kind}-images-writer-in-container-registry',
                     registry=custom_container_registry,
                     member=account,
-                    membership=ContainerRegistryMembership.APPEND,
+                    membership=ContainerRegistryMembership.WRITER,
                 )
 
-    def setup_inherited_container_registries(self):
+    def setup_legacy_container_registries(self):
         """
         Setup permissions for cpg-common + analysis-runner artifact registries
         """
@@ -1030,7 +1030,7 @@ class CpgDatasetInfrastructure:
                 registry=self.config.gcp.common_artifact_registry_name,
                 project=self.config.gcp.common_artifact_registry_project,
                 member=self.access_level_groups[kind],
-                membership=ContainerRegistryMembership.APPEND,
+                membership=ContainerRegistryMembership.WRITER,
             )
 
     # endregion CONTAINER REGISTRY

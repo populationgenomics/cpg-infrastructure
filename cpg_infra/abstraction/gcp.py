@@ -497,7 +497,7 @@ class GcpInfrastructure(CloudInfraBase):
 
         if membership == ContainerRegistryMembership.READER:
             role = 'roles/artifactregistry.reader'
-        elif membership == ContainerRegistryMembership.APPEND:
+        elif membership == ContainerRegistryMembership.WRITER:
             role = 'roles/artifactregistry.writer'
         else:
             raise ValueError(f'Unrecognised group membership type: {membership}')
