@@ -519,7 +519,7 @@ def create_stack(
     hail_client_emails_by_level = get_hail_service_accounts(dataset=dataset)
 
     formed_hail_config = {
-        f'datasets:hail_service_account_{access_level}': value
+        f'datasets:gcp_hail_service_account_{access_level}': value
         for access_level, value in hail_client_emails_by_level.items()
     }
     pulumi_stack = {
