@@ -35,28 +35,79 @@ class AWSInfra(CloudInfraBase):
         return name
 
     def create_monthly_budget(self, resource_key: str, *, project, budget):
-        pass
+        return self._create_budget(
+            resource_key,
+            time_period_end="2087-06-15_00:00",
+            time_period_start="2017-07-01_00:00",
+            time_unit="MONTHLY",
+        )
 
     def create_fixed_budget(
         self, resource_key: str, *, project, budget, start_date: date = date(2022, 1, 1)
     ):
-        pass
+        return self._create_budget(
+            resource_key,
+            time_period_end="2087-06-15_00:00",
+            time_period_start="2017-07-01_00:00",
+            # time_unit="MONTHLY",
+        )
+
+    def _create_budget(self, resource_key, budget, project, **kwargs):
+        if self.config.aws.subscriber_sns_topic_arns:
+
+            notifications = [
+                aws.budgets.BudgetNotification(
+                    threshold=threshold,
+                    threshold_type='PERCENT',
+                    notification_type='ACTUAL',
+                    comparison_operator="GREATER_THAN",
+                )
+                for threshold in self.config.budget_notification_thresholds
+            ]
+
+            notifications.append(
+                aws.budgets.BudgetNotification(
+                    treshold='100',
+                    threshold_type='PERCENT',
+                    comparison_operator="GREATER_THAN",
+                    notification_type='ACTUAL',
+                    subscriber_sns_topic_arns=self.config.aws.subscriber_sns_topic_arns,
+                )
+            )
+
+            kwargs['notifications'] = kwargs['notification']
+
+        return aws.budgets.Budget(
+            resource_key,
+            budget_type="COST",
+            cost_filters=[
+                aws.budgets.BudgetCostFilterArgs(
+                    name="Tag",
+                    values=[project if isinstance(project, str) else project.name],
+                )
+            ],
+            limit_amount=str(budget),
+            limit_unit=self.config.budget_currency,
+            **kwargs,
+        )
 
     def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
         return aws.s3.BucketLifecycleRuleArgs(
             enabled=True,
-            noncurrent_version_expiration=aws.s3.BucketLifecycleRuleNoncurrentVersionExpiration(days=days),
+            noncurrent_version_expiration=aws.s3.BucketLifecycleRuleNoncurrentVersionExpiration(
+                days=days
+            ),
         )
 
     def bucket_rule_temporary(self, days=TMP_BUCKET_PERIOD_IN_DAYS) -> Any:
         # TODO: https://www.pulumi.com/registry/packages/aws/api-docs/s3/bucket/#bucketrule
         return aws.s3.BucketLifecycleRuleArgs(
-                enabled=True,
-                expiration=aws.s3.BucketLifecycleRuleExpirationArgs(
-                    days=TMP_BUCKET_PERIOD_IN_DAYS,
-                ),
-                id="tmp",
-            )
+            enabled=True,
+            expiration=aws.s3.BucketLifecycleRuleExpirationArgs(
+                days=TMP_BUCKET_PERIOD_IN_DAYS,
+            ),
+            id="tmp",
+        )
 
     def bucket_rule_archive(self, days=ARCHIVE_PERIOD_IN_DAYS) -> Any:
         pass
@@ -84,9 +135,7 @@ class AWSInfra(CloudInfraBase):
             bucket=unique_bucket_name,
             lifecycle_rules=lifecycle_rules,
             request_payer='Requester' if requester_pays else 'BucketOwner',
-            tags={
-                'dataset': project or self.dataset
-            }
+            tags={'dataset': project or self.dataset},
         )
 
     def add_member_to_bucket(
@@ -121,9 +170,9 @@ class AWSInfra(CloudInfraBase):
         )
 
     def create_secret(self, name: str, project: str = None) -> Any:
-        secret = aws.secretsmanager.Secret(name, name=name, tags={
-                'dataset': project or self.dataset
-            })
+        secret = aws.secretsmanager.Secret(
+            name, name=name, tags={'dataset': project or self.dataset}
+        )
 
         return secret
 
