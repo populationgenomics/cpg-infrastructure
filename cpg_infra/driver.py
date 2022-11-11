@@ -2,14 +2,16 @@
 """
 CPG Dataset infrastructure
 """
+import os.path
 import re
 from inspect import isclass
 from typing import Type, Any, Iterator, Iterable
 from collections import defaultdict, namedtuple
 from functools import lru_cache, cached_property
 
-import cpg_utils.config
+import toml
 import pulumi
+import cpg_utils.config
 
 from cpg_infra.abstraction.azure import AzureInfra
 from cpg_infra.abstraction.gcp import GcpInfrastructure
@@ -215,8 +217,12 @@ class CpgDatasetInfrastructure:
         return {al: self.create_group(al) for al in ACCESS_LEVELS}
 
     @staticmethod
-    def get_group_output_name(*, dataset: str, kind: str):
+    def get_pulumi_output_group_name(*, dataset: str, kind: str):
         return f'{dataset}-{kind}-group-id'
+
+    @staticmethod
+    def get_pulumi_output_storage_config_name(infra_name, dataset, access_level) -> str:
+        return '-'.join(['storage', infra_name, dataset, access_level, 'config'])
 
     def setup_web_access_group_memberships(self):
         self.infra.add_group_member(
@@ -237,7 +243,7 @@ class CpgDatasetInfrastructure:
 
         for kind, group in kinds.items():
             pulumi.export(
-                self.get_group_output_name(
+                self.get_pulumi_output_group_name(
                     dataset=self.dataset_config.dataset, kind=kind
                 ),
                 group.id if hasattr(group, 'id') else group,
@@ -302,6 +308,118 @@ class CpgDatasetInfrastructure:
 
         if isinstance(self.infra, GcpInfrastructure):
             self.setup_storage_gcp_requester_pays_access()
+
+        self.setup_storage_outputs()
+
+    def setup_storage_outputs(self):
+
+        buckets = {
+            'main': {
+                'default': self.main_bucket,
+                'web': self.main_web_bucket,
+                'analysis': self.main_analysis_bucket,
+                'tmp': self.main_tmp_bucket,
+            },
+            'test': {
+                'default': self.test_bucket,
+                'web': self.test_web_bucket,
+                'analysis': self.test_analysis_bucket,
+                'tmp': self.test_tmp_bucket,
+            },
+        }
+
+        for access_level, al_buckets in buckets.items():
+
+            output_locations = {
+                cat: self.infra.bucket_output_path(bucket)
+                for cat, bucket in al_buckets.items()
+            }
+
+            # Export bucket path
+            # for category, bucket_path in output_locations.items():
+            #     components = [self.dataset_config.dataset, 'bucket', access_level]
+            #     if category != 'default':
+            #         components.append(category)
+            #
+            #     pulumi.export('-'.join(components), bucket_path)
+
+            configs_to_merge = []
+            for dependent_dataset in self.dataset_config.depends_on:
+
+                stack = self.get_pulumi_stack(dependent_dataset)
+                configs_to_merge.append(
+                    stack.get_output(
+                        self.get_pulumi_output_storage_config_name(
+                            self.infra.name(), dependent_dataset, access_level
+                        )
+                    )
+                )
+
+            prepare_config_kargs = {**output_locations}
+            if configs_to_merge:
+                prepare_config_kargs['extra_configs'] = pulumi.Output.all(
+                    *configs_to_merge
+                ).apply('\n'.join)
+                print('Adding extra configs')
+
+            dataset_storage_config = pulumi.output.Output.all(
+                **prepare_config_kargs
+            ).apply(self._pulumi_prepare_outputs_function())
+            pulumi_export_name = self.get_pulumi_output_storage_config_name(
+                self.infra.name(), self.dataset_config.dataset, access_level
+            )
+            pulumi.export(pulumi_export_name, dataset_storage_config)
+            self.add_config_toml_to_outputs(
+                access_level=access_level, contents=dataset_storage_config
+            )
+
+    def add_config_toml_to_outputs(self, access_level, contents):
+        assert (
+            self.config.config_destination
+            and self.config.config_destination.startswith('gs://')
+        )
+
+        bucket_name, suffix = self.config.config_destination[len('gs://') :].split(
+            '/', maxsplit=1
+        )
+
+        name = f'{self.infra.name()}-{self.dataset_config.dataset}-{access_level}'
+        output_name = os.path.join(suffix, name + '.toml')
+
+        gcp_infra = (
+            GcpInfrastructure(self.config, self.dataset_config)
+            if isinstance(self.infra, GcpInfrastructure)
+            else self.infra
+        )
+        gcp_infra.add_toml_config(
+            resource_name=f'storage-config-{name}',
+            bucket=bucket_name,
+            output_name=output_name,
+            contents=contents,
+        )
+
+    def _pulumi_prepare_outputs_function(self):
+        def func(arg):
+
+            kwargs = dict(arg)
+            config_dict = {}
+            if 'extra_configs' in kwargs:
+                config_dict = toml.loads(kwargs.pop('extra_configs'))
+
+            storage_dict = {
+                self.infra.name(): {
+                    'buckets': {'default': kwargs, self.dataset_config.dataset: kwargs}
+                }
+            }
+            if config_dict:
+                cpg_utils.config.update_dict(config_dict, storage_dict)
+            else:
+                config_dict = storage_dict
+
+            d = toml.dumps(config_dict)
+            return d
+
+        return func
 
     def setup_storage_gcp_requester_pays_access(self):
         """
@@ -1284,7 +1402,8 @@ class CpgDatasetInfrastructure:
 
     def setup_dependencies_group_memberships(self):
 
-        dependencies = self.dataset_config.depends_on
+        # duplicate here, because otherwise this affects all future invocations
+        dependencies = list(self.dataset_config.depends_on)
 
         if self.dataset_config.dataset != self.config.reference_dataset:
             dependencies.append(self.config.reference_dataset)
@@ -1295,14 +1414,16 @@ class CpgDatasetInfrastructure:
             self.infra.add_group_member(
                 f'{dependency}-access-group',
                 dependent_stack.get_output(
-                    self.get_group_output_name(dataset=dependency, kind='access')
+                    self.get_pulumi_output_group_name(dataset=dependency, kind='access')
                 ),
                 self.access_group,
             )
 
             for access_level, primary_access_group in self.access_level_groups.items():
                 dependency_group_id = dependent_stack.get_output(
-                    self.get_group_output_name(dataset=dependency, kind=access_level),
+                    self.get_pulumi_output_group_name(
+                        dataset=dependency, kind=access_level
+                    ),
                 )
 
                 # add this dataset to dependencies membership

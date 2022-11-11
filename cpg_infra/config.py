@@ -147,6 +147,8 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     budget_currency: str
     reference_dataset: str
 
+    config_destination: str
+
     gcp: GCP | None
     hail: Hail | None
     analysis_runner: AnalysisRunner | None

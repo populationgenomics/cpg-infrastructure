@@ -32,18 +32,32 @@ class GcpInfrastructure(CloudInfraBase):
         self, config: CPGInfrastructureConfig, dataset_config: CPGDatasetConfig
     ):
         super().__init__(config, dataset_config)
-
         self.region = 'australia-southeast1'
-        self.organization = gcp.organizations.get_organization(domain=config.domain)
-        self.project_id = gcp.organizations.get_project().project_id
 
-        self._svc_cloudresourcemanager = gcp.projects.Service(
+    @cached_property
+    def organization(self):
+        return gcp.organizations.get_organization(domain=self.config.domain)
+
+    @cached_property
+    def project_id(self):
+        return gcp.organizations.get_project().project_id
+
+    def get_dataset_project_id(self):
+        return self.project_id
+
+    # region SERVICES
+
+    @cached_property
+    def _svc_cloudresourcemanager(self):
+        return gcp.projects.Service(
             'cloudresourcemanager-service',
             service='cloudresourcemanager.googleapis.com',
             disable_on_destroy=False,
         )
 
-        self._svc_cloudidentity = gcp.projects.Service(
+    @cached_property
+    def _svc_cloudidentity(self):
+        return gcp.projects.Service(
             'cloudidentity-service',
             service='cloudidentity.googleapis.com',
             disable_on_destroy=False,
@@ -52,13 +66,17 @@ class GcpInfrastructure(CloudInfraBase):
             ),
         )
 
-        self._svc_serviceusage = gcp.projects.Service(
+    @cached_property
+    def _svc_serviceusage(self):
+        return gcp.projects.Service(
             'serviceusage-service',
             service='serviceusage.googleapis.com',
             disable_on_destroy=False,
         )
 
-        self._svc_secretmanager = gcp.projects.Service(
+    @cached_property
+    def _svc_secretmanager(self):
+        return gcp.projects.Service(
             'secretmanager-service',
             service='secretmanager.googleapis.com',
             disable_on_destroy=False,
@@ -67,10 +85,6 @@ class GcpInfrastructure(CloudInfraBase):
             ),
         )
 
-    def get_dataset_project_id(self):
-        return self.project_id
-
-    # region SERVICES
     @cached_property
     def _svc_dataproc(self):
         return gcp.projects.Service(
@@ -237,6 +251,9 @@ class GcpInfrastructure(CloudInfraBase):
             ),
             condition=gcp.storage.BucketLifecycleRuleConditionArgs(age=days),
         )
+
+    def bucket_output_path(self, bucket: gcp.storage.Bucket):
+        return pulumi.Output.concat('gs://', bucket.name)
 
     def create_bucket(
         self,
@@ -557,6 +574,11 @@ class GcpInfrastructure(CloudInfraBase):
             project=project or self.project_id,
             role=role,
             member=self.get_member_key(member),
+        )
+
+    def add_blob_to_bucket(self, resource_name, bucket, output_name, contents):
+        return gcp.storage.BucketObject(
+            resource_name, bucket=bucket, name=output_name, content=contents
         )
 
     # endregion GCP SPECIFIC
