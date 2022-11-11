@@ -391,7 +391,7 @@ class CpgDatasetInfrastructure:
             if isinstance(self.infra, GcpInfrastructure)
             else self.infra
         )
-        gcp_infra.add_toml_config(
+        gcp_infra.add_blob_to_bucket(
             resource_name=f'storage-config-{name}',
             bucket=bucket_name,
             output_name=output_name,
@@ -407,9 +407,7 @@ class CpgDatasetInfrastructure:
                 config_dict = toml.loads(kwargs.pop('extra_configs'))
 
             storage_dict = {
-                self.infra.name(): {
-                    'buckets': {'default': kwargs, self.dataset_config.dataset: kwargs}
-                }
+                'storage': {'default': kwargs, self.dataset_config.dataset: kwargs}
             }
             if config_dict:
                 cpg_utils.config.update_dict(config_dict, storage_dict)
