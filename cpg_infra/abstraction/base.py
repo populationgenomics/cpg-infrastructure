@@ -159,6 +159,11 @@ class CloudInfraBase(ABC):
         pass
 
     @abstractmethod
+    def add_blob_to_bucket(self, resource_name, bucket, output_name, contents):
+        """Add blob to a bucket, contents can be awaitable string"""
+        pass
+
+    @abstractmethod
     def give_member_ability_to_list_buckets(
         self, resource_key: str, member, project: str = None
     ):

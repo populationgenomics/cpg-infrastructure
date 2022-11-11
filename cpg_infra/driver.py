@@ -335,7 +335,7 @@ class CpgDatasetInfrastructure:
                 for cat, bucket in al_buckets.items()
             }
 
-            # Export bucket path
+            # Pulumi Export bucket path
             # for category, bucket_path in output_locations.items():
             #     components = [self.dataset_config.dataset, 'bucket', access_level]
             #     if category != 'default':
@@ -355,29 +355,63 @@ class CpgDatasetInfrastructure:
                     )
                 )
 
-            prepare_config_kargs = {**output_locations}
+            prepare_config_kwargs = {**output_locations}
             if configs_to_merge:
-                prepare_config_kargs['extra_configs'] = pulumi.Output.all(
+                # Merge them here, because we have to pass it as a single
+                # keyword-argument to Pulumi so we can reference it, but Pulumi
+                # won't resolve a List[Output[T]]
+                prepare_config_kwargs['_extra_configs'] = pulumi.Output.all(
                     *configs_to_merge
                 ).apply('\n'.join)
-                print('Adding extra configs')
 
+            def _pulumi_prepare_function(arg):
+                """Redefine like this as Pulumi drops the self somehow"""
+                return self._pulumi_prepare_outputs_function(arg)
+
+            # This is an pulumi.Output[String]
             dataset_storage_config = pulumi.output.Output.all(
-                **prepare_config_kargs
-            ).apply(self._pulumi_prepare_outputs_function())
+                **prepare_config_kwargs
+            ).apply(_pulumi_prepare_function)
             pulumi_export_name = self.get_pulumi_output_storage_config_name(
                 self.infra.name(), self.dataset_config.dataset, access_level
             )
+
+            # this export is important, it's how direct dependencies will be able to
+            # access the nested dependencies, this export is potentially depending
+            # on transitive dependencies.
             pulumi.export(pulumi_export_name, dataset_storage_config)
-            self.add_config_toml_to_outputs(
+            self.add_config_toml_to_bucket(
                 access_level=access_level, contents=dataset_storage_config
             )
 
-    def add_config_toml_to_outputs(self, access_level, contents):
-        assert (
-            self.config.config_destination
-            and self.config.config_destination.startswith('gs://')
-        )
+    def add_config_toml_to_bucket(self, access_level, contents: pulumi.Output):
+        """
+        Write the config to a bucket, this function decides the output-path based
+        on the current deploy infra, dataset, access_level.
+        :param access_level: test / main
+        :param contents: some Pulumi awaitable string
+        """
+        if not self.config.config_destination:
+            return
+
+        _infra_to_call_function_on = None
+        infra_prefix_map = [
+            ('gs://', GcpInfrastructure),
+            ('hail-az://', AzureInfra),
+        ]
+        for prefix, I in infra_prefix_map:
+            if self.config.config_destination.startswith(prefix):
+                _infra_to_call_function_on = (
+                    I(self.config, self.dataset_config)
+                    if isinstance(self.infra, I)
+                    else self.infra
+                )
+                break
+        else:
+            raise ValueError(
+                f'Could not find infra to save blob to for config_destination: '
+                f'{self.config.config_destination}'
+            )
 
         bucket_name, suffix = self.config.config_destination[len('gs://') :].split(
             '/', maxsplit=1
@@ -386,38 +420,32 @@ class CpgDatasetInfrastructure:
         name = f'{self.infra.name()}-{self.dataset_config.dataset}-{access_level}'
         output_name = os.path.join(suffix, name + '.toml')
 
-        gcp_infra = (
-            GcpInfrastructure(self.config, self.dataset_config)
-            if isinstance(self.infra, GcpInfrastructure)
-            else self.infra
-        )
-        gcp_infra.add_blob_to_bucket(
+        _infra_to_call_function_on.add_blob_to_bucket(
             resource_name=f'storage-config-{name}',
             bucket=bucket_name,
             output_name=output_name,
             contents=contents,
         )
 
-    def _pulumi_prepare_outputs_function(self):
-        def func(arg):
+    def _pulumi_prepare_outputs_function(self, arg):
+        """
+        Don't call this directly from Pulumi, as it strips the self
+        """
+        kwargs = dict(arg)
+        config_dict = {}
+        if '_extra_configs' in kwargs:
+            config_dict = toml.loads(kwargs.pop('_extra_configs'))
 
-            kwargs = dict(arg)
-            config_dict = {}
-            if 'extra_configs' in kwargs:
-                config_dict = toml.loads(kwargs.pop('extra_configs'))
+        storage_dict = {
+            'storage': {'default': kwargs, self.dataset_config.dataset: kwargs}
+        }
+        if config_dict:
+            cpg_utils.config.update_dict(config_dict, storage_dict)
+        else:
+            config_dict = storage_dict
 
-            storage_dict = {
-                'storage': {'default': kwargs, self.dataset_config.dataset: kwargs}
-            }
-            if config_dict:
-                cpg_utils.config.update_dict(config_dict, storage_dict)
-            else:
-                config_dict = storage_dict
-
-            d = toml.dumps(config_dict)
-            return d
-
-        return func
+        d = toml.dumps(config_dict)
+        return d
 
     def setup_storage_gcp_requester_pays_access(self):
         """
