@@ -361,3 +361,6 @@ class AzureInfra(CloudInfraBase):
         self, resource_key: str, member, project: str = None
     ):
         pass
+
+    def create_container_registry(self, name: str):
+        pass
