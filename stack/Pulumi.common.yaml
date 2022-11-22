@@ -17,4 +17,3 @@ config:
   gcp:billing_project: cpg-common
   gcp:project: cpg-common
   gcp:user_project_override: "true"
-
