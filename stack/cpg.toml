@@ -4,6 +4,7 @@ dataset_storage_prefix = "cpg-"
 budget_currency = "AUD"
 reference_dataset = "reference"
 config_destination = "gs://cpg-config/templates/storage/"
+web_url_template = "https://{namespace}-web.populationgenomics.org.au/{dataset}"
 
 #disable_group_memberships = "true"
 
