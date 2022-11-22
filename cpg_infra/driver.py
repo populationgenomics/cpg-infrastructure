@@ -1167,6 +1167,9 @@ class CpgDatasetInfrastructure:
     # region ACCESS GROUP CACHE
 
     def setup_group_cache(self):
+        if not isinstance(self.infra, GcpInfrastructure):
+            return
+
         self.setup_group_cache_access_group()
         self.setup_group_cache_web_access_group()
         self.setup_group_cache_sample_metadata_secrets()
@@ -1288,7 +1291,8 @@ class CpgDatasetInfrastructure:
 
     def setup_dependencies_group_memberships(self):
 
-        dependencies = self.dataset_config.depends_on
+        # duplicate reference to avoid mutating config
+        dependencies = list(self.dataset_config.depends_on)
 
         if self.dataset_config.dataset != self.config.reference_dataset:
             dependencies.append(self.config.reference_dataset)
@@ -1297,13 +1301,13 @@ class CpgDatasetInfrastructure:
             dependent_stack = self.get_pulumi_stack(dependency)
 
             self.infra.add_group_member(
-                f'{dependency}-access-group',
-                dependent_stack.get_output(
+                resource_key=f'{dependency}-access-group',
+                group=dependent_stack.get_output(
                     self.get_group_output_name(
                         infra_name=self.infra.name(), dataset=dependency, kind='access'
                     )
                 ),
-                self.access_group,
+                member=self.access_group,
             )
 
             for access_level, primary_access_group in self.access_level_groups.items():

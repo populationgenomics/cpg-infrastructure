@@ -2,11 +2,13 @@
 """
 Azure implementation for abstract infrastructure
 """
+import re
 from datetime import date
 
 from typing import Any
 from functools import cached_property
 
+import pulumi
 import pulumi_azure_native as az
 import pulumi_azuread as azuread
 
@@ -33,7 +35,9 @@ class AzureInfra(CloudInfraBase):
         self.region = 'australiaeast'
         resource_group_prefix = config.dataset_storage_prefix.replace('-', '')
         self._resource_group_name = f'{config.dataset_storage_prefix}{self.dataset}'
-        self._storage_account_name = f'{config.dataset_storage_prefix}{self.dataset}'
+        self._storage_account_name = re.sub(
+            '[^a-z]', '', f'{config.dataset_storage_prefix}{self.dataset}'.lower()
+        )
         self.storage_account_lifecycle_rules = []
         self.storage_account_undelete_rule = None
 
@@ -337,8 +341,22 @@ class AzureInfra(CloudInfraBase):
             security_enabled=True,
         )
 
+    def _get_object_id(self, obj):
+        if isinstance(obj, azuread.Group):
+            return obj.id
+
+        if isinstance(obj, pulumi.Output):
+            return obj
+
+        raise ValueError(f'Unrecognised object: {obj} ({type(obj)})')
+
     def add_group_member(self, resource_key: str, group, member) -> Any:
-        pass
+
+        return azuread.GroupMember(
+            self.resource_prefix() + resource_key,
+            group_object_id=self._get_object_id(group),
+            member_object_id=self._get_object_id(member),
+        )
 
     def create_secret(self, name: str, project: str = None) -> Any:
         pass
