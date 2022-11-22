@@ -262,7 +262,10 @@ class CPGDatasetConfig(DeserializableDataclass):
                 d[fieldname] = value
 
         if 'components' in d:
-            d['components'] = {k: [CPGDatasetComponents(c) for c in comps] for k, comps in d['components'].items()}
+            d['components'] = {
+                k: [CPGDatasetComponents(c) for c in comps]
+                for k, comps in d['components'].items()
+            }
 
         return cls(**d)
 
