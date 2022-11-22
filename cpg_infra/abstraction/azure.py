@@ -294,6 +294,10 @@ class AzureInfra(CloudInfraBase):
         )
 
     def bucket_membership_to_role(self, membership: BucketMembership):
+        """
+        WARNING: there is no LIST, only read + list / write
+        Get the role for a specific BucketMembership.
+        """
         if membership in (BucketMembership.MUTATE, BucketMembership.APPEND):
             return f'{self.subscription}/providers/Microsoft.Authorization/roleDefinitions/ba92f5b4-2d11-453d-a403-e96b0029c9fe'
         if membership in (BucketMembership.READ, BucketMembership.LIST):
@@ -377,8 +381,47 @@ class AzureInfra(CloudInfraBase):
             member_object_id=self._get_object_id(member),
         )
 
+    @cached_property
+    def secret_vault(self):
+        return az.keyvault.Vault(
+            self.resource_prefix() + 'vault',
+            resource_group_name=self.resource_group.name,
+            vault_name='secrets',
+            location=self.region,
+            properties=az.keyvault.VaultPropertiesArgs(
+                tenant_id=self.tenant,
+                enabled_for_deployment=True,
+                enabled_for_disk_encryption=True,
+                enabled_for_template_deployment=True,
+            ),
+        )
+
     def create_secret(self, name: str, project: str = None) -> Any:
-        pass
+        return az.keyvault.Secret(
+            self.resource_prefix() + 'secret-' + name,
+            secret_name=name,
+            properties=az.keyvault.SecretPropertiesArgs(
+                value=None,
+            ),
+            resource_group_name=self.resource_group.name,
+            vault_name=self.secret_vault.name,
+        )
+
+    def add_secret_version(
+        self,
+        resource_key: str,
+        secret: Any,
+        contents: Any,
+    ):
+        return az.keyvault.Secret(
+            self.resource_prefix() + resource_key,
+            secret_name=secret.name,
+            properties=az.keyvault.SecretPropertiesArgs(
+                value=contents,
+            ),
+            resource_group_name=self.resource_group.name,
+            vault_name=self.secret_vault.name,
+        )
 
     def add_secret_member(
         self,
@@ -390,16 +433,9 @@ class AzureInfra(CloudInfraBase):
     ) -> Any:
         pass
 
-    def add_secret_version(
-        self,
-        resource_key: str,
-        secret: Any,
-        contents: Any,
-    ):
-        pass
-
-    def container_membership_to_roles(
-        self, membership: ContainerRegistryMembership
+    @staticmethod
+    def _container_membership_to_roles(
+        membership: ContainerRegistryMembership,
     ) -> dict[str, str]:
         role_pull = '/providers/Microsoft.Authorization/roleDefinitions/7f951dda-4ed3-4680-a7ca-43fe172d538d'
         role_push = '/providers/Microsoft.Authorization/roleDefinitions/8311e382-0749-4cb8-b61a-304f252e45ec'
@@ -415,7 +451,7 @@ class AzureInfra(CloudInfraBase):
         self, resource_key: str, registry, member, membership, project=None
     ) -> list[Any]:
         roles = []
-        for role_type, role in self.container_membership_to_roles(membership).items():
+        for role_type, role in self._container_membership_to_roles(membership).items():
 
             roles.append(
                 az.authorization.RoleAssignment(
@@ -433,7 +469,13 @@ class AzureInfra(CloudInfraBase):
     def give_member_ability_to_list_buckets(
         self, resource_key: str, member, project: str = None
     ):
-        pass
+        return az.authorization.RoleAssignment(
+            self.resource_prefix() + resource_key,
+            scope=self.storage_account.id,
+            principal_id=self._get_object_id(member),
+            principal_type=self._get_principal_type(member),
+            role_definition_id=self.bucket_membership_to_role(BucketMembership.LIST),
+        )
 
     def create_container_registry(self, name: str):
         return az.containerregistry.Registry(
