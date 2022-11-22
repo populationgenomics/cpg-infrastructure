@@ -73,8 +73,8 @@ HAIL_AUTH_URL = {
     Cloud.AZURE: 'https://auth.azhail.popgen.rocks'
 }
 
-HAIL_CREATE_USER_PATH = '{HAIL_AUTH_URL[cloud.value]}/api/v1alpha/users/{username}/create'
-HAIL_GET_USER_PATH = '{HAIL_AUTH_URL[cloud.value]}/api/v1alpha/users/{username}'
+HAIL_CREATE_USER_PATH = '{hail_auth_url}/api/v1alpha/users/{username}/create'
+HAIL_GET_USER_PATH = '{hail_auth_url}/api/v1alpha/users/{username}'
 TIMEOUT = 5000
 
 logging.basicConfig(level=logging.INFO)
@@ -90,7 +90,7 @@ logging.basicConfig(level=logging.INFO)
 @click.option('--deploy-stack', required=False, is_flag=True, help='Runs `pulumi up`')
 @click.option('--generate-service-account-key', required=False, is_flag=True)
 @click.option('--add-random-digits-to-gcp-id', required=False, is_flag=True)
-@click.option('--budget', type=list[int], help='Monthly budget in whole AUD, order corresponds to cloud', default=[100])
+@click.option('--budget', help='Monthly budget in whole AUD, order corresponds to cloud', default=[100], multiple=True)
 @click.option('--create-release-buckets', required=False, is_flag=True)
 def main(
     dataset: str,
@@ -389,7 +389,7 @@ def _kubectl_hail_token_command(project, access_level: str):
 
 
 def _check_if_hail_account_exists(username, hail_auth_token, cloud: Cloud = Cloud.GCP):
-    url = HAIL_GET_USER_PATH.format(username=username, cloud=cloud, HAIL_AUTH_URL=HAIL_AUTH_URL)
+    url = HAIL_GET_USER_PATH.format(username=username, hail_auth_url=HAIL_AUTH_URL.get(cloud))
     resp = requests.get(
         url, headers={'Authorization': f'Bearer {hail_auth_token}'}, timeout=TIMEOUT
     )
@@ -402,10 +402,10 @@ def _check_if_hail_account_exists(username, hail_auth_token, cloud: Cloud = Clou
     return resp.ok
 
 
-def _check_if_hail_account_is_active(username, hail_auth_token) -> bool:
+def _check_if_hail_account_is_active(username, hail_auth_token, cloud: Cloud) -> bool:
     """Check if a hail account is active"""
 
-    url = HAIL_GET_USER_PATH.format(username=username)
+    url = HAIL_GET_USER_PATH.format(username=username, hail_auth_url=HAIL_AUTH_URL.get(cloud))
     resp = requests.get(
         url, headers={'Authorization': f'Bearer {hail_auth_token}'}, timeout=TIMEOUT
     )
@@ -418,7 +418,7 @@ def _check_if_hail_account_is_active(username, hail_auth_token) -> bool:
 
 
 def _create_hail_service_account(username, hail_auth_token, cloud: Cloud = Cloud.GCP):
-    url = HAIL_CREATE_USER_PATH.format(username=username, cloud=cloud, HAIL_AUTH_URL=HAIL_AUTH_URL)
+    url = HAIL_CREATE_USER_PATH.format(username=username, hail_auth_url=HAIL_AUTH_URL.get(cloud))
     post_resp = requests.post(
         url=url,
         headers={'Authorization': f'Bearer {hail_auth_token}'},
@@ -462,7 +462,7 @@ def create_hail_accounts(dataset, cloud: Cloud = Cloud.GCP):
     for username in potential_usernames:
         counter = 0
         while counter < 10:
-            if _check_if_hail_account_is_active(username, hail_auth_token):
+            if _check_if_hail_account_is_active(username, hail_auth_token, cloud):
                 logging.info(f'Hail account {username} is active')
                 break
 
@@ -615,4 +615,13 @@ def add_dataset_to_tokens(dataset: str):
 
 if __name__ == '__main__':
     # pylint: disable=no-value-for-parameter
+    if os.getenv('DEBUG'):
+        import debugpy
+
+        debugpy.listen(('localhost', 5678))
+        print('debugpy is listening, attach by pressing F5 or ►')
+
+        debugpy.wait_for_client()
+        print('Attached to debugpy!')
+
     main()
