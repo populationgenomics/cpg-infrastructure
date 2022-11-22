@@ -105,7 +105,6 @@ class AzureInfra(CloudInfraBase):
         )
 
     def create_project(self, name):
-        # TODO: Check if this will be final implementation of shared projects in az
         return az.resources.ResourceGroup(name)
 
     def create_budget(
@@ -223,7 +222,6 @@ class AzureInfra(CloudInfraBase):
         self.storage_account_undelete_rule = days
 
     def bucket_rule_archive(self, days=ARCHIVE_PERIOD_IN_DAYS) -> Any:
-        # TODO: Remove filters here on account of it being applied consistently in create_bucket function
         return az.storage.ManagementPolicyRuleArgs(
             name='bucket-rule-archive',
             type='Lifecycle',
@@ -234,10 +232,6 @@ class AzureInfra(CloudInfraBase):
                             days_after_modification_greater_than=days,
                         )
                     )
-                ),
-                filters=az.storage.ManagementPolicyFilterArgs(
-                    blob_types=['blockBlob'],
-                    prefix_match=['olcmtestcontainer1'],
                 ),
             ),
         )
@@ -335,11 +329,9 @@ class AzureInfra(CloudInfraBase):
     def create_machine_account(
         self, name: str, project: str = None, *, resource_key: str = None
     ) -> Any:
-        # TODO: skeptical because there's no name?
         return az.managedidentity.UserAssignedIdentity(
             self.resource_prefix() + (resource_key or f'service-account-{name}'),
             resource_name_=name,
-            # name=name,
             location=self.region,
             resource_group_name=self.resource_group.name,
         )
