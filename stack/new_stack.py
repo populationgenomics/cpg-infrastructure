@@ -216,6 +216,7 @@ def main(
         add_as_seqr_dependency=add_as_seqr_dependency,
         dataset=dataset,
         create_release_buckets=create_release_buckets,
+        load_hail_service_accounts=create_hail_service_accounts,
     )
 
     if not os.path.exists(pulumi_config_fn):
@@ -578,22 +579,13 @@ def create_stack(
     dataset: str,
     add_as_seqr_dependency: bool,
     create_release_buckets: bool,
+load_hail_service_accounts: bool,
 ):
     """
     Generate Pulumi.{dataset}.yaml pulumi stack file, with required params
     """
 
     branch_name = f'add-{dataset}-stack'
-
-    hail_client_emails_by_level = get_hail_service_accounts(
-        dataset=dataset, clouds=clouds
-    )
-
-    formed_hail_config = {
-        f'datasets:{cloud.value}_hail_service_account_{access_level}': account
-        for cloud, data in hail_client_emails_by_level.items()
-        for access_level, account in data.items()
-    }
 
     base_config = {
         'gcp:billing_project': gcp_project,
@@ -604,8 +596,18 @@ def create_stack(
         # kludge: this makes the comparison with on disk yaml happier
         'datasets:enable_release': str(create_release_buckets).lower(),
         'datasets:deploy_locations': [c.value for c in clouds],
-        **formed_hail_config,
     }
+
+    if load_hail_service_accounts:
+        hail_client_emails_by_level = get_hail_service_accounts(
+                dataset=dataset, clouds=clouds
+            )
+
+        base_config.update({
+            f'datasets:{cloud.value}_hail_service_account_{access_level}': account
+            for cloud, data in hail_client_emails_by_level.items()
+            for access_level, account in data.items()
+        })
 
     if az_subscription:
         base_config.update(
