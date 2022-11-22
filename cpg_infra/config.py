@@ -77,8 +77,6 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         billing_project_id: str
         billing_account_id: int
         budget_notification_pubsub: str | None
-        common_artifact_registry_project: str
-        common_artifact_registry_name: str
         reference_bucket_name: str
         config_bucket_name: str
 
@@ -224,9 +222,9 @@ class CPGDatasetConfig(DeserializableDataclass):
 
     dataset: str
 
-    gcp_hail_service_account_test: str
-    gcp_hail_service_account_standard: str
-    gcp_hail_service_account_full: str
+    gcp_hail_service_account_test: str | None = None
+    gcp_hail_service_account_standard: str | None = None
+    gcp_hail_service_account_full: str | None = None
 
     deployment_service_account_test: str | None = None
     deployment_service_account_standard: str | None = None
@@ -268,6 +266,12 @@ class CPGDatasetConfig(DeserializableDataclass):
             value = parse_value_from_type(config, fieldname, ftype)
             if value:
                 d[fieldname] = value
+
+        if 'components' in d:
+            d['components'] = {
+                k: [CPGDatasetComponents(c) for c in comps]
+                for k, comps in d['components'].items()
+            }
 
         return cls(**d)
 

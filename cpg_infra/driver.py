@@ -217,9 +217,8 @@ class CpgDatasetInfrastructure:
         return {al: self.create_group(al) for al in ACCESS_LEVELS}
 
     @staticmethod
-    def get_group_output_name(*, infra_name, dataset: str, kind: str):
-        # return f'{infra_name}-{dataset}-{kind}-group-id'
-        return f'{dataset}-{kind}-group-id'
+    def get_group_output_name(*, infra_name: str, dataset: str, kind: str):
+        return f'{infra_name}-{dataset}-{kind}-group-id'
 
 
     def setup_web_access_group_memberships(self):
@@ -239,15 +238,15 @@ class CpgDatasetInfrastructure:
             **self.access_level_groups,
         }
 
-        if isinstance(self.infra, GcpInfrastructure):
-            for kind, group in kinds.items():
-                pulumi.export(
-                    self.get_group_output_name(
-                        infra_name=self.infra.name(),
-                        dataset=self.dataset_config.dataset, kind=kind
-                    ),
-                    group.id if hasattr(group, 'id') else group,
-                )
+        for kind, group in kinds.items():
+            pulumi.export(
+                self.get_group_output_name(
+                    infra_name=self.infra.name(),
+                    dataset=self.dataset_config.dataset,
+                    kind=kind,
+                ),
+                group.id if hasattr(group, 'id') else group,
+            )
 
     def setup_access_level_group_memberships(self):
         for (
@@ -981,9 +980,9 @@ class CpgDatasetInfrastructure:
 
         # mostly because this current format requires the project_id
         custom_container_registry = self.infra.create_container_registry('images')
-        for kind, account in self.access_level_groups:
+        for kind, account in self.access_level_groups.items():
             self.infra.add_member_to_container_registry(
-                f'test-images-reader-in-container-registry',
+                f'{kind}-images-reader-in-container-registry',
                 registry=custom_container_registry,
                 member=account,
                 membership=ContainerRegistryMembership.READER,
@@ -998,18 +997,23 @@ class CpgDatasetInfrastructure:
 
     def setup_legacy_container_registries(self):
         """
-        Setup permissions for cpg-common + analysis-runner artifact registries
+        Setup permissions for analysis-runner artifact registries
         """
         # TODO: This will eventually be mostly solved by the cpg-common
         #       dataset with permissions through inheritance.
+        if not isinstance(self.infra, GcpInfrastructure):
+            return
+        try:
+            if not self.config.analysis_runner.gcp.project:
+                return
+        except AttributeError:
+            # gross catch nulls
+            return
+
         container_registries = [
             (
                 self.config.analysis_runner.gcp.project,
                 self.config.analysis_runner.gcp.container_registry_name,
-            ),
-            (
-                self.config.gcp.common_artifact_registry_project,
-                self.config.gcp.common_artifact_registry_name,
             ),
         ]
 
@@ -1031,15 +1035,6 @@ class CpgDatasetInfrastructure:
                     member=account,
                     membership=ContainerRegistryMembership.READER,
                 )
-
-        for kind in ('full', 'standard'):
-            self.infra.add_member_to_container_registry(
-                f'{kind}-images-writer-in-cpg-common',
-                registry=self.config.gcp.common_artifact_registry_name,
-                project=self.config.gcp.common_artifact_registry_project,
-                member=self.access_level_groups[kind],
-                membership=ContainerRegistryMembership.WRITER,
-            )
 
     # endregion CONTAINER REGISTRY
     # region NOTEBOOKS
@@ -1305,15 +1300,19 @@ class CpgDatasetInfrastructure:
                 f'{dependency}-access-group',
                 dependent_stack.get_output(
                     self.get_group_output_name(
-                        infra_name=self.infra.name(),
-                        dataset=dependency, kind='access')
+                        infra_name=self.infra.name(), dataset=dependency, kind='access'
+                    )
                 ),
                 self.access_group,
             )
 
             for access_level, primary_access_group in self.access_level_groups.items():
                 dependency_group_id = dependent_stack.get_output(
-                    self.get_group_output_name(infra_name=self.infra.name(),dataset=dependency, kind=access_level),
+                    self.get_group_output_name(
+                        infra_name=self.infra.name(),
+                        dataset=dependency,
+                        kind=access_level,
+                    ),
                 )
 
                 # add this dataset to dependencies membership
