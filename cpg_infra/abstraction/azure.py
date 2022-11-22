@@ -13,11 +13,11 @@ import pulumi_azuread as azuread
 from cpg_infra.config import CPGInfrastructureConfig, CPGDatasetConfig
 from cpg_infra.abstraction.base import (
     CloudInfraBase,
+    SecretMembership,
+    BucketMembership,
     UNDELETE_PERIOD_IN_DAYS,
     ARCHIVE_PERIOD_IN_DAYS,
     TMP_BUCKET_PERIOD_IN_DAYS,
-    SecretMembership,
-    BucketMembership,
 )
 
 AZURE_BILLING_START_DATE = '2017-06-01T00:00:00Z'

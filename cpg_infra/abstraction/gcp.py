@@ -18,6 +18,7 @@ from cpg_infra.abstraction.base import (
     BucketMembership,
     SecretMembership,
     ContainerRegistryMembership,
+    BUCKET_DELETE_INCOMPLETE_UPLOAD_PERIOD_IN_DAYS,
 )
 from cpg_infra.config import CPGDatasetConfig, CPGInfrastructureConfig
 
@@ -65,9 +66,6 @@ class GcpInfrastructure(CloudInfraBase):
                 depends_on=[self._svc_cloudresourcemanager]
             ),
         )
-
-    def finalise(self):
-        pass
 
     def get_dataset_project_id(self):
         return self.project_id
@@ -135,7 +133,9 @@ class GcpInfrastructure(CloudInfraBase):
             project_id=name,
             name=name,
             billing_account=self.config.gcp.billing_account_id,
-            opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudbilling]),
+            opts=pulumi.resource.ResourceOptions(
+                depends_on=[self._svc_cloudbilling], protect=True
+            ),
         )
 
     def create_budget(self, resource_key: str, *, project, budget: int, budget_filter):
@@ -225,6 +225,19 @@ class GcpInfrastructure(CloudInfraBase):
             condition=gcp.storage.BucketLifecycleRuleConditionArgs(age=days),
         )
 
+    def bucket_rule_abort_incomplete_multipart_upload(
+        self, days=BUCKET_DELETE_INCOMPLETE_UPLOAD_PERIOD_IN_DAYS
+    ):
+        """
+        Lifecycle rule that deletes incomplete multipart uploads after n days
+        """
+        return gcp.storage.BucketLifecycleRuleArgs(
+            action=gcp.storage.BucketLifecycleRuleActionArgs(
+                type='AbortIncompleteMultipartUpload'
+            ),
+            condition=gcp.storage.BucketLifecycleRuleConditionArgs(age=days),
+        )
+
     def create_bucket(
         self,
         name: str,
@@ -239,6 +252,7 @@ class GcpInfrastructure(CloudInfraBase):
             unique_bucket_name = (
                 f'{self.config.dataset_storage_prefix}{self.dataset}-{name}'
             )
+
         return gcp.storage.Bucket(
             unique_bucket_name,
             name=unique_bucket_name,
@@ -246,7 +260,11 @@ class GcpInfrastructure(CloudInfraBase):
             uniform_bucket_level_access=True,
             versioning=gcp.storage.BucketVersioningArgs(enabled=versioning),
             labels={'bucket': unique_bucket_name},
-            lifecycle_rules=lifecycle_rules,
+            # duplicate the array to avoid adding the lifecycle rule to an existing list
+            lifecycle_rules=[
+                *lifecycle_rules,
+                self.bucket_rule_abort_incomplete_multipart_upload(),
+            ],
             requester_pays=requester_pays,
             project=project or self.project_id,
         )
@@ -353,6 +371,10 @@ class GcpInfrastructure(CloudInfraBase):
     def create_machine_account(
         self, name: str, project: str = None, *, resource_key: str = None
     ) -> Any:
+
+        if project and isinstance(project, gcp.organizations.Project):
+            project = project.project_id
+
         return gcp.serviceaccount.Account(
             resource_key or f'service-account-{name}',
             account_id=name,
@@ -458,13 +480,24 @@ class GcpInfrastructure(CloudInfraBase):
             resource_key, secret=secret.id, secret_data=contents
         )
 
+    # region CONTAINER REGISTRY
+
+    def create_container_registry(self, name: str):
+        return gcp.artifactregistry.Repository(
+            'artifact-registry-' + name,
+            repository_id=name,
+            project=self.project_id,
+            format='DOCKER',
+            location=self.region,
+        )
+
     def add_member_to_container_registry(
         self, resource_key: str, registry, member, membership, project=None
     ) -> Any:
 
         if membership == ContainerRegistryMembership.READER:
             role = 'roles/artifactregistry.reader'
-        elif membership == ContainerRegistryMembership.APPEND:
+        elif membership == ContainerRegistryMembership.WRITER:
             role = 'roles/artifactregistry.writer'
         else:
             raise ValueError(f'Unrecognised group membership type: {membership}')
@@ -477,6 +510,8 @@ class GcpInfrastructure(CloudInfraBase):
             role=role,
             member=self.get_member_key(member),
         )
+
+    # endregion CONTAINER REGISTRY
 
     # region GCP SPECIFIC
 

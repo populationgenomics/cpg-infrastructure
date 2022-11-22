@@ -19,8 +19,10 @@ def from_pulumi():
      * builds the stack using the driver functions
     """
     config = CPGInfrastructureConfig.from_dict(get_config())
+
     pconfig = pulumi.Config()
     dataset_config = CPGDatasetConfig.from_pulumi(pconfig, dataset=pulumi.get_stack())
+
     CpgDatasetInfrastructure.deploy_all_from_config(config, dataset_config)
 
 

@@ -17,7 +17,7 @@ Structure:
 To develop, you can run the driver file directly, which given a config TOML, will print infrastructure to the console.
 
 ```shell
-export CPG_CONFIG_PATH=$(readlink -f stack/cpg.toml)
+export CPG_CONFIG_PATH=$(readlink -f cpg_infra/cpg.toml)
 python -m cpg_infra.driver
 # prints what resources it would create here (no Pulumi used for now)
 ```
@@ -39,7 +39,7 @@ In order to deploy a particular pulumi stack run the following
 pulumi up -s [stack] --config-file ../stack/Pulumi.[stack].yaml
 ```
 
-### Motiviations
+## Motivations
 
 This abstraction is trying to address a number of difficult problems:
 

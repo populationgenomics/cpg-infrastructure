@@ -29,6 +29,7 @@ from cpg_infra.config import (
 UNDELETE_PERIOD_IN_DAYS = 30
 TMP_BUCKET_PERIOD_IN_DAYS = 8  # tmp content gets deleted afterwards.
 ARCHIVE_PERIOD_IN_DAYS = 30
+BUCKET_DELETE_INCOMPLETE_UPLOAD_PERIOD_IN_DAYS = 7
 
 
 class SecretMembership(Enum):
@@ -51,7 +52,7 @@ class ContainerRegistryMembership(Enum):
     """Container registry membership type"""
 
     READER = 'reader'
-    APPEND = 'append'
+    WRITER = 'writer'
 
 
 class CloudInfraBase(ABC):
@@ -187,7 +188,6 @@ class CloudInfraBase(ABC):
         """
         Create a GROUP, which is a proxy for a number of members
         """
-        pass
 
     @abstractmethod
     def add_group_member(self, resource_key: str, group, member) -> Any:
@@ -231,6 +231,10 @@ class CloudInfraBase(ABC):
         project: str = None,
     ) -> Any:
         # TODO: this might need more thought
+        pass
+
+    @abstractmethod
+    def create_container_registry(self, name: str):
         pass
 
 

@@ -3,19 +3,21 @@
 
 import base64
 import json
+from pathlib import Path
+
 import kubernetes.client
 import kubernetes.config
 import yaml
 from google.cloud import secretmanager
 
 # List of repos that are allowed for *all* datasets.
-ALWAYS_ALLOWED_REPOS = [
-    'analysis-runner',
-    'sample-metadata',
-]
+ALWAYS_ALLOWED_REPOS = ['analysis-runner', 'sample-metadata', 'production-pipelines']
+TOKEN_DIR = Path(__file__).parent
+REPO_ROOT = TOKEN_DIR.parent
 
 # dataset -> list of git repos
-with open('repository-map.json', encoding='utf-8') as allowed_repo_file:
+repo_map_path = TOKEN_DIR / 'repository-map.json'
+with open(repo_map_path, encoding='utf-8') as allowed_repo_file:
     ALLOWED_REPOS = json.load(allowed_repo_file)
     print(f'Loaded repository-map with {len(ALLOWED_REPOS)} keys')
 
@@ -48,7 +50,7 @@ def get_token(hail_user: str) -> str:
 
 def get_project_id(dataset: str) -> str:
     """Returns the GCP project ID associated with the given dataset."""
-    with open(f'../stack/Pulumi.{dataset}.yaml', encoding='utf-8') as f:
+    with open(REPO_ROOT / f'stack/Pulumi.{dataset}.yaml', encoding='utf-8') as f:
         return yaml.safe_load(f)['config']['gcp:project']
 
 
@@ -56,9 +58,9 @@ def get_hail_user(dataset: str, access_level: str):
     """
     Returns the hail user associated with the given dataset for the access level
     """
-    with open(f'../stack/Pulumi.{dataset}.yaml', encoding='utf-8') as f:
+    with open(REPO_ROOT / f'stack/Pulumi.{dataset}.yaml', encoding='utf-8') as f:
         config = yaml.safe_load(f)['config']
-        key = f'datasets:hail_service_account_{access_level}'
+        key = f'datasets:gcp_hail_service_account_{access_level}'
         # removes -\d{3}@hail-295901.iam.gserviceaccount.com
         service_account_name = config[key][:-40]
         return service_account_name
