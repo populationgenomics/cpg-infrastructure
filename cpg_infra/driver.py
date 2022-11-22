@@ -1001,7 +1001,7 @@ class CpgDatasetInfrastructure:
         try:
             if not self.config.analysis_runner.gcp.project:
                 return
-        except:
+        except AttributeError:
             # gross catch nulls
             return
 
