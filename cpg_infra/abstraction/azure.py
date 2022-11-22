@@ -297,19 +297,18 @@ class AzureInfra(CloudInfraBase):
     def add_member_to_bucket(
         self, resource_key: str, bucket, member, membership
     ) -> Any:
-        if hasattr(member, 'principal_id'):
+        if isinstance(member, az.managedidentity.UserAssignedIdentity):
             principal_type = 'ServicePrincipal'
         elif isinstance(member, azuread.group.Group):
             principal_type = 'Group'
         else:
-            principal_type = 'User'
-
-        pid = member.principal_id if hasattr(member, 'principal_id') else member.id
+            # we don't cases yet where we want to add a user by string, so sort of kludge
+            principal_type = 'ServicePrincipal'
 
         return az.authorization.RoleAssignment(
             self.resource_prefix() + resource_key,
-            scope=bucket.id,
-            principal_id=pid,
+            scope=self._get_object_id(bucket),
+            principal_id=self._get_object_id(member),
             principal_type=principal_type,
             role_definition_id=self.bucket_membership_to_role(membership),
         )
@@ -342,11 +341,20 @@ class AzureInfra(CloudInfraBase):
         )
 
     def _get_object_id(self, obj):
+        if isinstance(obj, pulumi.Output):
+            return obj
+
+        if isinstance(obj, str):
+            return obj
+
+        if isinstance(obj, az.managedidentity.UserAssignedIdentity):
+            return obj.principal_id
+
         if isinstance(obj, azuread.Group):
             return obj.id
 
-        if isinstance(obj, pulumi.Output):
-            return obj
+        if isinstance(obj,  az.storage.BlobContainer):
+            return obj.id
 
         raise ValueError(f'Unrecognised object: {obj} ({type(obj)})')
 

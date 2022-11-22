@@ -402,7 +402,7 @@ def get_hail_service_accounts(dataset: str, clouds: list[Cloud]):
 
     identifier_by_cloud = {
         Cloud.GCP: 'client_email',
-        Cloud.AZURE: 'appId',
+        Cloud.AZURE: 'objectId',
     }
 
     hail_client_emails_by_level = defaultdict(dict)

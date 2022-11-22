@@ -207,7 +207,7 @@ class CPGDatasetComponents(Enum):
             'gcp': list(CPGDatasetComponents),
             'azure': [
                 CPGDatasetComponents.STORAGE,
-                # CPGDatasetComponents.HAIL_ACCOUNTS,
+                CPGDatasetComponents.HAIL_ACCOUNTS,
                 # CPGDatasetComponents.SAMPLE_METADATA,
             ],
         }
@@ -225,6 +225,10 @@ class CPGDatasetConfig(DeserializableDataclass):
     gcp_hail_service_account_test: str | None = None
     gcp_hail_service_account_standard: str | None = None
     gcp_hail_service_account_full: str | None = None
+
+    azure_hail_service_account_test: str | None = None
+    azure_hail_service_account_standard: str | None = None
+    azure_hail_service_account_full: str | None = None
 
     deployment_service_account_test: str | None = None
     deployment_service_account_standard: str | None = None

@@ -642,22 +642,31 @@ class CpgDatasetInfrastructure:
                 BucketMembership.MUTATE,
             )
 
-        # The analysis-runner also needs Hail bucket access for compiled code.
-        self.infra.add_member_to_bucket(
-            'analysis-runner-hail-bucket-admin',
-            bucket=self.hail_bucket,
-            member=self.config.analysis_runner.gcp.server_machine_account,  # ANALYSIS_RUNNER_SERVICE_ACCOUNT,
-            membership=BucketMembership.MUTATE,
-        )
+        if isinstance(self.infra, GcpInfrastructure):
+            # TODO: this will be more complicated for Azure, because analysis-runner
+            #   needs access to Azure bucket to write wheels / jars
+            # The analysis-runner needs Hail bucket access for compiled code.
+            self.infra.add_member_to_bucket(
+                'analysis-runner-hail-bucket-admin',
+                bucket=self.hail_bucket,
+                member=self.config.analysis_runner.gcp.server_machine_account,  # ANALYSIS_RUNNER_SERVICE_ACCOUNT,
+                membership=BucketMembership.MUTATE,
+            )
 
     def setup_hail_wheels_bucket_permissions(self):
-
         keys = {'access-group': self.access_group, **self.access_level_groups}
+
+        bucket = None
+        if isinstance(self.infra, GcpInfrastructure):
+            bucket = self.config.hail.gcp.wheel_bucket_name
+
+        if not bucket:
+            return
 
         for key, group in keys.items():
             self.infra.add_member_to_bucket(
                 f'{key}-hail-wheels-viewer',
-                bucket=self.config.hail.gcp.wheel_bucket_name,  # HAIL_WHEEL_BUCKET_NAME,
+                bucket=bucket,
                 member=group,
                 membership=BucketMembership.READ,
             )
@@ -666,12 +675,24 @@ class CpgDatasetInfrastructure:
     def hail_accounts_by_access_level(self):
         if not self.should_setup_hail:
             return {}
-        accounts = {
-            'test': self.dataset_config.gcp_hail_service_account_test,
-            'standard': self.dataset_config.gcp_hail_service_account_standard,
-            'full': self.dataset_config.gcp_hail_service_account_full,
-        }
-        assert all(ac is not None for ac in accounts.values())
+
+        accounts = {}
+        if isinstance(self.infra, GcpInfrastructure):
+            accounts = {
+                'test': self.dataset_config.gcp_hail_service_account_test,
+                'standard': self.dataset_config.gcp_hail_service_account_standard,
+                'full': self.dataset_config.gcp_hail_service_account_full,
+            }
+        elif isinstance(self.infra, AzureInfra):
+            accounts = {
+                'test': self.dataset_config.azure_hail_service_account_test,
+                'standard': self.dataset_config.azure_hail_service_account_standard,
+                'full': self.dataset_config.azure_hail_service_account_full,
+            }
+        else:
+            return accounts
+
+        accounts = {cat: ac for cat, ac in accounts.items() if ac}
         return accounts
 
     @cached_property
