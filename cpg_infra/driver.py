@@ -409,7 +409,7 @@ class CpgDatasetInfrastructure:
         )
 
         # web-server
-        if not isinstance(self.infra, AzureInfra):
+        if isinstance(self.infra, GcpInfrastructure):
             self.infra.add_member_to_bucket(
                 'web-server-main-web-bucket-viewer',
                 self.main_web_bucket,
@@ -546,7 +546,7 @@ class CpgDatasetInfrastructure:
                 )
 
         # give web-server access to test-bucket
-        if not isinstance(self.infra, AzureInfra):
+        if isinstance(self.infra, GcpInfrastructure):
             self.infra.add_member_to_bucket(
                 'web-server-test-web-bucket-viewer',
                 bucket=self.test_web_bucket,
