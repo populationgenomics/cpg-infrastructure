@@ -319,14 +319,18 @@ class CpgDatasetInfrastructure:
                 'web': self.infra.bucket_output_path(self.main_web_bucket),
                 'analysis': self.infra.bucket_output_path(self.main_analysis_bucket),
                 'tmp': self.infra.bucket_output_path(self.main_tmp_bucket),
-                'web_url': self.config.web_url_template.format(namespace='main', dataset=self.dataset_config.dataset)
+                'web_url': self.config.web_url_template.format(
+                    namespace='main', dataset=self.dataset_config.dataset
+                ),
             },
             'test': {
                 'default': self.infra.bucket_output_path(self.test_bucket),
                 'web': self.infra.bucket_output_path(self.test_web_bucket),
                 'analysis': self.infra.bucket_output_path(self.test_analysis_bucket),
                 'tmp': self.infra.bucket_output_path(self.test_tmp_bucket),
-                'web_url': self.config.web_url_template.format(namespace='test', dataset=self.dataset_config.dataset)
+                'web_url': self.config.web_url_template.format(
+                    namespace='test', dataset=self.dataset_config.dataset
+                ),
             },
         }
 
@@ -367,12 +371,7 @@ class CpgDatasetInfrastructure:
                     return self._pulumi_prepare_storage_outputs_main_function(arg)
 
             else:
-                prepare_config_kwargs.update(
-                    {
-                        cat: bucket
-                        for cat, bucket in al_buckets.items()
-                    }
-                )
+                prepare_config_kwargs.update(al_buckets)
 
                 def _pulumi_prepare_function(arg):
                     return self._pulumi_prepare_storage_outputs_test_function(arg)
@@ -427,7 +426,10 @@ class CpgDatasetInfrastructure:
         )
 
         name = f'{self.infra.name()}-{self.dataset_config.dataset}-{namespace}'
-        output_name = os.path.join(suffix, f'{self.infra.name()}/{self.dataset_config.dataset}-{namespace}' + '.toml')
+        output_name = os.path.join(
+            suffix,
+            f'{self.infra.name()}/{self.dataset_config.dataset}-{namespace}' + '.toml',
+        )
 
         _infra_to_call_function_on.add_blob_to_bucket(
             resource_name=f'storage-config-{name}',
@@ -473,10 +475,7 @@ class CpgDatasetInfrastructure:
             if name.startswith('test-')
         }
 
-        obj = {
-            **main_buckets,
-            'test': test_buckets
-        }
+        obj = {**main_buckets, 'test': test_buckets}
         storage_dict = {
             'storage': {
                 'default': obj,
