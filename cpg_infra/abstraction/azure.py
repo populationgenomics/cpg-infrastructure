@@ -182,7 +182,7 @@ class AzureInfra(CloudInfraBase):
 
     def _undelete(self, days=UNDELETE_PERIOD_IN_DAYS):
         az.storage.BlobServiceProperties(
-            f'{self.storage_account.name}-{days}day-undelete-rule',
+            f'{self.name()}-{self.storage_account.name}-{days}day-undelete-rule',
             account_name=self.storage_account.name,
             blob_services_name='default',
             delete_retention_policy=az.storage.DeleteRetentionPolicyArgs(
@@ -268,7 +268,7 @@ class AzureInfra(CloudInfraBase):
         self.storage_account_lifecycle_rules.extend(lifecycle_rules)
 
         return az.storage.BlobContainer(
-            f'{name}',
+            f'{self.name()}-{name}',
             account_name=self.storage_account.name,
             resource_group_name=project or self.resource_group.name,
             container_name=name,
@@ -297,7 +297,7 @@ class AzureInfra(CloudInfraBase):
         pid = member.principal_id if hasattr(member, 'principal_id') else member.id
 
         return az.authorization.RoleAssignment(
-            resource_key,
+            self.name() + resource_key,
             scope=bucket.id,
             principal_id=pid,
             principal_type=principal_type,
@@ -308,7 +308,7 @@ class AzureInfra(CloudInfraBase):
         self, name: str, project: str = None, *, resource_key: str = None
     ) -> Any:
         return az.managedidentity.UserAssignedIdentity(
-            resource_key or f'service-account-{name}',
+            self.name() + (resource_key or f'service-account-{name}'),
             location=self.region,
             resource_group_name=self.resource_group.name,
         )
@@ -323,7 +323,7 @@ class AzureInfra(CloudInfraBase):
 
     def create_group(self, name: str) -> Any:
         return azuread.Group(
-            name,
+            self.name() + name,
             display_name=name,
             security_enabled=True,
         )
