@@ -217,8 +217,10 @@ class CpgDatasetInfrastructure:
         return {al: self.create_group(al) for al in ACCESS_LEVELS}
 
     @staticmethod
-    def get_group_output_name(*, dataset: str, kind: str):
+    def get_group_output_name(*, infra_name, dataset: str, kind: str):
+        # return f'{infra_name}-{dataset}-{kind}-group-id'
         return f'{dataset}-{kind}-group-id'
+
 
     def setup_web_access_group_memberships(self):
         self.infra.add_group_member(
@@ -237,13 +239,15 @@ class CpgDatasetInfrastructure:
             **self.access_level_groups,
         }
 
-        for kind, group in kinds.items():
-            pulumi.export(
-                self.get_group_output_name(
-                    dataset=self.dataset_config.dataset, kind=kind
-                ),
-                group.id if hasattr(group, 'id') else group,
-            )
+        if isinstance(self.infra, GcpInfrastructure):
+            for kind, group in kinds.items():
+                pulumi.export(
+                    self.get_group_output_name(
+                        infra_name=self.infra.name(),
+                        dataset=self.dataset_config.dataset, kind=kind
+                    ),
+                    group.id if hasattr(group, 'id') else group,
+                )
 
     def setup_access_level_group_memberships(self):
         for (
@@ -1300,14 +1304,16 @@ class CpgDatasetInfrastructure:
             self.infra.add_group_member(
                 f'{dependency}-access-group',
                 dependent_stack.get_output(
-                    self.get_group_output_name(dataset=dependency, kind='access')
+                    self.get_group_output_name(
+                        infra_name=self.infra.name(),
+                        dataset=dependency, kind='access')
                 ),
                 self.access_group,
             )
 
             for access_level, primary_access_group in self.access_level_groups.items():
                 dependency_group_id = dependent_stack.get_output(
-                    self.get_group_output_name(dataset=dependency, kind=access_level),
+                    self.get_group_output_name(infra_name=self.infra.name(),dataset=dependency, kind=access_level),
                 )
 
                 # add this dataset to dependencies membership

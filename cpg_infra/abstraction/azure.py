@@ -31,9 +31,9 @@ class AzureInfra(CloudInfraBase):
         super().__init__(config, dataset_config)
 
         self.region = 'australiaeast'
-        self.prefix = config.dataset_storage_prefix.replace('-', '')
-        self._resource_group_name = f'{self.prefix}{self.dataset}'
-        self._storage_account_name = f'{self.prefix}{self.dataset}'
+        resource_group_prefix = config.dataset_storage_prefix.replace('-', '')
+        self._resource_group_name = f'{config.dataset_storage_prefix}{self.dataset}'
+        self._storage_account_name = f'{config.dataset_storage_prefix}{self.dataset}'
         self.storage_account_lifecycle_rules = []
         self.storage_account_undelete_rule = None
 
@@ -53,20 +53,26 @@ class AzureInfra(CloudInfraBase):
     def name():
         return 'azure'
 
+    @staticmethod
+    def resource_prefix():
+        return 'az-'
+
     def get_dataset_project_id(self):
         return self.dataset
 
     @cached_property
     def resource_group(self):
         return az.resources.ResourceGroup(
-            self._resource_group_name,
+            self.resource_prefix() + self._resource_group_name,
+            resource_group_name=self._resource_group_name,
             location=self.region,
         )
 
     @cached_property
     def storage_account(self):
         return az.storage.StorageAccount(
-            self._storage_account_name,
+            self.resource_prefix() + self._storage_account_name,
+            account_name=self._storage_account_name,
             resource_group_name=self.resource_group.name,
             location=self.region,
             kind='StorageV2',
@@ -75,7 +81,7 @@ class AzureInfra(CloudInfraBase):
 
     def _create_management_policy(self):
         return az.storage.ManagementPolicy(
-            f'{self.storage_account.name}-management-policy',
+            f'{self.resource_prefix()}{self._storage_account_name}-management-policy',
             account_name=self.storage_account.name,
             resource_group_name=self.resource_group.name,
             policy=az.storage.ManagementPolicySchemaArgs(
@@ -112,7 +118,7 @@ class AzureInfra(CloudInfraBase):
         kwargs = dict(kwargs, dict(budget_filter))
 
         az.consumption.Budget(
-            resource_key,
+            self.resource_prefix() + resource_key,
             budget_name=f'{project.name}-budget',
             amount=budget,
             category='Cost',
@@ -141,7 +147,7 @@ class AzureInfra(CloudInfraBase):
             ]
         )
         return self.create_budget(
-            resource_key=resource_key,
+            resource_key=self.resource_prefix() + resource_key,
             project=project,
             budget=budget,
             budget_filter=az.consumption.BudgetArgs(
@@ -167,7 +173,7 @@ class AzureInfra(CloudInfraBase):
             ]
         )
         return self.create_budget(
-            resource_key=resource_key,
+            resource_key=self.resource_prefix() + resource_key,
             project=project,
             budget=budget,
             budget_filter=az.consumption.BudgetArgs(
@@ -182,7 +188,7 @@ class AzureInfra(CloudInfraBase):
 
     def _undelete(self, days=UNDELETE_PERIOD_IN_DAYS):
         az.storage.BlobServiceProperties(
-            f'{self.name()}-{self.storage_account.name}-{days}day-undelete-rule',
+            f'{self.resource_prefix()}{self._storage_account_name}-{days}day-undelete-rule',
             account_name=self.storage_account.name,
             blob_services_name='default',
             delete_retention_policy=az.storage.DeleteRetentionPolicyArgs(
@@ -268,7 +274,7 @@ class AzureInfra(CloudInfraBase):
         self.storage_account_lifecycle_rules.extend(lifecycle_rules)
 
         return az.storage.BlobContainer(
-            f'{self.name()}-{name}',
+            f'{self.resource_prefix()}{name}',
             account_name=self.storage_account.name,
             resource_group_name=project or self.resource_group.name,
             container_name=name,
@@ -297,7 +303,7 @@ class AzureInfra(CloudInfraBase):
         pid = member.principal_id if hasattr(member, 'principal_id') else member.id
 
         return az.authorization.RoleAssignment(
-            self.name() + resource_key,
+            self.resource_prefix() + resource_key,
             scope=bucket.id,
             principal_id=pid,
             principal_type=principal_type,
@@ -307,8 +313,11 @@ class AzureInfra(CloudInfraBase):
     def create_machine_account(
         self, name: str, project: str = None, *, resource_key: str = None
     ) -> Any:
+        # TODO: skeptical because there's no name?
         return az.managedidentity.UserAssignedIdentity(
-            self.name() + (resource_key or f'service-account-{name}'),
+            self.resource_prefix() + (resource_key or f'service-account-{name}'),
+            resource_name_=name,
+            # name=name,
             location=self.region,
             resource_group_name=self.resource_group.name,
         )
@@ -323,7 +332,7 @@ class AzureInfra(CloudInfraBase):
 
     def create_group(self, name: str) -> Any:
         return azuread.Group(
-            self.name() + name,
+            self.resource_prefix() + name,
             display_name=name,
             security_enabled=True,
         )
