@@ -220,7 +220,6 @@ class CpgDatasetInfrastructure:
     def get_group_output_name(*, infra_name: str, dataset: str, kind: str):
         return f'{infra_name}-{dataset}-{kind}-group-id'
 
-
     def setup_web_access_group_memberships(self):
         self.infra.add_group_member(
             'web-access-group-access-group-membership',
@@ -642,7 +641,9 @@ class CpgDatasetInfrastructure:
                 BucketMembership.MUTATE,
             )
 
-        if isinstance(self.infra, GcpInfrastructure):
+        if self.should_setup_analysis_runner and isinstance(
+            self.infra, GcpInfrastructure
+        ):
             # TODO: this will be more complicated for Azure, because analysis-runner
             #   needs access to Azure bucket to write wheels / jars
             # The analysis-runner needs Hail bucket access for compiled code.
@@ -1298,11 +1299,11 @@ class CpgDatasetInfrastructure:
         if isinstance(self.infra, GcpInfrastructure):
             for kind, group in kinds.items():
                 self.infra.add_member_to_bucket(
-                f'{kind}-reference-bucket-viewer',
-                bucket=self.config.gcp.reference_bucket_name,  # REFERENCE_BUCKET_NAME,
-                member=group,
-                membership=BucketMembership.READ,
-            )
+                    f'{kind}-reference-bucket-viewer',
+                    bucket=self.config.gcp.reference_bucket_name,  # REFERENCE_BUCKET_NAME,
+                    member=group,
+                    membership=BucketMembership.READ,
+                )
 
     # endregion REFERENCE
     # region DEPENDENCIES

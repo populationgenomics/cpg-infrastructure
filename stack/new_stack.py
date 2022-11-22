@@ -53,6 +53,8 @@ from sample_metadata.apis import ProjectApi
 
 
 class Cloud(Enum):
+    """Clouds that we can create a new stack on"""
+
     AZURE = 'azure'
     GCP = 'gcp'
 
@@ -82,10 +84,23 @@ HAIL_AUTH_URL = {
     Cloud.GCP: 'https://auth.hail.populationgenomics.org.au',
     Cloud.AZURE: 'https://auth.azhail.popgen.rocks',
 }
+HAIL_BATCH_URL = {
+    Cloud.GCP: 'https://batch.hail.populationgenomics.org.au',
+    Cloud.AZURE: 'https://batch.azhail.popgen.rocks',
+}
 
 HAIL_CREATE_USER_PATH = '{hail_auth_url}/api/v1alpha/users/{username}/create'
 HAIL_GET_USER_PATH = '{hail_auth_url}/api/v1alpha/users/{username}'
-TIMEOUT = 5000
+HAIL_GET_BILLING_PROJECT_PATH = (
+    '{hail_batch_url}/api/v1alpha/billing_projects/{billing_project}'
+)
+HAIL_CREATE_BILLING_PROJECT_PATH = (
+    '{hail_batch_url}/api/v1alpha/billing_projects/{billing_project}/create'
+)
+HAIL_ADD_USER_TO_BILLING_PROJECT_PATH = (
+    '{hail_batch_url}/api/v1alpha/billing_projects/{billing_project}/users/{user}/add'
+)
+
 
 logging.basicConfig(level=logging.INFO)
 
@@ -123,8 +138,6 @@ def main(
     create_hail_service_accounts=False,
     add_as_seqr_dependency=False,
     configure_hail_batch_project=False,
-    create_pulumi_stack=False,
-    add_to_seqr_stack=False,
     deploy_stack=False,
     generate_service_account_key=False,
     add_random_digits_to_gcp_id=False,
@@ -155,7 +168,6 @@ def main(
         )
 
     _gcp_project = project_id
-    _azure_project = dataset
     if not project_id:
         project_id = dataset
         suffix = ''
@@ -192,7 +204,7 @@ def main(
 
     if configure_hail_batch_project:
         # TODO: address for clouds
-        setup_hail_batch_billing_project(dataset)
+        setup_hail_batch_billing_project(clouds=clouds, project=dataset)
 
     if Cloud.GCP in clouds:
         # True if created, else False if it already existed
@@ -336,7 +348,6 @@ def gcp_create_budget(project_id: str, amount=100):
     """
     Create a monthly budget for the project_id
     """
-
     budget = Budget(
         display_name=project_id,
         budget_filter=Filter(
@@ -421,49 +432,66 @@ def get_hail_service_accounts(dataset: str, clouds: list[Cloud]):
     return hail_client_emails_by_level
 
 
-def setup_hail_batch_billing_project(project: str):
+def setup_hail_batch_billing_project(project: str, clouds: list[Cloud]):
     """
     (If required) Create a Hail batch billing project
     (If required) Add standard + aggregator users to batch billing project
 
     Subsequent runs of this method produces no action.
     """
-    hail_auth_token = _get_hail_auth_token()
 
-    # determine list of users we want in batch billing_project
-    usernames = set(_get_standard_hail_account_names(project))
-    if BILLING_AGGREGATOR_USERNAME:
-        usernames.add(BILLING_AGGREGATOR_USERNAME)
+    for cloud in clouds:
+        hail_auth_token = _get_hail_auth_token(cloud=cloud)
 
-    url = HAIL_GET_BILLING_PROJECT_PATH.format(billing_project=project)
-    resp = requests.get(
-        url, headers={'Authorization': f'Bearer {hail_auth_token}'}, timeout=TIMEOUT
+        # determine list of users we want in batch billing_project
+        usernames = set(_get_standard_hail_account_names(project))
+        if BILLING_AGGREGATOR_USERNAME:
+            usernames.add(BILLING_AGGREGATOR_USERNAME)
+
+        url = HAIL_GET_BILLING_PROJECT_PATH.format(
+            hail_batch_url=HAIL_BATCH_URL.get(cloud), billing_project=project
+        )
+        resp = requests.get(
+            url, headers={'Authorization': f'Bearer {hail_auth_token}'}, timeout=TIMEOUT
+        )
+
+        usernames_already_in_project = set()
+        # it throws a 403 user error, but may as well check for 404 too
+        if resp.status_code in (403, 404):
+            _hail_batch_create_billing_project(
+                cloud=cloud, project=project, hail_auth_token=hail_auth_token
+            )
+        else:
+            # check for any other batch errors
+            resp.raise_for_status()
+            usernames_already_in_project = set(resp.json()['users'])
+
+        for username in usernames - usernames_already_in_project:
+            _hail_batch_add_user_to_billing_project(
+                cloud=cloud,
+                billing_project=project,
+                username=username,
+                hail_auth_token=hail_auth_token,
+            )
+
+
+def _hail_batch_create_billing_project(cloud, project, hail_auth_token):
+    url = HAIL_CREATE_BILLING_PROJECT_PATH.format(
+        hail_batch_url=HAIL_BATCH_URL.get(cloud), billing_project=project
     )
-
-    usernames_already_in_project = set()
-    # it throws a 403 user error, but may as well check for 404 too
-    if resp.status_code in (403, 404):
-        _hail_batch_create_billing_project(project, hail_auth_token=hail_auth_token)
-    else:
-        # check for any other batch errors
-        resp.raise_for_status()
-        usernames_already_in_project = set(resp.json()['users'])
-
-    for username in usernames - usernames_already_in_project:
-        _hail_batch_add_user_to_billing_project(project, username, hail_auth_token)
-
-
-def _hail_batch_create_billing_project(project, hail_auth_token):
-    url = HAIL_CREATE_BILLING_PROJECT_PATH.format(billing_project=project)
     resp = requests.post(
         url, headers={'Authorization': f'Bearer {hail_auth_token}'}, timeout=TIMEOUT
     )
     resp.raise_for_status()
 
 
-def _hail_batch_add_user_to_billing_project(billing_project, username, hail_auth_token):
+def _hail_batch_add_user_to_billing_project(
+    cloud, billing_project, username, hail_auth_token
+):
     url = HAIL_ADD_USER_TO_BILLING_PROJECT_PATH.format(
-        billing_project=billing_project, user=username
+        hail_batch_url=HAIL_BATCH_URL.get(cloud),
+        billing_project=billing_project,
+        user=username,
     )
     resp = requests.post(
         url, headers={'Authorization': f'Bearer {hail_auth_token}'}, timeout=TIMEOUT
@@ -533,7 +561,7 @@ def _get_standard_hail_account_names(dataset):
     return [dataset + suffix for suffix in username_suffixes]
 
 
-def _get_hail_auth_token(cloud):
+def _get_hail_auth_token(cloud: Cloud):
     with open(os.path.expanduser('~/.hail/tokens.json'), encoding='utf-8') as f:
         return json.load(f)[cloud.value]
 
@@ -572,14 +600,14 @@ def create_hail_accounts(dataset, cloud: Cloud = Cloud.GCP):
 
 
 def create_stack(
-        clouds: list[Cloud],
+    clouds: list[Cloud],
     pulumi_config_fn: str,
     gcp_project: str,
     az_subscription: str,
     dataset: str,
     add_as_seqr_dependency: bool,
     create_release_buckets: bool,
-load_hail_service_accounts: bool,
+    load_hail_service_accounts: bool,
 ):
     """
     Generate Pulumi.{dataset}.yaml pulumi stack file, with required params
@@ -600,14 +628,16 @@ load_hail_service_accounts: bool,
 
     if load_hail_service_accounts:
         hail_client_emails_by_level = get_hail_service_accounts(
-                dataset=dataset, clouds=clouds
-            )
+            dataset=dataset, clouds=clouds
+        )
 
-        base_config.update({
-            f'datasets:{cloud.value}_hail_service_account_{access_level}': account
-            for cloud, data in hail_client_emails_by_level.items()
-            for access_level, account in data.items()
-        })
+        base_config.update(
+            {
+                f'datasets:{cloud.value}_hail_service_account_{access_level}': account
+                for cloud, data in hail_client_emails_by_level.items()
+                for access_level, account in data.items()
+            }
+        )
 
     if az_subscription:
         base_config.update(
@@ -724,7 +754,6 @@ def add_dataset_to_tokens(dataset: str):
 
 
 if __name__ == '__main__':
-    # pylint: disable=no-value-for-parameter
     if os.getenv('DEBUG'):
         import debugpy
 
@@ -734,4 +763,4 @@ if __name__ == '__main__':
         debugpy.wait_for_client()
         print('Attached to debugpy!')
 
-    main()
+    main()  # pylint: disable=no-value-for-parameter

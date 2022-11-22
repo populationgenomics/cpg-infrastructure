@@ -20,6 +20,7 @@ from cpg_infra.abstraction.base import (
     UNDELETE_PERIOD_IN_DAYS,
     ARCHIVE_PERIOD_IN_DAYS,
     TMP_BUCKET_PERIOD_IN_DAYS,
+    ContainerRegistryMembership,
 )
 
 AZURE_BILLING_START_DATE = '2017-06-01T00:00:00Z'
@@ -33,10 +34,9 @@ class AzureInfra(CloudInfraBase):
         super().__init__(config, dataset_config)
 
         self.region = 'australiaeast'
-        resource_group_prefix = config.dataset_storage_prefix.replace('-', '')
         self._resource_group_name = f'{config.dataset_storage_prefix}{self.dataset}'
-        self._storage_account_name = re.sub(
-            '[^a-z]', '', f'{config.dataset_storage_prefix}{self.dataset}'.lower()
+        self._storage_account_name = self.fix_azure_alphanum_names(
+            f'{config.dataset_storage_prefix}{self.dataset}'
         )
         self.storage_account_lifecycle_rules = []
         self.storage_account_undelete_rule = None
@@ -48,7 +48,8 @@ class AzureInfra(CloudInfraBase):
     def finalise(self):
         """The azure storage account has a single management policy, and all the
         lifecycle rules need to be applied at once"""
-
+        # manually force a storage account to be created
+        _ = self.storage_account
         self._create_management_policy()
         if self.storage_account_undelete_rule:
             self._undelete(self.storage_account_undelete_rule)
@@ -63,6 +64,10 @@ class AzureInfra(CloudInfraBase):
 
     def get_dataset_project_id(self):
         return self.dataset
+
+    @staticmethod
+    def fix_azure_alphanum_names(name):
+        return re.sub('[^a-z]', '', name.lower())
 
     @cached_property
     def resource_group(self):
@@ -84,6 +89,8 @@ class AzureInfra(CloudInfraBase):
         )
 
     def _create_management_policy(self):
+        if not self.storage_account_lifecycle_rules:
+            return None
         return az.storage.ManagementPolicy(
             f'{self.resource_prefix()}{self._storage_account_name}-management-policy',
             account_name=self.storage_account.name,
@@ -297,21 +304,22 @@ class AzureInfra(CloudInfraBase):
     def add_member_to_bucket(
         self, resource_key: str, bucket, member, membership
     ) -> Any:
-        if isinstance(member, az.managedidentity.UserAssignedIdentity):
-            principal_type = 'ServicePrincipal'
-        elif isinstance(member, azuread.group.Group):
-            principal_type = 'Group'
-        else:
-            # we don't cases yet where we want to add a user by string, so sort of kludge
-            principal_type = 'ServicePrincipal'
-
         return az.authorization.RoleAssignment(
             self.resource_prefix() + resource_key,
             scope=self._get_object_id(bucket),
             principal_id=self._get_object_id(member),
-            principal_type=principal_type,
+            principal_type=self._get_principal_type(member),
             role_definition_id=self.bucket_membership_to_role(membership),
         )
+
+    def _get_principal_type(self, obj):
+        if isinstance(obj, az.managedidentity.UserAssignedIdentity):
+            return 'ServicePrincipal'
+        if isinstance(obj, azuread.group.Group):
+            return 'Group'
+
+        # we don't have cases yet where we want to add a user by string, so sort of kludge
+        return 'ServicePrincipal'
 
     def create_machine_account(
         self, name: str, project: str = None, *, resource_key: str = None
@@ -353,7 +361,10 @@ class AzureInfra(CloudInfraBase):
         if isinstance(obj, azuread.Group):
             return obj.id
 
-        if isinstance(obj,  az.storage.BlobContainer):
+        if isinstance(obj, az.containerregistry.Registry):
+            return obj.id
+
+        if isinstance(obj, az.storage.BlobContainer):
             return obj.id
 
         raise ValueError(f'Unrecognised object: {obj} ({type(obj)})')
@@ -387,10 +398,37 @@ class AzureInfra(CloudInfraBase):
     ):
         pass
 
+    def container_membership_to_roles(
+        self, membership: ContainerRegistryMembership
+    ) -> dict[str, str]:
+        role_pull = '/providers/Microsoft.Authorization/roleDefinitions/7f951dda-4ed3-4680-a7ca-43fe172d538d'
+        role_push = '/providers/Microsoft.Authorization/roleDefinitions/8311e382-0749-4cb8-b61a-304f252e45ec'
+        role_delete = '/providers/Microsoft.Authorization/roleDefinitions/c2f4ef07-c644-48eb-af81-4b1b4947fb11'
+        if membership == ContainerRegistryMembership.READER:
+            return {'pull': role_pull}
+        if membership == ContainerRegistryMembership.WRITER:
+            return {'pull': role_pull, 'push': role_push, 'delete': role_delete}
+
+        raise ValueError(f'Unknown container membership: {membership}')
+
     def add_member_to_container_registry(
         self, resource_key: str, registry, member, membership, project=None
-    ) -> Any:
-        pass
+    ) -> list[Any]:
+        roles = []
+        for role_type, role in self.container_membership_to_roles(membership).items():
+
+            roles.append(
+                az.authorization.RoleAssignment(
+                    self.resource_prefix() + resource_key + '-' + role_type,
+                    principal_id=self._get_object_id(member),
+                    principal_type=self._get_principal_type(member),
+                    role_assignment_name=None,
+                    role_definition_id=role,
+                    scope=self._get_object_id(registry),
+                )
+            )
+
+        return roles
 
     def give_member_ability_to_list_buckets(
         self, resource_key: str, member, project: str = None
@@ -398,4 +436,15 @@ class AzureInfra(CloudInfraBase):
         pass
 
     def create_container_registry(self, name: str):
-        pass
+        return az.containerregistry.Registry(
+            self.resource_prefix() + f'container-registry-{name}',
+            admin_user_enabled=True,
+            location=self.region,
+            registry_name=self.fix_azure_alphanum_names(
+                self.config.dataset_storage_prefix + self.dataset + name
+            ),
+            resource_group_name=self.resource_group.name,
+            sku=az.containerregistry.SkuArgs(
+                name='Standard',
+            ),
+        )
