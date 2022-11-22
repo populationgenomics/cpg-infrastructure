@@ -1,6 +1,9 @@
 # pylint: disable=missing-class-docstring, missing-function-docstring,too-many-public-methods
 """
 Azure implementation for abstract infrastructure
+
+If we want custom role / permissions, potentially look at:
+    https://www.pulumi.com/registry/packages/azure-native/api-docs/authorization/roledefinition/
 """
 import re
 from datetime import date
@@ -298,10 +301,14 @@ class AzureInfra(CloudInfraBase):
         WARNING: there is no LIST, only read + list / write
         Get the role for a specific BucketMembership.
         """
+        # role_blob_owners = '/providers/Microsoft.Authorization/roleDefinitions/b7e6dc6d-f1e8-4753-8033-0f276bb0955b'
+        role_blob_reader = '/providers/Microsoft.Authorization/roleDefinitions/2a2b9908-6ea1-4ae2-8e65-a410df84e7d1'
+        role_blob_contributor = '/providers/Microsoft.Authorization/roleDefinitions/ba92f5b4-2d11-453d-a403-e96b0029c9fe'
+
         if membership in (BucketMembership.MUTATE, BucketMembership.APPEND):
-            return f'{self.subscription}/providers/Microsoft.Authorization/roleDefinitions/ba92f5b4-2d11-453d-a403-e96b0029c9fe'
+            return role_blob_contributor
         if membership in (BucketMembership.READ, BucketMembership.LIST):
-            return f'{self.subscription}/providers/Microsoft.Authorization/roleDefinitions/2a2b9908-6ea1-4ae2-8e65-a410df84e7d1'
+            return role_blob_reader
 
         raise ValueError(f'Unrecognised bucket membership type {membership}')
 
@@ -487,6 +494,6 @@ class AzureInfra(CloudInfraBase):
             ),
             resource_group_name=self.resource_group.name,
             sku=az.containerregistry.SkuArgs(
-                name='Standard',
+                name='Basic',
             ),
         )
