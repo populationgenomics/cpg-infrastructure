@@ -116,30 +116,30 @@ class AzureInfra(CloudInfraBase):
         budget: int,
         budget_filter: az.consumption.BudgetArgs,
     ):
-        kwargs = {}
-        # TODO: setup Azure notifications for budget rules
-        # if self.config.gcp.budget_notification_pubsub:
-        #     kwargs['threshold_rules'] = [
-        #         gcp.billing.BudgetThresholdRuleArgs(threshold_percent=threshold)
-        #         for threshold in self.config.budget_notification_thresholds
-        #     ]
-        #     kwargs['all_updates_rule'] = gcp.billing.BudgetAllUpdatesRuleArgs(
-        #         pubsub_topic=self.config.gcp.budget_notification_pubsub,
-        #         schema_version='1.0',
-        #     )
-
-        filters = budget_filter.pop('filter')
-        kwargs = dict(kwargs, dict(budget_filter))
-
-        az.consumption.Budget(
-            self.resource_prefix() + resource_key,
-            budget_name=f'{project.name}-budget',
-            amount=budget,
-            category='Cost',
-            scope=self.subscription,
-            budget_filter=filters,
-            **kwargs,
-        )
+        raise NotImplementedError
+        # kwargs = {}
+        # # if self.config.gcp.budget_notification_pubsub:
+        # #     kwargs['threshold_rules'] = [
+        # #         gcp.billing.BudgetThresholdRuleArgs(threshold_percent=threshold)
+        # #         for threshold in self.config.budget_notification_thresholds
+        # #     ]
+        # #     kwargs['all_updates_rule'] = gcp.billing.BudgetAllUpdatesRuleArgs(
+        # #         pubsub_topic=self.config.gcp.budget_notification_pubsub,
+        # #         schema_version='1.0',
+        # #     )
+        #
+        # filters = budget_filter.pop('filter')
+        # kwargs = dict(kwargs, dict(budget_filter))
+        #
+        # az.consumption.Budget(
+        #     self.resource_prefix() + resource_key,
+        #     budget_name=f'{project.name}-budget',
+        #     amount=budget,
+        #     category='Cost',
+        #     scope=self.subscription,
+        #     budget_filter=filters,
+        #     **kwargs,
+        # )
 
     def create_fixed_budget(
         self,
@@ -149,56 +149,58 @@ class AzureInfra(CloudInfraBase):
         budget: int,
         start_date: date = date(2022, 1, 1),
     ):
-        filters = az.consumption.BudgetFilterArgs(
-            and_=[
-                az.consumption.BudgetFilterPropertiesArgs(
-                    dimensions=az.consumption.BudgetComparisonExpressionArgs(
-                        name='ResourceId',
-                        operator='In',
-                        values=[project.id],
-                    ),
-                )
-            ]
-        )
-        return self.create_budget(
-            resource_key=self.resource_prefix() + resource_key,
-            project=project,
-            budget=budget,
-            budget_filter=az.consumption.BudgetArgs(
-                time_grain='Annually',
-                time_period=az.consumption.BudgetTimePeriodArgs(
-                    start_date=str(start_date), end_date=AZURE_BILLING_EXPIRY_DATE
-                ),
-                filter=filters,
-            ),
-        )
+        raise NotImplementedError
+        # filters = az.consumption.BudgetFilterArgs(
+        #     and_=[
+        #         az.consumption.BudgetFilterPropertiesArgs(
+        #             dimensions=az.consumption.BudgetComparisonExpressionArgs(
+        #                 name='ResourceId',
+        #                 operator='In',
+        #                 values=[project.id],
+        #             ),
+        #         )
+        #     ]
+        # )
+        # return self.create_budget(
+        #     resource_key=self.resource_prefix() + resource_key,
+        #     project=project,
+        #     budget=budget,
+        #     budget_filter=az.consumption.BudgetArgs(
+        #         time_grain='Annually',
+        #         time_period=az.consumption.BudgetTimePeriodArgs(
+        #             start_date=str(start_date), end_date=AZURE_BILLING_EXPIRY_DATE
+        #         ),
+        #         filter=filters,
+        #     ),
+        # )
 
     def create_monthly_budget(self, resource_key: str, *, project, budget: int):
-        # No start date here thats an issue
-        filters = az.consumption.BudgetFilterArgs(
-            and_=[
-                az.consumption.BudgetFilterPropertiesArgs(
-                    dimensions=az.consumption.BudgetComparisonExpressionArgs(
-                        name='ResourceId',
-                        operator='In',
-                        values=[project.id],
-                    ),
-                )
-            ]
-        )
-        return self.create_budget(
-            resource_key=self.resource_prefix() + resource_key,
-            project=project,
-            budget=budget,
-            budget_filter=az.consumption.BudgetArgs(
-                time_grain='Monthly',
-                time_period=az.consumption.BudgetTimePeriodArgs(
-                    start_date=AZURE_BILLING_START_DATE,
-                    end_date=AZURE_BILLING_EXPIRY_DATE,
-                ),
-                filter=filters,
-            ),
-        )
+        raise NotImplementedError
+        # # No start date here that's an issue
+        # filters = az.consumption.BudgetFilterArgs(
+        #     and_=[
+        #         az.consumption.BudgetFilterPropertiesArgs(
+        #             dimensions=az.consumption.BudgetComparisonExpressionArgs(
+        #                 name='ResourceId',
+        #                 operator='In',
+        #                 values=[project.id],
+        #             ),
+        #         )
+        #     ]
+        # )
+        # return self.create_budget(
+        #     resource_key=self.resource_prefix() + resource_key,
+        #     project=project,
+        #     budget=budget,
+        #     budget_filter=az.consumption.BudgetArgs(
+        #         time_grain='Monthly',
+        #         time_period=az.consumption.BudgetTimePeriodArgs(
+        #             start_date=AZURE_BILLING_START_DATE,
+        #             end_date=AZURE_BILLING_EXPIRY_DATE,
+        #         ),
+        #         filter=filters,
+        #     ),
+        # )
 
     def _undelete(self, days=UNDELETE_PERIOD_IN_DAYS):
         az.storage.BlobServiceProperties(
@@ -213,10 +215,10 @@ class AzureInfra(CloudInfraBase):
 
     def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
         """
-        These rules cannot be applied on a per bucket basis.
-        Instead, a delete retention policy applies to all blobs within a
+        These rules cannot be applied on a per-bucket basis.
+        Instead, a delete-retention-policy applies to all blobs within a
         Storage Account.
-        This function sets the number of days for the delete retention policy.
+        This function sets the number of days for the delete-retention-policy.
         This service property gets applied and activated during
         finalise()
         """
@@ -296,7 +298,8 @@ class AzureInfra(CloudInfraBase):
             # TODO: work out requester_pays in Azure
         )
 
-    def bucket_membership_to_role(self, membership: BucketMembership):
+    @staticmethod
+    def bucket_membership_to_role(membership: BucketMembership):
         """
         WARNING: there is no LIST, only read + list / write
         Get the role for a specific BucketMembership.
@@ -323,7 +326,8 @@ class AzureInfra(CloudInfraBase):
             role_definition_id=self.bucket_membership_to_role(membership),
         )
 
-    def _get_principal_type(self, obj):
+    @staticmethod
+    def _get_principal_type(obj):
         if isinstance(obj, az.managedidentity.UserAssignedIdentity):
             return 'ServicePrincipal'
         if isinstance(obj, azuread.group.Group):
@@ -335,7 +339,6 @@ class AzureInfra(CloudInfraBase):
     def create_machine_account(
         self, name: str, project: str = None, *, resource_key: str = None
     ) -> Any:
-        # TODO: skeptical because there's no name?
         return az.managedidentity.UserAssignedIdentity(
             self.resource_prefix() + (resource_key or f'service-account-{name}'),
             resource_name_=name,
@@ -359,7 +362,8 @@ class AzureInfra(CloudInfraBase):
             security_enabled=True,
         )
 
-    def _get_object_id(self, obj):
+    @staticmethod
+    def _get_object_id(obj):
         if isinstance(obj, pulumi.Output):
             return obj
 
