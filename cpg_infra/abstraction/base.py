@@ -16,9 +16,10 @@ Some challenges I forsee with this abstraction:
 """
 
 from abc import ABC, abstractmethod
-from datetime import date
 from enum import Enum
-from typing import Any, Callable
+from datetime import date
+from typing import Any, TypeVar, Callable, Iterable
+from collections import defaultdict
 
 from cpg_infra.config import (
     CPGDatasetConfig,
@@ -30,6 +31,19 @@ UNDELETE_PERIOD_IN_DAYS = 30
 TMP_BUCKET_PERIOD_IN_DAYS = 8  # tmp content gets deleted afterwards.
 ARCHIVE_PERIOD_IN_DAYS = 30
 BUCKET_DELETE_INCOMPLETE_UPLOAD_PERIOD_IN_DAYS = 7
+
+
+T = TypeVar('T')
+X = TypeVar('X')
+
+
+def group_by(iterable: Iterable[T], selector: Callable[[T], X]) -> dict[X, list[T]]:
+    """Simple group by implementation"""
+    ret = defaultdict(list)
+    for k in iterable:
+        ret[selector(k)].append(k)
+
+    return dict(ret)
 
 
 class SecretMembership(Enum):

@@ -13,8 +13,7 @@ import toml
 import pulumi
 import cpg_utils.config
 
-from cpg_infra.abstraction.azure import AzureInfra
-from cpg_infra.abstraction.gcp import GcpInfrastructure
+from cpg_infra.abstraction import AzureInfra, GcpInfrastructure
 from cpg_infra.abstraction.base import (
     CloudInfraBase,
     DryRunInfra,
@@ -488,7 +487,7 @@ class CpgDatasetInfrastructure:
         main_buckets = {
             name.removeprefix('main-'): bucket_path
             for name, bucket_path in kwargs.items()
-            if name.startswith('test-')
+            if name.startswith('main-')
         }
 
         obj = {**main_buckets, 'test': test_buckets}
@@ -1423,6 +1422,9 @@ class CpgDatasetInfrastructure:
 
     def setup_group_cache_access_group(self):
         # Allow list of access-group
+
+        if not self.config.access_group_cache:
+            return
 
         for key, group in self.access_level_groups.items():
             # setup secret

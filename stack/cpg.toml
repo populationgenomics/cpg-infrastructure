@@ -43,3 +43,5 @@ runner_machine_account = "cromwell-runner@cromwell-305305.iam.gserviceaccount.co
 project = "sample-metadata"
 service_name = "sample-metadata-api"
 machine_account = "sample-metadata-api@sample-metadata.iam.gserviceaccount.com"
+
+[infrastructure.aws]

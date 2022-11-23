@@ -11,9 +11,13 @@ config:
     azure:
       - storage
       - container-registry
+    aws:
+      - storage
+      - container-registry
   datasets:deploy_locations:
   - gcp
   - azure
+  - aws
   datasets:enable_release: "false"
   datasets:create_container_registry: "true"
   gcp:billing_project: cpg-common
