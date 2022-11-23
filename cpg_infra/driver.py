@@ -49,6 +49,7 @@ SAMPLE_METADATA_PERMISSIONS = [
 AccessLevel = str
 ACCESS_LEVELS: Iterable[AccessLevel] = ('test', 'standard', 'full')
 NON_NAME_REGEX = re.compile(r'[^A-Za-z\d_-]')
+TOML_CONFIG_JOINER = '\n||||'
 
 
 class CpgDatasetInfrastructure:
@@ -371,7 +372,7 @@ class CpgDatasetInfrastructure:
                 # won't resolve a List[Output[T]]
                 prepare_config_kwargs['_extra_configs'] = pulumi.Output.all(
                     *configs_to_merge
-                ).apply('\n'.join)
+                ).apply(TOML_CONFIG_JOINER.join)
 
             if namespace == 'main':
                 prepare_config_kwargs.update(
@@ -461,7 +462,8 @@ class CpgDatasetInfrastructure:
         kwargs = dict(arg)
         config_dict = {}
         if '_extra_configs' in kwargs:
-            config_dict = toml.loads(kwargs.pop('_extra_configs'))
+            for config_str in kwargs.pop('_extra_configs').split(TOML_CONFIG_JOINER):
+                cpg_utils.config.update_dict(config_dict, toml.loads(config_str))
 
         storage_dict = {
             'storage': {'default': kwargs, self.dataset_config.dataset: kwargs}
@@ -478,7 +480,8 @@ class CpgDatasetInfrastructure:
         kwargs = dict(arg)
         config_dict = {}
         if '_extra_configs' in kwargs:
-            config_dict = toml.loads(kwargs.pop('_extra_configs'))
+            for config_str in kwargs.pop('_extra_configs').split(TOML_CONFIG_JOINER):
+                cpg_utils.config.update_dict(config_dict, toml.loads(config_str))
 
         test_buckets = {
             name.removeprefix('test-'): bucket_path
@@ -488,7 +491,7 @@ class CpgDatasetInfrastructure:
         main_buckets = {
             name.removeprefix('main-'): bucket_path
             for name, bucket_path in kwargs.items()
-            if name.startswith('test-')
+            if name.startswith('main-')
         }
 
         obj = {**main_buckets, 'test': test_buckets}
