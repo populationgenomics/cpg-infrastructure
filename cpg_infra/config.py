@@ -77,10 +77,13 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         billing_project_id: str
         billing_account_id: int
         budget_notification_pubsub: str | None
-        common_artifact_registry_project: str
-        common_artifact_registry_name: str
         reference_bucket_name: str
         config_bucket_name: str
+
+    # @dataclasses.dataclass(frozen=True)
+    # class Azure(DeserializableDataclass):
+    #     # TODO: Azure specific config
+    #     subscription_id: str
 
     @dataclasses.dataclass(frozen=True)
     class Hail(DeserializableDataclass):
@@ -151,6 +154,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     config_destination: str
 
     gcp: GCP | None
+    # azure: Azure | None
     hail: Hail | None
     analysis_runner: AnalysisRunner | None
     web_service: WebService
@@ -206,7 +210,7 @@ class CPGDatasetComponents(Enum):
             'gcp': list(CPGDatasetComponents),
             'azure': [
                 CPGDatasetComponents.STORAGE,
-                # CPGDatasetComponents.HAIL_ACCOUNTS,
+                CPGDatasetComponents.HAIL_ACCOUNTS,
                 # CPGDatasetComponents.SAMPLE_METADATA,
             ],
         }
@@ -221,9 +225,13 @@ class CPGDatasetConfig(DeserializableDataclass):
 
     dataset: str
 
-    gcp_hail_service_account_test: str
-    gcp_hail_service_account_standard: str
-    gcp_hail_service_account_full: str
+    gcp_hail_service_account_test: str | None = None
+    gcp_hail_service_account_standard: str | None = None
+    gcp_hail_service_account_full: str | None = None
+
+    azure_hail_service_account_test: str | None = None
+    azure_hail_service_account_standard: str | None = None
+    azure_hail_service_account_full: str | None = None
 
     deployment_service_account_test: str | None = None
     deployment_service_account_standard: str | None = None
@@ -265,6 +273,12 @@ class CPGDatasetConfig(DeserializableDataclass):
             value = parse_value_from_type(config, fieldname, ftype)
             if value:
                 d[fieldname] = value
+
+        if 'components' in d:
+            d['components'] = {
+                k: [CPGDatasetComponents(c) for c in comps]
+                for k, comps in d['components'].items()
+            }
 
         return cls(**d)
 
