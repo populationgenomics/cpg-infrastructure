@@ -149,6 +149,9 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     dataset_storage_prefix: str
     budget_currency: str
     reference_dataset: str
+    web_url_template: str
+
+    config_destination: str
 
     gcp: GCP | None
     # azure: Azure | None

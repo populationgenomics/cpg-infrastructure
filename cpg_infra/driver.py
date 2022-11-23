@@ -2,12 +2,14 @@
 """
 CPG Dataset infrastructure
 """
+import os.path
 import re
 from inspect import isclass
 from typing import Type, Any, Iterator, Iterable
 from collections import defaultdict, namedtuple
 from functools import lru_cache, cached_property
 
+import toml
 import pulumi
 import cpg_utils.config
 
@@ -217,8 +219,12 @@ class CpgDatasetInfrastructure:
         return {al: self.create_group(al) for al in ACCESS_LEVELS}
 
     @staticmethod
-    def get_group_output_name(*, infra_name: str, dataset: str, kind: str):
+    def get_pulumi_output_group_name(*, infra_name: str, dataset: str, kind: str):
         return f'{infra_name}-{dataset}-{kind}-group-id'
+
+    @staticmethod
+    def get_pulumi_output_storage_config_name(infra_name, dataset, access_level) -> str:
+        return '-'.join(['storage', infra_name, dataset, access_level, 'config'])
 
     def setup_web_access_group_memberships(self):
         self.infra.add_group_member(
@@ -239,7 +245,7 @@ class CpgDatasetInfrastructure:
 
         for kind, group in kinds.items():
             pulumi.export(
-                self.get_group_output_name(
+                self.get_pulumi_output_group_name(
                     infra_name=self.infra.name(),
                     dataset=self.dataset_config.dataset,
                     kind=kind,
@@ -308,6 +314,8 @@ class CpgDatasetInfrastructure:
         if isinstance(self.infra, GcpInfrastructure):
             self.setup_storage_gcp_requester_pays_access()
 
+        self.setup_storage_outputs()
+
     def setup_storage_common_test_access(self):
         if self.dataset_config.dataset != self.config.reference_dataset:
             return
@@ -319,6 +327,184 @@ class CpgDatasetInfrastructure:
             membership=BucketMembership.READ,
         )
 
+    def setup_storage_outputs(self):
+
+        buckets = {
+            'main': {
+                'default': self.infra.bucket_output_path(self.main_bucket),
+                'web': self.infra.bucket_output_path(self.main_web_bucket),
+                'analysis': self.infra.bucket_output_path(self.main_analysis_bucket),
+                'tmp': self.infra.bucket_output_path(self.main_tmp_bucket),
+                'web_url': self.config.web_url_template.format(
+                    namespace='main', dataset=self.dataset_config.dataset
+                ),
+            },
+            'test': {
+                'default': self.infra.bucket_output_path(self.test_bucket),
+                'web': self.infra.bucket_output_path(self.test_web_bucket),
+                'analysis': self.infra.bucket_output_path(self.test_analysis_bucket),
+                'tmp': self.infra.bucket_output_path(self.test_tmp_bucket),
+                'web_url': self.config.web_url_template.format(
+                    namespace='test', dataset=self.dataset_config.dataset
+                ),
+            },
+        }
+
+        for namespace, al_buckets in buckets.items():
+
+            configs_to_merge = []
+            for dependent_dataset in self.dataset_config.depends_on:
+
+                stack = self.get_pulumi_stack(dependent_dataset)
+                configs_to_merge.append(
+                    stack.get_output(
+                        self.get_pulumi_output_storage_config_name(
+                            self.infra.name(), dependent_dataset, namespace
+                        )
+                    )
+                )
+
+            prepare_config_kwargs = {}
+            if configs_to_merge:
+                # Merge them here, because we have to pass it as a single
+                # keyword-argument to Pulumi so we can reference it, but Pulumi
+                # won't resolve a List[Output[T]]
+                prepare_config_kwargs['_extra_configs'] = pulumi.Output.all(
+                    *configs_to_merge
+                ).apply('\n'.join)
+
+            if namespace == 'main':
+                prepare_config_kwargs.update(
+                    {
+                        f'{ns}-{cat}': _bucket
+                        for ns, ns_buckets in buckets.items()
+                        for cat, _bucket in ns_buckets.items()
+                    }
+                )
+
+                def _pulumi_prepare_function(arg):
+                    """Redefine like this as Pulumi drops the self somehow"""
+                    return self._pulumi_prepare_storage_outputs_main_function(arg)
+
+            else:
+                prepare_config_kwargs.update(al_buckets)
+
+                def _pulumi_prepare_function(arg):
+                    return self._pulumi_prepare_storage_outputs_test_function(arg)
+
+            # This is an pulumi.Output[String]
+            dataset_storage_config = pulumi.output.Output.all(
+                **prepare_config_kwargs
+            ).apply(_pulumi_prepare_function)
+            pulumi_export_name = self.get_pulumi_output_storage_config_name(
+                self.infra.name(), self.dataset_config.dataset, namespace
+            )
+
+            # this export is important, it's how direct dependencies will be able to
+            # access the nested dependencies, this export is potentially depending
+            # on transitive dependencies.
+            pulumi.export(pulumi_export_name, dataset_storage_config)
+            self.add_config_toml_to_bucket(
+                namespace=namespace, contents=dataset_storage_config
+            )
+
+    def add_config_toml_to_bucket(self, namespace, contents: pulumi.Output):
+        """
+        Write the config to a bucket, this function decides the output-path based
+        on the current deploy infra, dataset, access_level.
+        :param namespace: test / main
+        :param contents: some Pulumi awaitable string
+        """
+        if not self.config.config_destination:
+            return
+
+        _infra_to_call_function_on = None
+        infra_prefix_map = [
+            ('gs://', GcpInfrastructure),
+            ('hail-az://', AzureInfra),
+        ]
+        for prefix, I in infra_prefix_map:
+            if self.config.config_destination.startswith(prefix):
+                _infra_to_call_function_on = (
+                    self.infra
+                    if isinstance(self.infra, I)
+                    else I(self.config, self.dataset_config)
+                )
+                break
+        else:
+            raise ValueError(
+                f'Could not find infra to save blob to for config_destination: '
+                f'{self.config.config_destination}'
+            )
+
+        bucket_name, suffix = self.config.config_destination[len('gs://') :].split(
+            '/', maxsplit=1
+        )
+
+        name = f'{self.infra.name()}-{self.dataset_config.dataset}-{namespace}'
+        output_name = os.path.join(
+            suffix,
+            f'{self.infra.name()}/{self.dataset_config.dataset}-{namespace}' + '.toml',
+        )
+
+        _infra_to_call_function_on.add_blob_to_bucket(
+            resource_name=f'storage-config-{name}',
+            bucket=bucket_name,
+            output_name=output_name,
+            contents=contents,
+        )
+
+    def _pulumi_prepare_storage_outputs_test_function(self, arg):
+        """
+        Don't call this directly from Pulumi, as it strips the self
+        """
+        kwargs = dict(arg)
+        config_dict = {}
+        if '_extra_configs' in kwargs:
+            config_dict = toml.loads(kwargs.pop('_extra_configs'))
+
+        storage_dict = {
+            'storage': {'default': kwargs, self.dataset_config.dataset: kwargs}
+        }
+        if config_dict:
+            cpg_utils.config.update_dict(config_dict, storage_dict)
+        else:
+            config_dict = storage_dict
+
+        d = toml.dumps(config_dict)
+        return d
+
+    def _pulumi_prepare_storage_outputs_main_function(self, arg):
+        kwargs = dict(arg)
+        config_dict = {}
+        if '_extra_configs' in kwargs:
+            config_dict = toml.loads(kwargs.pop('_extra_configs'))
+
+        test_buckets = {
+            name.removeprefix('test-'): bucket_path
+            for name, bucket_path in kwargs.items()
+            if name.startswith('test-')
+        }
+        main_buckets = {
+            name.removeprefix('main-'): bucket_path
+            for name, bucket_path in kwargs.items()
+            if name.startswith('test-')
+        }
+
+        obj = {**main_buckets, 'test': test_buckets}
+        storage_dict = {
+            'storage': {
+                'default': obj,
+                self.dataset_config.dataset: obj,
+            },
+        }
+        if config_dict:
+            cpg_utils.config.update_dict(config_dict, storage_dict)
+        else:
+            config_dict = storage_dict
+
+        d = toml.dumps(config_dict)
+        return d
 
     def setup_storage_gcp_requester_pays_access(self):
         """
@@ -1338,7 +1524,7 @@ class CpgDatasetInfrastructure:
             self.infra.add_group_member(
                 resource_key=f'{dependency}-access-group',
                 group=dependent_stack.get_output(
-                    self.get_group_output_name(
+                    self.get_pulumi_output_group_name(
                         infra_name=self.infra.name(), dataset=dependency, kind='access'
                     )
                 ),
@@ -1347,7 +1533,7 @@ class CpgDatasetInfrastructure:
 
             for access_level, primary_access_group in self.access_level_groups.items():
                 dependency_group_id = dependent_stack.get_output(
-                    self.get_group_output_name(
+                    self.get_pulumi_output_group_name(
                         infra_name=self.infra.name(),
                         dataset=dependency,
                         kind=access_level,

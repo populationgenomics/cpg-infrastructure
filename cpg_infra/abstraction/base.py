@@ -142,6 +142,16 @@ class CloudInfraBase(ABC):
         pass
 
     @abstractmethod
+    def bucket_output_path(self, bucket):
+        """
+        Return fully formed path to bucket, eg:
+            gs://cpg-{dataset}-main
+            hail-az//cpg-dataset/main/
+            s3://cpg-{dataset}-main
+        """
+        pass
+
+    @abstractmethod
     def add_member_to_bucket(
         self, resource_key: str, bucket, member, membership: BucketMembership
     ) -> Any:
@@ -150,6 +160,11 @@ class CloudInfraBase(ABC):
         Note: You MUST specify a unique resource_key
         :param membership:
         """
+        pass
+
+    @abstractmethod
+    def add_blob_to_bucket(self, resource_name, bucket, output_name, contents):
+        """Add blob to a bucket, contents can be awaitable string"""
         pass
 
     @abstractmethod

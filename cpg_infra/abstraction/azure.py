@@ -91,6 +91,11 @@ class AzureInfra(CloudInfraBase):
             sku=az.storage.SkuArgs(name='Standard_LRS'),
         )
 
+    def bucket_output_path(self, bucket):
+        return pulumi.Output.concat(
+            'hail-az://', self.storage_account.name, '/', bucket.name
+        )
+
     def _create_management_policy(self):
         if not self.storage_account_lifecycle_rules:
             return None
@@ -329,6 +334,9 @@ class AzureInfra(CloudInfraBase):
 
         # we don't have cases yet where we want to add a user by string, so sort of kludge
         return 'ServicePrincipal'
+
+    def add_blob_to_bucket(self, resource_name, bucket, output_name, contents):
+        raise NotImplementedError
 
     def create_machine_account(
         self, name: str, project: str = None, *, resource_key: str = None
