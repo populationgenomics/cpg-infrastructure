@@ -481,12 +481,12 @@ class CpgDatasetInfrastructure:
             config_dict = toml.loads(kwargs.pop('_extra_configs'))
 
         test_buckets = {
-            name[len('test-') :]: bucket_path
+            name.removeprefix('test-'): bucket_path
             for name, bucket_path in kwargs.items()
             if name.startswith('test-')
         }
         main_buckets = {
-            name[len('main-') :]: bucket_path
+            name.removeprefix('main-'): bucket_path
             for name, bucket_path in kwargs.items()
             if name.startswith('test-')
         }
