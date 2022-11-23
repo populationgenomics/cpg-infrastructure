@@ -92,7 +92,9 @@ class AzureInfra(CloudInfraBase):
         )
 
     def bucket_output_path(self, bucket):
-        return pulumi.Output.concat('hail-az://', self.storage_account.name, '/', bucket.name)
+        return pulumi.Output.concat(
+            'hail-az://', self.storage_account.name, '/', bucket.name
+        )
 
     def _create_management_policy(self):
         if not self.storage_account_lifecycle_rules:
