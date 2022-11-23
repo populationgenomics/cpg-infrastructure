@@ -290,6 +290,7 @@ class CpgDatasetInfrastructure:
         if not self.should_setup_storage:
             return
 
+        self.setup_storage_common_test_access()
         self.infra.give_member_ability_to_list_buckets(
             'project-buckets-lister', self.access_group
         )
@@ -306,6 +307,18 @@ class CpgDatasetInfrastructure:
 
         if isinstance(self.infra, GcpInfrastructure):
             self.setup_storage_gcp_requester_pays_access()
+
+    def setup_storage_common_test_access(self):
+        if self.dataset_config.dataset != self.config.reference_dataset:
+            return
+
+        self.infra.add_member_to_bucket(
+            self.dataset_config.dataset + '-test-accessing-main',
+            bucket=self.main_bucket,
+            member=self.access_level_groups['test'],
+            membership=BucketMembership.READ,
+        )
+
 
     def setup_storage_gcp_requester_pays_access(self):
         """

@@ -6,8 +6,10 @@ config:
   datasets:customer_id: C010ys3gt
   datasets:components:
     gcp:
+      - storage
       - container-registry
     azure:
+      - storage
       - container-registry
   datasets:deploy_locations:
   - gcp
