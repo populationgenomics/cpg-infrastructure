@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-
+# pylint: disable=invalid-name
 """
-Create GCP project + stack file for Pulumi
+Create GCP project + budget + hail service accounts + stack file for Pulumi
 
 requirements:
     - click pyyaml sample-metadata google-cloud-billing-budgets
@@ -14,10 +14,10 @@ Example usage:
     DATASET="my-dataset"
     python new_stack.py \
         --dataset $DATASET \
-        --perform-all --no-commit \
+        --add-as-seqr-dependency \
+        --configure-hail-batch-project \
         --deploy-stack \
-        --generate-service-account-key \
-        --add-to-seqr-stack
+        --generate-service-account-key
 """
 
 # pylint: disable=unreachable,too-many-arguments,no-name-in-module,import-error,too-many-lines
@@ -114,9 +114,11 @@ logging.basicConfig(level=logging.INFO)
     multiple=True,
     type=click.Choice([e.value for e in Cloud]),
 )
-@click.option('--project-id', required=False, help='If different to the dataset name')
+@click.option(
+    '--gcp-project-id', required=False, help='If different to the dataset name'
+)
 @click.option('--az-subscription-id', required=False, help='Azure subscription id')
-@click.option('--create-hail-service-accounts', required=False, is_flag=True)
+@click.option('--do-not-create-hail-service-accounts', required=False, is_flag=True)
 @click.option('--add-as-seqr-dependency', required=False, is_flag=True)
 @click.option('--configure-hail-batch-project', required=False, is_flag=True)
 @click.option('--create-pulumi-stack', required=False, is_flag=True)
@@ -133,9 +135,9 @@ logging.basicConfig(level=logging.INFO)
 def main(
     dataset: str,
     clouds: list[str],
-    project_id: str = None,
+    gcp_project_id: str = None,
     az_subscription_id: str = None,
-    create_hail_service_accounts=False,
+    do_not_create_hail_service_accounts=False,
     add_as_seqr_dependency=False,
     configure_hail_batch_project=False,
     deploy_stack=False,
@@ -149,7 +151,6 @@ def main(
     clouds = [Cloud(c) for c in clouds]
     dataset = dataset.lower()
 
-    budgets = {}
     if len(budget) == len(clouds):
         budgets = dict(zip(clouds, budget))
     elif len(budget) == 1:
@@ -167,9 +168,8 @@ def main(
             f'Cannot create stack with cloud AZURE without az_subscription_id'
         )
 
-    _gcp_project = project_id
-    if not project_id:
-        project_id = dataset
+    _gcp_project = gcp_project_id
+    if not gcp_project_id:
         suffix = ''
         if add_random_digits_to_gcp_id:
             suffix = '-' + str(random.randint(100000, 999999))
@@ -198,12 +198,12 @@ def main(
             f'You should run this in the analysis-runner/stack directory, got {os.getcwd()}'
         )
 
-    if create_hail_service_accounts:
+    # create hail service accounts
+    if not do_not_create_hail_service_accounts:
         for c in clouds:
             create_hail_accounts(dataset, cloud=c)
 
     if configure_hail_batch_project:
-        # TODO: address for clouds
         setup_hail_batch_billing_project(clouds=clouds, project=dataset)
 
     if Cloud.GCP in clouds:
@@ -228,7 +228,7 @@ def main(
         add_as_seqr_dependency=add_as_seqr_dependency,
         dataset=dataset,
         create_release_buckets=create_release_buckets,
-        load_hail_service_accounts=create_hail_service_accounts,
+        load_hail_service_accounts=not do_not_create_hail_service_accounts,
     )
 
     if not os.path.exists(pulumi_config_fn):
@@ -236,14 +236,14 @@ def main(
 
     if deploy_stack:
         env = {**os.environ, 'PULUMI_CONFIG_PASSPHRASE': get_pulumi_config_passphrase()}
-        rc = subprocess.call(['pulumi', 'stack', 'select', dataset], env=env)
-        rc = subprocess.call(['pulumi', 'up', '-y'], env=env)
+        rc = subprocess.call(['pulumi', 'up', '--stack', dataset, '-y'], env=env)
         if rc != 0:
             raise ValueError(f'The stack {dataset} did not deploy correctly')
 
         if add_as_seqr_dependency:
-            rc = subprocess.call(['pulumi', 'stack', 'select', 'seqr'], env=env)
-            rc_seqr = subprocess.call(['pulumi', 'up', '-y'], env=env)
+            rc_seqr = subprocess.call(
+                ['pulumi', 'up', '--stack', 'seqr', '-y'], env=env
+            )
             if rc_seqr != 0:
                 raise ValueError(f'The seqr stack {dataset} did not deploy correctly')
 
@@ -382,10 +382,6 @@ def gcp_create_budget(project_id: str, amount=100):
     return True
 
 
-# def az_create_budget(project_id: str, amount=100):
-#     logging.warn(f'az_create_budget Not Implemented')
-
-
 def get_hail_service_accounts(dataset: str, clouds: list[Cloud]):
     """Get hail service accounts from kubectl"""
     setup_cluster = {
@@ -416,7 +412,7 @@ def get_hail_service_accounts(dataset: str, clouds: list[Cloud]):
         Cloud.AZURE: 'objectId',
     }
 
-    hail_client_emails_by_level = defaultdict(dict)
+    hail_client_emails_by_cloud_then_level = defaultdict(dict)
     for cloud in clouds:
         cloud_identifier = identifier_by_cloud[cloud]
         subprocess.check_output(setup_cluster[cloud])
@@ -427,9 +423,11 @@ def get_hail_service_accounts(dataset: str, clouds: list[Cloud]):
             ).decode()
             # The hail_token from kubectl looks like: { "key.json": "<service-account-json-string>" }
             sa_key = json.loads(json.loads(hail_token)['key.json'])
-            hail_client_emails_by_level[cloud][access_level] = sa_key[cloud_identifier]
+            hail_client_emails_by_cloud_then_level[cloud][access_level] = sa_key[
+                cloud_identifier
+            ]
 
-    return hail_client_emails_by_level
+    return hail_client_emails_by_cloud_then_level
 
 
 def setup_hail_batch_billing_project(project: str, clouds: list[Cloud]):
