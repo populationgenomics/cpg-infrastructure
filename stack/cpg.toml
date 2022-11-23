@@ -2,7 +2,9 @@
 domain = "populationgenomics.org.au"
 dataset_storage_prefix = "cpg-"
 budget_currency = "AUD"
-reference_dataset = "reference"
+reference_dataset = "common"
+config_destination = "gs://cpg-config/templates/storage/"
+web_url_template = "https://{namespace}-web.populationgenomics.org.au/{dataset}"
 
 #disable_group_memberships = "true"
 
@@ -13,9 +15,6 @@ billing_project_id = 'billing-admin-290403'
 budget_notification_pubsub = "projects/billing-admin-290403/topics/budget-notifications"
 reference_bucket_name = "cpg-reference"
 config_bucket_name = "cpg-config"
-
-common_artifact_registry_project = "cpg-common"
-common_artifact_registry_name = "images"
 
 [infrastructure.hail.gcp]
 wheel_bucket_name = "cpg-hail-ci"
