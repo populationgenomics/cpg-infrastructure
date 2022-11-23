@@ -77,10 +77,9 @@ def main():
         }
         for access_level in 'test', 'standard', 'full':
             hail_user = get_hail_user(dataset, access_level)
-            entries[f'gcp_{access_level}Token'] = get_token(hail_user, environment='gcp0')
+            entries[f'{access_level}Token'] = get_token(hail_user)
         config[dataset] = entries
 
-    print(json.dumps(config, indent=2))
     add_secret('server-config', json.dumps(config))
 
 

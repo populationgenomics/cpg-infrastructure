@@ -2,12 +2,13 @@
 
 """Updates all stacks in an order compatible with each stack dependency."""
 
+from collections import defaultdict
+
+import os
 import glob
 import graphlib  # TopologicalSorter requires python >= 3.9.
-import os
 import subprocess
 import yaml
-from collections import defaultdict
 
 from stack_utils import get_pulumi_config_passphrase  # pylint: disable=import-error
 
