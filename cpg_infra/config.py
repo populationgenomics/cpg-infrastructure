@@ -220,8 +220,8 @@ class CPGDatasetComponents(Enum):
             ],
             'aws': [
                 CPGDatasetComponents.STORAGE,
-                CPGDatasetComponents.CONTAINER_REGISTRY
-            ]
+                CPGDatasetComponents.CONTAINER_REGISTRY,
+            ],
         }
 
 

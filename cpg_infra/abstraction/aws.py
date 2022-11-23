@@ -1,10 +1,9 @@
-# pylint: disable=missing-class-docstring, missing-function-docstring
+# pylint: disable=missing-class-docstring, missing-function-docstring,too-many-public-methods
 """
 AWS implementation for abstract infrastructure
 """
 from collections import defaultdict
 from datetime import date
-from functools import cached_property
 from typing import Any
 
 import pulumi
@@ -20,7 +19,6 @@ from cpg_infra.abstraction.base import (
     ContainerRegistryMembership,
     BucketMembership,
     ARCHIVE_PERIOD_IN_DAYS,
-    group_by,
 )
 from cpg_infra.config import CPGInfrastructureConfig, CPGDatasetConfig
 
@@ -28,12 +26,16 @@ from cpg_infra.config import CPGInfrastructureConfig, CPGDatasetConfig
 class AWSInfra(CloudInfraBase):
     """AWS implementation for cloud abstraction"""
 
-    def __init__(self, config, dataset_config):
+    def __init__(
+        self, config: CPGInfrastructureConfig, dataset_config: CPGDatasetConfig
+    ):
         super().__init__(config=config, dataset_config=dataset_config)
 
         self.group_memberships = defaultdict(dict)
         self.entity_to_name: dict[any, str] = {}  # used for policy naming
-        self.iam_bucket_memberships: dict[any, dict[aws.s3.Bucket, list[BucketMembership]]] = defaultdict(lambda: defaultdict(list))
+        self.iam_bucket_memberships: dict[
+            any, dict[aws.s3.Bucket, list[BucketMembership]]
+        ] = defaultdict(lambda: defaultdict(list))
 
     @staticmethod
     def name():
@@ -108,35 +110,38 @@ class AWSInfra(CloudInfraBase):
         raise NotImplementedError(f'Unhandled bucket membership: {membership}')
 
     def finalise_bucket_memberships(self):
-
+        pass
         # this feels gross as, and I can't actually work out how to do it:
         # - policy is too long, do I split it up into different policies
         # - referencing entity from dict[entity: name] doesn't work
 
-        statements = []
-        for entity, entities in self.iam_bucket_memberships.items():
-            for bucket, memberships in entities.items():
-                actions = set(role for m in memberships for role in self.bucket_membership_to_s3_policy(m))
-
-                statements.append(
-                        aws.iam.GetPolicyDocumentStatementArgs(
-                            actions=list(actions),
-                            resources=[
-                                bucket.arn,
-                                bucket.arn.apply(lambda arn: f"{arn}/*"),
-                            ]
-                        )
-                )
-
-            policy = aws.iam.get_policy_document_output(statements=statements)
-            # policy.json.apply(lambda value: print(f'{self.entity_to_name[entity]}-policy: ' + value))
-            # if isinstance(entity, aws.iam.Group):
-            #     aws.iam.GroupPolicy(
-            #         self.resource_prefix() + f'{self.entity_to_name[entity]}-bucket-policy',
-            #         name=f'{self.entity_to_name[entity]}-policy',
-            #         group=entity.name,
-            #         policy=policy.json,
-            #     )
+        # statements = []
+        # for entity, entities in self.iam_bucket_memberships.items():
+        #     for bucket, memberships in entities.items():
+        #         actions = set(
+        #             role
+        #             for m in memberships
+        #             for role in self.bucket_membership_to_s3_policy(m)
+        #         )
+        #
+        #         statements.append(
+        #             aws.iam.GetPolicyDocumentStatementArgs(
+        #                 actions=list(actions),
+        #                 resources=[
+        #                     bucket.arn,
+        #                     bucket.arn.apply(lambda arn: f'{arn}/*'),
+        #                 ],
+        #             )
+        #         )
+        #     policy = aws.iam.get_policy_document_output(statements=statements)
+        #     policy.json.apply(lambda value: print(f'{self.entity_to_name[entity]}-policy: ' + value))
+        #     if isinstance(entity, aws.iam.Group):
+        #         aws.iam.GroupPolicy(
+        #             self.resource_prefix() + f'{self.entity_to_name[entity]}-bucket-policy',
+        #             name=f'{self.entity_to_name[entity]}-policy',
+        #             group=entity.name,
+        #             policy=policy.json,
+        #         )
 
     @staticmethod
     def resource_prefix():
@@ -148,9 +153,9 @@ class AWSInfra(CloudInfraBase):
     def create_monthly_budget(self, resource_key: str, *, project, budget):
         return self._create_budget(
             resource_key,
-            time_period_end="2087-06-15_00:00",
-            time_period_start="2017-07-01_00:00",
-            time_unit="MONTHLY",
+            time_period_end='2087-06-15_00:00',
+            time_period_start='2017-07-01_00:00',
+            time_unit='MONTHLY',
             project=project,
             budget=budget,
         )
@@ -160,9 +165,9 @@ class AWSInfra(CloudInfraBase):
     ):
         return self._create_budget(
             resource_key,
-            time_period_end="2087-06-15_00:00",
-            time_period_start="2017-07-01_00:00",
-            # time_unit="MONTHLY",
+            time_period_end='2087-06-15_00:00',
+            time_period_start='2017-07-01_00:00',
+            # time_unit='MONTHLY',
             project=project,
             budget=budget,
         )
@@ -175,7 +180,7 @@ class AWSInfra(CloudInfraBase):
                     threshold=threshold,
                     threshold_type='PERCENT',
                     notification_type='ACTUAL',
-                    comparison_operator="GREATER_THAN",
+                    comparison_operator='GREATER_THAN',
                 )
                 for threshold in self.config.budget_notification_thresholds
             ]
@@ -184,7 +189,7 @@ class AWSInfra(CloudInfraBase):
                 aws.budgets.BudgetNotification(
                     treshold='100',
                     threshold_type='PERCENT',
-                    comparison_operator="GREATER_THAN",
+                    comparison_operator='GREATER_THAN',
                     notification_type='ACTUAL',
                     subscriber_sns_topic_arns=self.config.aws.subscriber_sns_topic_arns,
                 )
@@ -194,10 +199,10 @@ class AWSInfra(CloudInfraBase):
 
         return aws.budgets.Budget(
             self.resource_prefix() + resource_key,
-            budget_type="COST",
+            budget_type='COST',
             cost_filters=[
                 aws.budgets.BudgetCostFilterArgs(
-                    name="Tag",
+                    name='Tag',
                     values=[project if isinstance(project, str) else project.name],
                 )
             ],
@@ -221,7 +226,7 @@ class AWSInfra(CloudInfraBase):
             expiration=aws.s3.BucketLifecycleRuleExpirationArgs(
                 days=TMP_BUCKET_PERIOD_IN_DAYS,
             ),
-            id="tmp",
+            id='tmp',
         )
 
     def bucket_rule_archive(self, days=ARCHIVE_PERIOD_IN_DAYS) -> Any:
@@ -243,7 +248,7 @@ class AWSInfra(CloudInfraBase):
             )
 
         # todo: remove this when lifecycle rules are correct
-        lifecycle_rules = [l for l in lifecycle_rules if l]
+        lifecycle_rules = [lr for lr in lifecycle_rules if lr]
 
         bucket = aws.s3.Bucket(
             self.resource_prefix() + unique_bucket_name,
