@@ -86,7 +86,8 @@ class GcpInfrastructure(CloudInfraBase):
         )
 
     def finalise(self):
-        pass
+        # Make sure this API is initialised somewhere
+        _ = self._svc_serviceusage
 
     # region SERVICES
     @cached_property

@@ -426,9 +426,9 @@ class CpgDatasetInfrastructure:
         for prefix, I in infra_prefix_map:
             if self.config.config_destination.startswith(prefix):
                 _infra_to_call_function_on = (
-                    I(self.config, self.dataset_config)
+                    self.infra
                     if isinstance(self.infra, I)
-                    else self.infra
+                    else I(self.config, self.dataset_config)
                 )
                 break
         else:
