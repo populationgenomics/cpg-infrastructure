@@ -85,6 +85,9 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     #     # TODO: Azure specific config
     #     subscription_id: str
 
+    class AWS(DeserializableDataclass):
+        subscriber_sns_topic_arns: str | None = None
+
     @dataclasses.dataclass(frozen=True)
     class Hail(DeserializableDataclass):
         @dataclasses.dataclass(frozen=True)
@@ -149,21 +152,22 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     dataset_storage_prefix: str
     budget_currency: str
     reference_dataset: str
-    web_url_template: str
 
-    config_destination: str
-
-    gcp: GCP | None
+    gcp: GCP | None = None
     # azure: Azure | None
-    hail: Hail | None
-    analysis_runner: AnalysisRunner | None
-    web_service: WebService
-    notebooks: Notebooks | None
-    cromwell: Cromwell | None
-    sample_metadata: SampleMetadata | None
+    aws: AWS | None = None
+    hail: Hail | None = None
+    analysis_runner: AnalysisRunner | None = None
+    web_service: WebService | None = None
+    notebooks: Notebooks | None = None
+    cromwell: Cromwell | None = None
+    sample_metadata: SampleMetadata | None = None
+
+    config_destination: str | None = None
+    web_url_template: str | None = None
 
     # temporary
-    access_group_cache: AccessGroupCache
+    access_group_cache: AccessGroupCache | None = None
 
     # When resources are renamed, it can be useful to explicitly apply changes in two
     # phases: delete followed by create; that's opposite of the default create followed by
@@ -210,9 +214,14 @@ class CPGDatasetComponents(Enum):
             'gcp': list(CPGDatasetComponents),
             'azure': [
                 CPGDatasetComponents.STORAGE,
+                CPGDatasetComponents.CONTAINER_REGISTRY,
                 CPGDatasetComponents.HAIL_ACCOUNTS,
                 # CPGDatasetComponents.SAMPLE_METADATA,
             ],
+            'aws': [
+                CPGDatasetComponents.STORAGE,
+                CPGDatasetComponents.CONTAINER_REGISTRY
+            ]
         }
 
 
