@@ -70,6 +70,9 @@ class GcpInfrastructure(CloudInfraBase):
     def get_dataset_project_id(self):
         return self.project_id
 
+    def finalise(self):
+        pass
+
     # region SERVICES
     @cached_property
     def _svc_dataproc(self):

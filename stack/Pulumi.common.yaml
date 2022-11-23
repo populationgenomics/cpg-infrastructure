@@ -11,7 +11,7 @@ config:
       - container-registry
   datasets:deploy_locations:
   - gcp
-#  - azure
+  - azure
   datasets:enable_release: "false"
   datasets:create_container_registry: "true"
   gcp:billing_project: cpg-common

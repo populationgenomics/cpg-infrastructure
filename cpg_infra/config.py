@@ -80,6 +80,11 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         reference_bucket_name: str
         config_bucket_name: str
 
+    # @dataclasses.dataclass(frozen=True)
+    # class Azure(DeserializableDataclass):
+    #     # TODO: Azure specific config
+    #     subscription_id: str
+
     @dataclasses.dataclass(frozen=True)
     class Hail(DeserializableDataclass):
         @dataclasses.dataclass(frozen=True)
@@ -146,6 +151,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     reference_dataset: str
 
     gcp: GCP | None
+    # azure: Azure | None
     hail: Hail | None
     analysis_runner: AnalysisRunner | None
     web_service: WebService
@@ -201,7 +207,7 @@ class CPGDatasetComponents(Enum):
             'gcp': list(CPGDatasetComponents),
             'azure': [
                 CPGDatasetComponents.STORAGE,
-                # CPGDatasetComponents.HAIL_ACCOUNTS,
+                CPGDatasetComponents.HAIL_ACCOUNTS,
                 # CPGDatasetComponents.SAMPLE_METADATA,
             ],
         }
@@ -219,6 +225,10 @@ class CPGDatasetConfig(DeserializableDataclass):
     gcp_hail_service_account_test: str | None = None
     gcp_hail_service_account_standard: str | None = None
     gcp_hail_service_account_full: str | None = None
+
+    azure_hail_service_account_test: str | None = None
+    azure_hail_service_account_standard: str | None = None
+    azure_hail_service_account_full: str | None = None
 
     deployment_service_account_test: str | None = None
     deployment_service_account_standard: str | None = None
