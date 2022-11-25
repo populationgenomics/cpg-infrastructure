@@ -13,7 +13,6 @@ customer_id = "C010ys3gt"
 billing_account_id = '01D012-20A6A2-CBD343'
 billing_project_id = 'billing-admin-290403'
 budget_notification_pubsub = "projects/billing-admin-290403/topics/budget-notifications"
-reference_bucket_name = "cpg-reference"
 config_bucket_name = "cpg-config"
 
 [infrastructure.hail.gcp]

@@ -77,7 +77,6 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         billing_project_id: str
         billing_account_id: int
         budget_notification_pubsub: str | None
-        reference_bucket_name: str
         config_bucket_name: str
 
     # @dataclasses.dataclass(frozen=True)
