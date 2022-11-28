@@ -1204,7 +1204,8 @@ class CpgDatasetInfrastructure:
 
         # mostly because this current format requires the project_id
         custom_container_registry = self.infra.create_container_registry('images')
-        for kind, account in self.access_level_groups.items():
+        accounts = {'access': self.access_group, **self.access_level_groups}
+        for kind, account in accounts.items():
             self.infra.add_member_to_container_registry(
                 f'{kind}-images-reader-in-container-registry',
                 registry=custom_container_registry,
@@ -1270,7 +1271,9 @@ class CpgDatasetInfrastructure:
 
         # allow access group to use notebook account
         self.infra.add_member_to_machine_account_access(
-            'notebook-account-users', self.notebook_account, self.access_group
+            'notebook-account-users',
+            machine_account=self.notebook_account,
+            member=self.access_group,
         )
 
         # Grant the notebook account the same permissions as the access group members.
