@@ -1,4 +1,4 @@
-# pylint: disable=missing-function-docstring,unnecessary-pass
+# pylint: disable=missing-function-docstring,unnecessary-pass,too-many-public-methods,unused-argument
 """
 Generic Infrastructure abstraction that relies on each to be subclassed
 by an equivalent GCP / Azure implementation.
@@ -52,7 +52,7 @@ class ContainerRegistryMembership(Enum):
     """Container registry membership type"""
 
     READER = 'reader'
-    APPEND = 'append'
+    WRITER = 'writer'
 
 
 class CloudInfraBase(ABC):
@@ -77,6 +77,10 @@ class CloudInfraBase(ABC):
             CPGDatasetComponents.default_component_for_infrastructure()[self.name()],
         )
         self.resource_prefix = resource_prefix
+
+    @abstractmethod
+    def finalise(self):
+        pass
 
     @staticmethod
     @abstractmethod
@@ -139,6 +143,16 @@ class CloudInfraBase(ABC):
         pass
 
     @abstractmethod
+    def bucket_output_path(self, bucket):
+        """
+        Return fully formed path to bucket, eg:
+            gs://cpg-{dataset}-main
+            hail-az//cpg-dataset/main/
+            s3://cpg-{dataset}-main
+        """
+        pass
+
+    @abstractmethod
     def add_member_to_bucket(
         self, resource_key: str, bucket, member, membership: BucketMembership
     ) -> Any:
@@ -147,6 +161,11 @@ class CloudInfraBase(ABC):
         Note: You MUST specify a unique resource_key
         :param membership:
         """
+        pass
+
+    @abstractmethod
+    def add_blob_to_bucket(self, resource_name, bucket, output_name, contents):
+        """Add blob to a bucket, contents can be awaitable string"""
         pass
 
     @abstractmethod
@@ -170,7 +189,7 @@ class CloudInfraBase(ABC):
 
     @abstractmethod
     def add_member_to_machine_account_access(
-        self, resource_key: str, machine_account, member
+        self, resource_key: str, machine_account, member, project: str = None
     ) -> Any:
         pass
 
@@ -230,6 +249,10 @@ class CloudInfraBase(ABC):
         # TODO: this might need more thought
         pass
 
+    @abstractmethod
+    def create_container_registry(self, name: str):
+        pass
+
 
 # DEV OVERRIDE
 
@@ -257,7 +280,7 @@ class DryRunInfra(CloudInfraBase):
         self, resource_key: str, *, project, budget, start_date: date = date(2022, 1, 1)
     ):
         print(
-            f'{resource_key} :: Create fixed budget for {project}: ${budget} {self.config.budget_currency} (from {date})'
+            f'{resource_key} :: Create fixed budget for {project}: ${budget} {self.config.budget_currency} (from {start_date})'
         )
 
     def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
@@ -291,7 +314,7 @@ class DryRunInfra(CloudInfraBase):
         return name + '@generated.service-account'
 
     def add_member_to_machine_account_access(
-        self, resource_key: str, machine_account, member
+        self, resource_key: str, machine_account, member, project: str = None
     ) -> Any:
         print(f'Allow {member} to access {machine_account}')
 

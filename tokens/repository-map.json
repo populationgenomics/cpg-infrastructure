@@ -17,6 +17,7 @@
     "circa": [
         "automated-interpretation-pipeline"
     ],
+    "common": [],
     "constraint": [
         "structural-constraint"
     ],
@@ -64,6 +65,7 @@
     "ohmr4-epilepsy": [
         "automated-interpretation-pipeline"
     ],
+    "ourdna-browser": [],
     "perth-neuro": [
         "automated-interpretation-pipeline"
     ],

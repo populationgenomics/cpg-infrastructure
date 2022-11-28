@@ -2,15 +2,17 @@
 """
 CPG Dataset infrastructure
 """
-import graphlib
 import re
+import os.path
+import graphlib
 from inspect import isclass
 from typing import Type, Any, Iterator, Iterable
 from collections import defaultdict, namedtuple
 from functools import lru_cache, cached_property
 
-import cpg_utils.config
+import toml
 import pulumi
+import cpg_utils.config
 
 from cpg_infra.abstraction.azure import AzureInfra
 from cpg_infra.abstraction.gcp import GcpInfrastructure
@@ -48,6 +50,7 @@ SAMPLE_METADATA_PERMISSIONS = [
 AccessLevel = str
 ACCESS_LEVELS: Iterable[AccessLevel] = ('test', 'standard', 'full')
 NON_NAME_REGEX = re.compile(r'[^A-Za-z\d_-]')
+TOML_CONFIG_JOINER = '\n||||'
 
 
 class CpgDatasetInfrastructure:
@@ -153,6 +156,8 @@ class CpgDatasetInfrastructure:
 
         self.setup_group_cache()
 
+        self.infra.finalise()
+
     # region MACHINE ACCOUNTS
 
     @cached_property
@@ -235,8 +240,12 @@ class CpgDatasetInfrastructure:
         return {al: self.create_group(al) for al in ACCESS_LEVELS}
 
     @staticmethod
-    def get_group_output_name(*, dataset: str, kind: str):
-        return f'{dataset}-{kind}-group-id'
+    def get_pulumi_output_group_name(*, infra_name: str, dataset: str, kind: str):
+        return f'{infra_name}-{dataset}-{kind}-group-id'
+
+    @staticmethod
+    def get_pulumi_output_storage_config_name(infra_name, dataset, access_level) -> str:
+        return '-'.join(['storage', infra_name, dataset, access_level, 'config'])
 
     def setup_web_access_group_memberships(self):
         self.infra.add_group_member(
@@ -257,8 +266,10 @@ class CpgDatasetInfrastructure:
 
         for kind, group in kinds.items():
             pulumi.export(
-                self.get_group_output_name(
-                    dataset=self.dataset_config.dataset, kind=kind
+                self.get_pulumi_output_group_name(
+                    infra_name=self.infra.name(),
+                    dataset=self.dataset_config.dataset,
+                    kind=kind,
                 ),
                 group.id if hasattr(group, 'id') else group,
             )
@@ -306,6 +317,7 @@ class CpgDatasetInfrastructure:
         if not self.should_setup_storage:
             return
 
+        self.setup_storage_common_test_access()
         self.infra.give_member_ability_to_list_buckets(
             'project-buckets-lister', self.access_group
         )
@@ -322,6 +334,200 @@ class CpgDatasetInfrastructure:
 
         if isinstance(self.infra, GcpInfrastructure):
             self.setup_storage_gcp_requester_pays_access()
+
+        self.setup_storage_outputs()
+
+    def setup_storage_common_test_access(self):
+        if self.dataset_config.dataset != self.config.reference_dataset:
+            return
+
+        self.infra.add_member_to_bucket(
+            self.dataset_config.dataset + '-test-accessing-main',
+            bucket=self.main_bucket,
+            member=self.access_level_groups['test'],
+            membership=BucketMembership.READ,
+        )
+
+    def setup_storage_outputs(self):
+
+        buckets = {
+            'main': {
+                'default': self.infra.bucket_output_path(self.main_bucket),
+                'web': self.infra.bucket_output_path(self.main_web_bucket),
+                'analysis': self.infra.bucket_output_path(self.main_analysis_bucket),
+                'tmp': self.infra.bucket_output_path(self.main_tmp_bucket),
+                'web_url': self.config.web_url_template.format(
+                    namespace='main', dataset=self.dataset_config.dataset
+                ),
+            },
+            'test': {
+                'default': self.infra.bucket_output_path(self.test_bucket),
+                'web': self.infra.bucket_output_path(self.test_web_bucket),
+                'analysis': self.infra.bucket_output_path(self.test_analysis_bucket),
+                'tmp': self.infra.bucket_output_path(self.test_tmp_bucket),
+                'web_url': self.config.web_url_template.format(
+                    namespace='test', dataset=self.dataset_config.dataset
+                ),
+            },
+        }
+
+        for namespace, al_buckets in buckets.items():
+
+            configs_to_merge = []
+            for dependent_dataset in self.dataset_config.depends_on:
+
+                stack = self.get_pulumi_stack(dependent_dataset)
+                configs_to_merge.append(
+                    stack.get_output(
+                        self.get_pulumi_output_storage_config_name(
+                            self.infra.name(), dependent_dataset, namespace
+                        )
+                    )
+                )
+
+            prepare_config_kwargs = {}
+            if configs_to_merge:
+                # Merge them here, because we have to pass it as a single
+                # keyword-argument to Pulumi so we can reference it, but Pulumi
+                # won't resolve a List[Output[T]]
+                prepare_config_kwargs['_extra_configs'] = pulumi.Output.all(
+                    *configs_to_merge
+                ).apply(TOML_CONFIG_JOINER.join)
+
+            if namespace == 'main':
+                prepare_config_kwargs.update(
+                    {
+                        f'{ns}-{cat}': _bucket
+                        for ns, ns_buckets in buckets.items()
+                        for cat, _bucket in ns_buckets.items()
+                    }
+                )
+
+                def _pulumi_prepare_function(arg):
+                    """Redefine like this as Pulumi drops the self somehow"""
+                    return self._pulumi_prepare_storage_outputs_main_function(arg)
+
+            else:
+                prepare_config_kwargs.update(al_buckets)
+
+                def _pulumi_prepare_function(arg):
+                    return self._pulumi_prepare_storage_outputs_test_function(arg)
+
+            # This is an pulumi.Output[String]
+            dataset_storage_config = pulumi.output.Output.all(
+                **prepare_config_kwargs
+            ).apply(_pulumi_prepare_function)
+            pulumi_export_name = self.get_pulumi_output_storage_config_name(
+                self.infra.name(), self.dataset_config.dataset, namespace
+            )
+
+            # this export is important, it's how direct dependencies will be able to
+            # access the nested dependencies, this export is potentially depending
+            # on transitive dependencies.
+            pulumi.export(pulumi_export_name, dataset_storage_config)
+            self.add_config_toml_to_bucket(
+                namespace=namespace, contents=dataset_storage_config
+            )
+
+    def add_config_toml_to_bucket(self, namespace, contents: pulumi.Output):
+        """
+        Write the config to a bucket, this function decides the output-path based
+        on the current deploy infra, dataset, access_level.
+        :param namespace: test / main
+        :param contents: some Pulumi awaitable string
+        """
+        if not self.config.config_destination:
+            return
+
+        _infra_to_call_function_on = None
+        infra_prefix_map = [
+            ('gs://', GcpInfrastructure),
+            ('hail-az://', AzureInfra),
+        ]
+        for prefix, I in infra_prefix_map:
+            if self.config.config_destination.startswith(prefix):
+                _infra_to_call_function_on = (
+                    self.infra
+                    if isinstance(self.infra, I)
+                    else I(self.config, self.dataset_config)
+                )
+                break
+        else:
+            raise ValueError(
+                f'Could not find infra to save blob to for config_destination: '
+                f'{self.config.config_destination}'
+            )
+
+        bucket_name, suffix = self.config.config_destination[len('gs://') :].split(
+            '/', maxsplit=1
+        )
+
+        name = f'{self.infra.name()}-{self.dataset_config.dataset}-{namespace}'
+        output_name = os.path.join(
+            suffix,
+            f'{self.infra.name()}/{self.dataset_config.dataset}-{namespace}' + '.toml',
+        )
+
+        _infra_to_call_function_on.add_blob_to_bucket(
+            resource_name=f'storage-config-{name}',
+            bucket=bucket_name,
+            output_name=output_name,
+            contents=contents,
+        )
+
+    def _pulumi_prepare_storage_outputs_test_function(self, arg):
+        """
+        Don't call this directly from Pulumi, as it strips the self
+        """
+        kwargs = dict(arg)
+        config_dict = {}
+        if '_extra_configs' in kwargs:
+            for config_str in kwargs.pop('_extra_configs').split(TOML_CONFIG_JOINER):
+                cpg_utils.config.update_dict(config_dict, toml.loads(config_str))
+
+        storage_dict = {
+            'storage': {'default': kwargs, self.dataset_config.dataset: kwargs}
+        }
+        if config_dict:
+            cpg_utils.config.update_dict(config_dict, storage_dict)
+        else:
+            config_dict = storage_dict
+
+        d = toml.dumps(config_dict)
+        return d
+
+    def _pulumi_prepare_storage_outputs_main_function(self, arg):
+        kwargs = dict(arg)
+        config_dict = {}
+        if '_extra_configs' in kwargs:
+            for config_str in kwargs.pop('_extra_configs').split(TOML_CONFIG_JOINER):
+                cpg_utils.config.update_dict(config_dict, toml.loads(config_str))
+
+        test_buckets = {
+            name.removeprefix('test-'): bucket_path
+            for name, bucket_path in kwargs.items()
+            if name.startswith('test-')
+        }
+        main_buckets = {
+            name.removeprefix('main-'): bucket_path
+            for name, bucket_path in kwargs.items()
+            if name.startswith('main-')
+        }
+
+        obj = {**main_buckets, 'test': test_buckets}
+        storage_dict = {
+            'storage': {
+                'default': obj,
+                self.dataset_config.dataset: obj,
+            },
+        }
+        if config_dict:
+            cpg_utils.config.update_dict(config_dict, storage_dict)
+        else:
+            config_dict = storage_dict
+
+        d = toml.dumps(config_dict)
+        return d
 
     def setup_storage_gcp_requester_pays_access(self):
         """
@@ -425,12 +631,13 @@ class CpgDatasetInfrastructure:
         )
 
         # web-server
-        self.infra.add_member_to_bucket(
-            'web-server-main-web-bucket-viewer',
-            self.main_web_bucket,
-            self.config.web_service.gcp.server_machine_account,  # WEB_SERVER_SERVICE_ACCOUNT,
-            BucketMembership.READ,
-        )
+        if isinstance(self.infra, GcpInfrastructure):
+            self.infra.add_member_to_bucket(
+                'web-server-main-web-bucket-viewer',
+                self.main_web_bucket,
+                self.config.web_service.gcp.server_machine_account,  # WEB_SERVER_SERVICE_ACCOUNT,
+                BucketMembership.READ,
+            )
 
         self.infra.add_member_to_bucket(
             'standard-main-web-bucket-view-create',
@@ -561,12 +768,13 @@ class CpgDatasetInfrastructure:
                 )
 
         # give web-server access to test-bucket
-        self.infra.add_member_to_bucket(
-            'web-server-test-web-bucket-viewer',
-            bucket=self.test_web_bucket,
-            member=self.config.web_service.gcp.server_machine_account,  # WEB_SERVER_SERVICE_ACCOUNT,
-            membership=BucketMembership.READ,
-        )
+        if isinstance(self.infra, GcpInfrastructure):
+            self.infra.add_member_to_bucket(
+                'web-server-test-web-bucket-viewer',
+                bucket=self.test_web_bucket,
+                member=self.config.web_service.gcp.server_machine_account,  # WEB_SERVER_SERVICE_ACCOUNT,
+                membership=BucketMembership.READ,
+            )
 
     @cached_property
     def test_bucket(self):
@@ -655,22 +863,33 @@ class CpgDatasetInfrastructure:
                 BucketMembership.MUTATE,
             )
 
-        # The analysis-runner also needs Hail bucket access for compiled code.
-        self.infra.add_member_to_bucket(
-            'analysis-runner-hail-bucket-admin',
-            bucket=self.hail_bucket,
-            member=self.config.analysis_runner.gcp.server_machine_account,  # ANALYSIS_RUNNER_SERVICE_ACCOUNT,
-            membership=BucketMembership.MUTATE,
-        )
+        if self.should_setup_analysis_runner and isinstance(
+            self.infra, GcpInfrastructure
+        ):
+            # TODO: this will be more complicated for Azure, because analysis-runner
+            #   needs access to Azure bucket to write wheels / jars
+            # The analysis-runner needs Hail bucket access for compiled code.
+            self.infra.add_member_to_bucket(
+                'analysis-runner-hail-bucket-admin',
+                bucket=self.hail_bucket,
+                member=self.config.analysis_runner.gcp.server_machine_account,  # ANALYSIS_RUNNER_SERVICE_ACCOUNT,
+                membership=BucketMembership.MUTATE,
+            )
 
     def setup_hail_wheels_bucket_permissions(self):
-
         keys = {'access-group': self.access_group, **self.access_level_groups}
+
+        bucket = None
+        if isinstance(self.infra, GcpInfrastructure):
+            bucket = self.config.hail.gcp.wheel_bucket_name
+
+        if not bucket:
+            return
 
         for key, group in keys.items():
             self.infra.add_member_to_bucket(
                 f'{key}-hail-wheels-viewer',
-                bucket=self.config.hail.gcp.wheel_bucket_name,  # HAIL_WHEEL_BUCKET_NAME,
+                bucket=bucket,
                 member=group,
                 membership=BucketMembership.READ,
             )
@@ -687,7 +906,15 @@ class CpgDatasetInfrastructure:
                 'standard': self.dataset_config.gcp.hail_service_account_standard,
                 'full': self.dataset_config.gcp.hail_service_account_full,
             }
-        assert all(ac is not None for ac in accounts.values())
+        elif isinstance(self.infra, AzureInfra):
+            accounts = {
+                'test': self.dataset_config.azure_hail_service_account_test,
+                'standard': self.dataset_config.azure_hail_service_account_standard,
+                'full': self.dataset_config.azure_hail_service_account_full,
+            }
+        else:
+            return {}
+        accounts = {cat: ac for cat, ac in accounts.items() if ac}
         return accounts
 
     @cached_property
@@ -983,15 +1210,53 @@ class CpgDatasetInfrastructure:
         + cpg-common container registries
         :return:
         """
+        self.setup_dataset_container_registry()
+        self.setup_legacy_container_registries()
+
+    def setup_dataset_container_registry(self):
+        """
+        If required, setup a container registry for a dataset
+        :return:
+        """
+        if not self.dataset_config.create_container_registry:
+            return
+
+        # mostly because this current format requires the project_id
+        custom_container_registry = self.infra.create_container_registry('images')
+        for kind, account in self.access_level_groups.items():
+            self.infra.add_member_to_container_registry(
+                f'{kind}-images-reader-in-container-registry',
+                registry=custom_container_registry,
+                member=account,
+                membership=ContainerRegistryMembership.READER,
+            )
+            if kind in ('standard', 'full'):
+                self.infra.add_member_to_container_registry(
+                    f'{kind}-images-writer-in-container-registry',
+                    registry=custom_container_registry,
+                    member=account,
+                    membership=ContainerRegistryMembership.WRITER,
+                )
+
+    def setup_legacy_container_registries(self):
+        """
+        Setup permissions for analysis-runner artifact registries
+        """
+        # TODO: This will eventually be mostly solved by the cpg-common
+        #       dataset with permissions through inheritance.
+        if not isinstance(self.infra, GcpInfrastructure):
+            return
+        try:
+            if not self.config.analysis_runner.gcp.project:
+                return
+        except AttributeError:
+            # gross catch nulls
+            return
 
         container_registries = [
             (
                 self.config.analysis_runner.gcp.project,
                 self.config.analysis_runner.gcp.container_registry_name,
-            ),
-            (
-                self.config.gcp.common_artifact_registry_project,
-                self.config.gcp.common_artifact_registry_name,
             ),
         ]
 
@@ -1012,15 +1277,6 @@ class CpgDatasetInfrastructure:
                     project=project,
                     member=account,
                     membership=ContainerRegistryMembership.READER,
-                )
-
-            if kind in ('full', 'standard'):
-                self.infra.add_member_to_container_registry(
-                    f'{kind}-images-writer-in-cpg-common',
-                    registry=self.config.gcp.common_artifact_registry_name,
-                    project=self.config.gcp.common_artifact_registry_project,
-                    member=account,
-                    membership=ContainerRegistryMembership.APPEND,
                 )
 
     # endregion CONTAINER REGISTRY
@@ -1154,6 +1410,9 @@ class CpgDatasetInfrastructure:
     # region ACCESS GROUP CACHE
 
     def setup_group_cache(self):
+        if not isinstance(self.infra, GcpInfrastructure):
+            return
+
         self.setup_group_cache_access_group()
         self.setup_group_cache_web_access_group()
         self.setup_group_cache_sample_metadata_secrets()
@@ -1258,13 +1517,14 @@ class CpgDatasetInfrastructure:
             **self.access_level_groups,
         }
 
-        for kind, group in kinds.items():
-            self.infra.add_member_to_bucket(
-                f'{kind}-reference-bucket-viewer',
-                bucket=self.config.gcp.reference_bucket_name,  # REFERENCE_BUCKET_NAME,
-                member=group,
-                membership=BucketMembership.READ,
-            )
+        if isinstance(self.infra, GcpInfrastructure):
+            for kind, group in kinds.items():
+                self.infra.add_member_to_bucket(
+                    f'{kind}-reference-bucket-viewer',
+                    bucket=self.config.gcp.reference_bucket_name,  # REFERENCE_BUCKET_NAME,
+                    member=group,
+                    membership=BucketMembership.READ,
+                )
 
     # endregion REFERENCE
     # region DEPENDENCIES
@@ -1274,7 +1534,8 @@ class CpgDatasetInfrastructure:
 
     def setup_dependencies_group_memberships(self):
 
-        dependencies = self.dataset_config.depends_on
+        # duplicate reference to avoid mutating config
+        dependencies = list(self.dataset_config.depends_on)
 
         if self.dataset_config.dataset != self.config.reference_dataset:
             dependencies.append(self.config.reference_dataset)
@@ -1283,16 +1544,22 @@ class CpgDatasetInfrastructure:
             dependent_stack = self.get_pulumi_stack(dependency)
 
             self.infra.add_group_member(
-                f'{dependency}-access-group',
-                dependent_stack.get_output(
-                    self.get_group_output_name(dataset=dependency, kind='access')
+                resource_key=f'{dependency}-access-group',
+                group=dependent_stack.get_output(
+                    self.get_pulumi_output_group_name(
+                        infra_name=self.infra.name(), dataset=dependency, kind='access'
+                    )
                 ),
-                self.access_group,
+                member=self.access_group,
             )
 
             for access_level, primary_access_group in self.access_level_groups.items():
                 dependency_group_id = dependent_stack.get_output(
-                    self.get_group_output_name(dataset=dependency, kind=access_level),
+                    self.get_pulumi_output_group_name(
+                        infra_name=self.infra.name(),
+                        dataset=dependency,
+                        kind=access_level,
+                    ),
                 )
 
                 # add this dataset to dependencies membership

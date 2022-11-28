@@ -32,19 +32,36 @@ class GcpInfrastructure(CloudInfraBase):
         self, config: CPGInfrastructureConfig, dataset_config: CPGDatasetConfig, resource_prefix: str
     ):
         super().__init__(config=config, dataset_config=dataset_config, resource_prefix=resource_prefix)
-
         self.region = dataset_config.gcp.region or config.gcp.region
-        self.organization = gcp.organizations.get_organization(domain=config.domain)
-        self.project_id = dataset_config.gcp.project
 
-        self._svc_cloudresourcemanager = gcp.projects.Service(
-            f'{resource_prefix}cloudresourcemanager-service',
+    @cached_property
+    def organization(self):
+        return gcp.organizations.get_organization(domain=self.config.domain)
+
+    @cached_property
+    def project_id(self):
+        return gcp.organizations.get_project().project_id
+
+    def get_dataset_project_id(self):
+        return self.project_id
+
+    def finalise(self):
+        # Make sure this API is initialised somewhere
+        _ = self._svc_serviceusage
+
+    # region SERVICES
+    @cached_property
+    def _svc_cloudresourcemanager(self):
+        return gcp.projects.Service(
+            f'{self.resource_prefix}cloudresourcemanager-service',
             service='cloudresourcemanager.googleapis.com',
             disable_on_destroy=False,
         )
 
-        self._svc_cloudidentity = gcp.projects.Service(
-            f'{resource_prefix}cloudidentity-service',
+    @cached_property
+    def _svc_cloudidentity(self):
+        return gcp.projects.Service(
+            f'{self.resource_prefix}cloudidentity-service',
             service='cloudidentity.googleapis.com',
             disable_on_destroy=False,
             opts=pulumi.resource.ResourceOptions(
@@ -52,14 +69,18 @@ class GcpInfrastructure(CloudInfraBase):
             ),
         )
 
-        self._svc_serviceusage = gcp.projects.Service(
-            f'{resource_prefix}serviceusage-service',
+    @cached_property
+    def _svc_serviceusage(self):
+        return gcp.projects.Service(
+            f'{self.resource_prefix}serviceusage-service',
             service='serviceusage.googleapis.com',
             disable_on_destroy=False,
         )
 
-        self._svc_secretmanager = gcp.projects.Service(
-            f'{resource_prefix}secretmanager-service',
+    @cached_property
+    def _svc_secretmanager(self):
+        return gcp.projects.Service(
+            f'{self.resource_prefix}secretmanager-service',
             service='secretmanager.googleapis.com',
             disable_on_destroy=False,
             opts=pulumi.resource.ResourceOptions(
@@ -67,10 +88,6 @@ class GcpInfrastructure(CloudInfraBase):
             ),
         )
 
-    def get_dataset_project_id(self):
-        return self.project_id
-
-    # region SERVICES
     @cached_property
     def _svc_dataproc(self):
         return gcp.projects.Service(
@@ -235,6 +252,9 @@ class GcpInfrastructure(CloudInfraBase):
             ),
             condition=gcp.storage.BucketLifecycleRuleConditionArgs(age=days),
         )
+
+    def bucket_output_path(self, bucket: gcp.storage.Bucket):
+        return pulumi.Output.concat('gs://', bucket.name)
 
     def create_bucket(
         self,
@@ -478,13 +498,24 @@ class GcpInfrastructure(CloudInfraBase):
             self.resource_prefix + resource_key, secret=secret.id, secret_data=contents
         )
 
+    # region CONTAINER REGISTRY
+
+    def create_container_registry(self, name: str):
+        return gcp.artifactregistry.Repository(
+            'artifact-registry-' + name,
+            repository_id=name,
+            project=self.project_id,
+            format='DOCKER',
+            location=self.region,
+        )
+
     def add_member_to_container_registry(
         self, resource_key: str, registry, member, membership, project=None
     ) -> Any:
 
         if membership == ContainerRegistryMembership.READER:
             role = 'roles/artifactregistry.reader'
-        elif membership == ContainerRegistryMembership.APPEND:
+        elif membership == ContainerRegistryMembership.WRITER:
             role = 'roles/artifactregistry.writer'
         else:
             raise ValueError(f'Unrecognised group membership type: {membership}')
@@ -497,6 +528,8 @@ class GcpInfrastructure(CloudInfraBase):
             role=role,
             member=self.get_member_key(member),
         )
+
+    # endregion CONTAINER REGISTRY
 
     # region GCP SPECIFIC
 
@@ -542,6 +575,11 @@ class GcpInfrastructure(CloudInfraBase):
             project=project or self.project_id,
             role=role,
             member=self.get_member_key(member),
+        )
+
+    def add_blob_to_bucket(self, resource_name, bucket, output_name, contents):
+        return gcp.storage.BucketObject(
+            resource_name, bucket=bucket, name=output_name, content=contents
         )
 
     # endregion GCP SPECIFIC
