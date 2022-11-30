@@ -81,9 +81,9 @@ def main():
         for access_level in 'test', 'standard', 'full':
             hail_user = get_hail_user(dataset, access_level)
             if not hail_user:
-               print(f'Warning: no Hail user found for {dataset}/{access_level}')
-               entries = None
-               break
+                print(f'Warning: no Hail user found for {dataset}/{access_level}')
+                entries = None
+                break
             entries[f'{access_level}Token'] = get_token(hail_user)
         if entries:
             config[dataset] = entries
