@@ -54,13 +54,16 @@ def get_project_id(dataset: str) -> str:
         return yaml.safe_load(f)['config']['gcp:project']
 
 
-def get_hail_user(dataset: str, access_level: str):
+def get_hail_user(dataset: str, access_level: str) -> str | None:
     """
     Returns the hail user associated with the given dataset for the access level
     """
     with open(REPO_ROOT / f'stack/Pulumi.{dataset}.yaml', encoding='utf-8') as f:
         config = yaml.safe_load(f)['config']
         key = f'datasets:gcp_hail_service_account_{access_level}'
+        val = config.get(key)
+        if not val:
+            return None
         # removes -\d{3}@hail-295901.iam.gserviceaccount.com
         service_account_name = config[key][:-40]
         return service_account_name
@@ -77,8 +80,13 @@ def main():
         }
         for access_level in 'test', 'standard', 'full':
             hail_user = get_hail_user(dataset, access_level)
+            if not hail_user:
+               print(f'Warning: no Hail user found for {dataset}/{access_level}')
+               entries = None
+               break
             entries[f'{access_level}Token'] = get_token(hail_user)
-        config[dataset] = entries
+        if entries:
+            config[dataset] = entries
 
     add_secret('server-config', json.dumps(config))
 
