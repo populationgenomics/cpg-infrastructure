@@ -1,0 +1,13 @@
+encryptionsalt: v1:OJSauP4YhnI=:v1:cixXZFOjR/SMbnaS:/MVQNmERDBesc98gu3HrpKJAfxVfQw==
+config:
+  datasets:archive_age: "90"
+  datasets:customer_id: C010ys3gt
+  datasets:deploy_locations:
+  - gcp
+  datasets:enable_release: "false"
+  datasets:gcp_hail_service_account_full: lof-curation-full-499@hail-295901.iam.gserviceaccount.com
+  datasets:gcp_hail_service_account_standard: lof-curation-standard-574@hail-295901.iam.gserviceaccount.com
+  datasets:gcp_hail_service_account_test: lof-curation-test-156@hail-295901.iam.gserviceaccount.com
+  gcp:billing_project: lof-curation-655721
+  gcp:project: lof-curation-655721
+  gcp:user_project_override: "true"
