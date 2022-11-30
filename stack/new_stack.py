@@ -121,6 +121,7 @@ logging.basicConfig(level=logging.INFO)
 @click.option('--do-not-create-hail-service-accounts', required=False, is_flag=True)
 @click.option('--add-as-seqr-dependency', required=False, is_flag=True)
 @click.option('--configure-hail-batch-project', required=False, is_flag=True)
+@click.option('--create-pulumi-stack', required=False, is_flag=True)
 @click.option('--deploy-stack', required=False, is_flag=True, help='Runs `pulumi up`')
 @click.option('--generate-service-account-key', required=False, is_flag=True)
 @click.option('--add-random-digits-to-gcp-id', required=False, is_flag=True)
@@ -560,8 +561,7 @@ def _get_standard_hail_account_names(dataset):
 
 def _get_hail_auth_token(cloud: Cloud):
     with open(os.path.expanduser('~/.hail/tokens.json'), encoding='utf-8') as f:
-        return json.load(f)['default']
-        #return json.load(f)[cloud.value]
+        return json.load(f)[cloud.value]
 
 
 def create_hail_accounts(dataset, cloud: Cloud = Cloud.GCP):
