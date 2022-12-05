@@ -73,6 +73,7 @@
         "variant-curation-portal"
     ],
     "mcri-lrp": [
+        "automated-interpretation-pipeline",
         "rare-disease"
     ],
     "mgrb": [],
