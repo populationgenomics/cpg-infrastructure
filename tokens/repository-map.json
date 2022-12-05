@@ -54,6 +54,9 @@
     "leukodystrophies": [
         "automated-interpretation-pipeline"
     ],
+    "lof-curation": [
+        "variant-curation-portal"
+    ],
     "mcri-lrp": [],
     "mgrb": [],
     "mito-disease": [
