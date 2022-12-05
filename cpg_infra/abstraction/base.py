@@ -18,6 +18,7 @@ Some challenges I forsee with this abstraction:
 from abc import ABC, abstractmethod
 from datetime import date
 from enum import Enum
+from functools import cached_property
 from typing import Any, Callable
 
 from cpg_infra.config import (
@@ -67,7 +68,7 @@ class CloudInfraBase(ABC):
     """
 
     def __init__(
-        self, config: CPGInfrastructureConfig, dataset_config: CPGDatasetConfig, resource_prefix: str
+        self, config: CPGInfrastructureConfig, dataset_config: CPGDatasetConfig
     ):
         super().__init__()
         self.config = config
@@ -76,7 +77,11 @@ class CloudInfraBase(ABC):
             self.name(),
             CPGDatasetComponents.default_component_for_infrastructure()[self.name()],
         )
-        self.resource_prefix = resource_prefix
+
+    def get_pulumi_name(self, key: str):
+        if key.startswith(self.dataset + '-'):
+            key = key.removeprefix(self.dataset + '-')
+        return f'{self.dataset}-{self.name()}-' + key
 
     @abstractmethod
     def finalise(self):

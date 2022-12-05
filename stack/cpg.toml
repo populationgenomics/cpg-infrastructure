@@ -17,6 +17,9 @@ budget_notification_pubsub = "projects/billing-admin-290403/topics/budget-notifi
 reference_bucket_name = "cpg-reference"
 config_bucket_name = "cpg-config"
 
+[infrastructure.azure]
+region = "australiaeast"
+
 [infrastructure.hail.gcp]
 wheel_bucket_name = "cpg-hail-ci"
 

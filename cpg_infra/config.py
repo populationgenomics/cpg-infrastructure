@@ -81,10 +81,9 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         reference_bucket_name: str
         config_bucket_name: str
 
-    # @dataclasses.dataclass(frozen=True)
-    # class Azure(DeserializableDataclass):
-    #     # TODO: Azure specific config
-    #     subscription_id: str
+    @dataclasses.dataclass(frozen=True)
+    class Azure(DeserializableDataclass):
+        region: str
 
     @dataclasses.dataclass(frozen=True)
     class Hail(DeserializableDataclass):
@@ -154,17 +153,17 @@ class CPGInfrastructureConfig(DeserializableDataclass):
 
     config_destination: str
 
-    gcp: GCP | None
-    # azure: Azure | None
-    hail: Hail | None
-    analysis_runner: AnalysisRunner | None
-    web_service: WebService
-    notebooks: Notebooks | None
-    cromwell: Cromwell | None
-    sample_metadata: SampleMetadata | None
+    gcp: GCP | None = None
+    azure: Azure | None = None
+    hail: Hail | None = None
+    analysis_runner: AnalysisRunner | None = None
+    web_service: WebService | None = None
+    notebooks: Notebooks | None = None
+    cromwell: Cromwell | None = None
+    sample_metadata: SampleMetadata | None = None
 
     # temporary
-    access_group_cache: AccessGroupCache
+    access_group_cache: AccessGroupCache = None
 
     # When resources are renamed, it can be useful to explicitly apply changes in two
     # phases: delete followed by create; that's opposite of the default create followed by
@@ -227,24 +226,25 @@ class CPGDatasetConfig(DeserializableDataclass):
     @dataclasses.dataclass(frozen=True)
     class Gcp(DeserializableDataclass):
         project: str
-
-        hail_service_account_test: str
-        hail_service_account_standard: str
-        hail_service_account_full: str
-
         region: str | None = None
+
+        hail_service_account_test: str = None
+        hail_service_account_standard: str = None
+        hail_service_account_full: str = None
+
+
+    @dataclasses.dataclass(frozen=True)
+    class Azure(DeserializableDataclass):
+        region: str | None = None
+
+        hail_service_account_test: str = None
+        hail_service_account_standard: str = None
+        hail_service_account_full: str = None
+
 
     dataset: str
 
     gcp: Gcp
-
-    gcp_hail_service_account_test: str | None = None
-    gcp_hail_service_account_standard: str | None = None
-    gcp_hail_service_account_full: str | None = None
-
-    azure_hail_service_account_test: str | None = None
-    azure_hail_service_account_standard: str | None = None
-    azure_hail_service_account_full: str | None = None
 
     deployment_service_account_test: str | None = None
     deployment_service_account_standard: str | None = None

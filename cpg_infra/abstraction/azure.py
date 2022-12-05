@@ -36,7 +36,9 @@ class AzureInfra(CloudInfraBase):
     ):
         super().__init__(config, dataset_config)
 
-        self.region = 'australiaeast'
+        assert config.azure, 'config.azure is required to deploy to Azure'
+
+        self.region = config.azure.region
         self._resource_group_name = f'{config.dataset_storage_prefix}{self.dataset}'
         self._storage_account_name = self.fix_azure_alphanum_names(
             f'{config.dataset_storage_prefix}{self.dataset}'
@@ -61,10 +63,6 @@ class AzureInfra(CloudInfraBase):
     def name():
         return 'azure'
 
-    @staticmethod
-    def resource_prefix():
-        return 'az-'
-
     def get_dataset_project_id(self):
         return self.dataset
 
@@ -75,7 +73,7 @@ class AzureInfra(CloudInfraBase):
     @cached_property
     def resource_group(self):
         return az.resources.ResourceGroup(
-            self.resource_prefix() + self._resource_group_name,
+            self.get_pulumi_name(self._resource_group_name),
             resource_group_name=self._resource_group_name,
             location=self.region,
         )
@@ -83,7 +81,7 @@ class AzureInfra(CloudInfraBase):
     @cached_property
     def storage_account(self):
         return az.storage.StorageAccount(
-            self.resource_prefix() + self._storage_account_name,
+            self.get_pulumi_name(self._storage_account_name),
             account_name=self._storage_account_name,
             resource_group_name=self.resource_group.name,
             location=self.region,
@@ -99,8 +97,9 @@ class AzureInfra(CloudInfraBase):
     def _create_management_policy(self):
         if not self.storage_account_lifecycle_rules:
             return None
+
         return az.storage.ManagementPolicy(
-            f'{self.resource_prefix()}{self._storage_account_name}-management-policy',
+            self.get_pulumi_name(f'{self._storage_account_name}-management-policy'),
             account_name=self.storage_account.name,
             resource_group_name=self.resource_group.name,
             policy=az.storage.ManagementPolicySchemaArgs(
@@ -136,7 +135,7 @@ class AzureInfra(CloudInfraBase):
         # kwargs = dict(kwargs, dict(budget_filter))
         #
         # az.consumption.Budget(
-        #     self.resource_prefix() + resource_key,
+        #     self.get_pulumi_name(resource_key),
         #     budget_name=f'{project.name}-budget',
         #     amount=budget,
         #     category='Cost',
@@ -166,7 +165,7 @@ class AzureInfra(CloudInfraBase):
         #     ]
         # )
         # return self.create_budget(
-        #     resource_key=self.resource_prefix() + resource_key,
+        #     resource_key=self.get_pulumi_name(resource_key),
         #     project=project,
         #     budget=budget,
         #     budget_filter=az.consumption.BudgetArgs(
@@ -193,7 +192,7 @@ class AzureInfra(CloudInfraBase):
         #     ]
         # )
         # return self.create_budget(
-        #     resource_key=self.resource_prefix() + resource_key,
+        #     resource_key=self.get_pulumi_name(resource_key),
         #     project=project,
         #     budget=budget,
         #     budget_filter=az.consumption.BudgetArgs(
@@ -208,7 +207,7 @@ class AzureInfra(CloudInfraBase):
 
     def _undelete(self, days=UNDELETE_PERIOD_IN_DAYS):
         az.storage.BlobServiceProperties(
-            f'{self.resource_prefix()}{self._storage_account_name}-{days}day-undelete-rule',
+            self.get_pulumi_name(f'{self._storage_account_name}-{days}day-undelete-rule'),
             account_name=self.storage_account.name,
             blob_services_name='default',
             delete_retention_policy=az.storage.DeleteRetentionPolicyArgs(
@@ -289,7 +288,7 @@ class AzureInfra(CloudInfraBase):
         self.storage_account_lifecycle_rules.extend(lifecycle_rules)
 
         return az.storage.BlobContainer(
-            f'{self.resource_prefix()}{name}',
+            self.get_pulumi_name(name),
             account_name=self.storage_account.name,
             resource_group_name=project or self.resource_group.name,
             container_name=name,
@@ -318,7 +317,7 @@ class AzureInfra(CloudInfraBase):
         self, resource_key: str, bucket, member, membership
     ) -> Any:
         return az.authorization.RoleAssignment(
-            self.resource_prefix() + resource_key,
+            self.get_pulumi_name(resource_key),
             scope=self._get_object_id(bucket),
             principal_id=self._get_object_id(member),
             principal_type=self._get_principal_type(member),
@@ -342,7 +341,7 @@ class AzureInfra(CloudInfraBase):
         self, name: str, project: str = None, *, resource_key: str = None
     ) -> Any:
         return az.managedidentity.UserAssignedIdentity(
-            self.resource_prefix() + (resource_key or f'service-account-{name}'),
+            self.get_pulumi_name((resource_key or f'service-account-{name}')),
             resource_name_=name,
             location=self.region,
             resource_group_name=self.resource_group.name,
@@ -358,7 +357,7 @@ class AzureInfra(CloudInfraBase):
 
     def create_group(self, name: str) -> Any:
         return azuread.Group(
-            self.resource_prefix() + name,
+            self.get_pulumi_name(name),
             display_name=name,
             security_enabled=True,
         )
@@ -388,7 +387,7 @@ class AzureInfra(CloudInfraBase):
     def add_group_member(self, resource_key: str, group, member) -> Any:
 
         return azuread.GroupMember(
-            self.resource_prefix() + resource_key,
+            self.get_pulumi_name(resource_key),
             group_object_id=self._get_object_id(group),
             member_object_id=self._get_object_id(member),
         )
@@ -396,7 +395,7 @@ class AzureInfra(CloudInfraBase):
     @cached_property
     def secret_vault(self):
         return az.keyvault.Vault(
-            self.resource_prefix() + 'vault',
+            self.get_pulumi_name('vault'),
             resource_group_name=self.resource_group.name,
             vault_name='secrets',
             location=self.region,
@@ -410,7 +409,7 @@ class AzureInfra(CloudInfraBase):
 
     def create_secret(self, name: str, project: str = None) -> Any:
         return az.keyvault.Secret(
-            self.resource_prefix() + 'secret-' + name,
+            self.get_pulumi_name('secret-' + name),
             secret_name=name,
             properties=az.keyvault.SecretPropertiesArgs(
                 value=None,
@@ -426,7 +425,7 @@ class AzureInfra(CloudInfraBase):
         contents: Any,
     ):
         return az.keyvault.Secret(
-            self.resource_prefix() + resource_key,
+            self.get_pulumi_name(resource_key),
             secret_name=secret.name,
             properties=az.keyvault.SecretPropertiesArgs(
                 value=contents,
@@ -467,7 +466,7 @@ class AzureInfra(CloudInfraBase):
 
             roles.append(
                 az.authorization.RoleAssignment(
-                    self.resource_prefix() + resource_key + '-' + role_type,
+                    self.get_pulumi_name(resource_key + '-' + role_type),
                     principal_id=self._get_object_id(member),
                     principal_type=self._get_principal_type(member),
                     role_assignment_name=None,
@@ -482,7 +481,7 @@ class AzureInfra(CloudInfraBase):
         self, resource_key: str, member, project: str = None
     ):
         return az.authorization.RoleAssignment(
-            self.resource_prefix() + resource_key,
+            self.get_pulumi_name(resource_key),
             scope=self.storage_account.id,
             principal_id=self._get_object_id(member),
             principal_type=self._get_principal_type(member),
@@ -491,7 +490,7 @@ class AzureInfra(CloudInfraBase):
 
     def create_container_registry(self, name: str):
         return az.containerregistry.Registry(
-            self.resource_prefix() + f'container-registry-{name}',
+            self.get_pulumi_name(f'container-registry-{name}'),
             admin_user_enabled=True,
             location=self.region,
             registry_name=self.fix_azure_alphanum_names(

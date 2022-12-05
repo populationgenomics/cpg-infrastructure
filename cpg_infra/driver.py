@@ -71,8 +71,8 @@ class CpgDatasetInfrastructure:
         datasets = {
             k: CPGDatasetConfig(dataset=k, **v) for k, v in dataset_config.items()
         }
-        deps = {k: v.depends_on for k, v in datasets.items()}
-        deps['reference'] = list(set(deps.keys()) - {'reference'})
+        deps = {k: v.depends_on + [config.reference_dataset] for k, v in datasets.items()}
+        deps[config.reference_dataset] = []
 
         for dataset in graphlib.TopologicalSorter(deps).static_order():
             dataset_config = datasets[dataset]
@@ -81,11 +81,9 @@ class CpgDatasetInfrastructure:
                 print(f'Will load {dataset} @ {deploy_location}')
 
                 InfraClass = infra_map[deploy_location]
-                resource_prefix = f'{dataset}-{InfraClass.name()}-'
                 infra_obj = InfraClass(
                     config=config,
                     dataset_config=dataset_config,
-                    resource_prefix=resource_prefix,
                 )
                 CpgDatasetInfrastructure(config, infra_obj, dataset_config).main()
 
