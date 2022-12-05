@@ -207,7 +207,9 @@ class AzureInfra(CloudInfraBase):
 
     def _undelete(self, days=UNDELETE_PERIOD_IN_DAYS):
         az.storage.BlobServiceProperties(
-            self.get_pulumi_name(f'{self._storage_account_name}-{days}day-undelete-rule'),
+            self.get_pulumi_name(
+                f'{self._storage_account_name}-{days}day-undelete-rule'
+            ),
             account_name=self.storage_account.name,
             blob_services_name='default',
             delete_retention_policy=az.storage.DeleteRetentionPolicyArgs(

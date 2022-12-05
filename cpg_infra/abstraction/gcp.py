@@ -210,6 +210,7 @@ class GcpInfrastructure(CloudInfraBase):
                     )
                 ),
             ),
+            project=project,
         )
 
     def create_monthly_budget(self, resource_key: str, *, project, budget: int):
@@ -220,6 +221,7 @@ class GcpInfrastructure(CloudInfraBase):
                 projects=[pulumi.Output.concat('projects/', project.number)],
                 calendar_period='month',
             ),
+            project=project,
         )
 
     def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:

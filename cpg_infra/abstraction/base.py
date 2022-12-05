@@ -18,7 +18,6 @@ Some challenges I forsee with this abstraction:
 from abc import ABC, abstractmethod
 from datetime import date
 from enum import Enum
-from functools import cached_property
 from typing import Any, Callable
 
 from cpg_infra.config import (
@@ -266,6 +265,9 @@ class CloudInfraBase(ABC):
 class DryRunInfra(CloudInfraBase):
     """DryRun infrastructure (just prints resources)"""
 
+    def finalise(self):
+        pass
+
     @staticmethod
     def name():
         return 'dry-run'
@@ -362,3 +364,12 @@ class DryRunInfra(CloudInfraBase):
         self, resource_key: str, member, project: str = None
     ):
         return f'{resource_key} :: {member} can list buckets'
+
+    def bucket_output_path(self, bucket):
+        return f'Fake://{bucket}'
+
+    def add_blob_to_bucket(self, resource_name, bucket, output_name, contents):
+        return f'Add blob to FAKE://{bucket}/{output_name} < "{contents}"'
+
+    def create_container_registry(self, name: str):
+        return f'ContainerRegistry: {name}'

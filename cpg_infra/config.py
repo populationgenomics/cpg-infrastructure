@@ -232,7 +232,6 @@ class CPGDatasetConfig(DeserializableDataclass):
         hail_service_account_standard: str = None
         hail_service_account_full: str = None
 
-
     @dataclasses.dataclass(frozen=True)
     class Azure(DeserializableDataclass):
         region: str | None = None
@@ -241,10 +240,10 @@ class CPGDatasetConfig(DeserializableDataclass):
         hail_service_account_standard: str = None
         hail_service_account_full: str = None
 
-
     dataset: str
 
     gcp: Gcp
+    azure: Azure = None
 
     deployment_service_account_test: str | None = None
     deployment_service_account_standard: str | None = None
@@ -275,9 +274,10 @@ class CPGDatasetConfig(DeserializableDataclass):
 
     @classmethod
     def instantiate(cls, **kwargs):
-        kwargs['components'] = {
+        if components := kwargs.get('components'):
+            kwargs['components'] = {
             k: [CPGDatasetComponents(c) for c in comps]
-            for k, comps in kwargs['components'].items()
+            for k, comps in components.items()
         }
         return cls(**kwargs)
 
