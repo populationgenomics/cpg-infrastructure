@@ -72,6 +72,7 @@ class CloudInfraBase(ABC):
     ):
         super().__init__()
         self.config = config
+        self.dataset_config = dataset_config
         self.dataset = dataset_config.dataset
         self.components = dataset_config.components.get(
             self.name(),

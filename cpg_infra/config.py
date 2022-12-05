@@ -267,13 +267,19 @@ class CPGDatasetConfig(DeserializableDataclass):
     # convenience place for plumbing extra service-accounts for SM
     sm_read_only_sas: list[str] = dataclasses.field(default_factory=list)
     sm_read_write_sas: list[str] = dataclasses.field(default_factory=list)
+    archive_age: int = 30
 
     components: dict[str, list[CPGDatasetComponents]] = dataclasses.field(
         default_factory=dict
     )
 
-    archive_age: int = 30
-
+    @classmethod
+    def instantiate(cls, **kwargs):
+        kwargs['components'] = {
+            k: [CPGDatasetComponents(c) for c in comps]
+            for k, comps in kwargs['components'].items()
+        }
+        return cls(**kwargs)
 
     @classmethod
     def from_pulumi(cls, config, **kwargs):

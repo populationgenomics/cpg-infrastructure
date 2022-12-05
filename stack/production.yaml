@@ -1,4 +1,8 @@
 acute-care:
+  azure:
+    hail_service_account_full: 706635d9-26cd-400a-81cd-af26deeaed7b
+    hail_service_account_standard: 86f4b767-18e0-4677-a5a4-c9a1619b3d76
+    hail_service_account_test: c61ab032-ac74-402e-a7b2-b88bc876c3a7
   enable_release: true
   gcp:
     hail_service_account_full: acute-care-full-677@hail-295901.iam.gserviceaccount.com
@@ -44,6 +48,22 @@ circa:
     hail_service_account_standard: circa-standard-342@hail-295901.iam.gserviceaccount.com
     hail_service_account_test: circa-test-707@hail-295901.iam.gserviceaccount.com
     project: circa-716939
+common:
+  archive_age: 90
+  components:
+    azure:
+    - storage
+    - container-registry
+    gcp:
+    - storage
+    - container-registry
+  create_container_registry: 'true'
+  deploy_locations:
+  - gcp
+  - azure
+  enable_release: false
+  gcp:
+    project: cpg-common
 constraint:
   archive_age: 90
   enable_release: false
@@ -116,6 +136,8 @@ ibmdx:
     project: ibmdx-501430
 kccg-genomics-med:
   archive_age: 90
+  depends_on:
+  - tob-wgs
   enable_release: false
   gcp:
     hail_service_account_full: kccg-genomics-med-full-914@hail-295901.iam.gserviceaccount.com
@@ -179,6 +201,14 @@ ohmr4-epilepsy:
     hail_service_account_standard: ohmr4-epilepsy-standard-895@hail-295901.iam.gserviceaccount.com
     hail_service_account_test: ohmr4-epilepsy-test-744@hail-295901.iam.gserviceaccount.com
     project: ohmr4-epilepsy
+ourdna-browser:
+  archive_age: 90
+  enable_release: false
+  gcp:
+    hail_service_account_full: ourdna-browser-full-872@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: ourdna-browser-standard-810@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: ourdna-browser-test-528@hail-295901.iam.gserviceaccount.com
+    project: ourdna-browser
 ozrefdb:
   enable_release: false
   gcp:
@@ -299,6 +329,14 @@ sgs-somatic-mtn:
     hail_service_account_test: sgs-somatic-mtn-test-910@hail-295901.iam.gserviceaccount.com
     project: sgs-somatic-mtn
 thousand-genomes:
+  archive_age: 90
+  azure:
+    hail_service_account_full: ffc3832d-891c-43e4-a2d0-740ffd40599a
+    hail_service_account_standard: 7c5294f8-78e2-4894-9634-49dbaaf24d82
+    hail_service_account_test: 4e95e067-fb0f-452c-8b10-936a7a15972a
+  deploy_locations:
+  - gcp
+  - azure
   enable_release: false
   gcp:
     hail_service_account_full: thousand-genomes-full-579@hail-295901.iam.gserviceaccount.com

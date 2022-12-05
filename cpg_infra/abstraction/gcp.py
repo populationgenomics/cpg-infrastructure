@@ -40,7 +40,11 @@ class GcpInfrastructure(CloudInfraBase):
 
     @cached_property
     def project_id(self):
-        return gcp.organizations.get_project().project_id
+        return self.dataset_config.gcp.project
+
+    @cached_property
+    def project(self):
+        return gcp.organizations.get_project(self.project_id)
 
     def get_dataset_project_id(self):
         return self.project_id
@@ -272,7 +276,7 @@ class GcpInfrastructure(CloudInfraBase):
             )
 
         return gcp.storage.Bucket(
-            self.get_pulumi_name(unique_bucket_name),
+            self.get_pulumi_name(name + '-bucket'),
             name=unique_bucket_name,
             location=self.region,
             uniform_bucket_level_access=True,
@@ -284,7 +288,7 @@ class GcpInfrastructure(CloudInfraBase):
                 self.bucket_rule_abort_incomplete_multipart_upload(),
             ],
             requester_pays=requester_pays,
-            project=project or self.project_id,
+            project=project or self.project.project_id,
         )
 
     def get_member_key(self, member):
@@ -425,7 +429,7 @@ class GcpInfrastructure(CloudInfraBase):
     def create_group(self, name: str) -> Any:
         mail = f'{name}@populationgenomics.org.au'
         return gcp.cloudidentity.Group(
-            self.get_pulumi_name(name),
+            self.get_pulumi_name(name + '-group'),
             display_name=name,
             group_key=gcp.cloudidentity.GroupGroupKeyArgs(id=mail),
             labels={'cloudidentity.googleapis.com/groups.discussion_forum': ''},
@@ -502,7 +506,7 @@ class GcpInfrastructure(CloudInfraBase):
 
     def create_container_registry(self, name: str):
         return gcp.artifactregistry.Repository(
-            'artifact-registry-' + name,
+            self.get_pulumi_name('artifact-registry-' + name),
             repository_id=name,
             project=self.project_id,
             format='DOCKER',

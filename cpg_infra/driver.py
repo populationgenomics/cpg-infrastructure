@@ -69,7 +69,7 @@ class CpgDatasetInfrastructure:
 
         # load datasets
         datasets = {
-            k: CPGDatasetConfig(dataset=k, **v) for k, v in dataset_config.items()
+            k: CPGDatasetConfig.instantiate(dataset=k, **v) for k, v in dataset_config.items()
         }
         deps = {k: v.depends_on + [config.reference_dataset] for k, v in datasets.items()}
         deps[config.reference_dataset] = []
@@ -129,7 +129,6 @@ class CpgDatasetInfrastructure:
         self.setup_access_groups()
 
         # optional components
-
         if self.should_setup_storage:
             self.setup_storage()
         if self.should_setup_sample_metadata:

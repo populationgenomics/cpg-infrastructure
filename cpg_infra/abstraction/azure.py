@@ -288,7 +288,7 @@ class AzureInfra(CloudInfraBase):
         self.storage_account_lifecycle_rules.extend(lifecycle_rules)
 
         return az.storage.BlobContainer(
-            self.get_pulumi_name(name),
+            self.get_pulumi_name(name + '-blob-container'),
             account_name=self.storage_account.name,
             resource_group_name=project or self.resource_group.name,
             container_name=name,
@@ -357,7 +357,7 @@ class AzureInfra(CloudInfraBase):
 
     def create_group(self, name: str) -> Any:
         return azuread.Group(
-            self.get_pulumi_name(name),
+            self.get_pulumi_name(name + '-group'),
             display_name=name,
             security_enabled=True,
         )
