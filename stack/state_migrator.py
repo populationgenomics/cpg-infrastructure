@@ -1,6 +1,7 @@
 import os
 import glob
 import json
+import re
 import subprocess
 
 import yaml
@@ -16,12 +17,16 @@ types_to_ignore = {
 }
 
 datasets_to_ignore = {'production', 'reference'}
+role_regex = re.compile(r'^organizations\/\d+\/')
 
 GCP_BUCKET_OBJECT_TYPE = "gcp:storage/bucketObject:BucketObject"
 GCP_BUCKET_TYPE = "gcp:storage/bucket:Bucket"
 GCP_BUCKET_MEMBERSHIP_TYPE = "gcp:storage/bucketIAMMember:BucketIAMMember"
 GCP_SECRET_MEMBERSHIP_TYPE = "gcp:secretmanager/secretIamMember:SecretIamMember"
+GCP_SERVICE_ACCOUNT_MEMBER_TYPE = "gcp:serviceAccount/iAMMember:IAMMember"
+GCP_CLOUD_RUN_MEMBERSHIP_TYPE = "gcp:cloudrun/iamMember:IamMember"
 GCP_REPOSITORY_MEMBERSHIP_TYPE = "gcp:artifactregistry/repositoryIamMember:RepositoryIamMember"
+GCP_IAM_MEMBER_TYPE = "gcp:serviceAccount:IAMMember"
 GCP_GROUP_TYPE = 'gcp:cloudidentity/group:Group'
 AZURE_BLOB_CONTAINER_TYPE = 'azure-native:storage:BlobContainer'
 AZURE_GROUP_TYPE = 'azuread:index/group:Group'
@@ -31,7 +36,10 @@ membership_types = {
     "gcp:projects/iAMMember:IAMMember",
     GCP_REPOSITORY_MEMBERSHIP_TYPE,
     GCP_SECRET_MEMBERSHIP_TYPE,
-    GCP_BUCKET_MEMBERSHIP_TYPE
+    GCP_BUCKET_MEMBERSHIP_TYPE,
+GCP_IAM_MEMBER_TYPE,
+GCP_CLOUD_RUN_MEMBERSHIP_TYPE,
+GCP_SERVICE_ACCOUNT_MEMBER_TYPE,
 }
 
 
@@ -105,18 +113,37 @@ def process_id(*, project_id: str, rtype: str, identifier: str):
     if rtype in membership_types:
         split = identifier.split('/')
 
-        resource = split[0]
-        role = "/".join(split[1:-1])
-        if rtype == GCP_BUCKET_MEMBERSHIP_TYPE:
-            resource = "/".join(split[:2])
-            role = "/".join(split[2:-1])
-        elif rtype == GCP_SECRET_MEMBERSHIP_TYPE:
-            resource = "/".join(split[:4])
-            role = "/".join(split[4:-1])
-        elif rtype == GCP_REPOSITORY_MEMBERSHIP_TYPE:
-            resource = "/".join(split[:6])
-            role = "/".join(split[6:-1])
+        resource_bound = 1
+        role_bound = -1
 
+        if rtype == GCP_BUCKET_MEMBERSHIP_TYPE or rtype == GCP_IAM_MEMBER_TYPE:
+            resource_bound = 2
+        elif rtype == GCP_SECRET_MEMBERSHIP_TYPE:
+            resource_bound = 4
+        elif rtype == GCP_REPOSITORY_MEMBERSHIP_TYPE:
+            resource_bound = 6
+        elif rtype == GCP_CLOUD_RUN_MEMBERSHIP_TYPE:
+            resource_bound = 7
+        elif rtype == GCP_SERVICE_ACCOUNT_MEMBER_TYPE:
+            resource_bound = 4
+
+        #   (thousand-genomes-gcp-cromwell-runner-standard-service-account-user):
+        #projects/thousand-genomes/serviceAccounts/cromwell-standard@thousand-genomes.iam.gserviceaccount.com/roles/iam.serviceAccountUser/serviceaccount:cromwell-runner@cromwell-305305.iam.gserviceaccount.com: Wrong number of parts to Member id [projects/thousand-genomes/serviceAccounts/cromwell-standard@thousand-genomes.iam.gserviceaccount.com/roles/iam.serviceAccountUser/serviceaccount:cromwell-runner@cromwell-305305.iam.gserviceaccount.com]; expected 'resource_name role member [condition_title]'.
+
+        resource = "/".join(split[:resource_bound])
+        role = "/".join(split[resource_bound:role_bound])
+
+        if rtype == GCP_BUCKET_MEMBERSHIP_TYPE:
+            resource = resource.removeprefix('b/')
+
+        if role.startswith('subscriptions'):
+            # this imports, just ends up applying an update
+            role = "/" + role
+
+        if not role.startswith("organizations/648561325637"):
+            # don't replace our organization roles, because we do
+            # have some custom roles
+            role = role_regex.sub('/', role)
         return " ".join([resource, role, split[-1]])
 
     if rtype == GCP_BUCKET_OBJECT_TYPE:
@@ -190,4 +217,4 @@ def _migrate_stack(gcp_project_id, dataset):
 
 
 if __name__ == '__main__':
-    migrate_stack('acute-care')
+    migrate_stack('thousand-genomes')
