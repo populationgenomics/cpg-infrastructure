@@ -585,7 +585,9 @@ class GcpInfrastructure(CloudInfraBase):
 
     def add_blob_to_bucket(self, resource_name, bucket, output_name, contents):
         return gcp.storage.BucketObject(
-            self.get_member_key(resource_name),
+            # Don't uniquify resource_name here, because often
+            # it's called outside the scope of a specific infra
+            resource_name,
             bucket=bucket,
             name=output_name,
             content=contents,
