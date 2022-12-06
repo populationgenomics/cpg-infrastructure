@@ -214,12 +214,13 @@ def _migrate_stack(gcp_project_id, dataset):
 
     for resource in dataset_dict['deployment']['resources']:
         urn = resource['urn']
-        if not resource.get('id'):
-            print(f'Bad resource: {urn}')
-            continue
 
         if name := process_urn_into_name(dataset, urn):
             rtype = resource['type']
+
+            if not resource.get('id'):
+                print(f'Bad resource: {urn}')
+                continue
 
             new_resource = {
                 'name': name,
@@ -240,4 +241,10 @@ def _migrate_stack(gcp_project_id, dataset):
 
 
 if __name__ == '__main__':
-    migrate_stack('thousand-genomes')
+
+
+    with open(f'pulumi-production-test-migrated.json', 'w+', encoding='utf-8') as f:
+        json.dump({'resources': [
+            *migrate_stack('common'),
+            *migrate_stack('thousand-genomes'),
+        ]}, f, indent=2)
