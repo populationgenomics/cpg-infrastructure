@@ -276,9 +276,9 @@ class CPGDatasetConfig(DeserializableDataclass):
     def instantiate(cls, **kwargs):
         if components := kwargs.get('components'):
             kwargs['components'] = {
-            k: [CPGDatasetComponents(c) for c in comps]
-            for k, comps in components.items()
-        }
+                k: [CPGDatasetComponents(c) for c in comps]
+                for k, comps in components.items()
+            }
         return cls(**kwargs)
 
     @classmethod

@@ -240,11 +240,20 @@ def _migrate_stack(gcp_project_id, dataset):
     return resources
 
 
-if __name__ == '__main__':
-
+def _test():
 
     with open(f'pulumi-production-test-migrated.json', 'w+', encoding='utf-8') as f:
-        json.dump({'resources': [
-            *migrate_stack('common'),
-            *migrate_stack('thousand-genomes'),
-        ]}, f, indent=2)
+        json.dump(
+            {
+                'resources': [
+                    *migrate_stack('common'),
+                    *migrate_stack('thousand-genomes'),
+                ]
+            },
+            f,
+            indent=2,
+        )
+
+
+if __name__ == '__main__':
+    _test()

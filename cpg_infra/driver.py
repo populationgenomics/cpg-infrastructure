@@ -302,7 +302,7 @@ class CPGDatasetInfrastructure:
                     kind=kind,
                 ),
                 group.id if hasattr(group, 'id') else group,
-                pulumi_export=True
+                pulumi_export=True,
             )
 
     def setup_access_level_group_memberships(self):
@@ -937,7 +937,9 @@ class CPGDatasetInfrastructure:
                 'full': self.dataset_config.gcp.hail_service_account_full,
             }
         elif isinstance(self.infra, AzureInfra):
-            assert self.dataset_config.azure, 'dataset_config.azure is required to be set'
+            assert (
+                self.dataset_config.azure
+            ), 'dataset_config.azure is required to be set'
             accounts = {
                 'test': self.dataset_config.azure.hail_service_account_test,
                 'standard': self.dataset_config.azure.hail_service_account_standard,
