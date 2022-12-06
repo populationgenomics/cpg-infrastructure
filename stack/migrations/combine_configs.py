@@ -1,3 +1,7 @@
+"""
+Grab information from multiple Pulumi stacks and
+combine into a single production.yaml. Only ran once.
+"""
 import glob
 import json
 from collections import defaultdict
@@ -28,11 +32,14 @@ for filename in glob.glob('Pulumi.*.yaml'):
         print(f'Couldn\'t combine {filename}')
         continue
 
-    config = defaultdict(dict, {
-        k[9:]: v
-        for k, v in parsed_config.items()
-        if k.startswith('datasets:') and k not in KEYS_TO_IGNORE
-    })
+    config = defaultdict(
+        dict,
+        {
+            k[9:]: v
+            for k, v in parsed_config.items()
+            if k.startswith('datasets:') and k not in KEYS_TO_IGNORE
+        },
+    )
 
     config['gcp'] = {
         k[4:]: v
