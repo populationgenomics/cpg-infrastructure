@@ -160,6 +160,16 @@ leukodystrophies:
     hail_service_account_standard: leukodystrophies-standard-657@hail-295901.iam.gserviceaccount.com
     hail_service_account_test: leukodystrophies-test-164@hail-295901.iam.gserviceaccount.com
     project: leukodystrophies
+lof-curation:
+  archive_age: 90
+  deploy_locations:
+  - gcp
+  enable_release: false
+  gcp:
+    hail_service_account_full: lof-curation-full-499@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: lof-curation-standard-574@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: lof-curation-test-156@hail-295901.iam.gserviceaccount.com
+    project: lof-curation-655721
 mcri-lrp:
   archive_age: 90
   enable_release: false
