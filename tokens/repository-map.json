@@ -2,27 +2,32 @@
     "acute-care": [
         "automated-interpretation-pipeline",
         "fewgenomes",
-        "gatk-sv"
+        "gatk-sv",
+        "rare-disease"
     ],
     "ag-hidden": [
-        "automated-interpretation-pipeline"
+        "automated-interpretation-pipeline",
+        "rare-disease"
     ],
     "ancestry": [
         "ancestry"
     ],
     "bioheart": [],
     "brain-malf": [
-        "automated-interpretation-pipeline"
+        "automated-interpretation-pipeline",
+        "rare-disease"
     ],
     "circa": [
-        "automated-interpretation-pipeline"
+        "automated-interpretation-pipeline",
+        "rare-disease"
     ],
     "common": [],
     "constraint": [
         "structural-constraint"
     ],
     "epileptic-enceph": [
-        "automated-interpretation-pipeline"
+        "automated-interpretation-pipeline",
+        "rare-disease"
     ],
     "fewgenomes": [
         "automated-interpretation-pipeline",
@@ -30,47 +35,64 @@
         "images",
         "joint-calling",
         "production-pipelines",
+        "rare-disease",
         "sv-workflows"
     ],
     "flinders-ophthal": [],
-    "gtex": [],
+    "gtex": [
+        "rare-disease"
+    ],
     "heartkids": [
-        "automated-interpretation-pipeline"
+        "automated-interpretation-pipeline",
+        "rare-disease"
     ],
     "hereditary-neuro": [
         "automated-interpretation-pipeline",
+        "rare-disease",
         "sv-workflows"
     ],
     "hgdp": [
         "hgdp"
     ],
-    "ibmdx": [],
+    "ibmdx": [
+        "automated-interpretation-pipeline",
+        "rare-disease"
+    ],
     "kccg-genomics-med": [
         "cromwell-kccg-mutect2-chip"
     ],
     "kidgen": [
-        "automated-interpretation-pipeline"
+        "automated-interpretation-pipeline",
+        "rare-disease"
     ],
     "leukodystrophies": [
-        "automated-interpretation-pipeline"
+        "automated-interpretation-pipeline",
+        "rare-disease"
     ],
     "lof-curation": [
         "variant-curation-portal"
     ],
-    "mcri-lrp": [],
+    "mcri-lrp": [
+        "automated-interpretation-pipeline",
+        "rare-disease"
+    ],
     "mgrb": [],
     "mito-disease": [
-        "automated-interpretation-pipeline"
+        "automated-interpretation-pipeline",
+        "rare-disease"
     ],
     "ohmr3-mendelian": [
-        "automated-interpretation-pipeline"
+        "automated-interpretation-pipeline",
+        "rare-disease"
     ],
     "ohmr4-epilepsy": [
-        "automated-interpretation-pipeline"
+        "automated-interpretation-pipeline",
+        "rare-disease"
     ],
     "ourdna-browser": [],
     "perth-neuro": [
-        "automated-interpretation-pipeline"
+        "automated-interpretation-pipeline",
+        "rare-disease"
     ],
     "prophecy": [
         "production-pipelines",
@@ -79,18 +101,25 @@
         "large-cohort-pipeline"
     ],
     "ravenscroft-arch": [
-        "automated-interpretation-pipeline"
+        "automated-interpretation-pipeline",
+        "rare-disease"
     ],
     "ravenscroft-rdstudy": [
-        "automated-interpretation-pipeline"
+        "automated-interpretation-pipeline",
+        "rare-disease"
     ],
     "rdnow": [
-        "automated-interpretation-pipeline"
+        "automated-interpretation-pipeline",
+        "rare-disease"
     ],
-    "rdp-kidney": [],
+    "rdp-kidney": [
+        "automated-interpretation-pipeline",
+        "rare-disease"
+    ],
     "reference": [],
     "schr-neuro": [
-        "automated-interpretation-pipeline"
+        "automated-interpretation-pipeline",
+        "rare-disease"
     ],
     "seqr": [
         "hail-elasticsearch-pipelines",
@@ -118,8 +147,13 @@
     "tx-adapt": [
         "tx-adapt"
     ],
-    "udn-aus": [],
-    "udn-aus-training": [],
+    "udn-aus": [
+        "automated-interpretation-pipeline",
+        "rare-disease"
+],
+    "udn-aus-training": [
+        "rare-disease"
+    ],
     "validation": [
         "automated-interpretation-pipeline",
         "production-pipelines",
