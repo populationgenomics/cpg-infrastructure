@@ -79,8 +79,7 @@ class CloudInfraBase(ABC):
         )
 
     def get_pulumi_name(self, key: str):
-        if key.startswith(self.dataset + '-'):
-            key = key.removeprefix(self.dataset + '-')
+        key = key.removeprefix(self.dataset + '-')
         return f'{self.dataset}-{self.name()}-' + key
 
     @abstractmethod

@@ -53,7 +53,7 @@ TOML_CONFIG_JOINER = '\n||||'
 
 
 class CPGInfrastructure:
-    """Class for managing all CPGInfrastructure"""
+    """Class for managing all CPG infrastructure"""
 
     class OutputProvider:
         """Handler for storing outputs"""
@@ -1606,11 +1606,6 @@ class CPGDatasetInfrastructure:
 
     # endregion DEPENDENCIES
     # region UTILS
-
-    # @staticmethod
-    # @lru_cache()
-    # def get_pulumi_stack(dependency_name: str):
-    #     return pulumi.StackReference(dependency_name)
 
     @staticmethod
     def _get_name_from_external_sa(email: str, suffix='.iam.gserviceaccount.com'):
