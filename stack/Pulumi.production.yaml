@@ -5,3 +5,4 @@ config:
   gcp:project: billing-admin-290403
   gcp:billing_project: billing-admin-290403
   gcp:user_project_override: "true"
+  azure-native:tenantId: a744336e-0ec4-40f1-891f-6c8ccaf8e267
