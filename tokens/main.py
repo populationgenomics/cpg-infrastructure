@@ -59,7 +59,7 @@ def get_token(environment: str, hail_user: str) -> str:
 def main():
     """Main entry point."""
 
-    with open('../stack/production.yaml') as f:
+    with open('../stack/production.yaml', encoding='utf-8') as f:
         production_config = yaml.safe_load(f)
 
     invalid_datasets = set(ALLOWED_REPOS.keys()) - set(production_config.keys())
