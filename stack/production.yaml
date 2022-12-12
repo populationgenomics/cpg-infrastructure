@@ -1,8 +1,8 @@
 acute-care:
-  azure:
-    hail_service_account_full: 706635d9-26cd-400a-81cd-af26deeaed7b
-    hail_service_account_standard: 86f4b767-18e0-4677-a5a4-c9a1619b3d76
-    hail_service_account_test: c61ab032-ac74-402e-a7b2-b88bc876c3a7
+#  azure:
+#    hail_service_account_full: 706635d9-26cd-400a-81cd-af26deeaed7b
+#    hail_service_account_standard: 86f4b767-18e0-4677-a5a4-c9a1619b3d76
+#    hail_service_account_test: c61ab032-ac74-402e-a7b2-b88bc876c3a7
   enable_release: true
   gcp:
     hail_service_account_full: acute-care-full-677@hail-295901.iam.gserviceaccount.com
@@ -279,14 +279,14 @@ rdp-kidney:
     hail_service_account_standard: rdp-kidney-standard-302@hail-295901.iam.gserviceaccount.com
     hail_service_account_test: rdp-kidney-test-527@hail-295901.iam.gserviceaccount.com
     project: rdp-kidney
-reference:
-  archive_age: 90
-  enable_release: false
-  gcp:
-    hail_service_account_full: reference-full-612@hail-295901.iam.gserviceaccount.com
-    hail_service_account_standard: reference-standard-424@hail-295901.iam.gserviceaccount.com
-    hail_service_account_test: reference-test-306@hail-295901.iam.gserviceaccount.com
-    project: reference-762817
+#reference:
+#  archive_age: 90
+#  enable_release: false
+#  gcp:
+#    hail_service_account_full: reference-full-612@hail-295901.iam.gserviceaccount.com
+#    hail_service_account_standard: reference-standard-424@hail-295901.iam.gserviceaccount.com
+#    hail_service_account_test: reference-test-306@hail-295901.iam.gserviceaccount.com
+#    project: reference-762817
 schr-neuro:
   archive_age: 90
   enable_release: false
@@ -349,7 +349,7 @@ thousand-genomes:
     hail_service_account_test: 4e95e067-fb0f-452c-8b10-936a7a15972a
   deploy_locations:
   - gcp
-  - azure
+#  - azure
   enable_release: false
   gcp:
     hail_service_account_full: thousand-genomes-full-579@hail-295901.iam.gserviceaccount.com
