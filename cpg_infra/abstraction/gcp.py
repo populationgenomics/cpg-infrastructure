@@ -149,7 +149,8 @@ class GcpInfrastructure(CloudInfraBase):
 
     def create_project(self, name):
         return gcp.organizations.Project(
-            f'{name}-project',
+            # manually construct this one, because it might not be the current dataset
+            f'{self.name()}-{name}-project',
             org_id=self.organization.org_id,
             project_id=name,
             name=name,
@@ -404,7 +405,7 @@ class GcpInfrastructure(CloudInfraBase):
             account_id=name,
             # display_name=name,
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_iam]),
-            project=project,
+            project=project or self.project.project_id,
         )
 
     # pylint: disable=unused-argument

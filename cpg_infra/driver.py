@@ -1413,7 +1413,7 @@ class CPGDatasetInfrastructure:
 
         shared_project = self.infra.create_project(project_name)
         self.infra.create_fixed_budget(
-            f'{self.dataset_config.dataset}-shared-budget',
+            f'shared-budget',
             project=shared_project,
             budget=self.dataset_config.shared_project_budget,
         )
