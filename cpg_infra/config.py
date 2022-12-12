@@ -223,6 +223,11 @@ class CPGDatasetConfig(DeserializableDataclass):
     Configuration that describes the minimum information
     required to construct the dataset infrastructure
     """
+    def __post_init__(self):
+        try:
+            super().__post_init__()
+        except TypeError as e:
+            raise TypeError(f'Could not instantiate {self.__class__.__name__} for "{self.dataset}": {str(e)}') from e
 
     @dataclasses.dataclass(frozen=True)
     class Gcp(DeserializableDataclass):
@@ -235,6 +240,7 @@ class CPGDatasetConfig(DeserializableDataclass):
 
     @dataclasses.dataclass(frozen=True)
     class Azure(DeserializableDataclass):
+        subscription: str
         region: str | None = None
 
         hail_service_account_test: str = None
