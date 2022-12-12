@@ -175,8 +175,7 @@ def migrate_all():
         datasets_config = yaml.safe_load(f)
 
     resources = []
-    for filename in glob.glob('Pulumi.*.yaml'):
-        dataset = filename.split('.')[1]
+    for dataset in datasets_config:
         gcp_project_id = datasets_config.get(dataset, {}).get('gcp', {}).get('project')
         assert gcp_project_id, f'Could not get GCP project ID for {dataset}'
         resources.extend(_migrate_stack(gcp_project_id, dataset))
@@ -256,4 +255,4 @@ def _test():
 
 
 if __name__ == '__main__':
-    _test()
+    migrate_all()

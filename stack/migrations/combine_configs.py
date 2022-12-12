@@ -2,6 +2,7 @@
 Grab information from multiple Pulumi stacks and
 combine into a single production.yaml. Only ran once.
 """
+import os
 import glob
 import json
 from collections import defaultdict
@@ -16,8 +17,8 @@ KEYS_TO_IGNORE = {
     'gcp:billing_project',
 }
 
-for filename in glob.glob('Pulumi.*.yaml'):
-    dataset = filename.split('.')[1]
+for filename in glob.glob('../Pulumi.*.yaml'):
+    dataset = os.path.basename(filename).split('.')[1]
     if dataset == 'production':
         continue
 
