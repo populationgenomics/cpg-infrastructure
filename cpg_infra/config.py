@@ -84,6 +84,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     @dataclasses.dataclass(frozen=True)
     class Azure(DeserializableDataclass):
         region: str
+        tenant: str
 
     @dataclasses.dataclass(frozen=True)
     class Hail(DeserializableDataclass):
