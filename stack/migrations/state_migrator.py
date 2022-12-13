@@ -3,7 +3,6 @@
 Migrate state from multiple stacks to single-stack
 """
 import os
-import glob
 import json
 import re
 import subprocess
