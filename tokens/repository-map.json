@@ -116,7 +116,9 @@
         "automated-interpretation-pipeline",
         "rare-disease"
     ],
-    "reference": [],
+    "reference": [
+        "references"
+    ],
     "schr-neuro": [
         "automated-interpretation-pipeline",
         "rare-disease"
