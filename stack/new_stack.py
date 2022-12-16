@@ -610,7 +610,7 @@ def create_stack(
                 for access_level, account in data.items()
             }
 
-    with open('production.yaml', 'rw', encoding='utf-8') as fp:
+    with open('production.yaml', 'r+', encoding='utf-8') as fp:
         production_config = yaml.safe_load(fp)
         if dataset in production_config:
             existing_config = production_config[dataset]

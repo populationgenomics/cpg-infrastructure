@@ -387,6 +387,7 @@ class CPGDatasetInfrastructure:
                 'web': self.infra.bucket_output_path(self.main_web_bucket),
                 'analysis': self.infra.bucket_output_path(self.main_analysis_bucket),
                 'tmp': self.infra.bucket_output_path(self.main_tmp_bucket),
+                'upload': self.infra.bucket_output_path(self.main_upload_buckets['main-upload']),
                 'web_url': self.config.web_url_template.format(
                     namespace='main', dataset=self.dataset_config.dataset
                 ),
@@ -396,6 +397,7 @@ class CPGDatasetInfrastructure:
                 'web': self.infra.bucket_output_path(self.test_web_bucket),
                 'analysis': self.infra.bucket_output_path(self.test_analysis_bucket),
                 'tmp': self.infra.bucket_output_path(self.test_tmp_bucket),
+                'upload': self.infra.bucket_output_path(self.test_upload_bucket),
                 'web_url': self.config.web_url_template.format(
                     namespace='test', dataset=self.dataset_config.dataset
                 ),
