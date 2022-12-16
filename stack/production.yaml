@@ -36,6 +36,15 @@ brain-malf:
     hail_service_account_standard: brain-malf-standard-861@hail-295901.iam.gserviceaccount.com
     hail_service_account_test: brain-malf-test-219@hail-295901.iam.gserviceaccount.com
     project: brain-malf
+broad-rgp:
+  archive_age: 90
+  deploy_locations:
+  - gcp
+  enable_release: false
+  gcp:
+    hail_service_account_full: broad-rgp-full-682@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: broad-rgp-standard-352@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: broad-rgp-test-319@hail-295901.iam.gserviceaccount.com
 circa:
   archive_age: 90
   enable_release: false
@@ -92,6 +101,15 @@ flinders-ophthal:
     hail_service_account_standard: flinders-ophthal-standard-593@hail-295901.iam.gserviceaccount.com
     hail_service_account_test: flinders-ophthal-test-267@hail-295901.iam.gserviceaccount.com
     project: flinders-ophthal
+genomic-autopsy:
+  archive_age: 90
+  deploy_locations:
+  - gcp
+  enable_release: false
+  gcp:
+    hail_service_account_full: genomic-autopsy-full-011@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: genomic-autopsy-standard-138@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: genomic-autopsy-test-456@hail-295901.iam.gserviceaccount.com
 gtex:
   archive_age: 90
   enable_release: false
@@ -309,6 +327,8 @@ seqr:
   - udn-aus
   - udn-aus-training
   - validation
+  - broad-rgp
+  - genomic-autopsy
   deployment_service_account_standard: seqr-prod@seqr-308602.iam.gserviceaccount.com
   deployment_service_account_test: seqr-staging@seqr-308602.iam.gserviceaccount.com
   enable_release: false
