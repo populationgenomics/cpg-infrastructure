@@ -240,7 +240,6 @@ class CPGDatasetConfig(DeserializableDataclass):
 
     @dataclasses.dataclass(frozen=True)
     class Azure(DeserializableDataclass):
-        subscription: str
         region: str | None = None
 
         hail_service_account_test: str = None
