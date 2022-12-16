@@ -86,9 +86,9 @@ def main():
             infra_config = dataset_config.get(infra)
             if not infra_config:
                 continue
+            if infra == 'gcp':
+                entries[infra]['projectId'] = infra_config.get('project')
 
-            project_key = 'project' if infra == 'gcp' else 'subscriptionId'
-            entries[infra]['projectId'] = infra_config.get(project_key)
             for access_level in 'test', 'standard', 'full':
 
                 # removes -\d{3}@hail-295901.iam.gserviceaccount.com

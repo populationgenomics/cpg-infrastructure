@@ -64,8 +64,7 @@ common:
   enable_release: false
   gcp:
     project: cpg-common
-  azure:
-    subscription: f75afb43-522a-4d01-93c3-37dbc412110e
+  azure: {}
 constraint:
   archive_age: 90
   enable_release: false
@@ -323,7 +322,7 @@ seqr:
   - udn-aus-training
   - validation
   deployment_service_account_standard: seqr-prod@seqr-308602.iam.gserviceaccount.com
-  deployment_service_account_test: seqr-dev@seqr-308602.iam.gserviceaccount.com
+  deployment_service_account_test: seqr-staging@seqr-308602.iam.gserviceaccount.com
   enable_release: false
   gcp:
     hail_service_account_full: seqr-full-041@hail-295901.iam.gserviceaccount.com
@@ -343,7 +342,6 @@ sgs-somatic-mtn:
 thousand-genomes:
   archive_age: 90
   azure:
-    subscription: 6d438d9f-6d4c-498a-b11e-210551df32b3
     hail_service_account_full: ffc3832d-891c-43e4-a2d0-740ffd40599a
     hail_service_account_standard: 7c5294f8-78e2-4894-9634-49dbaaf24d82
     hail_service_account_test: 4e95e067-fb0f-452c-8b10-936a7a15972a
