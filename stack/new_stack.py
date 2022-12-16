@@ -205,9 +205,7 @@ def main(
             gcp_assign_billing_account(_gcp_project)
             gcp_create_budget(_gcp_project, amount=budgets[Cloud.GCP])
 
-    logging.info(
-        f'Creating dataset "{dataset}" with GCP id {_gcp_project}.'
-    )
+    logging.info(f'Creating dataset "{dataset}" with GCP id {_gcp_project}.')
 
     create_sample_metadata_project(dataset, _gcp_project)
 
@@ -588,11 +586,9 @@ def create_stack(
     Generate Pulumi.{dataset}.yaml pulumi stack file, with required params
     """
 
-    branch_name = f'add-{dataset}-stack'
-
     dataset_config = {
-          'archive_age': 90,
-            'enable_release': create_release_buckets,
+        'archive_age': 90,
+        'enable_release': create_release_buckets,
         'deploy_locations': [c.value for c in clouds],
     }
 
@@ -616,20 +612,27 @@ def create_stack(
             existing_config = production_config[dataset]
             if existing_config != dataset_config:
 
-                keys_to_check = set(list(existing_config.keys()) + list(dataset_config.keys()))
+                keys_to_check = set(
+                    list(existing_config.keys()) + list(dataset_config.keys())
+                )
                 mismatched_keys = [
-                    k for k in keys_to_check if existing_config.get(k) != dataset_config.get(k)
+                    k
+                    for k in keys_to_check
+                    if existing_config.get(k) != dataset_config.get(k)
                 ]
 
                 if not mismatched_keys:
                     return
 
                 warning = ' | '.join(
-                    f'{k}: {existing_config.get(k)} != {dataset_config.get(k)}' for k in mismatched_keys
+                    f'{k}: {existing_config.get(k)} != {dataset_config.get(k)}'
+                    for k in mismatched_keys
                 )
 
-                message = f'The pulumi stack file already exists and is not identical ({warning}), ' \
-                          f'do you want to recreate it?'
+                message = (
+                    f'The pulumi stack file already exists and is not identical ({warning}), '
+                    f'do you want to recreate it?'
+                )
                 if not click.confirm(message):
                     return
 
