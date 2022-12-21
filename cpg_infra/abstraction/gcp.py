@@ -60,6 +60,7 @@ class GcpInfrastructure(CloudInfraBase):
             self.get_pulumi_name(f'cloudresourcemanager-service'),
             service='cloudresourcemanager.googleapis.com',
             disable_on_destroy=False,
+            project=self.project_id,
         )
 
     @cached_property
@@ -71,6 +72,7 @@ class GcpInfrastructure(CloudInfraBase):
             opts=pulumi.resource.ResourceOptions(
                 depends_on=[self._svc_cloudresourcemanager]
             ),
+            project=self.project_id,
         )
 
     @cached_property
@@ -79,6 +81,7 @@ class GcpInfrastructure(CloudInfraBase):
             self.get_pulumi_name('serviceusage-service'),
             service='serviceusage.googleapis.com',
             disable_on_destroy=False,
+            project=self.project_id,
         )
 
     @cached_property
@@ -90,6 +93,7 @@ class GcpInfrastructure(CloudInfraBase):
             opts=pulumi.resource.ResourceOptions(
                 depends_on=[self._svc_cloudresourcemanager]
             ),
+            project=self.project_id,
         )
 
     @cached_property
@@ -101,6 +105,7 @@ class GcpInfrastructure(CloudInfraBase):
             opts=pulumi.resource.ResourceOptions(
                 depends_on=[self._svc_cloudresourcemanager]
             ),
+            project=self.project_id,
         )
 
     @cached_property
@@ -109,6 +114,7 @@ class GcpInfrastructure(CloudInfraBase):
             self.get_pulumi_name('lifesciences-service'),
             service='lifesciences.googleapis.com',
             disable_on_destroy=False,
+            project=self.project_id,
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_serviceusage]),
         )
 
@@ -140,6 +146,7 @@ class GcpInfrastructure(CloudInfraBase):
             self.get_pulumi_name('iam-service'),
             service='iam.googleapis.com',
             disable_on_destroy=False,
+            project=self.project_id,
             opts=pulumi.resource.ResourceOptions(
                 depends_on=[self._svc_cloudresourcemanager]
             ),

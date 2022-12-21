@@ -97,7 +97,7 @@ class CPGInfrastructure:
             dataset_config = datasets[dataset]
 
             for deploy_location in dataset_config.deploy_locations:
-                print(f'Will load {dataset} @ {deploy_location}')
+                # print(f'Will load {dataset} @ {deploy_location}')
 
                 location = infra_map[deploy_location]
                 infra_obj = location(
@@ -181,8 +181,6 @@ class CPGDatasetInfrastructure:
 
         if self.should_setup_analysis_runner:
             self.setup_analysis_runner()
-
-        self.setup_reference()
 
         self.setup_group_cache()
 
@@ -1548,25 +1546,6 @@ class CPGDatasetInfrastructure:
         )
 
     # endregion ACCESS GROUP CACHE
-    # region REFERENCE
-
-    def setup_reference(self):
-
-        kinds = {
-            'access-group': self.access_group,
-            **self.access_level_groups,
-        }
-
-        if isinstance(self.infra, GcpInfrastructure):
-            for kind, group in kinds.items():
-                self.infra.add_member_to_bucket(
-                    f'{kind}-reference-bucket-viewer',
-                    bucket=self.config.gcp.reference_bucket_name,  # REFERENCE_BUCKET_NAME,
-                    member=group,
-                    membership=BucketMembership.READ,
-                )
-
-    # endregion REFERENCE
     # region DEPENDENCIES
 
     def setup_dependencies(self):

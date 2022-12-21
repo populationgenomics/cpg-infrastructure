@@ -595,16 +595,21 @@ def create_stack(
     if gcp_project:
         dataset_config['gcp'] = {'project': gcp_project}
 
+    if Cloud.AZURE in clouds:
+        dataset_config['azure'] = {}
+
     if load_hail_service_accounts:
         hail_client_emails_by_level = get_hail_service_accounts(
             dataset=dataset, clouds=clouds
         )
 
         for cloud, data in hail_client_emails_by_level.items():
-            dataset_config[cloud.value] = {
-                f'hail_service_account_{access_level}': account
-                for access_level, account in data.items()
-            }
+            dataset_config[cloud.value].update(
+                {
+                    f'hail_service_account_{access_level}': account
+                    for access_level, account in data.items()
+                }
+            )
 
     with open('production.yaml', 'r+', encoding='utf-8') as fp:
         production_config = yaml.safe_load(fp)

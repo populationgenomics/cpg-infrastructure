@@ -45,6 +45,7 @@ broad-rgp:
     hail_service_account_full: broad-rgp-full-682@hail-295901.iam.gserviceaccount.com
     hail_service_account_standard: broad-rgp-standard-352@hail-295901.iam.gserviceaccount.com
     hail_service_account_test: broad-rgp-test-319@hail-295901.iam.gserviceaccount.com
+    project: broad-rgp
 circa:
   archive_age: 90
   enable_release: false
@@ -110,6 +111,7 @@ genomic-autopsy:
     hail_service_account_full: genomic-autopsy-full-011@hail-295901.iam.gserviceaccount.com
     hail_service_account_standard: genomic-autopsy-standard-138@hail-295901.iam.gserviceaccount.com
     hail_service_account_test: genomic-autopsy-test-456@hail-295901.iam.gserviceaccount.com
+    project: genomic-autopsy
 gtex:
   archive_age: 90
   enable_release: false
