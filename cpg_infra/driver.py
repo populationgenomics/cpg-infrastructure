@@ -2,12 +2,12 @@
 """
 CPG Dataset infrastructure
 """
-import os.path
 import re
-from inspect import isclass
+import os.path
+import graphlib
 from typing import Type, Any, Iterator, Iterable
 from collections import defaultdict, namedtuple
-from functools import lru_cache, cached_property
+from functools import cached_property
 
 import toml
 import pulumi
@@ -52,32 +52,83 @@ NON_NAME_REGEX = re.compile(r'[^A-Za-z\d_-]')
 TOML_CONFIG_JOINER = '\n||||'
 
 
-class CpgDatasetInfrastructure:
+class CPGInfrastructure:
+    """Class for managing all CPG infrastructure"""
+
+    class OutputProvider:
+        """Handler for storing outputs"""
+
+        def __init__(self):
+            self.outputs = {}
+
+        def add_output(self, name, value, pulumi_export=False):
+            if not isinstance(name, str):
+                raise ValueError(
+                    f'Output name must be a str, received: {type(name)} ({name})'
+                )
+            if pulumi_export:
+                pulumi.export(name, value)
+            self.outputs[name] = value
+
+        def get_output(self, name):
+            return self.outputs[name]
+
+    def __init__(self, config: CPGInfrastructureConfig):
+        self.config = config
+        self.output_provider = CPGInfrastructure.OutputProvider()
+
+    def deploy_all_from_dataset_configs(self, dataset_config: dict[str, Any]):
+        infra_map: dict[str, Type[CloudInfraBase]] = {
+            c.name(): c for c in CloudInfraBase.__subclasses__()
+        }
+
+        # load datasets
+        datasets = {
+            k: CPGDatasetConfig.instantiate(dataset=k, **v)
+            for k, v in dataset_config.items()
+        }
+        deps = {
+            k: v.depends_on + [self.config.reference_dataset]
+            for k, v in datasets.items()
+        }
+        deps[self.config.reference_dataset] = []
+
+        for dataset in graphlib.TopologicalSorter(deps).static_order():
+            dataset_config = datasets[dataset]
+
+            for deploy_location in dataset_config.deploy_locations:
+                # print(f'Will load {dataset} @ {deploy_location}')
+
+                location = infra_map[deploy_location]
+                infra_obj = location(
+                    config=self.config,
+                    dataset_config=dataset_config,
+                )
+                CPGDatasetInfrastructure(
+                    config=self.config,
+                    infra=infra_obj,
+                    dataset_config=dataset_config,
+                    output_provider=self.output_provider,
+                ).main()
+
+
+class CPGDatasetInfrastructure:
     """
     Logic for building infrastructure for a single dataset
     for one infrastructure object.
     """
 
-    @staticmethod
-    def deploy_all_from_config(
-        config: CPGInfrastructureConfig, dataset_config: CPGDatasetConfig
-    ):
-        infra_map = {c.name(): c for c in CloudInfraBase.__subclasses__()}
-
-        for infra_obj in [infra_map[n] for n in dataset_config.deploy_locations]:
-            CpgDatasetInfrastructure(config, infra_obj, dataset_config).main()
-
     def __init__(
         self,
         config: CPGInfrastructureConfig,
-        infra: CloudInfraBase | Type[CloudInfraBase],
+        output_provider: CPGInfrastructure.OutputProvider,
+        infra: CloudInfraBase,
         dataset_config: CPGDatasetConfig,
     ):
         self.config = config
+        self.output_provider = output_provider
         self.dataset_config: CPGDatasetConfig = dataset_config
-        self.infra: CloudInfraBase = (
-            infra(self.config, self.dataset_config) if isclass(infra) else infra
-        )
+        self.infra: CloudInfraBase = infra
         self.components: list[CPGDatasetComponents] = dataset_config.components.get(
             self.infra.name(),
             CPGDatasetComponents.default_component_for_infrastructure()[
@@ -111,7 +162,6 @@ class CpgDatasetInfrastructure:
         self.setup_access_groups()
 
         # optional components
-
         if self.should_setup_storage:
             self.setup_storage()
         if self.should_setup_sample_metadata:
@@ -131,8 +181,6 @@ class CpgDatasetInfrastructure:
 
         if self.should_setup_analysis_runner:
             self.setup_analysis_runner()
-
-        self.setup_reference()
 
         self.setup_group_cache()
 
@@ -245,13 +293,14 @@ class CpgDatasetInfrastructure:
         }
 
         for kind, group in kinds.items():
-            pulumi.export(
+            self.output_provider.add_output(
                 self.get_pulumi_output_group_name(
                     infra_name=self.infra.name(),
                     dataset=self.dataset_config.dataset,
                     kind=kind,
                 ),
                 group.id if hasattr(group, 'id') else group,
+                pulumi_export=True,
             )
 
     def setup_access_level_group_memberships(self):
@@ -336,6 +385,9 @@ class CpgDatasetInfrastructure:
                 'web': self.infra.bucket_output_path(self.main_web_bucket),
                 'analysis': self.infra.bucket_output_path(self.main_analysis_bucket),
                 'tmp': self.infra.bucket_output_path(self.main_tmp_bucket),
+                'upload': self.infra.bucket_output_path(
+                    self.main_upload_buckets['main-upload']
+                ),
                 'web_url': self.config.web_url_template.format(
                     namespace='main', dataset=self.dataset_config.dataset
                 ),
@@ -345,6 +397,7 @@ class CpgDatasetInfrastructure:
                 'web': self.infra.bucket_output_path(self.test_web_bucket),
                 'analysis': self.infra.bucket_output_path(self.test_analysis_bucket),
                 'tmp': self.infra.bucket_output_path(self.test_tmp_bucket),
+                'upload': self.infra.bucket_output_path(self.test_upload_bucket),
                 'web_url': self.config.web_url_template.format(
                     namespace='test', dataset=self.dataset_config.dataset
                 ),
@@ -356,9 +409,8 @@ class CpgDatasetInfrastructure:
             configs_to_merge = []
             for dependent_dataset in self.dataset_config.depends_on:
 
-                stack = self.get_pulumi_stack(dependent_dataset)
                 configs_to_merge.append(
-                    stack.get_output(
+                    self.output_provider.get_output(
                         self.get_pulumi_output_storage_config_name(
                             self.infra.name(), dependent_dataset, namespace
                         )
@@ -404,7 +456,7 @@ class CpgDatasetInfrastructure:
             # this export is important, it's how direct dependencies will be able to
             # access the nested dependencies, this export is potentially depending
             # on transitive dependencies.
-            pulumi.export(pulumi_export_name, dataset_storage_config)
+            self.output_provider.add_output(pulumi_export_name, dataset_storage_config)
             self.add_config_toml_to_bucket(
                 namespace=namespace, contents=dataset_storage_config
             )
@@ -882,19 +934,21 @@ class CpgDatasetInfrastructure:
         accounts = {}
         if isinstance(self.infra, GcpInfrastructure):
             accounts = {
-                'test': self.dataset_config.gcp_hail_service_account_test,
-                'standard': self.dataset_config.gcp_hail_service_account_standard,
-                'full': self.dataset_config.gcp_hail_service_account_full,
+                'test': self.dataset_config.gcp.hail_service_account_test,
+                'standard': self.dataset_config.gcp.hail_service_account_standard,
+                'full': self.dataset_config.gcp.hail_service_account_full,
             }
         elif isinstance(self.infra, AzureInfra):
+            assert (
+                self.dataset_config.azure
+            ), 'dataset_config.azure is required to be set'
             accounts = {
-                'test': self.dataset_config.azure_hail_service_account_test,
-                'standard': self.dataset_config.azure_hail_service_account_standard,
-                'full': self.dataset_config.azure_hail_service_account_full,
+                'test': self.dataset_config.azure.hail_service_account_test,
+                'standard': self.dataset_config.azure.hail_service_account_standard,
+                'full': self.dataset_config.azure.hail_service_account_full,
             }
         else:
-            return accounts
-
+            return {}
         accounts = {cat: ac for cat, ac in accounts.items() if ac}
         return accounts
 
@@ -1361,7 +1415,7 @@ class CpgDatasetInfrastructure:
 
         shared_project = self.infra.create_project(project_name)
         self.infra.create_fixed_budget(
-            f'{self.dataset_config.dataset}-shared-budget',
+            f'shared-budget',
             project=shared_project,
             budget=self.dataset_config.shared_project_budget,
         )
@@ -1492,25 +1546,6 @@ class CpgDatasetInfrastructure:
         )
 
     # endregion ACCESS GROUP CACHE
-    # region REFERENCE
-
-    def setup_reference(self):
-
-        kinds = {
-            'access-group': self.access_group,
-            **self.access_level_groups,
-        }
-
-        if isinstance(self.infra, GcpInfrastructure):
-            for kind, group in kinds.items():
-                self.infra.add_member_to_bucket(
-                    f'{kind}-reference-bucket-viewer',
-                    bucket=self.config.gcp.reference_bucket_name,  # REFERENCE_BUCKET_NAME,
-                    member=group,
-                    membership=BucketMembership.READ,
-                )
-
-    # endregion REFERENCE
     # region DEPENDENCIES
 
     def setup_dependencies(self):
@@ -1525,11 +1560,10 @@ class CpgDatasetInfrastructure:
             dependencies.append(self.config.reference_dataset)
 
         for dependency in dependencies:
-            dependent_stack = self.get_pulumi_stack(dependency)
 
             self.infra.add_group_member(
                 resource_key=f'{dependency}-access-group',
-                group=dependent_stack.get_output(
+                group=self.output_provider.get_output(
                     self.get_pulumi_output_group_name(
                         infra_name=self.infra.name(), dataset=dependency, kind='access'
                     )
@@ -1538,7 +1572,7 @@ class CpgDatasetInfrastructure:
             )
 
             for access_level, primary_access_group in self.access_level_groups.items():
-                dependency_group_id = dependent_stack.get_output(
+                dependency_group_id = self.output_provider.get_output(
                     self.get_pulumi_output_group_name(
                         infra_name=self.infra.name(),
                         dataset=dependency,
@@ -1557,22 +1591,17 @@ class CpgDatasetInfrastructure:
     # region UTILS
 
     @staticmethod
-    @lru_cache()
-    def get_pulumi_stack(dependency_name: str):
-        return pulumi.StackReference(dependency_name)
-
-    @staticmethod
     def _get_name_from_external_sa(email: str, suffix='.iam.gserviceaccount.com'):
         """
         Convert service account email to name + some filtering.
 
-        >>> CpgDatasetInfrastructure._get_name_from_external_sa('my-service-account@project.iam.gserviceaccount.com')
+        >>> CPGDatasetInfrastructure._get_name_from_external_sa('my-service-account@project.iam.gserviceaccount.com')
         'my-service-account-project'
 
-        >>> CpgDatasetInfrastructure._get_name_from_external_sa('yourname@populationgenomics.org.au')
+        >>> CPGDatasetInfrastructure._get_name_from_external_sa('yourname@populationgenomics.org.au')
         'yourname'
 
-        >>> CpgDatasetInfrastructure._get_name_from_external_sa('my.service-account+extra@domain.com')
+        >>> CPGDatasetInfrastructure._get_name_from_external_sa('my.service-account+extra@domain.com')
         'my-service-account-extra'
         """
         if email.endswith(suffix):
@@ -1585,7 +1614,7 @@ class CpgDatasetInfrastructure:
     # endregion UTILS
 
 
-if __name__ == '__main__':
+def test():
 
     locations: list[Type[CloudInfraBase]] = [
         DryRunInfra,
@@ -1593,14 +1622,26 @@ if __name__ == '__main__':
         # AzureInfra,
     ]
     infra_config = CPGInfrastructureConfig.from_dict(cpg_utils.config.get_config())
-
-    for location in locations:
+    infra = CPGInfrastructure(infra_config)
+    for _loc in locations:
 
         _config = CPGDatasetConfig(
             dataset='fewgenomes',
             deploy_locations=['dry-run'],
-            gcp_hail_service_account_test='fewgenomes-test@service-account',
-            gcp_hail_service_account_standard='fewgenomes-standard@service-account',
-            gcp_hail_service_account_full='fewgenomes-full@service-account',
+            gcp=CPGDatasetConfig.Gcp(
+                project='test-project',
+                hail_service_account_test='fewgenomes-test@service-account',
+                hail_service_account_standard='fewgenomes-standard@service-account',
+                hail_service_account_full='fewgenomes-full@service-account',
+            ),
         )
-        CpgDatasetInfrastructure(infra_config, location, _config).main()
+        CPGDatasetInfrastructure(
+            config=infra_config,
+            output_provider=infra.output_provider,
+            infra=_loc(infra_config, _config),
+            dataset_config=_config,
+        ).main()
+
+
+if __name__ == '__main__':
+    test()

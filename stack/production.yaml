@@ -1,0 +1,409 @@
+acute-care:
+  enable_release: true
+  gcp:
+    hail_service_account_full: acute-care-full-677@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: acute-care-standard-211@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: acute-care-test-952@hail-295901.iam.gserviceaccount.com
+    project: acute-care-321904
+ag-hidden:
+  archive_age: 90
+  enable_release: false
+  gcp:
+    hail_service_account_full: ag-hidden-full-863@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: ag-hidden-standard-002@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: ag-hidden-test-013@hail-295901.iam.gserviceaccount.com
+    project: ag-hidden
+ancestry:
+  enable_release: false
+  gcp:
+    hail_service_account_full: ancestry-full-029@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: ancestry-standard-732@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: ancestry-test-355@hail-295901.iam.gserviceaccount.com
+    project: ancestry-310609
+bioheart:
+  archive_age: 90
+  enable_release: true
+  gcp:
+    hail_service_account_full: bioheart-full-067@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: bioheart-standard-205@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: bioheart-test-995@hail-295901.iam.gserviceaccount.com
+    project: bioheart
+brain-malf:
+  archive_age: 90
+  enable_release: false
+  gcp:
+    hail_service_account_full: brain-malf-full-315@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: brain-malf-standard-861@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: brain-malf-test-219@hail-295901.iam.gserviceaccount.com
+    project: brain-malf
+broad-rgp:
+  archive_age: 90
+  deploy_locations:
+  - gcp
+  enable_release: false
+  gcp:
+    hail_service_account_full: broad-rgp-full-682@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: broad-rgp-standard-352@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: broad-rgp-test-319@hail-295901.iam.gserviceaccount.com
+    project: broad-rgp
+circa:
+  archive_age: 90
+  enable_release: false
+  gcp:
+    hail_service_account_full: circa-full-874@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: circa-standard-342@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: circa-test-707@hail-295901.iam.gserviceaccount.com
+    project: circa-716939
+common:
+  archive_age: 90
+  azure: {}
+  components:
+    azure:
+    - storage
+    - container-registry
+    gcp:
+    - storage
+    - container-registry
+  create_container_registry: 'true'
+  deploy_locations:
+  - gcp
+  - azure
+  enable_release: false
+  gcp:
+    project: cpg-common
+constraint:
+  archive_age: 90
+  enable_release: false
+  gcp:
+    hail_service_account_full: constraint-full-915@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: constraint-standard-361@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: constraint-test-587@hail-295901.iam.gserviceaccount.com
+    project: constraint-232598
+epileptic-enceph:
+  archive_age: 90
+  enable_release: false
+  gcp:
+    hail_service_account_full: epileptic-enceph-full-046@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: epileptic-enceph-standard-142@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: epileptic-enceph-test-285@hail-295901.iam.gserviceaccount.com
+    project: epileptic-enceph
+fewgenomes:
+  enable_release: false
+  gcp:
+    hail_service_account_full: fewgenomes-full-915@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: fewgenomes-standard-737@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: fewgenomes-test-126@hail-295901.iam.gserviceaccount.com
+    project: fewgenomes
+flinders-ophthal:
+  archive_age: 90
+  enable_release: false
+  gcp:
+    hail_service_account_full: flinders-ophthal-full-077@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: flinders-ophthal-standard-593@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: flinders-ophthal-test-267@hail-295901.iam.gserviceaccount.com
+    project: flinders-ophthal
+genomic-autopsy:
+  archive_age: 90
+  deploy_locations:
+  - gcp
+  enable_release: false
+  gcp:
+    hail_service_account_full: genomic-autopsy-full-011@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: genomic-autopsy-standard-138@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: genomic-autopsy-test-456@hail-295901.iam.gserviceaccount.com
+    project: genomic-autopsy
+gtex:
+  archive_age: 90
+  enable_release: false
+  gcp:
+    hail_service_account_full: gtex-full-991@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: gtex-standard-245@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: gtex-test-234@hail-295901.iam.gserviceaccount.com
+    project: gtex-461745
+heartkids:
+  archive_age: 365
+  enable_release: false
+  gcp:
+    hail_service_account_full: heartkids-full-435@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: heartkids-standard-100@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: heartkids-test-608@hail-295901.iam.gserviceaccount.com
+    project: heartkids
+hereditary-neuro:
+  archive_age: 90
+  enable_release: false
+  gcp:
+    hail_service_account_full: hereditary-neuro-full-470@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: hereditary-neuro-standard-913@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: hereditary-neuro-test-120@hail-295901.iam.gserviceaccount.com
+    project: hereditary-neuro
+hgdp:
+  enable_release: false
+  gcp:
+    hail_service_account_full: hgdp-full-137@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: hgdp-standard-127@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: hgdp-test-558@hail-295901.iam.gserviceaccount.com
+    project: hgdp-323802
+ibmdx:
+  archive_age: 90
+  enable_release: false
+  gcp:
+    hail_service_account_full: ibmdx-full-910@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: ibmdx-standard-065@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: ibmdx-test-044@hail-295901.iam.gserviceaccount.com
+    project: ibmdx-501430
+kccg-genomics-med:
+  archive_age: 90
+  depends_on:
+  - tob-wgs
+  enable_release: false
+  gcp:
+    hail_service_account_full: kccg-genomics-med-full-914@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: kccg-genomics-med-standard-304@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: kccg-genomics-med-test-791@hail-295901.iam.gserviceaccount.com
+    project: kccg-genomics-med
+kidgen:
+  archive_age: 90
+  enable_release: false
+  gcp:
+    hail_service_account_full: kidgen-full-116@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: kidgen-standard-963@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: kidgen-test-780@hail-295901.iam.gserviceaccount.com
+    project: kidgen
+leukodystrophies:
+  archive_age: 90
+  enable_release: false
+  gcp:
+    hail_service_account_full: leukodystrophies-full-536@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: leukodystrophies-standard-657@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: leukodystrophies-test-164@hail-295901.iam.gserviceaccount.com
+    project: leukodystrophies
+lof-curation:
+  archive_age: 90
+  deploy_locations:
+  - gcp
+  enable_release: false
+  gcp:
+    hail_service_account_full: lof-curation-full-499@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: lof-curation-standard-574@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: lof-curation-test-156@hail-295901.iam.gserviceaccount.com
+    project: lof-curation-655721
+mcri-lrp:
+  archive_age: 90
+  enable_release: false
+  gcp:
+    hail_service_account_full: mcri-lrp-full-495@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: mcri-lrp-standard-638@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: mcri-lrp-test-419@hail-295901.iam.gserviceaccount.com
+    project: mcri-lrp
+mgrb:
+  enable_release: false
+  gcp:
+    hail_service_account_full: mgrb-full-205@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: mgrb-standard-867@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: mgrb-test-991@hail-295901.iam.gserviceaccount.com
+    project: mgrb-324606
+mito-disease:
+  archive_age: 90
+  enable_release: true
+  enable_shared_project: true
+  gcp:
+    hail_service_account_full: mito-disease-full-261@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: mito-disease-standard-971@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: mito-disease-test-091@hail-295901.iam.gserviceaccount.com
+    project: mito-disease
+  shared_project_budget: 250
+ohmr3-mendelian:
+  archive_age: 90
+  enable_release: true
+  gcp:
+    hail_service_account_full: ohmr3-mendelian-full-279@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: ohmr3-mendelian-standard-377@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: ohmr3-mendelian-test-605@hail-295901.iam.gserviceaccount.com
+    project: ohmr3-mendelian
+ohmr4-epilepsy:
+  archive_age: 90
+  enable_release: false
+  gcp:
+    hail_service_account_full: ohmr4-epilepsy-full-666@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: ohmr4-epilepsy-standard-895@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: ohmr4-epilepsy-test-744@hail-295901.iam.gserviceaccount.com
+    project: ohmr4-epilepsy
+ourdna-browser:
+  archive_age: 90
+  enable_release: false
+  gcp:
+    hail_service_account_full: ourdna-browser-full-872@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: ourdna-browser-standard-810@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: ourdna-browser-test-528@hail-295901.iam.gserviceaccount.com
+    project: ourdna-browser
+ozrefdb:
+  enable_release: false
+  gcp:
+    hail_service_account_full: ozrefdb-full-353@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: ozrefdb-standard-044@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: ozrefdb-test-942@hail-295901.iam.gserviceaccount.com
+    project: ozrefdb
+perth-neuro:
+  enable_release: true
+  enable_shared_project: 'true'
+  gcp:
+    hail_service_account_full: perth-neuro-full-621@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: perth-neuro-standard-174@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: perth-neuro-test-746@hail-295901.iam.gserviceaccount.com
+    project: perth-neuro
+  shared_project_budget: 100
+prophecy:
+  archive_age: 90
+  enable_release: true
+  gcp:
+    hail_service_account_full: prophecy-full-674@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: prophecy-standard-432@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: prophecy-test-998@hail-295901.iam.gserviceaccount.com
+    project: prophecy-339301
+ravenscroft-arch:
+  archive_age: 90
+  enable_release: false
+  gcp:
+    hail_service_account_full: ravenscroft-arch-full-263@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: ravenscroft-arch-standard-429@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: ravenscroft-arch-test-029@hail-295901.iam.gserviceaccount.com
+    project: ravenscroft-arch
+ravenscroft-rdstudy:
+  archive_age: 365
+  enable_release: true
+  enable_shared_project: 'true'
+  gcp:
+    hail_service_account_full: ravenscroft-rd-full-143@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: ravenscroft-rd-standard-839@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: ravenscroft-rd-test-046@hail-295901.iam.gserviceaccount.com
+    project: ravenscroft-rdstudy
+  shared_project_budget: 50
+rdnow:
+  archive_age: 365
+  enable_release: false
+  gcp:
+    hail_service_account_full: rdnow-full-147@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: rdnow-standard-895@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: rdnow-test-168@hail-295901.iam.gserviceaccount.com
+    project: rdnow-331902
+rdp-kidney:
+  archive_age: 90
+  enable_release: false
+  gcp:
+    hail_service_account_full: rdp-kidney-full-872@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: rdp-kidney-standard-302@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: rdp-kidney-test-527@hail-295901.iam.gserviceaccount.com
+    project: rdp-kidney
+schr-neuro:
+  archive_age: 90
+  enable_release: false
+  gcp:
+    hail_service_account_full: schr-neuro-full-706@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: schr-neuro-standard-457@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: schr-neuro-test-891@hail-295901.iam.gserviceaccount.com
+    project: schr-neuro
+seqr:
+  archive_age: 30
+  depends_on:
+  - acute-care
+  - ag-hidden
+  - brain-malf
+  - circa
+  - epileptic-enceph
+  - flinders-ophthal
+  - heartkids
+  - hereditary-neuro
+  - ibmdx
+  - kidgen
+  - leukodystrophies
+  - mcri-lrp
+  - mito-disease
+  - ohmr3-mendelian
+  - ohmr4-epilepsy
+  - perth-neuro
+  - ravenscroft-arch
+  - ravenscroft-rdstudy
+  - rdnow
+  - rdp-kidney
+  - schr-neuro
+  - udn-aus
+  - udn-aus-training
+  - validation
+  - broad-rgp
+  - genomic-autopsy
+  deployment_service_account_standard: seqr-prod@seqr-308602.iam.gserviceaccount.com
+  deployment_service_account_test: seqr-staging@seqr-308602.iam.gserviceaccount.com
+  enable_release: false
+  gcp:
+    hail_service_account_full: seqr-full-041@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: seqr-standard-758@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: seqr-test-709@hail-295901.iam.gserviceaccount.com
+    project: seqr-308602
+sgs-somatic-mtn:
+  archive_age: 90
+  depends_on:
+  - tob-wgs
+  enable_release: false
+  gcp:
+    hail_service_account_full: sgs-somatic-mtn-full-952@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: sgs-somatic-mtn-standard-951@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: sgs-somatic-mtn-test-910@hail-295901.iam.gserviceaccount.com
+    project: sgs-somatic-mtn
+thousand-genomes:
+  archive_age: 90
+  azure:
+    hail_service_account_full: ffc3832d-891c-43e4-a2d0-740ffd40599a
+    hail_service_account_standard: 7c5294f8-78e2-4894-9634-49dbaaf24d82
+    hail_service_account_test: 4e95e067-fb0f-452c-8b10-936a7a15972a
+  deploy_locations:
+  - gcp
+  enable_release: false
+  gcp:
+    hail_service_account_full: thousand-genomes-full-579@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: thousand-genomes-standard-832@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: thousand-genomes-test-508@hail-295901.iam.gserviceaccount.com
+    project: thousand-genomes
+tob-wgs:
+  archive_age: 365
+  depends_on:
+  - thousand-genomes
+  enable_release: false
+  gcp:
+    hail_service_account_full: tob-wgs-full-484@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: tob-wgs-standard-496@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: tob-wgs-test-996@hail-295901.iam.gserviceaccount.com
+    project: tob-wgs
+tx-adapt:
+  archive_age: 90
+  depends_on:
+  - gtex
+  enable_release: false
+  gcp:
+    hail_service_account_full: tx-adapt-full-254@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: tx-adapt-standard-469@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: tx-adapt-test-692@hail-295901.iam.gserviceaccount.com
+    project: tx-adapt
+udn-aus:
+  archive_age: 90
+  enable_release: false
+  gcp:
+    hail_service_account_full: udn-aus-full-991@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: udn-aus-standard-850@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: udn-aus-test-603@hail-295901.iam.gserviceaccount.com
+    project: udn-aus
+udn-aus-training:
+  archive_age: 90
+  enable_release: false
+  gcp:
+    hail_service_account_full: udn-aus-training-full-476@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: udn-aus-training-standard-636@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: udn-aus-training-test-579@hail-295901.iam.gserviceaccount.com
+    project: udn-aus-training
+validation:
+  archive_age: 90
+  enable_release: true
+  gcp:
+    hail_service_account_full: validation-full-567@hail-295901.iam.gserviceaccount.com
+    hail_service_account_standard: validation-standard-575@hail-295901.iam.gserviceaccount.com
+    hail_service_account_test: validation-test-067@hail-295901.iam.gserviceaccount.com
+    project: validation-351902

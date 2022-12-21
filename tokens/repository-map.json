@@ -21,7 +21,7 @@
         "automated-interpretation-pipeline",
         "rare-disease"
     ],
-    "common": [],
+    "common": ["references"],
     "constraint": [
         "structural-constraint"
     ],
@@ -116,7 +116,6 @@
         "automated-interpretation-pipeline",
         "rare-disease"
     ],
-    "reference": [],
     "schr-neuro": [
         "automated-interpretation-pipeline",
         "rare-disease"

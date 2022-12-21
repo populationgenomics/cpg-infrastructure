@@ -71,11 +71,16 @@ class CloudInfraBase(ABC):
     ):
         super().__init__()
         self.config = config
+        self.dataset_config = dataset_config
         self.dataset = dataset_config.dataset
         self.components = dataset_config.components.get(
             self.name(),
             CPGDatasetComponents.default_component_for_infrastructure()[self.name()],
         )
+
+    def get_pulumi_name(self, key: str):
+        key = key.removeprefix(self.dataset + '-')
+        return f'{self.dataset}-{self.name()}-' + key
 
     @abstractmethod
     def finalise(self):
@@ -259,6 +264,9 @@ class CloudInfraBase(ABC):
 class DryRunInfra(CloudInfraBase):
     """DryRun infrastructure (just prints resources)"""
 
+    def finalise(self):
+        pass
+
     @staticmethod
     def name():
         return 'dry-run'
@@ -355,3 +363,12 @@ class DryRunInfra(CloudInfraBase):
         self, resource_key: str, member, project: str = None
     ):
         return f'{resource_key} :: {member} can list buckets'
+
+    def bucket_output_path(self, bucket):
+        return f'Fake://{bucket}'
+
+    def add_blob_to_bucket(self, resource_name, bucket, output_name, contents):
+        return f'Add blob to FAKE://{bucket}/{output_name} < "{contents}"'
+
+    def create_container_registry(self, name: str):
+        return f'ContainerRegistry: {name}'

@@ -106,7 +106,7 @@ logging.basicConfig(level=logging.INFO)
 
 
 @click.command()
-@click.option('--dataset')
+@click.option('--dataset', required=True)
 @click.option(
     '--clouds',
     help='Cloud platforms to setup stack file for deployment',
@@ -117,7 +117,6 @@ logging.basicConfig(level=logging.INFO)
 @click.option(
     '--gcp-project-id', required=False, help='If different to the dataset name'
 )
-@click.option('--az-subscription-id', required=False, help='Azure subscription id')
 @click.option('--do-not-create-hail-service-accounts', required=False, is_flag=True)
 @click.option('--add-as-seqr-dependency', required=False, is_flag=True)
 @click.option('--configure-hail-batch-project', required=False, is_flag=True)
@@ -135,7 +134,6 @@ def main(
     dataset: str,
     clouds: list[str],
     gcp_project_id: str = None,
-    az_subscription_id: str = None,
     do_not_create_hail_service_accounts=False,
     add_as_seqr_dependency=False,
     configure_hail_batch_project=False,
@@ -161,11 +159,6 @@ def main(
 
     # TODO: eventually remove when gcp_project_id not required by Metamist
     assert Cloud.GCP in clouds
-
-    if Cloud.AZURE in clouds and not az_subscription_id:
-        raise ValueError(
-            f'Cannot create stack with cloud AZURE without az_subscription_id'
-        )
 
     _gcp_project = gcp_project_id
     if not gcp_project_id:
@@ -212,17 +205,12 @@ def main(
             gcp_assign_billing_account(_gcp_project)
             gcp_create_budget(_gcp_project, amount=budgets[Cloud.GCP])
 
-    logging.info(
-        f'Creating dataset "{dataset}" with GCP id {_gcp_project} and AZURE id {az_subscription_id}.'
-    )
+    logging.info(f'Creating dataset "{dataset}" with GCP id {_gcp_project}.')
 
     create_sample_metadata_project(dataset, _gcp_project)
 
-    pulumi_config_fn = f'Pulumi.{dataset}.yaml'
     create_stack(
         clouds=clouds,
-        pulumi_config_fn=pulumi_config_fn,
-        az_subscription=az_subscription_id,
         gcp_project=_gcp_project,
         add_as_seqr_dependency=add_as_seqr_dependency,
         dataset=dataset,
@@ -230,21 +218,11 @@ def main(
         load_hail_service_accounts=not do_not_create_hail_service_accounts,
     )
 
-    if not os.path.exists(pulumi_config_fn):
-        raise ValueError(f'Expected to find {pulumi_config_fn}, but it did not exist')
-
     if deploy_stack:
         env = {**os.environ, 'PULUMI_CONFIG_PASSPHRASE': get_pulumi_config_passphrase()}
-        rc = subprocess.call(['pulumi', 'up', '--stack', dataset, '-y'], env=env)
+        rc = subprocess.call(['pulumi', 'up', '--stack', 'production', '-y'], env=env)
         if rc != 0:
             raise ValueError(f'The stack {dataset} did not deploy correctly')
-
-        if add_as_seqr_dependency:
-            rc_seqr = subprocess.call(
-                ['pulumi', 'up', '--stack', 'seqr', '-y'], env=env
-            )
-            if rc_seqr != 0:
-                raise ValueError(f'The seqr stack {dataset} did not deploy correctly')
 
     if generate_service_account_key:
         generate_upload_account_json(dataset=dataset, gcp_project=_gcp_project)
@@ -598,9 +576,7 @@ def create_hail_accounts(dataset, cloud: Cloud = Cloud.GCP):
 
 def create_stack(
     clouds: list[Cloud],
-    pulumi_config_fn: str,
     gcp_project: str,
-    az_subscription: str,
     dataset: str,
     add_as_seqr_dependency: bool,
     create_release_buckets: bool,
@@ -610,92 +586,72 @@ def create_stack(
     Generate Pulumi.{dataset}.yaml pulumi stack file, with required params
     """
 
-    branch_name = f'add-{dataset}-stack'
-
-    base_config = {
-        'gcp:billing_project': gcp_project,
-        'gcp:project': gcp_project,
-        'gcp:user_project_override': 'true',
-        'datasets:archive_age': '90',
-        'datasets:customer_id': 'C010ys3gt',
-        # kludge: this makes the comparison with on disk yaml happier
-        'datasets:enable_release': str(create_release_buckets).lower(),
-        'datasets:deploy_locations': [c.value for c in clouds],
+    dataset_config = {
+        'archive_age': 90,
+        'enable_release': create_release_buckets,
+        'deploy_locations': [c.value for c in clouds],
     }
+
+    if gcp_project:
+        dataset_config['gcp'] = {'project': gcp_project}
+
+    if Cloud.AZURE in clouds:
+        dataset_config['azure'] = {}
 
     if load_hail_service_accounts:
         hail_client_emails_by_level = get_hail_service_accounts(
             dataset=dataset, clouds=clouds
         )
 
-        base_config.update(
-            {
-                f'datasets:{cloud.value}_hail_service_account_{access_level}': account
-                for cloud, data in hail_client_emails_by_level.items()
-                for access_level, account in data.items()
-            }
-        )
-
-    if az_subscription:
-        base_config.update(
-            {
-                'azure-native:tenantId': AZURE_POPGEN_TENANT,
-                'azure-native:subscriptionId': az_subscription,
-            }
-        )
-
-    pulumi_stack = {
-        'config': base_config,
-    }
-
-    if os.path.exists(pulumi_config_fn):
-
-        with open(pulumi_config_fn, 'r', encoding='utf-8') as fp:
-            existing_config = yaml.load(fp, Loader=yaml.FullLoader)
-
-            config_a = pulumi_stack['config']
-            config_b = existing_config['config']
-            keys_to_check = set(list(config_a.keys()) + list(config_b.keys()))
-            mismatched_keys = [
-                k for k in keys_to_check if config_a.get(k) != config_b.get(k)
-            ]
-
-            if not mismatched_keys:
-                return
-
-            warning = ' | '.join(
-                f'{k}: {config_a.get(k)} != {config_b.get(k)}' for k in mismatched_keys
+        for cloud, data in hail_client_emails_by_level.items():
+            dataset_config[cloud.value].update(
+                {
+                    f'hail_service_account_{access_level}': account
+                    for access_level, account in data.items()
+                }
             )
-            message = f'The pulumi stack file already exists and is not identical ({warning}), do you want to recreate it?'
-            if not click.confirm(message):
+
+    with open('production.yaml', 'r+', encoding='utf-8') as fp:
+        production_config = yaml.safe_load(fp)
+        if dataset in production_config:
+            existing_config = production_config[dataset]
+            if existing_config != dataset_config:
+
+                keys_to_check = set(
+                    list(existing_config.keys()) + list(dataset_config.keys())
+                )
+                mismatched_keys = [
+                    k
+                    for k in keys_to_check
+                    if existing_config.get(k) != dataset_config.get(k)
+                ]
+
+                if not mismatched_keys:
+                    return
+
+                warning = ' | '.join(
+                    f'{k}: {existing_config.get(k)} != {dataset_config.get(k)}'
+                    for k in mismatched_keys
+                )
+
+                message = (
+                    f'The pulumi stack file already exists and is not identical ({warning}), '
+                    f'do you want to recreate it?'
+                )
+                if not click.confirm(message):
+                    return
+
+        if add_as_seqr_dependency:
+            depends_on = production_config['seqr'].get('depends_on')
+            if dataset in depends_on:
+                # it's already there!
                 return
+            production_config['seqr']['depends_on'] = [*depends_on, dataset]
 
-    with open(pulumi_config_fn, 'w+', encoding='utf-8') as fp:
-        logging.info(f'Writing to {pulumi_config_fn}')
-        yaml.dump(pulumi_stack, fp, default_flow_style=False)
+        production_config[dataset] = dataset_config
 
-    files_to_add = [pulumi_config_fn]
-
-    if add_as_seqr_dependency:
-        add_dataset_to_seqr_depends_on(dataset)
-        files_to_add.append('Pulumi.seqr.yaml')
-
-    add_dataset_to_tokens(dataset)
-    files_to_add.append('../tokens/repository-map.json')
-
-    # Creating the stack sets the config passphrase encryption salt.
-    env = {**os.environ, 'PULUMI_CONFIG_PASSPHRASE': get_pulumi_config_passphrase()}
-    subprocess.check_output(['pulumi', 'stack', 'select', '--create', dataset], env=env)
-
-    logging.info(
-        f"""
-Created stack {dataset}, you can commit and push this with:
-
-    git checkout -b add-{dataset}-stack
-    git add {' '.join(files_to_add)}
-    git push --set-upstream origin {branch_name}
-"""
-    )
+        fp.seek(0)
+        yaml.dump(production_config, fp)
 
 
 def generate_upload_account_json(dataset, gcp_project):
@@ -711,23 +667,6 @@ def generate_upload_account_json(dataset, gcp_project):
         ]
     )
     logging.info(f'Generated service account: {service_account_fn}')
-
-
-def add_dataset_to_seqr_depends_on(dataset: str):
-    """
-    Add dataset to depends_on in seqr stack
-    """
-    with open('Pulumi.seqr.yaml', 'r+', encoding='utf-8') as f:
-        d = yaml.safe_load(f)
-        config = d['config']
-        depends_on = json.loads(config['datasets:depends_on'])
-        if dataset in depends_on:
-            # it's already there!
-            return
-        config['datasets:depends_on'] = json.dumps([*depends_on, dataset])
-        # go back to the start for writing to disk
-        f.seek(0)
-        yaml.dump(d, f, default_flow_style=False)
 
 
 def add_dataset_to_tokens(dataset: str):
