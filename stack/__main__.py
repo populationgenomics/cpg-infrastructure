@@ -8,7 +8,7 @@ import pulumi
 import yaml
 
 from cpg_utils.config import get_config
-from cpg_infra.config import CPGInfrastructureConfig
+from cpg_infra.config import CPGInfrastructureConfig, CPGDatasetConfig
 from cpg_infra.driver import CPGInfrastructure
 
 
@@ -26,7 +26,11 @@ def from_pulumi():
     dataset_config_path = pconfig.get('dataset_config_path')
     with open(dataset_config_path, encoding='utf-8') as f:
         dataset_configs = yaml.safe_load(f)
-    CPGInfrastructure(config).deploy_all_from_dataset_configs(dataset_configs)
+
+    instantiated_configs = [
+        CPGDatasetConfig.instantiate(dataset=k, **v) for k, v in dataset_configs.items()
+    ]
+    CPGInfrastructure(config, instantiated_configs).deploy_all()
 
 
 if __name__ == '__main__':

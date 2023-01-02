@@ -67,18 +67,31 @@ class CloudInfraBase(ABC):
     """
 
     def __init__(
-        self, config: CPGInfrastructureConfig, dataset_config: CPGDatasetConfig
+        self, config: CPGInfrastructureConfig, dataset_config: CPGDatasetConfig | None
     ):
         super().__init__()
         self.config = config
-        self.dataset_config = dataset_config
-        self.dataset = dataset_config.dataset
-        self.components = dataset_config.components.get(
-            self.name(),
-            CPGDatasetComponents.default_component_for_infrastructure()[self.name()],
-        )
+        self._dataset_config = dataset_config
+
+        self.components = CPGDatasetComponents.default_component_for_infrastructure()[
+            self.name()
+        ]
+        if dataset_config:
+            if components := dataset_config.components.get(self.name()):
+                self.components = components
+
+    @property
+    def dataset_config(self) -> CPGDatasetConfig:
+        if not self._dataset_config:
+            raise AttributeError('Dataset config was not provided')
+        return self._dataset_config
+
+    @property
+    def dataset(self):
+        return self.dataset_config.dataset
 
     def get_pulumi_name(self, key: str):
+        assert self.dataset, 'Dataset config was not set'
         key = key.removeprefix(self.dataset + '-')
         return f'{self.dataset}-{self.name()}-' + key
 
