@@ -79,13 +79,17 @@ class CPGInfrastructure:
         class Group:
             """Placeholder for a Group of members"""
 
-            def __init__(self, name: str, members: list, members_cache_secret):
+            def __init__(self, name: str, members: dict, members_cache_secret):
                 self.name: str = name
                 self.secret = members_cache_secret
-                self.members: list = members
+                self.members: {} = members
 
             def add_member(self, resource_key, member):
-                self.members.append((member, resource_key))
+                print(f'{resource_key} :: {self.name}.add_member({member})')
+                self.members[resource_key] = member
+
+            def __repr__(self):
+                return f'GROUP("{self.name}")'
 
         def __init__(self):
             self.groups: dict[
@@ -101,15 +105,17 @@ class CPGInfrastructure:
             infra: CloudInfraBase,
             name: str,
             members_cache_secret,
-            members: list = None,
+            members: dict = None,
         ) -> Group:
+            if infra.name() not in self.groups:
+                self.groups[infra.name()] = {}
             if name in self.groups[infra.name()]:
                 raise ValueError(f'Group "{name}" in "{infra.name()}" already exists')
 
             group = CPGInfrastructure.GroupProvider.Group(
                 name=name,
                 members_cache_secret=members_cache_secret,
-                members=members or [],
+                members=members or {},
             )
             self.groups[infra.name()][name] = group
 
@@ -125,7 +131,7 @@ class CPGInfrastructure:
             deps = {
                 group.name: [
                     g.name
-                    for g in group.members
+                    for g in group.members.values()
                     if isinstance(g, CPGInfrastructure.GroupProvider.Group)
                 ]
                 for group in groups.values()
@@ -133,19 +139,19 @@ class CPGInfrastructure:
 
             return [groups[n] for n in graphlib.TopologicalSorter(deps).static_order()]
 
-        def resolve_group_members(self, group) -> list:
+        def resolve_group_members(self, group: 'Group') -> list:
             if group.name in self._cached_resolved_members:
                 return self._cached_resolved_members[group.name]
 
             resolved_members = []
-            for member in group.members:
+            for member in group.members.values():
                 if isinstance(member, CPGInfrastructure.GroupProvider.Group):
                     resolved_members.extend(self.resolve_group_members(member))
                 else:
                     resolved_members.append(member)
 
             self._cached_resolved_members[group.name] = resolved_members
-            return []
+            return resolved_members
 
         def prepare_outputs_from_members(self, members: list):
             return pulumi.Output.all(*members).apply(','.join)
@@ -154,16 +160,17 @@ class CPGInfrastructure:
         self, config: CPGInfrastructureConfig, dataset_configs: list[CPGDatasetConfig]
     ):
         self.config = config
-        self.datasets = {d.dataset for d in dataset_configs}
+        self.datasets = {d.dataset: d for d in dataset_configs}
         self.output_provider = CPGInfrastructure.OutputProvider()
         self.group_provider = CPGInfrastructure.GroupProvider()
 
     def resolve_dataset_order(self):
-        deps = {
-            k: v.depends_on + [self.config.reference_dataset]
-            for k, v in self.datasets.items()
-        }
-        deps[self.config.reference_dataset] = []
+        reference_dataset = (
+            [self.config.reference_dataset] if self.config.reference_dataset else []
+        )
+        deps = {k: v.depends_on + reference_dataset for k, v in self.datasets.items()}
+        if self.config.reference_dataset:
+            deps[self.config.reference_dataset] = []
 
         return graphlib.TopologicalSorter(deps).static_order()
 
@@ -193,15 +200,16 @@ class CPGInfrastructure:
         # now resolve groups
         for cloud in self.group_provider.groups:
             infra = infra_map[cloud](config=self.config, dataset_config=None)
+
             for group in self.group_provider.static_group_order(cloud=cloud):
                 igroup = infra.create_group(group.name)
 
-                for member, resource_key in group.members:
+                for resource_key, member in group.members.items():
                     infra.add_group_member(
                         resource_key=resource_key, group=igroup, member=member
                     )
 
-                if igroup.secret:
+                if group.secret:
                     _members = self.group_provider.resolve_group_members(group)
                     secret_value = self.group_provider.prepare_outputs_from_members(
                         _members
@@ -260,7 +268,7 @@ class CPGDatasetInfrastructure:
         group_name = f'{self.dataset_config.dataset}-{name}'
         # group = self.infra.create_group(group_name)
         group = self.group_provider.create_group(
-            self.infra.name(), members_cache_secret=None, name=group_name
+            self.infra, members_cache_secret=None, name=group_name
         )
         return group
 
@@ -579,6 +587,11 @@ class CPGDatasetInfrastructure:
         :param contents: some Pulumi awaitable string
         """
         if not self.config.config_destination:
+            return
+
+        if isinstance(self.infra, DryRunInfra):
+            # we're likely not running in the pulumi engine,
+            # so skip this step
             return
 
         _infra_to_call_function_on = None
@@ -1135,14 +1148,16 @@ class CPGDatasetInfrastructure:
 
             # Allow the Hail service account to access its corresponding cromwell key
             if self.should_setup_hail:
-                hail_service_account = self.hail_accounts_by_access_level[access_level]
-                self.infra.add_secret_member(
-                    f'cromwell-service-account-{access_level}-self-accessor',
-                    project=self.config.analysis_runner.gcp.project,  # ANALYSIS_RUNNER_PROJECT,
-                    secret=secret,
-                    member=hail_service_account,
-                    membership=SecretMembership.ACCESSOR,
-                )
+                if hail_service_account := self.hail_accounts_by_access_level.get(
+                    access_level
+                ):
+                    self.infra.add_secret_member(
+                        f'cromwell-service-account-{access_level}-self-accessor',
+                        project=self.config.analysis_runner.gcp.project,  # ANALYSIS_RUNNER_PROJECT,
+                        secret=secret,
+                        member=hail_service_account,
+                        membership=SecretMembership.ACCESSOR,
+                    )
 
     @cached_property
     def cromwell_machine_accounts_by_access_level(self) -> dict[AccessLevel, Any]:
@@ -1671,7 +1686,10 @@ class CPGDatasetInfrastructure:
         # duplicate reference to avoid mutating config
         dependencies = list(self.dataset_config.depends_on)
 
-        if self.dataset_config.dataset != self.config.reference_dataset:
+        if (
+            self.config.reference_dataset
+            and self.dataset_config.dataset != self.config.reference_dataset
+        ):
             dependencies.append(self.config.reference_dataset)
 
         for dependency in dependencies:
@@ -1736,8 +1754,9 @@ class CPGDatasetInfrastructure:
 
 
 def test():
-
-    infra_config = CPGInfrastructureConfig.from_dict(cpg_utils.config.get_config())
+    infra_config_dict = dict(cpg_utils.config.get_config())
+    infra_config_dict['infrastructure']['reference_dataset'] = None
+    infra_config = CPGInfrastructureConfig.from_dict(infra_config_dict)
 
     configs = [
         CPGDatasetConfig(

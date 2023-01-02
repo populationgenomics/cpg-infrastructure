@@ -29,6 +29,7 @@ class DeserializableDataclass:
             value = self.__dict__.get(fieldname)
             if not value:
                 continue
+
             dtypes = []
             # determine which type we should try to parse the value as
             # handle unions (eg: None | DType)
@@ -44,6 +45,8 @@ class DeserializableDataclass:
                     continue
 
             elif issubclass(ftype, DeserializableDataclass):
+                if isinstance(value, ftype):
+                    continue
                 dtypes.append(ftype)
 
             e = None
