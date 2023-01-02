@@ -53,6 +53,22 @@ class GcpInfrastructure(CloudInfraBase):
         # Make sure this API is initialised somewhere
         _ = self._svc_serviceusage
 
+    @staticmethod
+    def member_id(member):
+        if isinstance(member, gcp.serviceaccount.Account):
+            return member.email
+
+        if isinstance(member, gcp.cloudidentity.Group):
+            return member.group_key.id
+
+        if isinstance(member, str):
+            return member
+
+        if isinstance(member, pulumi.Output):
+            return member
+
+        raise NotImplementedError(f'Invalid member type {type(member)}')
+
     # region SERVICES
     @cached_property
     def _svc_cloudresourcemanager(self):

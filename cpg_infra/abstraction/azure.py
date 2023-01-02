@@ -70,6 +70,10 @@ class AzureInfra(CloudInfraBase):
     def fix_azure_alphanum_names(name):
         return re.sub('[^a-z]', '', name.lower())
 
+    @staticmethod
+    def member_id(member):
+        raise NotImplementedError
+
     @cached_property
     def resource_group(self):
         return az.resources.ResourceGroup(

@@ -153,9 +153,6 @@ class CPGInfrastructure:
             self._cached_resolved_members[group.name] = resolved_members
             return resolved_members
 
-        def prepare_outputs_from_members(self, members: list):
-            return pulumi.Output.all(*members).apply(','.join)
-
     def __init__(
         self, config: CPGInfrastructureConfig, dataset_configs: list[CPGDatasetConfig]
     ):
@@ -211,9 +208,12 @@ class CPGInfrastructure:
 
                 if group.secret:
                     _members = self.group_provider.resolve_group_members(group)
-                    secret_value = self.group_provider.prepare_outputs_from_members(
-                        _members
-                    )
+                    member_ids = [infra.member_id(m) for m in _members]
+                    if all(isinstance(m, str) for m in member_ids):
+                        secret_value = ','.join(member_ids)
+                    else:
+                        secret_value = pulumi.Output.all(*member_ids).apply(','.join)
+
                     # we'll create a secret with the members
                     infra.add_secret_version(
                         f'{group.name}-access-group-cache-members',

@@ -104,6 +104,12 @@ class CloudInfraBase(ABC):
     def name():
         pass
 
+    @abstractmethod
+    @staticmethod
+    def member_id(member):
+        """Get the identifier for the user, that can be used in the group-cache"""
+        pass
+
     # region PROJECT
     @abstractmethod
     def get_dataset_project_id(self):
@@ -286,6 +292,10 @@ class DryRunInfra(CloudInfraBase):
 
     def get_dataset_project_id(self):
         return self.dataset
+
+    @staticmethod
+    def member_id(member):
+        return member
 
     def create_project(self, name):
         print(f'Creating project: {name}')
