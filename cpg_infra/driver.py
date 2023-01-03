@@ -55,34 +55,16 @@ TOML_CONFIG_JOINER = '\n||||'
 class CPGInfrastructure:
     """Class for managing all CPG infrastructure"""
 
-    class OutputProvider:
-        """Handler for storing outputs"""
-
-        def __init__(self):
-            self.outputs = {}
-
-        def add_output(self, name, value, pulumi_export=False):
-            if not isinstance(name, str):
-                raise ValueError(
-                    f'Output name must be a str, received: {type(name)} ({name})'
-                )
-            if pulumi_export:
-                pulumi.export(name, value)
-            self.outputs[name] = value
-
-        def get_output(self, name):
-            return self.outputs[name]
-
     class GroupProvider:
         """Provider for managing groups + memberships"""
 
         class Group:
             """Placeholder for a Group of members"""
 
-            def __init__(self, name: str, members: dict, members_cache_secret):
+            def __init__(self, name: str, members: dict, cache_members: bool):
                 self.name: str = name
-                self.secret = members_cache_secret
-                self.members: {} = members
+                self.cache_members: bool = cache_members
+                self.members: dict[str, Any] = members
 
             def add_member(self, resource_key, member):
                 print(f'{resource_key} :: {self.name}.add_member({member})')
@@ -104,7 +86,7 @@ class CPGInfrastructure:
             self,
             infra: CloudInfraBase,
             name: str,
-            members_cache_secret,
+            cache_members: bool,
             members: dict = None,
         ) -> Group:
             if infra.name() not in self.groups:
@@ -114,7 +96,7 @@ class CPGInfrastructure:
 
             group = CPGInfrastructure.GroupProvider.Group(
                 name=name,
-                members_cache_secret=members_cache_secret,
+                cache_members=cache_members,
                 members=members or {},
             )
             self.groups[infra.name()][name] = group
@@ -158,8 +140,12 @@ class CPGInfrastructure:
     ):
         self.config = config
         self.datasets = {d.dataset: d for d in dataset_configs}
-        self.output_provider = CPGInfrastructure.OutputProvider()
         self.group_provider = CPGInfrastructure.GroupProvider()
+
+        # { cloud: { name: DatasetInfrastructure } }
+        self.dataset_infrastructure: dict[
+            str, dict[str, CPGDatasetInfrastructure]
+        ] = defaultdict()
 
     def resolve_dataset_order(self):
         reference_dataset = (
@@ -171,7 +157,11 @@ class CPGInfrastructure:
 
         return graphlib.TopologicalSorter(deps).static_order()
 
-    def deploy_all(self):
+    def main(self):
+        self.setup_access_cache_bucket()
+        self.deploy_datasets()
+
+    def deploy_datasets(self):
         infra_map: dict[str, Type[CloudInfraBase]] = {
             c.name(): c for c in CloudInfraBase.__subclasses__()
         }
@@ -186,14 +176,20 @@ class CPGInfrastructure:
                     config=self.config,
                     dataset_config=dataset_config,
                 )
-                CPGDatasetInfrastructure(
+                dataset_infra = CPGDatasetInfrastructure(
+                    root=self,
                     config=self.config,
                     infra=infra_obj,
                     dataset_config=dataset_config,
-                    output_provider=self.output_provider,
                     group_provider=self.group_provider,
-                ).main()
+                )
+                dataset_infra.main()
+                self.dataset_infrastructure[deploy_location][dataset] = dataset_infra
 
+    def finalize_groups(self):
+        infra_map: dict[str, Type[CloudInfraBase]] = {
+            c.name(): c for c in CloudInfraBase.__subclasses__()
+        }
         # now resolve groups
         for cloud in self.group_provider.groups:
             infra = infra_map[cloud](config=self.config, dataset_config=None)
@@ -206,7 +202,7 @@ class CPGInfrastructure:
                         resource_key=resource_key, group=igroup, member=member
                     )
 
-                if group.secret:
+                if group.cache_members:
                     _members = self.group_provider.resolve_group_members(group)
                     member_ids = [infra.member_id(m) for m in _members]
                     if all(isinstance(m, str) for m in member_ids):
@@ -215,11 +211,28 @@ class CPGInfrastructure:
                         secret_value = pulumi.Output.all(*member_ids).apply(','.join)
 
                     # we'll create a secret with the members
+                    infra.secret
                     infra.add_secret_version(
                         f'{group.name}-access-group-cache-members',
                         secret=igroup.secret,
                         contents=secret_value,
                     )
+
+    # dataset agnostic infrastructure
+
+    # region ACCESS_CACHE
+
+    @cached_property
+    def access_cache_bucket(self):
+        reference_infra = self.dataset_infrastructure['gcp'][
+            self.config.reference_dataset
+        ]
+        return reference_infra.infra.create_bucket(
+            'cpg-access-group-cache', unique=True, versioning=True, lifecycle_rules=[]
+        )
+
+    def setup_access_cache_bucket(self):
+        _ = self.access_cache_bucket
 
 
 class CPGDatasetInfrastructure:
@@ -231,13 +244,13 @@ class CPGDatasetInfrastructure:
     def __init__(
         self,
         config: CPGInfrastructureConfig,
-        output_provider: CPGInfrastructure.OutputProvider,
+        root: CPGInfrastructure,
         group_provider: CPGInfrastructure.GroupProvider,
         infra: CloudInfraBase,
         dataset_config: CPGDatasetConfig,
     ):
         self.config = config
-        self.output_provider = output_provider
+        self.root = root
         self.group_provider = group_provider
 
         self.dataset_config: CPGDatasetConfig = dataset_config
@@ -263,6 +276,9 @@ class CPGDatasetInfrastructure:
         self.should_setup_analysis_runner = (
             CPGDatasetComponents.ANALYSIS_RUNNER in self.components
         )
+
+        # outputs
+        self.storage_tomls = {}
 
     def create_group(self, name: str):
         group_name = f'{self.dataset_config.dataset}-{name}'
@@ -387,10 +403,6 @@ class CPGDatasetInfrastructure:
     def get_pulumi_output_group_name(*, infra_name: str, dataset: str, kind: str):
         return f'{infra_name}-{dataset}-{kind}-group-id'
 
-    @staticmethod
-    def get_pulumi_output_storage_config_name(infra_name, dataset, access_level) -> str:
-        return '-'.join(['storage', infra_name, dataset, access_level, 'config'])
-
     def setup_web_access_group_memberships(self):
         self.web_access_group.add_member(
             # self.infra.add_group_member(
@@ -410,14 +422,13 @@ class CPGDatasetInfrastructure:
         }
 
         for kind, group in kinds.items():
-            self.output_provider.add_output(
+            pulumi.export(
                 self.get_pulumi_output_group_name(
                     infra_name=self.infra.name(),
                     dataset=self.dataset_config.dataset,
                     kind=kind,
                 ),
                 group.id if hasattr(group, 'id') else group,
-                pulumi_export=True,
             )
 
     def setup_access_level_group_memberships(self):
@@ -522,18 +533,15 @@ class CPGDatasetInfrastructure:
             },
         }
 
+        stacks_to_reference = self.root.dataset_infrastructure[self.infra.name()]
         for namespace, al_buckets in buckets.items():
 
             configs_to_merge = []
             for dependent_dataset in self.dataset_config.depends_on:
-
-                configs_to_merge.append(
-                    self.output_provider.get_output(
-                        self.get_pulumi_output_storage_config_name(
-                            self.infra.name(), dependent_dataset, namespace
-                        )
-                    )
-                )
+                if config := stacks_to_reference[dependent_dataset].storage_tomls.get(
+                    namespace
+                ):
+                    configs_to_merge.append(config)
 
             prepare_config_kwargs = {}
             if configs_to_merge:
@@ -567,14 +575,11 @@ class CPGDatasetInfrastructure:
             dataset_storage_config = pulumi.output.Output.all(
                 **prepare_config_kwargs
             ).apply(_pulumi_prepare_function)
-            pulumi_export_name = self.get_pulumi_output_storage_config_name(
-                self.infra.name(), self.dataset_config.dataset, namespace
-            )
 
             # this export is important, it's how direct dependencies will be able to
             # access the nested dependencies, this export is potentially depending
             # on transitive dependencies.
-            self.output_provider.add_output(pulumi_export_name, dataset_storage_config)
+            self.storage_tomls[namespace] = dataset_storage_config
             self.add_config_toml_to_bucket(
                 namespace=namespace, contents=dataset_storage_config
             )
@@ -1692,37 +1697,25 @@ class CPGDatasetInfrastructure:
         ):
             dependencies.append(self.config.reference_dataset)
 
+        stacks = self.root.dataset_infrastructure[self.infra.name()]
         for dependency in dependencies:
 
-            self.group_provider.get_group(
-                self.infra.name(), f'{dependency}-access'
-            ).add_member(
-                # self.infra.add_group_member(
+            # Adding dependent groups in two ways for reference:
+
+            # 1. Grab the dependent stack, use the access_group member
+            #    and add directly.
+            stacks[dependency].access_group.add_member(
                 resource_key=f'{dependency}-access-group',
-                # group=self.output_provider.get_output(
-                #     self.get_pulumi_output_group_name(
-                #         infra_name=self.infra.name(), dataset=dependency, kind='access'
-                #     )
-                # ),
                 member=self.access_group,
             )
 
             for access_level, primary_access_group in self.access_level_groups.items():
-                # dependency_group_id = self.output_provider.get_output(
-                #     self.get_pulumi_output_group_name(
-                #         infra_name=self.infra.name(),
-                #         dataset=dependency,
-                #         kind=access_level,
-                #     ),
-                # )
 
-                # add this dataset to dependencies membership
+                # 2. Use the group provider to grab the group directly
                 self.group_provider.get_group(
                     self.infra.name(), f'{dependency}-{access_level}'
                 ).add_member(
-                    # self.infra.add_group_member(
                     f'{dependency}-{access_level}-access-level-group',
-                    # dependency_group_id,
                     member=primary_access_group,
                 )
 

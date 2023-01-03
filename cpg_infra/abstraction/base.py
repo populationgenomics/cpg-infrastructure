@@ -73,13 +73,6 @@ class CloudInfraBase(ABC):
         self.config = config
         self._dataset_config = dataset_config
 
-        self.components = CPGDatasetComponents.default_component_for_infrastructure()[
-            self.name()
-        ]
-        if dataset_config:
-            if components := dataset_config.components.get(self.name()):
-                self.components = components
-
     @property
     def dataset_config(self) -> CPGDatasetConfig:
         if not self._dataset_config:
