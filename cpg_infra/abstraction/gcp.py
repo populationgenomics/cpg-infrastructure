@@ -32,7 +32,9 @@ class GcpInfrastructure(CloudInfraBase):
         self, config: CPGInfrastructureConfig, dataset_config: CPGDatasetConfig
     ):
         super().__init__(config=config, dataset_config=dataset_config)
-        self.region = dataset_config.gcp.region or config.gcp.region
+        self.region = config.gcp.region
+        if dataset_config and dataset_config.gcp.region:
+            self.region = dataset_config.gcp.region
 
     @cached_property
     def organization(self):

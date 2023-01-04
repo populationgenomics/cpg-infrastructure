@@ -77,7 +77,7 @@ class CPGInfrastructure:
                 self.members: dict[str, Any] = members
 
             def add_member(self, resource_key, member):
-                print(f'{resource_key} :: {self.name}.add_member({member})')
+                # print(f'{resource_key} :: {self.name}.add_member({member})')
                 self.members[resource_key] = member
 
             def __repr__(self):
@@ -164,7 +164,7 @@ class CPGInfrastructure:
         reference_dataset = (
             [self.config.reference_dataset] if self.config.reference_dataset else []
         )
-        deps = {k: v.depends_on + reference_dataset for k, v in self.datasets.items()}
+        deps = {k: v.depends_on + v.depends_on_readonly + reference_dataset for k, v in self.datasets.items()}
         if self.config.reference_dataset:
             deps[self.config.reference_dataset] = []
 
