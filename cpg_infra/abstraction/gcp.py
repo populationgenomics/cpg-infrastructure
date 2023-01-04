@@ -463,7 +463,9 @@ class GcpInfrastructure(CloudInfraBase):
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
         )
 
-    def add_group_member(self, resource_key: str, group, member, unique_resource_key: bool=False) -> Any:
+    def add_group_member(
+        self, resource_key: str, group, member, unique_resource_key: bool = False
+    ) -> Any:
         if self.config.disable_group_memberships:
             return
 

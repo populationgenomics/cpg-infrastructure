@@ -207,16 +207,18 @@ class CPGInfrastructure:
                     _members = self.group_provider.resolve_group_members(group)
                     member_ids = [infra.member_id(m) for m in _members]
                     if all(isinstance(m, str) for m in member_ids):
-                        secret_value = ','.join(member_ids)
+                        members_contents = '\n'.join(member_ids)
                     else:
-                        secret_value = pulumi.Output.all(*member_ids).apply(','.join)
+                        members_contents = pulumi.Output.all(*member_ids).apply(
+                            '\n'.join
+                        )
 
-                    # we'll create a secret with the members
-                    infra.secret
-                    infra.add_secret_version(
-                        f'{group.name}-access-group-cache-members',
-                        secret=igroup.secret,
-                        contents=secret_value,
+                    # we'll create a blob with the members of the groups
+                    infra.add_blob_to_bucket(
+                        f'{group.name}-group-cache-members',
+                        bucket=self.access_cache_bucket,
+                        contents=members_contents,
+                        output_name=f'{group.name}-members.txt',
                     )
 
     # dataset agnostic infrastructure

@@ -22,7 +22,6 @@ from typing import Any, Callable
 
 from cpg_infra.config import (
     CPGDatasetConfig,
-    CPGDatasetComponents,
     CPGInfrastructureConfig,
 )
 
