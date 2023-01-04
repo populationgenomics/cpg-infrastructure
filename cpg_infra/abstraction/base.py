@@ -96,8 +96,8 @@ class CloudInfraBase(ABC):
     def name():
         pass
 
-    @abstractmethod
     @staticmethod
+    @abstractmethod
     def member_id(member):
         """Get the identifier for the user, that can be used in the group-cache"""
         pass
@@ -221,7 +221,9 @@ class CloudInfraBase(ABC):
         """
 
     @abstractmethod
-    def add_group_member(self, resource_key: str, group, member) -> Any:
+    def add_group_member(
+        self, resource_key: str, group, member, unique_resource_key: bool = False
+    ) -> Any:
         pass
 
     # SECRETS
@@ -347,7 +349,9 @@ class DryRunInfra(CloudInfraBase):
         print(f'Creating Group: {name}')
         return name + '@populationgenomics.org.au'
 
-    def add_group_member(self, resource_key: str, group, member) -> Any:
+    def add_group_member(
+        self, resource_key: str, group, member, unique_resource_key: bool = False
+    ) -> Any:
         print(f'{resource_key} :: Add {member} to {group}')
 
     def create_secret(self, name: str, project: str = None) -> Any:

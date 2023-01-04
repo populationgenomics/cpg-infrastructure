@@ -9,7 +9,9 @@ from typing import Type, Any, Iterator, Iterable
 from collections import defaultdict, namedtuple
 from functools import cached_property
 
+import yaml
 import toml
+import xxhash
 import pulumi
 import cpg_utils.config
 
@@ -50,6 +52,10 @@ AccessLevel = str
 ACCESS_LEVELS: Iterable[AccessLevel] = ('test', 'standard', 'full')
 NON_NAME_REGEX = re.compile(r'[^A-Za-z\d_-]')
 TOML_CONFIG_JOINER = '\n||||'
+
+CPG_INFRA_PRIVATE_PATH = os.getenv(
+    'CPG_INFRA_PRIVATE_PATH', os.path.abspath('../../cpg-infrastructure-private/')
+)
 
 
 class CPGInfrastructure:
@@ -158,8 +164,8 @@ class CPGInfrastructure:
         return graphlib.TopologicalSorter(deps).static_order()
 
     def main(self):
-        self.setup_access_cache_bucket()
         self.deploy_datasets()
+        self.setup_access_cache_bucket()
         self.finalize_groups()
 
     def deploy_datasets(self):
@@ -171,7 +177,8 @@ class CPGInfrastructure:
             dataset_config = self.datasets[dataset]
 
             for deploy_location in dataset_config.deploy_locations:
-
+                if deploy_location not in self.dataset_infrastructure:
+                    self.dataset_infrastructure[deploy_location] = {}
                 location = infra_map[deploy_location]
                 infra_obj = location(
                     config=self.config,
@@ -200,7 +207,10 @@ class CPGInfrastructure:
 
                 for resource_key, member in group.members.items():
                     infra.add_group_member(
-                        resource_key=resource_key, group=igroup, member=member
+                        resource_key=resource_key,
+                        group=igroup,
+                        member=member,
+                        unique_resource_key=True,
                     )
 
                 if group.cache_members:
@@ -326,6 +336,7 @@ class CPGDatasetInfrastructure:
 
         # access-groups
         self.setup_access_groups()
+        self.setup_externally_specified_members()
 
         # optional components
         if self.should_setup_storage:
@@ -404,6 +415,50 @@ class CPGDatasetInfrastructure:
         return {k: v for k, v in accounts.items() if v}
 
     # endregion MACHINE ACCOUNTS
+
+    # region PERSON ACCESS
+    def setup_externally_specified_members(self):
+
+        if not CPG_INFRA_PRIVATE_PATH:
+            return
+
+        if not os.path.exists(CPG_INFRA_PRIVATE_PATH):
+            raise ValueError(
+                f'Could not find the "cpg-infrastructure-private" repo at: '
+                f'{CPG_INFRA_PRIVATE_PATH}, consider setting the '
+                f'"CPG_INFRA_PRIVATE_PATH" environment variable'
+            )
+
+        groups = [
+            self.data_manager_group,
+            self.analysis_group,
+            self.metadata_access_group,
+            self.upload_group,
+            self.web_access_group,
+        ]
+
+        filepath = os.path.join(
+            CPG_INFRA_PRIVATE_PATH, f'{self.dataset_config.dataset}/members.yaml'
+        )
+
+        with open(filepath, encoding='utf-8') as f:
+            d = yaml.safe_load(f)
+
+        def compute_hash(s):
+            # add a salt to make it slightly more challenging to discover who's in a group
+            return xxhash.xxh32((self.dataset_config.dataset + s).encode()).hexdigest()
+
+        for group in groups:
+            group_name = group.name.removeprefix(self.dataset_config.dataset + '-')
+            for member in d.get(group_name, []):
+                h = compute_hash(member)
+                group.add_member(
+                    self.infra.get_pulumi_name(f'{group.name}-member-{h}'),
+                    member,
+                )
+
+    # endregion
+
     # region ACCESS GROUPS
 
     def setup_access_groups(self):
@@ -413,8 +468,8 @@ class CPGDatasetInfrastructure:
         self.setup_access_level_group_outputs()
 
         # transitive person groups
-        self.metadata_access_group.add_member(
-            self.infra.get_pulumi_name('data-manager-in-metadata'),
+        self.analysis_group.add_member(
+            self.infra.get_pulumi_name('data-manager-in-analysis'),
             self.data_manager_group,
         )
         self.upload_group.add_member(
@@ -424,11 +479,12 @@ class CPGDatasetInfrastructure:
         self.metadata_access_group.add_member(
             self.infra.get_pulumi_name('analysis-in-metadata'), self.analysis_group
         )
-        self.metadata_access_group.add_member(
-            self.infra.get_pulumi_name('metadata-in-metadata-web'),
-            self.web_access_group,
+        self.web_access_group.add_member(
+            self.infra.get_pulumi_name('metadata-in-web-access'),
+            self.metadata_access_group,
         )
 
+        # transitive storage groups
         self.test_read_group.add_member('test-full-in-test-read', self.test_full_group)
         self.test_full_group.add_member(
             'analysis-group-in-test-full', self.analysis_group
@@ -459,7 +515,7 @@ class CPGDatasetInfrastructure:
 
     @cached_property
     def analysis_group(self):
-        return self.create_group('access', cache_members=True)
+        return self.create_group('analysis', cache_members=True)
 
     @cached_property
     def metadata_access_group(self):
@@ -658,7 +714,9 @@ class CPGDatasetInfrastructure:
             },
         }
 
-        stacks_to_reference = self.root.dataset_infrastructure[self.infra.name()]
+        stacks_to_reference = self.root.dataset_infrastructure.get(
+            self.infra.name(), {}
+        )
         for namespace, al_buckets in buckets.items():
 
             configs_to_merge = []
@@ -1785,11 +1843,12 @@ class CPGDatasetInfrastructure:
             ]
 
             for group in transitive_groups:
+                group_name = group.name.removeprefix(self.dataset_config.dataset + '-')
                 transitive_group = self.group_provider.get_group(
-                    self.infra.name(), f'{dependency}-{group.name}'
+                    self.infra.name(), f'{dependency}-{group_name}'
                 )
                 transitive_group.add_member(
-                    self.infra.get_pulumi_name(f'{dependency}-{group.name}'), group
+                    self.infra.get_pulumi_name(f'{dependency}-{group_name}'), group
                 )
 
         for dependency in self.dataset_config.depends_on_readonly:
@@ -1846,7 +1905,7 @@ class CPGDatasetInfrastructure:
 
 def test():
     infra_config_dict = dict(cpg_utils.config.get_config())
-    infra_config_dict['infrastructure']['reference_dataset'] = None
+    infra_config_dict['infrastructure']['reference_dataset'] = 'fewgenomes'
     infra_config = CPGInfrastructureConfig.from_dict(infra_config_dict)
 
     configs = [

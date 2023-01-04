@@ -390,7 +390,9 @@ class AzureInfra(CloudInfraBase):
 
         raise ValueError(f'Unrecognised object: {obj} ({type(obj)})')
 
-    def add_group_member(self, resource_key: str, group, member) -> Any:
+    def add_group_member(
+        self, resource_key: str, group, member, unique_resource_key: bool = False
+    ) -> Any:
 
         return azuread.GroupMember(
             self.get_pulumi_name(resource_key),
