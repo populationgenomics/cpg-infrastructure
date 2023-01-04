@@ -30,7 +30,7 @@ def from_pulumi():
     instantiated_configs = [
         CPGDatasetConfig.instantiate(dataset=k, **v) for k, v in dataset_configs.items()
     ]
-    CPGInfrastructure(config, instantiated_configs).deploy_all()
+    CPGInfrastructure(config, instantiated_configs).main()
 
 
 if __name__ == '__main__':

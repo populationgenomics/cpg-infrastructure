@@ -318,6 +318,10 @@ class GcpInfrastructure(CloudInfraBase):
         )
 
     def get_member_key(self, member):
+        # it's a 'cpg_infra.driver.CPGInfrastructure.GroupProvider.Group'
+        if hasattr(member, 'is_group') and hasattr(member, 'group'):
+            return self.get_member_key(member.group)
+
         if isinstance(member, gcp.serviceaccount.Account):
             return pulumi.Output.concat('serviceAccount:', member.email)
 

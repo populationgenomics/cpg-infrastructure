@@ -67,8 +67,12 @@ class CPGInfrastructure:
         class Group:
             """Placeholder for a Group of members"""
 
-            def __init__(self, name: str, members: dict, cache_members: bool):
+            # useful for checking isinstance without isinstance
+            is_group = True
+
+            def __init__(self, name: str, group, members: dict, cache_members: bool):
                 self.name: str = name
+                self.group = group
                 self.cache_members: bool = cache_members
                 self.members: dict[str, Any] = members
 
@@ -83,6 +87,7 @@ class CPGInfrastructure:
             self.groups: dict[
                 str, dict[str, CPGInfrastructure.GroupProvider.Group]
             ] = defaultdict()
+
             self._cached_resolved_members: dict[str, list] = {}
 
         def get_group(self, infra_name: str, group_name: str):
@@ -104,6 +109,7 @@ class CPGInfrastructure:
                 name=name,
                 cache_members=cache_members,
                 members=members or {},
+                group=infra.create_group(name)
             )
             self.groups[infra.name()][name] = group
 
@@ -146,6 +152,7 @@ class CPGInfrastructure:
     ):
         self.config = config
         self.datasets = {d.dataset: d for d in dataset_configs}
+
         self.group_provider = CPGInfrastructure.GroupProvider()
 
         # { cloud: { name: DatasetInfrastructure } }
@@ -203,12 +210,11 @@ class CPGInfrastructure:
             infra = infra_map[cloud](config=self.config, dataset_config=None)
 
             for group in self.group_provider.static_group_order(cloud=cloud):
-                igroup = infra.create_group(group.name)
 
                 for resource_key, member in group.members.items():
                     infra.add_group_member(
                         resource_key=resource_key,
-                        group=igroup,
+                        group=group.group,
                         member=member,
                         unique_resource_key=True,
                     )
@@ -632,20 +638,20 @@ class CPGDatasetInfrastructure:
         self.infra.add_project_role(
             'project-compute-viewer',
             role='roles/compute.viewer',
-            member=self.analysis_group,
+            member=self.analysis_group.group,
             project=self.infra.project_id,
         )
 
         self.infra.add_project_role(
             'project-logging-viewer',
             role='roles/logging.viewer',
-            member=self.analysis_group,
+            member=self.analysis_group.group,
             project=self.infra.project_id,
         )
 
         self.infra.add_project_role(
             'project-monitoring-viewer',
-            member=self.analysis_group,
+            member=self.analysis_group.group,
             role='roles/monitoring.viewer',
         )
 

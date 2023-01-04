@@ -370,6 +370,10 @@ class AzureInfra(CloudInfraBase):
 
     @staticmethod
     def _get_object_id(obj):
+
+        if hasattr(obj, 'is_group') and hasattr(obj, 'group'):
+            return AzureInfra._get_object_id(obj.group)
+
         if isinstance(obj, pulumi.Output):
             return obj
 
