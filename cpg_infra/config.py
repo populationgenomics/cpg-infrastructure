@@ -270,6 +270,7 @@ class CPGDatasetConfig(DeserializableDataclass):
     shared_project_budget: int = None
     # give access for this dataset to access any other it depends on
     depends_on: list[str] = dataclasses.field(default_factory=list)
+    depends_on_readonly: list[str] = dataclasses.field(default_factory=list)
 
     # extra places that collaborators can upload data too
     additional_upload_buckets: list[str] = dataclasses.field(default_factory=list)
