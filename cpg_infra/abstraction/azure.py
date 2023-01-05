@@ -398,9 +398,10 @@ class AzureInfra(CloudInfraBase):
     def add_group_member(
         self, resource_key: str, group, member, unique_resource_key: bool = False
     ) -> Any:
-
+        if not unique_resource_key:
+            resource_key = self.get_pulumi_name(resource_key)
         return azuread.GroupMember(
-            self.get_pulumi_name(resource_key),
+            resource_key,
             group_object_id=self._get_object_id(group),
             member_object_id=self._get_object_id(member),
         )

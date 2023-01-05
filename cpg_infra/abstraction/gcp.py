@@ -479,8 +479,11 @@ class GcpInfrastructure(CloudInfraBase):
         if self.config.disable_group_memberships:
             return
 
+        if not unique_resource_key:
+            resource_key = self.get_pulumi_name(resource_key)
+
         gcp.cloudidentity.GroupMembership(
-            resource_key if unique_resource_key else self.get_pulumi_name(resource_key),
+            resource_key,
             group=self.get_group_key(group),
             preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
                 id=self.get_preferred_group_membership_key(member)
