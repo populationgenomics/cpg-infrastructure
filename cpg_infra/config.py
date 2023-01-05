@@ -80,6 +80,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         region: str
         billing_project_id: str
         billing_account_id: int
+        groups_domain: str
         budget_notification_pubsub: str | None
         config_bucket_name: str
 

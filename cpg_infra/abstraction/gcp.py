@@ -319,9 +319,10 @@ class GcpInfrastructure(CloudInfraBase):
             project=project or self.project.project_id,
         )
 
-    def get_member_key(self, member):
+    def get_member_key(self, member):  # pylint: disable=too-many-return-statements
         # it's a 'cpg_infra.driver.CPGInfrastructure.GroupProvider.Group'
         if hasattr(member, 'is_group') and hasattr(member, 'group'):
+            # cheeky catch for internal group
             return self.get_member_key(member.group)
 
         if isinstance(member, gcp.serviceaccount.Account):
@@ -347,6 +348,9 @@ class GcpInfrastructure(CloudInfraBase):
         raise NotImplementedError(f'Invalid member type {type(member)}')
 
     def get_preferred_group_membership_key(self, member):
+        if hasattr(member, 'is_group') and hasattr(member, 'group'):
+            # cheeky catch for internal group
+            return self.get_preferred_group_membership_key(member.group)
         if isinstance(member, gcp.cloudidentity.Group):
             return member.group_key.id
         if isinstance(member, gcp.serviceaccount.Account):
@@ -367,9 +371,9 @@ class GcpInfrastructure(CloudInfraBase):
             # return pulumi.Output.concat('group:', group.group_key.id)
 
         if isinstance(group, str):
-            if group.endswith('@populationgenomics.org.au') and not group.startswith(
-                'group:'
-            ):
+            if group.endswith(
+                '@' + self.config.gcp.groups_domain
+            ) and not group.startswith('group:'):
                 return f'group:{group}'
 
             return group
@@ -459,7 +463,7 @@ class GcpInfrastructure(CloudInfraBase):
         ).private_key.apply(lambda s: base64.b64decode(s).decode('utf-8'))
 
     def create_group(self, name: str) -> Any:
-        mail = f'{name}@populationgenomics.org.au'
+        mail = f'{name}@{self.config.gcp.groups_domain}'
         return gcp.cloudidentity.Group(
             self.get_pulumi_name(name + '-group'),
             display_name=name,
