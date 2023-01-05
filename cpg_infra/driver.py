@@ -78,6 +78,9 @@ class CPGInfrastructure:
 
             def add_member(self, resource_key, member):
                 # print(f'{resource_key} :: {self.name}.add_member({member})')
+                if isinstance(member, type(self)):
+                    if member.name == self.name:
+                        raise ValueError(f'Cannot add self to group {self.name}')
                 self.members[resource_key] = member
 
             def __repr__(self):
@@ -109,7 +112,7 @@ class CPGInfrastructure:
                 name=name,
                 cache_members=cache_members,
                 members=members or {},
-                group=infra.create_group(name)
+                group=infra.create_group(name),
             )
             self.groups[infra.name()][name] = group
 
@@ -164,7 +167,10 @@ class CPGInfrastructure:
         reference_dataset = (
             [self.config.reference_dataset] if self.config.reference_dataset else []
         )
-        deps = {k: v.depends_on + v.depends_on_readonly + reference_dataset for k, v in self.datasets.items()}
+        deps = {
+            k: v.depends_on + v.depends_on_readonly + reference_dataset
+            for k, v in self.datasets.items()
+        }
         if self.config.reference_dataset:
             deps[self.config.reference_dataset] = []
 
@@ -202,12 +208,12 @@ class CPGInfrastructure:
                 self.dataset_infrastructure[deploy_location][dataset] = dataset_infra
 
     def finalize_groups(self):
-        infra_map: dict[str, Type[CloudInfraBase]] = {
-            c.name(): c for c in CloudInfraBase.__subclasses__()
-        }
         # now resolve groups
         for cloud in self.group_provider.groups:
-            infra = infra_map[cloud](config=self.config, dataset_config=None)
+            # We're adding groups, but it does rely on some service being created
+            infra = self.dataset_infrastructure[cloud][
+                self.config.reference_dataset
+            ].infra
 
             for group in self.group_provider.static_group_order(cloud=cloud):
 
@@ -505,7 +511,7 @@ class CPGDatasetInfrastructure:
             'main-create-in-main-read', self.main_create_group
         )
         self.main_read_group.add_member(
-            'data-manager-in-main-read', self.main_read_group
+            'data-manager-in-main-read', self.data_manager_group
         )
         self.main_create_group.add_member(
             'standard-in-main-create', self.standard_group
