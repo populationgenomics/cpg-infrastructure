@@ -174,21 +174,49 @@ class CPGInfrastructure:
 
     def resolve_dataset_order(self):
         reference_dataset = (
-            [self.config.reference_dataset] if self.config.reference_dataset else []
+            [self.config.common_dataset] if self.config.common_dataset else []
         )
         deps = {
             k: v.depends_on + v.depends_on_readonly + reference_dataset
             for k, v in self.datasets.items()
         }
-        if self.config.reference_dataset:
-            deps[self.config.reference_dataset] = []
+        if self.config.common_dataset:
+            deps[self.config.common_dataset] = []
 
         return graphlib.TopologicalSorter(deps).static_order()
 
     def main(self):
-        self.deploy_datasets()
+        self.setup_common_dataset()
         self.setup_access_cache_bucket()
+        self.deploy_datasets()
         self.finalize_groups()
+
+    def setup_common_dataset(self):
+        infra_map: dict[str, Type[CloudInfraBase]] = {
+            c.name(): c for c in CloudInfraBase.__subclasses__()
+        }
+
+        dataset_config = self.datasets[self.config.common_dataset]
+
+        for deploy_location in dataset_config.deploy_locations:
+
+            if deploy_location not in self.dataset_infrastructure:
+                self.dataset_infrastructure[deploy_location] = {}
+
+            dataset_infra = CPGDatasetInfrastructure(
+                root=self,
+                config=self.config,
+                infra=infra_map[deploy_location](
+                    config=self.config,
+                    dataset_config=dataset_config,
+                ),
+                dataset_config=dataset_config,
+                group_provider=self.group_provider,
+            )
+            self.dataset_infrastructure[deploy_location][
+                self.config.common_dataset
+            ] = dataset_infra
+            dataset_infra.main()
 
     def deploy_datasets(self):
         infra_map: dict[str, Type[CloudInfraBase]] = {
@@ -196,6 +224,10 @@ class CPGInfrastructure:
         }
 
         for dataset in self.resolve_dataset_order():
+            if dataset == self.config.common_dataset:
+                # we set it up manually first
+                continue
+
             dataset_config = self.datasets[dataset]
 
             for deploy_location in dataset_config.deploy_locations:
@@ -213,16 +245,14 @@ class CPGInfrastructure:
                     dataset_config=dataset_config,
                     group_provider=self.group_provider,
                 )
-                dataset_infra.main()
                 self.dataset_infrastructure[deploy_location][dataset] = dataset_infra
+                dataset_infra.main()
 
     def finalize_groups(self):
         # now resolve groups
         for cloud in self.group_provider.groups:
             # We're adding groups, but it does rely on some service being created
-            infra = self.dataset_infrastructure[cloud][
-                self.config.reference_dataset
-            ].infra
+            infra = self.dataset_infrastructure[cloud][self.config.common_dataset].infra
 
             for group in self.group_provider.static_group_order(cloud=cloud):
 
@@ -258,17 +288,13 @@ class CPGInfrastructure:
 
     @cached_property
     def access_cache_bucket(self):
-        reference_infra = self.dataset_infrastructure['gcp'][
-            self.config.reference_dataset
-        ]
+        reference_infra = self.dataset_infrastructure['gcp'][self.config.common_dataset]
         return reference_infra.infra.create_bucket(
             'cpg-members-group-cache', unique=True, versioning=True, lifecycle_rules=[]
         )
 
     def setup_access_cache_bucket(self):
-        reference_infra = self.dataset_infrastructure['gcp'][
-            self.config.reference_dataset
-        ]
+        reference_infra = self.dataset_infrastructure['gcp'][self.config.common_dataset]
 
         access_group_cache_accessors = []
 
@@ -691,7 +717,7 @@ class CPGDatasetInfrastructure:
         self.setup_storage_outputs()
 
     def setup_storage_common_test_access(self):
-        if self.dataset_config.dataset != self.config.reference_dataset:
+        if self.dataset_config.dataset != self.config.common_dataset:
             return
 
         self.infra.add_member_to_bucket(
@@ -1205,7 +1231,7 @@ class CPGDatasetInfrastructure:
         )
 
         self.infra.add_member_to_bucket(
-            'analysis-group-release-bucket-viewer',
+            'release-access-group-release-bucket-viewer',
             self.release_bucket,
             self.release_access_group,
             BucketMembership.READ,
@@ -1837,10 +1863,10 @@ class CPGDatasetInfrastructure:
         dependencies = list(self.dataset_config.depends_on)
 
         if (
-            self.config.reference_dataset
-            and self.dataset_config.dataset != self.config.reference_dataset
+            self.config.common_dataset
+            and self.dataset_config.dataset != self.config.common_dataset
         ):
-            dependencies.append(self.config.reference_dataset)
+            dependencies.append(self.config.common_dataset)
 
         for dependency in dependencies:
 
