@@ -22,7 +22,6 @@ from typing import Any, Callable
 
 from cpg_infra.config import (
     CPGDatasetConfig,
-    CPGDatasetComponents,
     CPGInfrastructureConfig,
 )
 
@@ -72,13 +71,13 @@ class CloudInfraBase(ABC):
         super().__init__()
         self.config = config
         self.dataset_config = dataset_config
-        self.dataset = dataset_config.dataset
-        self.components = dataset_config.components.get(
-            self.name(),
-            CPGDatasetComponents.default_component_for_infrastructure()[self.name()],
-        )
+
+    @property
+    def dataset(self):
+        return self.dataset_config.dataset
 
     def get_pulumi_name(self, key: str):
+        assert self.dataset, 'Dataset config was not set'
         key = key.removeprefix(self.dataset + '-')
         return f'{self.dataset}-{self.name()}-' + key
 
@@ -89,6 +88,12 @@ class CloudInfraBase(ABC):
     @staticmethod
     @abstractmethod
     def name():
+        pass
+
+    @staticmethod
+    @abstractmethod
+    def member_id(member):
+        """Get the identifier for the user, that can be used in the group-cache"""
         pass
 
     # region PROJECT
@@ -210,7 +215,9 @@ class CloudInfraBase(ABC):
         """
 
     @abstractmethod
-    def add_group_member(self, resource_key: str, group, member) -> Any:
+    def add_group_member(
+        self, resource_key: str, group, member, unique_resource_key: bool = False
+    ) -> Any:
         pass
 
     # SECRETS
@@ -274,6 +281,10 @@ class DryRunInfra(CloudInfraBase):
     def get_dataset_project_id(self):
         return self.dataset
 
+    @staticmethod
+    def member_id(member):
+        return member
+
     def create_project(self, name):
         print(f'Creating project: {name}')
         return f'Project: {name}'
@@ -330,9 +341,11 @@ class DryRunInfra(CloudInfraBase):
 
     def create_group(self, name: str) -> Any:
         print(f'Creating Group: {name}')
-        return name + '@populationgenomics.org.au'
+        return f'{name}@{self.config.gcp.groups_domain}'
 
-    def add_group_member(self, resource_key: str, group, member) -> Any:
+    def add_group_member(
+        self, resource_key: str, group, member, unique_resource_key: bool = False
+    ) -> Any:
         print(f'{resource_key} :: Add {member} to {group}')
 
     def create_secret(self, name: str, project: str = None) -> Any:

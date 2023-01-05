@@ -9,6 +9,7 @@ web_url_template = "https://{namespace}-web.populationgenomics.org.au/{dataset}"
 #disable_group_memberships = "true"
 
 [infrastructure.gcp]
+groups_domain = "populationgenomics.org.au"
 region = "australia-southeast1"
 customer_id = "C010ys3gt"
 billing_account_id = '01D012-20A6A2-CBD343'

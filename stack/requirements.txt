@@ -5,3 +5,4 @@ requests==2.27.1
 PyYAML==5.4.1
 click==8.0.3
 cpg-utils
+xxhash==3.2.0

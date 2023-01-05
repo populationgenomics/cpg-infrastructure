@@ -70,6 +70,10 @@ class AzureInfra(CloudInfraBase):
     def fix_azure_alphanum_names(name):
         return re.sub('[^a-z]', '', name.lower())
 
+    @staticmethod
+    def member_id(member):
+        raise NotImplementedError
+
     @cached_property
     def resource_group(self):
         return az.resources.ResourceGroup(
@@ -365,7 +369,12 @@ class AzureInfra(CloudInfraBase):
         )
 
     @staticmethod
-    def _get_object_id(obj):
+    def _get_object_id(obj):  # pylint: disable=too-many-return-statements
+
+        if hasattr(obj, 'is_group') and hasattr(obj, 'group'):
+            # cheeky catch for internal group
+            return AzureInfra._get_object_id(obj.group)
+
         if isinstance(obj, pulumi.Output):
             return obj
 
@@ -386,10 +395,13 @@ class AzureInfra(CloudInfraBase):
 
         raise ValueError(f'Unrecognised object: {obj} ({type(obj)})')
 
-    def add_group_member(self, resource_key: str, group, member) -> Any:
-
+    def add_group_member(
+        self, resource_key: str, group, member, unique_resource_key: bool = False
+    ) -> Any:
+        if not unique_resource_key:
+            resource_key = self.get_pulumi_name(resource_key)
         return azuread.GroupMember(
-            self.get_pulumi_name(resource_key),
+            resource_key,
             group_object_id=self._get_object_id(group),
             member_object_id=self._get_object_id(member),
         )

@@ -341,7 +341,7 @@ seqr:
     project: seqr-308602
 sgs-somatic-mtn:
   archive_age: 90
-  depends_on:
+  depends_on_readonly:
   - tob-wgs
   enable_release: false
   gcp:

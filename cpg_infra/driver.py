@@ -9,7 +9,9 @@ from typing import Type, Any, Iterator, Iterable
 from collections import defaultdict, namedtuple
 from functools import cached_property
 
+import yaml
 import toml
+import xxhash
 import pulumi
 import cpg_utils.config
 
@@ -51,65 +53,277 @@ ACCESS_LEVELS: Iterable[AccessLevel] = ('test', 'standard', 'full')
 NON_NAME_REGEX = re.compile(r'[^A-Za-z\d_-]')
 TOML_CONFIG_JOINER = '\n||||'
 
+# This INFRA_MEMBERS_PATH is a folder with directories the name of the datasets
+# with a file called `members.yaml` in each, listing the group name, then the members
+# eg:
+#   cpg-infra-private/dataset-name/members.yaml:
+#       analysis:
+#         - user.name@domain.com
+#       data-manager:
+#         - user.name2@domain.com
+INFRA_MEMBERS_PATH = os.getenv(
+    'INFRA_MEMBERS_PATH', os.path.abspath('../../cpg-infrastructure-private/')
+)
+
 
 class CPGInfrastructure:
     """Class for managing all CPG infrastructure"""
 
-    class OutputProvider:
-        """Handler for storing outputs"""
+    class GroupProvider:
+        """Provider for managing groups + memberships"""
+
+        class Group:
+            """Placeholder for a Group of members"""
+
+            # useful for checking isinstance without isinstance
+            is_group = True
+
+            def __init__(self, name: str, group, members: dict, cache_members: bool):
+                self.name: str = name
+                self.group = group
+                self.cache_members: bool = cache_members
+                self.members: dict[str, Any] = members
+
+            def add_member(self, resource_key, member):
+                # print(f'{resource_key} :: {self.name}.add_member({member})')
+                if isinstance(member, type(self)):
+                    if member.name == self.name:
+                        raise ValueError(f'Cannot add self to group {self.name}')
+                self.members[resource_key] = member
+
+            def __repr__(self):
+                return f'GROUP("{self.name}")'
 
         def __init__(self):
-            self.outputs = {}
+            self.groups: dict[
+                str, dict[str, CPGInfrastructure.GroupProvider.Group]
+            ] = defaultdict()
 
-        def add_output(self, name, value, pulumi_export=False):
-            if not isinstance(name, str):
-                raise ValueError(
-                    f'Output name must be a str, received: {type(name)} ({name})'
-                )
-            if pulumi_export:
-                pulumi.export(name, value)
-            self.outputs[name] = value
+            self._cached_resolved_members: dict[str, list] = {}
 
-        def get_output(self, name):
-            return self.outputs[name]
+        def get_group(self, infra_name: str, group_name: str):
+            return self.groups[infra_name][group_name]
 
-    def __init__(self, config: CPGInfrastructureConfig):
+        def create_group(
+            self,
+            infra: CloudInfraBase,
+            name: str,
+            cache_members: bool,
+            members: dict = None,
+        ) -> Group:
+            if infra.name() not in self.groups:
+                self.groups[infra.name()] = {}
+            if name in self.groups[infra.name()]:
+                raise ValueError(f'Group "{name}" in "{infra.name()}" already exists')
+
+            group = CPGInfrastructure.GroupProvider.Group(
+                name=name,
+                cache_members=cache_members,
+                members=members or {},
+                group=infra.create_group(name),
+            )
+            self.groups[infra.name()][name] = group
+
+            return group
+
+        def static_group_order(self, cloud) -> list[Group]:
+            """
+            not that it super matters because we do recursively look it up and
+            cache the result, but it's nice to grab the groups in an order that
+            minimises depth looking.
+            """
+            groups = self.groups[cloud]
+
+            deps = {
+                group.name: [
+                    g.name
+                    for g in group.members.values()
+                    if isinstance(g, CPGInfrastructure.GroupProvider.Group)
+                ]
+                for group in groups.values()
+            }
+
+            return [groups[n] for n in graphlib.TopologicalSorter(deps).static_order()]
+
+        def resolve_group_members(self, group: 'Group') -> list:
+            if group.name in self._cached_resolved_members:
+                return self._cached_resolved_members[group.name]
+
+            resolved_members = []
+            for member in group.members.values():
+                if isinstance(member, CPGInfrastructure.GroupProvider.Group):
+                    resolved_members.extend(self.resolve_group_members(member))
+                else:
+                    resolved_members.append(member)
+
+            self._cached_resolved_members[group.name] = resolved_members
+            return resolved_members
+
+    def __init__(
+        self, config: CPGInfrastructureConfig, dataset_configs: list[CPGDatasetConfig]
+    ):
         self.config = config
-        self.output_provider = CPGInfrastructure.OutputProvider()
+        self.datasets = {d.dataset: d for d in dataset_configs}
 
-    def deploy_all_from_dataset_configs(self, dataset_config: dict[str, Any]):
+        self.group_provider = CPGInfrastructure.GroupProvider()
+
+        # { cloud: { name: DatasetInfrastructure } }
+        self.dataset_infrastructure: dict[
+            str, dict[str, CPGDatasetInfrastructure]
+        ] = defaultdict()
+
+    def resolve_dataset_order(self):
+        reference_dataset = (
+            [self.config.common_dataset] if self.config.common_dataset else []
+        )
+        deps = {
+            k: v.depends_on + v.depends_on_readonly + reference_dataset
+            for k, v in self.datasets.items()
+        }
+        if self.config.common_dataset:
+            deps[self.config.common_dataset] = []
+
+        return graphlib.TopologicalSorter(deps).static_order()
+
+    def main(self):
+        self.setup_common_dataset()
+        self.setup_access_cache_bucket()
+        self.deploy_datasets()
+        self.finalize_groups()
+
+    def setup_common_dataset(self):
         infra_map: dict[str, Type[CloudInfraBase]] = {
             c.name(): c for c in CloudInfraBase.__subclasses__()
         }
 
-        # load datasets
-        datasets = {
-            k: CPGDatasetConfig.instantiate(dataset=k, **v)
-            for k, v in dataset_config.items()
-        }
-        deps = {
-            k: v.depends_on + [self.config.reference_dataset]
-            for k, v in datasets.items()
-        }
-        deps[self.config.reference_dataset] = []
+        dataset_config = self.datasets[self.config.common_dataset]
 
-        for dataset in graphlib.TopologicalSorter(deps).static_order():
-            dataset_config = datasets[dataset]
+        for deploy_location in dataset_config.deploy_locations:
+
+            if deploy_location not in self.dataset_infrastructure:
+                self.dataset_infrastructure[deploy_location] = {}
+
+            dataset_infra = CPGDatasetInfrastructure(
+                root=self,
+                config=self.config,
+                infra=infra_map[deploy_location](
+                    config=self.config,
+                    dataset_config=dataset_config,
+                ),
+                dataset_config=dataset_config,
+                group_provider=self.group_provider,
+            )
+            self.dataset_infrastructure[deploy_location][
+                self.config.common_dataset
+            ] = dataset_infra
+            dataset_infra.main()
+
+    def deploy_datasets(self):
+        infra_map: dict[str, Type[CloudInfraBase]] = {
+            c.name(): c for c in CloudInfraBase.__subclasses__()
+        }
+
+        for dataset in self.resolve_dataset_order():
+            if dataset == self.config.common_dataset:
+                # we set it up manually first
+                continue
+
+            dataset_config = self.datasets[dataset]
 
             for deploy_location in dataset_config.deploy_locations:
-                # print(f'Will load {dataset} @ {deploy_location}')
-
+                if deploy_location not in self.dataset_infrastructure:
+                    self.dataset_infrastructure[deploy_location] = {}
                 location = infra_map[deploy_location]
                 infra_obj = location(
                     config=self.config,
                     dataset_config=dataset_config,
                 )
-                CPGDatasetInfrastructure(
+                dataset_infra = CPGDatasetInfrastructure(
+                    root=self,
                     config=self.config,
                     infra=infra_obj,
                     dataset_config=dataset_config,
-                    output_provider=self.output_provider,
-                ).main()
+                    group_provider=self.group_provider,
+                )
+                self.dataset_infrastructure[deploy_location][dataset] = dataset_infra
+                dataset_infra.main()
+
+    def finalize_groups(self):
+        # now resolve groups
+        for cloud in self.group_provider.groups:
+            # We're adding groups, but it does rely on some service being created
+            infra = self.dataset_infrastructure[cloud][self.config.common_dataset].infra
+
+            for group in self.group_provider.static_group_order(cloud=cloud):
+
+                for resource_key, member in group.members.items():
+                    infra.add_group_member(
+                        resource_key=resource_key,
+                        group=group.group,
+                        member=member,
+                        unique_resource_key=True,
+                    )
+
+                if group.cache_members and isinstance(infra, GcpInfrastructure):
+                    _members = self.group_provider.resolve_group_members(group)
+                    member_ids = [infra.member_id(m) for m in _members]
+                    if all(isinstance(m, str) for m in member_ids):
+                        members_contents = '\n'.join(member_ids)
+                    else:
+                        members_contents = pulumi.Output.all(*member_ids).apply(
+                            '\n'.join
+                        )
+
+                    # we'll create a blob with the members of the groups
+                    infra.add_blob_to_bucket(
+                        f'{group.name}-group-cache-members',
+                        bucket=self.access_cache_bucket,
+                        contents=members_contents,
+                        output_name=f'{group.name}-members.txt',
+                    )
+
+    # dataset agnostic infrastructure
+
+    # region ACCESS_CACHE
+
+    @cached_property
+    def access_cache_bucket(self):
+        reference_infra = self.dataset_infrastructure['gcp'][self.config.common_dataset]
+        return reference_infra.infra.create_bucket(
+            'cpg-members-group-cache', unique=True, versioning=True, lifecycle_rules=[]
+        )
+
+    def setup_access_cache_bucket(self):
+        reference_infra = self.dataset_infrastructure['gcp'][self.config.common_dataset]
+
+        access_group_cache_accessors = []
+
+        if self.config.analysis_runner:
+            access_group_cache_accessors.append(
+                (
+                    'analysis-runner',
+                    self.config.analysis_runner.gcp.server_machine_account,
+                )
+            )
+
+        if self.config.sample_metadata:
+            access_group_cache_accessors.append(
+                ('sample-metadata', self.config.sample_metadata.gcp.machine_account)
+            )
+
+        if self.config.web_service:
+            access_group_cache_accessors.append(
+                ('web-service', self.config.web_service.gcp.server_machine_account)
+            )
+
+        for key, account in access_group_cache_accessors:
+
+            reference_infra.infra.add_member_to_bucket(
+                f'{key}-members-group-cache-accessor',
+                bucket=self.access_cache_bucket,
+                member=account,
+                membership=BucketMembership.READ,
+            )
 
 
 class CPGDatasetInfrastructure:
@@ -121,12 +335,15 @@ class CPGDatasetInfrastructure:
     def __init__(
         self,
         config: CPGInfrastructureConfig,
-        output_provider: CPGInfrastructure.OutputProvider,
+        root: CPGInfrastructure,
+        group_provider: CPGInfrastructure.GroupProvider,
         infra: CloudInfraBase,
         dataset_config: CPGDatasetConfig,
     ):
         self.config = config
-        self.output_provider = output_provider
+        self.root = root
+        self.group_provider = group_provider
+
         self.dataset_config: CPGDatasetConfig = dataset_config
         self.infra: CloudInfraBase = infra
         self.components: list[CPGDatasetComponents] = dataset_config.components.get(
@@ -151,15 +368,21 @@ class CPGDatasetInfrastructure:
             CPGDatasetComponents.ANALYSIS_RUNNER in self.components
         )
 
-    def create_group(self, name: str):
+        # outputs
+        self.storage_tomls = {}
+
+    def create_group(self, name: str, cache_members: bool = False):
         group_name = f'{self.dataset_config.dataset}-{name}'
-        group = self.infra.create_group(group_name)
+        # group = self.infra.create_group(group_name)
+        group = self.group_provider.create_group(
+            self.infra, cache_members=cache_members, name=group_name
+        )
         return group
 
     def main(self):
 
-        # access-groups
         self.setup_access_groups()
+        self.setup_externally_specified_members()
 
         # optional components
         if self.should_setup_storage:
@@ -181,8 +404,6 @@ class CPGDatasetInfrastructure:
 
         if self.should_setup_analysis_runner:
             self.setup_analysis_runner()
-
-        self.setup_group_cache()
 
         self.infra.finalise()
 
@@ -240,68 +461,196 @@ class CPGDatasetInfrastructure:
         return {k: v for k, v in accounts.items() if v}
 
     # endregion MACHINE ACCOUNTS
+
+    # region PERSON ACCESS
+    def setup_externally_specified_members(self):
+
+        if not INFRA_MEMBERS_PATH:
+            return
+
+        if not os.path.exists(INFRA_MEMBERS_PATH):
+            raise ValueError(
+                f'Could not find the "cpg-infrastructure-private" repo at: '
+                f'{INFRA_MEMBERS_PATH}, consider setting the '
+                f'"INFRA_MEMBERS_PATH" environment variable'
+            )
+
+        groups = [
+            self.data_manager_group,
+            self.analysis_group,
+            self.metadata_access_group,
+            self.upload_group,
+            self.web_access_group,
+        ]
+
+        filepath = os.path.join(
+            INFRA_MEMBERS_PATH, f'{self.dataset_config.dataset}/members.yaml'
+        )
+
+        if not os.path.exists(filepath):
+            return
+
+        with open(filepath, encoding='utf-8') as f:
+            d = yaml.safe_load(f)
+
+        def compute_hash(s):
+            # add a salt so you can't track members through the resource names
+            # between different stacks - a small obfuscation.
+            return xxhash.xxh32((self.dataset_config.dataset + s).encode()).hexdigest()
+
+        for group in groups:
+            group_name = group.name.removeprefix(self.dataset_config.dataset + '-')
+            for member in d.get(group_name, []):
+                h = compute_hash(member)
+                group.add_member(
+                    self.infra.get_pulumi_name(f'{group.name}-member-{h}'),
+                    member,
+                )
+
+    # endregion
+
     # region ACCESS GROUPS
 
     def setup_access_groups(self):
         self.setup_web_access_group_memberships()
         self.setup_access_level_group_memberships()
         self.setup_dependencies_group_memberships()
-        self.setup_access_level_group_outputs()
+
+        # transitive person groups
+        self.analysis_group.add_member(
+            self.infra.get_pulumi_name('data-manager-in-analysis'),
+            self.data_manager_group,
+        )
+        self.upload_group.add_member(
+            self.infra.get_pulumi_name('data-manager-in-upload'),
+            self.data_manager_group,
+        )
+        self.metadata_access_group.add_member(
+            self.infra.get_pulumi_name('analysis-in-metadata'), self.analysis_group
+        )
+        self.web_access_group.add_member(
+            self.infra.get_pulumi_name('metadata-in-web-access'),
+            self.metadata_access_group,
+        )
+
+        # transitive storage groups
+        self.test_read_group.add_member(
+            self.infra.get_pulumi_name('test-full-in-test-read'), self.test_full_group
+        )
+        self.test_full_group.add_member(
+            self.infra.get_pulumi_name('analysis-group-in-test-full'),
+            self.analysis_group,
+        )
+        self.test_full_group.add_member(
+            self.infra.get_pulumi_name('full-in-test-full'), self.full_group
+        )
+        self.test_full_group.add_member(
+            self.infra.get_pulumi_name('test-in-test-full'), self.test_group
+        )
+
+        self.main_list_group.add_member(
+            self.infra.get_pulumi_name('analysis-group-in-main-list'),
+            self.analysis_group,
+        )
+        self.main_read_group.add_member(
+            self.infra.get_pulumi_name('main-create-in-main-read'),
+            self.main_create_group,
+        )
+        self.main_read_group.add_member(
+            self.infra.get_pulumi_name('data-manager-in-main-read'),
+            self.data_manager_group,
+        )
+        self.main_create_group.add_member(
+            self.infra.get_pulumi_name('standard-in-main-create'), self.standard_group
+        )
+        self.main_create_group.add_member(
+            self.infra.get_pulumi_name('full-in-main-create'), self.full_group
+        )
 
         if isinstance(self.infra, GcpInfrastructure):
             self.setup_gcp_monitoring_access()
 
     @cached_property
-    def access_group(self):
-        return self.create_group('access')
+    def data_manager_group(self):
+        return self.create_group('data-manager')
+
+    @cached_property
+    def analysis_group(self):
+        return self.create_group('analysis', cache_members=True)
+
+    @cached_property
+    def metadata_access_group(self):
+        return self.create_group('metadata-access')
 
     @cached_property
     def web_access_group(self):
-        return self.create_group('web-access')
+        return self.create_group('web-access', cache_members=True)
+
+    @cached_property
+    def upload_group(self):
+        """
+        We want people to upload machine accounts, so it makes sense for us to
+        give collaborators ONE set of credentials, and add those credentials to
+        multiple upload groups. This makes who has access to datasets
+        more transparent.
+        """
+        return self.create_group('upload')
 
     @cached_property
     def release_access_group(self):
         return self.create_group('release-access')
 
+    # access groups
+
+    @cached_property
+    def test_read_group(self):
+        return self.create_group('test-read')
+
+    @cached_property
+    def test_full_group(self):
+        return self.create_group('test-full')
+
+    @cached_property
+    def main_list_group(self):
+        return self.create_group('main-list')
+
+    @cached_property
+    def main_read_group(self):
+        return self.create_group('main-read')
+
+    @cached_property
+    def main_create_group(self):
+        return self.create_group('main-create')
+
+    @cached_property
+    def test_group(self):
+        return self.create_group('test')
+
+    @cached_property
+    def standard_group(self):
+        return self.create_group('standard')
+
+    @cached_property
+    def full_group(self):
+        return self.create_group('full')
+
     @cached_property
     def access_level_groups(self) -> dict[AccessLevel, Any]:
-        return {al: self.create_group(al) for al in ACCESS_LEVELS}
+        return {
+            'test': self.test_group,
+            'standard': self.standard_group,
+            'full': self.full_group,
+        }
 
     @staticmethod
     def get_pulumi_output_group_name(*, infra_name: str, dataset: str, kind: str):
         return f'{infra_name}-{dataset}-{kind}-group-id'
 
-    @staticmethod
-    def get_pulumi_output_storage_config_name(infra_name, dataset, access_level) -> str:
-        return '-'.join(['storage', infra_name, dataset, access_level, 'config'])
-
     def setup_web_access_group_memberships(self):
-        self.infra.add_group_member(
-            'web-access-group-access-group-membership',
-            group=self.web_access_group,
-            member=self.access_group,
+        self.web_access_group.add_member(
+            self.infra.get_pulumi_name('analysis-in-web-access'),
+            member=self.analysis_group,
         )
-
-    def setup_access_level_group_outputs(self):
-
-        if isinstance(self.infra, DryRunInfra):
-            return
-
-        kinds = {
-            'access': self.access_group,
-            **self.access_level_groups,
-        }
-
-        for kind, group in kinds.items():
-            self.output_provider.add_output(
-                self.get_pulumi_output_group_name(
-                    infra_name=self.infra.name(),
-                    dataset=self.dataset_config.dataset,
-                    kind=kind,
-                ),
-                group.id if hasattr(group, 'id') else group,
-                pulumi_export=True,
-            )
 
     def setup_access_level_group_memberships(self):
         for (
@@ -310,9 +659,10 @@ class CPGDatasetInfrastructure:
             machine_account,
         ) in self.working_machine_accounts_kind_al_account_gen():
             group = self.access_level_groups[access_level]
-            self.infra.add_group_member(
-                f'{kind}-{access_level}-access-level-group-membership',
-                group=group,
+            group.add_member(
+                self.infra.get_pulumi_name(
+                    f'{kind}-{access_level}-access-level-group-membership'
+                ),
                 member=machine_account,
             )
 
@@ -322,20 +672,20 @@ class CPGDatasetInfrastructure:
         self.infra.add_project_role(
             'project-compute-viewer',
             role='roles/compute.viewer',
-            member=self.access_group,
+            member=self.analysis_group.group,
             project=self.infra.project_id,
         )
 
         self.infra.add_project_role(
             'project-logging-viewer',
             role='roles/logging.viewer',
-            member=self.access_group,
+            member=self.analysis_group.group,
             project=self.infra.project_id,
         )
 
         self.infra.add_project_role(
             'project-monitoring-viewer',
-            member=self.access_group,
+            member=self.analysis_group.group,
             role='roles/monitoring.viewer',
         )
 
@@ -348,7 +698,7 @@ class CPGDatasetInfrastructure:
 
         self.setup_storage_common_test_access()
         self.infra.give_member_ability_to_list_buckets(
-            'project-buckets-lister', self.access_group
+            'project-buckets-lister', self.analysis_group
         )
         self.setup_storage_archive_bucket_permissions()
         self.setup_storage_main_bucket_permissions()
@@ -367,13 +717,13 @@ class CPGDatasetInfrastructure:
         self.setup_storage_outputs()
 
     def setup_storage_common_test_access(self):
-        if self.dataset_config.dataset != self.config.reference_dataset:
+        if self.dataset_config.dataset != self.config.common_dataset:
             return
 
         self.infra.add_member_to_bucket(
             self.dataset_config.dataset + '-test-accessing-main',
             bucket=self.main_bucket,
-            member=self.access_level_groups['test'],
+            member=self.test_read_group,
             membership=BucketMembership.READ,
         )
 
@@ -404,18 +754,17 @@ class CPGDatasetInfrastructure:
             },
         }
 
+        stacks_to_reference = self.root.dataset_infrastructure.get(
+            self.infra.name(), {}
+        )
         for namespace, al_buckets in buckets.items():
 
             configs_to_merge = []
             for dependent_dataset in self.dataset_config.depends_on:
-
-                configs_to_merge.append(
-                    self.output_provider.get_output(
-                        self.get_pulumi_output_storage_config_name(
-                            self.infra.name(), dependent_dataset, namespace
-                        )
-                    )
-                )
+                if config := stacks_to_reference[dependent_dataset].storage_tomls.get(
+                    namespace
+                ):
+                    configs_to_merge.append(config)
 
             prepare_config_kwargs = {}
             if configs_to_merge:
@@ -449,14 +798,11 @@ class CPGDatasetInfrastructure:
             dataset_storage_config = pulumi.output.Output.all(
                 **prepare_config_kwargs
             ).apply(_pulumi_prepare_function)
-            pulumi_export_name = self.get_pulumi_output_storage_config_name(
-                self.infra.name(), self.dataset_config.dataset, namespace
-            )
 
             # this export is important, it's how direct dependencies will be able to
             # access the nested dependencies, this export is potentially depending
             # on transitive dependencies.
-            self.output_provider.add_output(pulumi_export_name, dataset_storage_config)
+            self.storage_tomls[namespace] = dataset_storage_config
             self.add_config_toml_to_bucket(
                 namespace=namespace, contents=dataset_storage_config
             )
@@ -469,6 +815,11 @@ class CPGDatasetInfrastructure:
         :param contents: some Pulumi awaitable string
         """
         if not self.config.config_destination:
+            return
+
+        if isinstance(self.infra, DryRunInfra):
+            # we're likely not running in the pulumi engine,
+            # so skip this step
             return
 
         _infra_to_call_function_on = None
@@ -570,7 +921,7 @@ class CPGDatasetInfrastructure:
         assert isinstance(self.infra, GcpInfrastructure)
 
         kinds = {
-            'access-group': self.access_group,
+            'analysis-group': self.analysis_group,
             **self.access_level_groups,
         }
         for key, account in kinds.items():
@@ -585,7 +936,7 @@ class CPGDatasetInfrastructure:
         self.infra.add_member_to_bucket(
             'full-archive-bucket-admin',
             self.archive_bucket,
-            self.access_level_groups['full'],
+            self.full_group,
             BucketMembership.MUTATE,
         )
 
@@ -602,63 +953,84 @@ class CPGDatasetInfrastructure:
     # region MAIN BUCKETS
 
     def setup_storage_main_bucket_permissions(self):
-        # access has list permission
+        # analysis already has list permission
 
         self.infra.add_member_to_bucket(
-            'standard-main-bucket-view-create',
+            'main-read-main-bucket-read',
             self.main_bucket,
-            self.access_level_groups['standard'],
+            self.main_read_group,
+            BucketMembership.READ,
+        )
+
+        self.infra.add_member_to_bucket(
+            'main-create-main-bucket-view-create',
+            self.main_bucket,
+            self.main_create_group,
             BucketMembership.APPEND,
         )
 
         self.infra.add_member_to_bucket(
             'full-main-bucket-admin',
             self.main_bucket,
-            self.access_level_groups['full'],
+            self.full_group,
             BucketMembership.MUTATE,
         )
 
     def setup_storage_main_tmp_bucket(self):
         self.infra.add_member_to_bucket(
-            'standard-main-tmp-bucket-view-create',
+            'main-read-main-tmp-bucket-read',
             self.main_tmp_bucket,
-            self.access_level_groups['standard'],
+            self.main_read_group,
+            BucketMembership.READ,
+        )
+
+        self.infra.add_member_to_bucket(
+            'main-create-main-tmp-bucket-view-create',
+            self.main_tmp_bucket,
+            self.main_create_group,
             BucketMembership.APPEND,
         )
 
         self.infra.add_member_to_bucket(
             'full-main-tmp-bucket-admin',
             self.main_tmp_bucket,
-            self.access_level_groups['full'],
+            self.full_group,
             BucketMembership.MUTATE,
         )
 
     def setup_storage_main_analysis_bucket(self):
         self.infra.add_member_to_bucket(
-            'access-group-main-analysis-bucket-viewer',
+            'analysis-group-main-analysis-bucket-viewer',
             self.main_analysis_bucket,
-            self.access_group,
+            self.analysis_group,
+            BucketMembership.READ,
+        )
+
+        self.infra.add_member_to_bucket(
+            'main-read-main-analysis-bucket-viewer',
+            self.main_analysis_bucket,
+            self.main_read_group,
             BucketMembership.READ,
         )
         self.infra.add_member_to_bucket(
-            'standard-main-analysis-bucket-view-create',
+            'main-create-main-analysis-bucket-view-create',
             self.main_analysis_bucket,
-            self.access_level_groups['standard'],
+            self.main_create_group,
             BucketMembership.APPEND,
         )
 
         self.infra.add_member_to_bucket(
             'full-main-analysis-bucket-admin',
             self.main_analysis_bucket,
-            self.access_level_groups['full'],
+            self.full_group,
             BucketMembership.MUTATE,
         )
 
     def setup_storage_main_web_bucket_permissions(self):
         self.infra.add_member_to_bucket(
-            'access-group-main-web-bucket-viewer',
+            'analysis-group-main-web-bucket-viewer',
             self.main_web_bucket,
-            self.access_group,
+            self.analysis_group,
             BucketMembership.READ,
         )
 
@@ -672,20 +1044,21 @@ class CPGDatasetInfrastructure:
             )
 
         self.infra.add_member_to_bucket(
-            'standard-main-web-bucket-view-create',
+            'main-read-main-web-bucket-viewer',
             self.main_web_bucket,
-            self.access_level_groups['standard'],
+            self.main_read_group,
             BucketMembership.APPEND,
         )
 
         self.infra.add_member_to_bucket(
             'full-main-web-bucket-admin',
             self.main_web_bucket,
-            self.access_level_groups['full'],
+            self.full_group,
             BucketMembership.MUTATE,
         )
 
     def setup_storage_main_upload_buckets_permissions(self):
+
         for bname, main_upload_bucket in self.main_upload_buckets.items():
 
             # main_upload SA has ADMIN
@@ -696,28 +1069,35 @@ class CPGDatasetInfrastructure:
                 membership=BucketMembership.MUTATE,
             )
 
+            # upload_group has ADMIN
+            self.infra.add_member_to_bucket(
+                f'main-upload-upload-group-{bname}-bucket-admin',
+                bucket=main_upload_bucket,
+                member=self.upload_group,
+                membership=BucketMembership.MUTATE,
+            )
+
             # full GROUP has ADMIN
             self.infra.add_member_to_bucket(
                 f'full-{bname}-bucket-admin',
                 bucket=main_upload_bucket,
-                member=self.access_level_groups['full'],
+                member=self.full_group,
                 membership=BucketMembership.MUTATE,
             )
 
-            # standard GROUP has READ
             self.infra.add_member_to_bucket(
-                f'standard-{bname}-bucket-viewer',
+                f'main-read-{bname}-bucket-viewer',
                 bucket=main_upload_bucket,
-                member=self.access_level_groups['standard'],
+                member=self.main_read_group,
                 membership=BucketMembership.READ,
             )
 
             # access GROUP has VIEWER
             # (semi surprising tbh, but useful for reading uploaded metadata)
             self.infra.add_member_to_bucket(
-                f'access-group-{bname}-bucket-viewer',
+                f'analysis-group-{bname}-bucket-viewer',
                 bucket=main_upload_bucket,
-                member=self.access_group,
+                member=self.analysis_group,
                 membership=BucketMembership.READ,
             )
 
@@ -784,20 +1164,19 @@ class CPGDatasetInfrastructure:
 
         for bucket_name, bucket in buckets:
 
-            test_bucket_admins: list[tuple[str, Any]] = [
-                (f'access-group-{bucket_name}-bucket-admin', self.access_group),
-                *[
-                    (f'{access_level}-{bucket_name}-bucket-admin', group)
-                    for access_level, group in self.access_level_groups.items()
-                ],
-            ]
-            for resource_key, group in test_bucket_admins:
-                self.infra.add_member_to_bucket(
-                    resource_key,
-                    bucket,
-                    group,
-                    BucketMembership.MUTATE,
-                )
+            self.infra.add_member_to_bucket(
+                f'test-full-{bucket_name}-admin',
+                bucket,
+                self.test_full_group,
+                BucketMembership.MUTATE,
+            )
+
+            self.infra.add_member_to_bucket(
+                f'test-read-{bucket_name}-read',
+                bucket,
+                self.test_read_group,
+                BucketMembership.READ,
+            )
 
         # give web-server access to test-bucket
         if isinstance(self.infra, GcpInfrastructure):
@@ -845,9 +1224,9 @@ class CPGDatasetInfrastructure:
 
     def setup_storage_release_bucket_permissions(self):
         self.infra.add_member_to_bucket(
-            'access-group-release-bucket-viewer',
+            'analysis-group-release-bucket-viewer',
             self.release_bucket,
-            self.access_group,
+            self.analysis_group,
             BucketMembership.READ,
         )
 
@@ -861,7 +1240,7 @@ class CPGDatasetInfrastructure:
         self.infra.add_member_to_bucket(
             'full-release-bucket-admin',
             self.release_bucket,
-            self.access_level_groups['full'],
+            self.full_group,
             BucketMembership.MUTATE,
         )
 
@@ -909,7 +1288,7 @@ class CPGDatasetInfrastructure:
             )
 
     def setup_hail_wheels_bucket_permissions(self):
-        keys = {'access-group': self.access_group, **self.access_level_groups}
+        keys = {'analysis-group': self.analysis_group, **self.access_level_groups}
 
         bucket = None
         if isinstance(self.infra, GcpInfrastructure):
@@ -1025,14 +1404,16 @@ class CPGDatasetInfrastructure:
 
             # Allow the Hail service account to access its corresponding cromwell key
             if self.should_setup_hail:
-                hail_service_account = self.hail_accounts_by_access_level[access_level]
-                self.infra.add_secret_member(
-                    f'cromwell-service-account-{access_level}-self-accessor',
-                    project=self.config.analysis_runner.gcp.project,  # ANALYSIS_RUNNER_PROJECT,
-                    secret=secret,
-                    member=hail_service_account,
-                    membership=SecretMembership.ACCESSOR,
-                )
+                if hail_service_account := self.hail_accounts_by_access_level.get(
+                    access_level
+                ):
+                    self.infra.add_secret_member(
+                        f'cromwell-service-account-{access_level}-self-accessor',
+                        project=self.config.analysis_runner.gcp.project,  # ANALYSIS_RUNNER_PROJECT,
+                        secret=secret,
+                        member=hail_service_account,
+                        membership=SecretMembership.ACCESSOR,
+                    )
 
     @cached_property
     def cromwell_machine_accounts_by_access_level(self) -> dict[AccessLevel, Any]:
@@ -1050,6 +1431,7 @@ class CPGDatasetInfrastructure:
 
         # Add Hail service accounts to (premade) Cromwell access group.
         for access_level, hail_account in self.hail_accounts_by_access_level.items():
+            # premade google group, so don't manage this one
             self.infra.add_group_member(
                 f'hail-service-account-{access_level}-cromwell-access',
                 group=self.config.cromwell.gcp.access_group_id,  # CROMWELL_ACCESS_GROUP_ID,
@@ -1113,7 +1495,7 @@ class CPGDatasetInfrastructure:
             self.infra.add_project_role(
                 'project-dataproc-viewer',
                 role='roles/dataproc.viewer',
-                member=self.access_group,
+                member=self.analysis_group,
                 project=self.infra.project_id,
             )
 
@@ -1145,12 +1527,14 @@ class CPGDatasetInfrastructure:
             raise NotImplementedError
 
     @cached_property
-    def sample_metadata_groups(self) -> dict[str, Any]:
+    def sample_metadata_groups(
+        self,
+    ) -> dict[str, CPGInfrastructure.GroupProvider.Group]:
         if not self.should_setup_sample_metadata:
             return {}
 
         sm_groups = {
-            key: self.create_group(f'sample-metadata-{key}')
+            key: self.create_group(f'sample-metadata-{key}', cache_members=True)
             for key in SAMPLE_METADATA_PERMISSIONS
         }
 
@@ -1169,10 +1553,10 @@ class CPGDatasetInfrastructure:
             )
 
         self.infra.add_cloudrun_invoker(
-            f'sample-metadata-access-group-cloudrun-invoker',
+            f'sample-metadata-analysis-group-cloudrun-invoker',
             service=self.config.sample_metadata.gcp.service_name,  # SAMPLE_METADATA_SERVICE_NAME,
             project=self.config.sample_metadata.gcp.project,  # SAMPLE_METADATA_PROJECT,
-            member=self.access_group,
+            member=self.analysis_group,
         )
 
     def setup_sample_metadata_access_permissions(self):
@@ -1181,22 +1565,42 @@ class CPGDatasetInfrastructure:
         sm_access_levels: list[SampleMetadataAccessorMembership] = [
             SampleMetadataAccessorMembership(
                 name='human',
-                member=self.access_group,
+                member=self.analysis_group,
                 permissions=(SM_MAIN_READ, SM_TEST_READ, SM_TEST_WRITE),
             ),
             SampleMetadataAccessorMembership(
-                name='test',
-                member=self.access_level_groups['test'],
+                name='data-manager-group',
+                member=self.data_manager_group,
+                permissions=SAMPLE_METADATA_PERMISSIONS,
+            ),
+            SampleMetadataAccessorMembership(
+                name='metadata-group',
+                member=self.metadata_access_group,
                 permissions=(SM_MAIN_READ, SM_TEST_READ, SM_TEST_WRITE),
             ),
             SampleMetadataAccessorMembership(
-                name='standard',
-                member=self.access_level_groups['standard'],
+                name='test-read',
+                member=self.test_read_group,
+                permissions=(SM_MAIN_READ, SM_TEST_READ, SM_TEST_WRITE),
+            ),
+            SampleMetadataAccessorMembership(
+                name='test-write',
+                member=self.test_full_group,
+                permissions=(SM_MAIN_READ, SM_TEST_READ, SM_TEST_WRITE),
+            ),
+            SampleMetadataAccessorMembership(
+                name='main-read',
+                member=self.main_create_group,
+                permissions=(SM_MAIN_READ,),
+            ),
+            SampleMetadataAccessorMembership(
+                name='main-write',
+                member=self.test_full_group,
                 permissions=(SM_MAIN_READ, SM_MAIN_WRITE),
             ),
             SampleMetadataAccessorMembership(
                 name='full',
-                member=self.access_level_groups['full'],
+                member=self.full_group,
                 permissions=SAMPLE_METADATA_PERMISSIONS,
             ),
             # allow the analysis-runner logging cloud function to update the sample-metadata project
@@ -1230,9 +1634,10 @@ class CPGDatasetInfrastructure:
 
         for name, member, permission in sm_access_levels:
             for kind in permission:
-                self.infra.add_group_member(
-                    f'sample-metadata-{kind}-{name}-access-level-group-membership',
-                    group=self.sample_metadata_groups[kind],
+                self.sample_metadata_groups[kind].add_member(
+                    self.infra.get_pulumi_name(
+                        f'sample-metadata-{kind}-{name}-group-membership'
+                    ),
                     member=member,
                 )
 
@@ -1258,7 +1663,7 @@ class CPGDatasetInfrastructure:
 
         # mostly because this current format requires the project_id
         custom_container_registry = self.infra.create_container_registry('images')
-        accounts = {'access': self.access_group, **self.access_level_groups}
+        accounts = {'access': self.analysis_group, **self.access_level_groups}
         for kind, account in accounts.items():
             self.infra.add_member_to_container_registry(
                 f'{kind}-images-reader-in-container-registry',
@@ -1297,7 +1702,7 @@ class CPGDatasetInfrastructure:
         ]
 
         kinds = {
-            'access-group': self.access_group,
+            'analysis-group': self.analysis_group,
             **self.access_level_groups,
         }
 
@@ -1327,14 +1732,13 @@ class CPGDatasetInfrastructure:
         self.infra.add_member_to_machine_account_access(
             'notebook-account-users',
             machine_account=self.notebook_account,
-            member=self.access_group,
+            member=self.analysis_group,
         )
 
         # Grant the notebook account the same permissions as the access group members.
-        self.infra.add_group_member(
-            'notebook-service-account-access-group-member',
-            self.access_group,
-            self.notebook_account,
+        self.analysis_group.add_member(
+            self.infra.get_pulumi_name('notebook-service-account-group-member'),
+            member=self.notebook_account,
         )
 
         if isinstance(self.infra, GcpInfrastructure):
@@ -1373,14 +1777,14 @@ class CPGDatasetInfrastructure:
 
         assert isinstance(self.infra, GcpInfrastructure)
         self.infra.add_cloudrun_invoker(
-            f'analysis-runner-access-invoker',
+            f'analysis-runner-analysis-invoker',
             project=self.config.analysis_runner.gcp.project,  # ANALYSIS_RUNNER_PROJECT,
             service=self.config.analysis_runner.gcp.cloud_run_instance_name,  # ANALYSIS_RUNNER_CLOUD_RUN_INSTANCE_NAME,
-            member=self.access_group,
+            member=self.analysis_group,
         )
 
     def setup_analysis_runner_config_access(self):
-        keys = {'access-group': self.access_group, **self.access_level_groups}
+        keys = {'analysis-group': self.analysis_group, **self.access_level_groups}
 
         for key, group in keys.items():
             self.infra.add_member_to_bucket(
@@ -1447,104 +1851,6 @@ class CPGDatasetInfrastructure:
 
     # region ACCESS GROUP CACHE
 
-    def setup_group_cache(self):
-        if not isinstance(self.infra, GcpInfrastructure):
-            return
-
-        self.setup_group_cache_access_group()
-        self.setup_group_cache_web_access_group()
-        self.setup_group_cache_sample_metadata_secrets()
-
-    def _setup_group_cache_secret(self, *, group, key, secret_name: str = None):
-        self.infra.add_group_member(
-            f'group-cache-{key}-membership',
-            group,
-            self.config.access_group_cache.process_machine_account,  # ACCESS_GROUP_CACHE_SERVICE_ACCOUNT,
-        )
-        group_cache_secret = self.infra.create_secret(
-            secret_name or f'{key}-group-cache-secret',
-        )
-        # Modify access_group_cache secret
-        self.infra.add_secret_member(
-            f'{key}-group-cache-secret-version-manager',
-            group_cache_secret,
-            self.config.access_group_cache.process_machine_account,  # ACCESS_GROUP_CACHE_SERVICE_ACCOUNT,
-            SecretMembership.ADMIN,
-        )
-
-        self.infra.add_secret_member(
-            f'{key}-group-cache-secret-accessor',
-            group_cache_secret,
-            self.config.access_group_cache.process_machine_account,  # ACCESS_GROUP_CACHE_SERVICE_ACCOUNT,
-            SecretMembership.ACCESSOR,
-        )
-
-        return group_cache_secret
-
-    def setup_group_cache_access_group(self):
-        # Allow list of access-group
-
-        for key, group in self.access_level_groups.items():
-            # setup secret
-            _ = self._setup_group_cache_secret(
-                group=group,
-                key=key,
-                secret_name=f'{self.dataset_config.dataset}-{key}-members-cache',
-            )
-
-        # analysis-runner view contents of access-groups
-
-        access_secret = self._setup_group_cache_secret(
-            group=self.access_group,
-            key='access',
-            secret_name=f'{self.dataset_config.dataset}-access-members-cache',
-        )
-        self.infra.add_secret_member(
-            f'analysis-runner-access-group-cache-secret-accessor',
-            access_secret,
-            self.config.analysis_runner.gcp.server_machine_account,  # ANALYSIS_RUNNER_SERVICE_ACCOUNT,
-            SecretMembership.ACCESSOR,
-        )
-
-    def setup_group_cache_sample_metadata_secrets(self):
-        """
-        sample-metadata-main-read-group-cache-secret
-        sample-metadata-main-write-group-cache-secret
-        sample-metadata-test-read-group-cache-secret
-        sample-metadata-test-write-group-cache-secret
-                :return:
-        """
-        for key, sm_group in self.sample_metadata_groups.items():
-            secret = self._setup_group_cache_secret(
-                group=sm_group,
-                key=f'sample-metadata-{key}',
-                # oops, shouldn't have included the dataset in the original
-                # secret name, will be fixed by the new group-cache anyway
-                secret_name=f'{self.dataset_config.dataset}-sample-metadata-{key}-members-cache',
-            )
-
-            self.infra.add_secret_member(
-                f'sample-metadata-{key}-api-secret-accessor',
-                secret,
-                self.config.sample_metadata.gcp.machine_account,  # SAMPLE_METADATA_API_SERVICE_ACCOUNT,
-                SecretMembership.ACCESSOR,
-            )
-
-    def setup_group_cache_web_access_group(self):
-        # Allow list of access-group
-        secret = self._setup_group_cache_secret(
-            group=self.web_access_group,
-            key='web-access',
-            secret_name=f'{self.dataset_config.dataset}-web-access-members-cache',
-        )
-
-        self.infra.add_secret_member(
-            'web-server-web-access-group-cache-secret-accessor',
-            secret,
-            self.config.web_service.gcp.server_machine_account,  # WEB_SERVER_SERVICE_ACCOUNT,
-            SecretMembership.ACCESSOR,
-        )
-
     # endregion ACCESS GROUP CACHE
     # region DEPENDENCIES
 
@@ -1556,36 +1862,62 @@ class CPGDatasetInfrastructure:
         # duplicate reference to avoid mutating config
         dependencies = list(self.dataset_config.depends_on)
 
-        if self.dataset_config.dataset != self.config.reference_dataset:
-            dependencies.append(self.config.reference_dataset)
+        if (
+            self.config.common_dataset
+            and self.dataset_config.dataset != self.config.common_dataset
+        ):
+            dependencies.append(self.config.common_dataset)
 
         for dependency in dependencies:
 
-            self.infra.add_group_member(
-                resource_key=f'{dependency}-access-group',
-                group=self.output_provider.get_output(
-                    self.get_pulumi_output_group_name(
-                        infra_name=self.infra.name(), dataset=dependency, kind='access'
-                    )
-                ),
-                member=self.access_group,
-            )
+            # Adding dependent groups in two ways for reference:
 
-            for access_level, primary_access_group in self.access_level_groups.items():
-                dependency_group_id = self.output_provider.get_output(
-                    self.get_pulumi_output_group_name(
-                        infra_name=self.infra.name(),
-                        dataset=dependency,
-                        kind=access_level,
+            transitive_groups = [
+                self.test_read_group,
+                self.test_read_group,
+                self.test_full_group,
+                self.main_list_group,
+                self.main_read_group,
+                self.main_create_group,
+                self.full_group,
+            ]
+
+            for group in transitive_groups:
+                group_name = group.name.removeprefix(self.dataset_config.dataset + '-')
+                transitive_group = self.group_provider.get_group(
+                    self.infra.name(), f'{dependency}-{group_name}'
+                )
+                transitive_group.add_member(
+                    self.infra.get_pulumi_name(
+                        f'transitive-{group_name}-in-{dependency}-{group_name}'
                     ),
+                    group,
                 )
 
-                # add this dataset to dependencies membership
-                self.infra.add_group_member(
-                    f'{dependency}-{access_level}-access-level-group',
-                    dependency_group_id,
-                    primary_access_group,
+        for dependency in self.dataset_config.depends_on_readonly:
+            group_map = {
+                'test-read': [
+                    self.test_read_group,
+                    self.test_full_group,
+                ],
+                'main-read': [
+                    self.main_read_group,
+                    self.main_create_group,
+                    self.full_group,
+                ],
+                'main-list': [self.main_list_group],
+            }
+            for target_group, groups in group_map.items():
+                transitive_group = self.group_provider.get_group(
+                    self.infra.name(), f'{dependency}-{target_group}'
                 )
+                for group in groups:
+                    transitive_group.add_member(
+                        self.infra.get_pulumi_name(
+                            f'transitive-{group.name}-in-{dependency}-{target_group}'
+                        ),
+                        group,
+                    )
 
     # endregion DEPENDENCIES
     # region UTILS
@@ -1615,17 +1947,12 @@ class CPGDatasetInfrastructure:
 
 
 def test():
+    infra_config_dict = dict(cpg_utils.config.get_config())
+    infra_config_dict['infrastructure']['reference_dataset'] = 'fewgenomes'
+    infra_config = CPGInfrastructureConfig.from_dict(infra_config_dict)
 
-    locations: list[Type[CloudInfraBase]] = [
-        DryRunInfra,
-        # GcpInfrastructure,
-        # AzureInfra,
-    ]
-    infra_config = CPGInfrastructureConfig.from_dict(cpg_utils.config.get_config())
-    infra = CPGInfrastructure(infra_config)
-    for _loc in locations:
-
-        _config = CPGDatasetConfig(
+    configs = [
+        CPGDatasetConfig(
             dataset='fewgenomes',
             deploy_locations=['dry-run'],
             gcp=CPGDatasetConfig.Gcp(
@@ -1635,12 +1962,9 @@ def test():
                 hail_service_account_full='fewgenomes-full@service-account',
             ),
         )
-        CPGDatasetInfrastructure(
-            config=infra_config,
-            output_provider=infra.output_provider,
-            infra=_loc(infra_config, _config),
-            dataset_config=_config,
-        ).main()
+    ]
+    infra = CPGInfrastructure(infra_config, configs)
+    infra.main()
 
 
 if __name__ == '__main__':

@@ -29,6 +29,7 @@ class DeserializableDataclass:
             value = self.__dict__.get(fieldname)
             if not value:
                 continue
+
             dtypes = []
             # determine which type we should try to parse the value as
             # handle unions (eg: None | DType)
@@ -44,6 +45,8 @@ class DeserializableDataclass:
                     continue
 
             elif issubclass(ftype, DeserializableDataclass):
+                if isinstance(value, ftype):
+                    continue
                 dtypes.append(ftype)
 
             e = None
@@ -77,6 +80,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         region: str
         billing_project_id: str
         billing_account_id: int
+        groups_domain: str
         budget_notification_pubsub: str | None
         config_bucket_name: str
 
@@ -148,7 +152,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     domain: str
     dataset_storage_prefix: str
     budget_currency: str
-    reference_dataset: str
+    common_dataset: str
     web_url_template: str
 
     config_destination: str
@@ -267,6 +271,7 @@ class CPGDatasetConfig(DeserializableDataclass):
     shared_project_budget: int = None
     # give access for this dataset to access any other it depends on
     depends_on: list[str] = dataclasses.field(default_factory=list)
+    depends_on_readonly: list[str] = dataclasses.field(default_factory=list)
 
     # extra places that collaborators can upload data too
     additional_upload_buckets: list[str] = dataclasses.field(default_factory=list)
