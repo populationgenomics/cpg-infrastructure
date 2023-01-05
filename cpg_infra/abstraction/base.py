@@ -66,17 +66,11 @@ class CloudInfraBase(ABC):
     """
 
     def __init__(
-        self, config: CPGInfrastructureConfig, dataset_config: CPGDatasetConfig | None
+        self, config: CPGInfrastructureConfig, dataset_config: CPGDatasetConfig
     ):
         super().__init__()
         self.config = config
-        self._dataset_config = dataset_config
-
-    @property
-    def dataset_config(self) -> CPGDatasetConfig:
-        if not self._dataset_config:
-            raise AttributeError('Dataset config was not provided')
-        return self._dataset_config
+        self.dataset_config = dataset_config
 
     @property
     def dataset(self):
@@ -347,7 +341,7 @@ class DryRunInfra(CloudInfraBase):
 
     def create_group(self, name: str) -> Any:
         print(f'Creating Group: {name}')
-        return name + '@populationgenomics.org.au'
+        return f'{name}@{self.config.gcp.groups_domain}'
 
     def add_group_member(
         self, resource_key: str, group, member, unique_resource_key: bool = False
