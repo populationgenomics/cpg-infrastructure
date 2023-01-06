@@ -173,6 +173,10 @@ class CPGInfrastructure:
         ] = defaultdict()
 
     def resolve_dataset_order(self):
+        """
+        This is now obsolete because we setup all datasets, and then deploy
+        so they all exist before the actual deploy.
+        """
         reference_dataset = (
             [self.config.common_dataset] if self.config.common_dataset else []
         )
