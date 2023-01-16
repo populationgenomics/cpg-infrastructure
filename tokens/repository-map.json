@@ -17,6 +17,9 @@
         "automated-interpretation-pipeline",
         "rare-disease"
     ],
+    "broad-rgp": [
+        "automated-interpretation-pipeline"
+    ],
     "circa": [
         "automated-interpretation-pipeline",
         "rare-disease"
