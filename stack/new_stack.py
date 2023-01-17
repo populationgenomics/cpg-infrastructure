@@ -174,7 +174,7 @@ def main(
 
     if not re.fullmatch(GCP_PROJECT_REGEX, _gcp_project):
         components = [
-            f'The GCP project ID "{_gcp_project}" must be between 6 and 30 characters'
+            f'The GCP project ID {_gcp_project!r} must be between 6 and 30 characters'
         ]
         if len(_gcp_project) < 6:
             components.append('consider adding the --add-random-digits-to-gcp-id flag')
@@ -205,7 +205,7 @@ def main(
             gcp_assign_billing_account(_gcp_project)
             gcp_create_budget(_gcp_project, amount=budgets[Cloud.GCP])
 
-    logging.info(f'Creating dataset "{dataset}" with GCP id {_gcp_project}.')
+    logging.info(f'Creating dataset {dataset!r} with GCP id {_gcp_project!r}.')
 
     create_sample_metadata_project(dataset, _gcp_project)
 

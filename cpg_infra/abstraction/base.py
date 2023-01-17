@@ -352,7 +352,7 @@ class DryRunInfra(CloudInfraBase):
         processor: Callable[[Any], Any] = None,
     ):
         _processor = processor or (lambda el: el)
-        return f'{resource_key} :: {secret}.add_version("{_processor(contents)}")'
+        return f'{resource_key} :: {secret}.add_version({_processor(contents)!r})'
 
     def add_member_to_container_registry(
         self, resource_key: str, registry, member, membership, project=None
@@ -368,7 +368,7 @@ class DryRunInfra(CloudInfraBase):
         return f'Fake://{bucket}'
 
     def add_blob_to_bucket(self, resource_name, bucket, output_name, contents):
-        return f'Add blob to FAKE://{bucket}/{output_name} < "{contents}"'
+        return f'Add blob to FAKE://{bucket}/{output_name} < {contents!r}'
 
     def create_container_registry(self, name: str):
         return f'ContainerRegistry: {name}'
