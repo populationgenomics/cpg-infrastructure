@@ -254,6 +254,9 @@ perth-neuro:
   shared_project_budget: 100
 prophecy:
   archive_age: 90
+  depends_on:
+  - hgdp
+  - thousand-genomes
   enable_release: true
   enable_shared_project: 'true'
   shared_project_budget: 250
