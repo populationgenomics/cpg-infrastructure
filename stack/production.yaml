@@ -153,7 +153,7 @@ ibmdx:
     project: ibmdx-501430
 kccg-genomics-med:
   archive_age: 90
-  depends_on:
+  depends_on_readonly:
   - tob-wgs
   enable_release: false
   gcp:
