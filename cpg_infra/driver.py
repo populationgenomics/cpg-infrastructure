@@ -498,9 +498,12 @@ class CPGDatasetInfrastructure:
             d = yaml.safe_load(f)
 
         def compute_hash(s):
-            # add a salt so you can't track members through the resource names
-            # between different stacks - a small obfuscation.
-            return xxhash.xxh32((self.dataset_config.dataset + s).encode()).hexdigest()
+            initials = ''.join(n[0] for n in s.split('.')).upper()
+            # I was going to say "add a salt", but we're displaying the initials,
+            # so let's call it something like salt, monosodium glutamate ;)
+            msg = self.dataset_config.dataset + s
+            computed_hash = xxhash.xxh32(msg.encode()).hexdigest()
+            return initials + '-' + computed_hash
 
         for group in groups:
             group_name = group.name.removeprefix(self.dataset_config.dataset + '-')
