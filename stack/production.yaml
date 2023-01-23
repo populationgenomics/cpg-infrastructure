@@ -254,7 +254,12 @@ perth-neuro:
   shared_project_budget: 100
 prophecy:
   archive_age: 90
+  depends_on:
+  - hgdp
+  - thousand-genomes
   enable_release: true
+  enable_shared_project: 'true'
+  shared_project_budget: 250
   gcp:
     hail_service_account_full: prophecy-full-674@hail-295901.iam.gserviceaccount.com
     hail_service_account_standard: prophecy-standard-432@hail-295901.iam.gserviceaccount.com
