@@ -268,21 +268,31 @@ class CPGInfrastructure:
                         unique_resource_key=True,
                     )
 
+                def _process_members(members):
+                    # use .sort twice because python sort is in place and stable
+                    # sort on first bit of email second
+                    # sort on domains (higher priority)
+
+                    _sorted_members = list(set(members))
+                    _sorted_members.sort(key=lambda m: m.split('@')[0])
+                    _sorted_members.sort(key=lambda m: m.split('@')[1])
+                    return '\n'.join(_sorted_members)
+
                 if group.cache_members and isinstance(infra, GcpInfrastructure):
                     _members = self.group_provider.resolve_group_members(group)
                     member_ids = [infra.member_id(m) for m in _members]
                     if all(isinstance(m, str) for m in member_ids):
-                        members_contents = '\n'.join(member_ids)
+                        members_contents = _process_members(member_ids)
                     else:
                         members_contents = pulumi.Output.all(*member_ids).apply(
-                            '\n'.join
+                            _process_members
                         )
 
                     # we'll create a blob with the members of the groups
                     infra.add_blob_to_bucket(
                         f'{group.name}-group-cache-members',
-                        bucket=self.access_cache_bucket,
-                        contents=members_contents,
+                        bucket=self.members_cache_bucket,
+                        contents=members_contents or '',
                         output_name=f'{group.name}-members.txt',
                     )
 
@@ -291,19 +301,22 @@ class CPGInfrastructure:
     # region ACCESS_CACHE
 
     @cached_property
-    def access_cache_bucket(self):
+    def members_cache_bucket(self):
         reference_infra = self.dataset_infrastructure['gcp'][self.config.common_dataset]
         return reference_infra.infra.create_bucket(
-            'cpg-members-group-cache', unique=True, versioning=True, lifecycle_rules=[]
+            f'{self.config.dataset_storage_prefix}members-group-cache',
+            unique=True,
+            versioning=True,
+            lifecycle_rules=[],
         )
 
     def setup_access_cache_bucket(self):
         reference_infra = self.dataset_infrastructure['gcp'][self.config.common_dataset]
 
-        access_group_cache_accessors = []
+        group_cache_accessors = []
 
         if self.config.analysis_runner:
-            access_group_cache_accessors.append(
+            group_cache_accessors.append(
                 (
                     'analysis-runner',
                     self.config.analysis_runner.gcp.server_machine_account,
@@ -311,20 +324,20 @@ class CPGInfrastructure:
             )
 
         if self.config.sample_metadata:
-            access_group_cache_accessors.append(
+            group_cache_accessors.append(
                 ('sample-metadata', self.config.sample_metadata.gcp.machine_account)
             )
 
         if self.config.web_service:
-            access_group_cache_accessors.append(
+            group_cache_accessors.append(
                 ('web-service', self.config.web_service.gcp.server_machine_account)
             )
 
-        for key, account in access_group_cache_accessors:
+        for key, account in group_cache_accessors:
 
             reference_infra.infra.add_member_to_bucket(
                 f'{key}-members-group-cache-accessor',
-                bucket=self.access_cache_bucket,
+                bucket=self.members_cache_bucket,
                 member=account,
                 membership=BucketMembership.READ,
             )
@@ -495,24 +508,29 @@ class CPGDatasetInfrastructure:
             return
 
         with open(filepath, encoding='utf-8') as f:
-            d = yaml.safe_load(f)
-
-        def compute_hash(s):
-            initials = ''.join(n[0] for n in s.split('.')).upper()
-            # I was going to say "add a salt", but we're displaying the initials,
-            # so let's call it something like salt, monosodium glutamate ;)
-            msg = self.dataset_config.dataset + s
-            computed_hash = xxhash.xxh32(msg.encode()).hexdigest()
-            return initials + '-' + computed_hash
+            d = yaml.safe_load(f) or {}
 
         for group in groups:
             group_name = group.name.removeprefix(self.dataset_config.dataset + '-')
             for member in d.get(group_name, []):
-                h = compute_hash(member)
+                h = self.compute_hash(self.dataset_config.dataset, member)
                 group.add_member(
                     self.infra.get_pulumi_name(f'{group.name}-member-{h}'),
                     member,
                 )
+
+    @staticmethod
+    def compute_hash(dataset, member):
+        """
+        >>> CPGDatasetInfrastructure.compute_hash('dataset', 'hello.world@email.com')
+        'HW-d51b65ee'
+        """
+        initials = ''.join(n[0] for n in member.split('@')[0].split('.')).upper()
+        # I was going to say "add a salt", but we're displaying the initials,
+        # so let's call it something like salt, monosodium glutamate ;)
+        msg = dataset + member
+        computed_hash = xxhash.xxh32(msg.encode()).hexdigest()
+        return initials + '-' + computed_hash
 
     # endregion
 
@@ -801,7 +819,7 @@ class CPGDatasetInfrastructure:
                 def _pulumi_prepare_function(arg):
                     return self._pulumi_prepare_storage_outputs_test_function(arg)
 
-            # This is an pulumi.Output[String]
+            # This is a pulumi.Output[String]
             dataset_storage_config = pulumi.output.Output.all(
                 **prepare_config_kwargs
             ).apply(_pulumi_prepare_function)
@@ -1670,7 +1688,7 @@ class CPGDatasetInfrastructure:
 
         # mostly because this current format requires the project_id
         custom_container_registry = self.infra.create_container_registry('images')
-        accounts = {'access': self.analysis_group, **self.access_level_groups}
+        accounts = {'analysis': self.analysis_group, **self.access_level_groups}
         for kind, account in accounts.items():
             self.infra.add_member_to_container_registry(
                 f'{kind}-images-reader-in-container-registry',
