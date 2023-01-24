@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from cloudpathlib import AnyPath
 from cpg_utils.config import get_config
 from cpg_utils.hail_batch import dataset_path
