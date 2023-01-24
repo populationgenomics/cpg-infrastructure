@@ -85,7 +85,6 @@ class CPGInfrastructure:
                 self.members: dict[str, Any] = members
 
             def add_member(self, resource_key, member):
-                # print(f'{resource_key} :: {self.name}.add_member({member})')
                 if isinstance(member, type(self)):
                     if member.name == self.name:
                         raise ValueError(f'Cannot add self to group {self.name}')
