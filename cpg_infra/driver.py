@@ -191,9 +191,11 @@ class CPGInfrastructure:
 
     def main(self):
         self.setup_common_dataset()
-        self.setup_access_cache_bucket()
+        self.setup_gcp_access_cache_bucket()
         self.deploy_datasets()
         self.finalize_groups()
+
+        self.output_infrastructure_config()
 
     def setup_common_dataset(self):
         infra_map: dict[str, Type[CloudInfraBase]] = {
@@ -291,17 +293,47 @@ class CPGInfrastructure:
                     # we'll create a blob with the members of the groups
                     infra.add_blob_to_bucket(
                         f'{group.name}-group-cache-members',
-                        bucket=self.members_cache_bucket,
+                        bucket=self.gcp_members_cache_bucket,
                         contents=members_contents or '',
                         output_name=f'{group.name}-members.txt',
                     )
 
     # dataset agnostic infrastructure
 
+    def build_infrastructure_config_output(self) -> dict:
+        reference_infra = self.dataset_infrastructure['gcp'][self.config.common_dataset]
+        return {
+            'members_cache_location': reference_infra.infra.bucket_output_path(self.gcp_members_cache_bucket),
+        }
+
+    def output_infrastructure_config(self):
+        # we'll only do it on GCP for now
+        reference_infra = self.dataset_infrastructure['gcp'][self.config.common_dataset]
+
+        items = self.build_infrastructure_config_output().items()
+
+        def _build_config(values):
+            """Build config from pulumi awaited values"""
+            keys = [v[0] for v in items]
+            # nest in .infrastructure
+            d = {'infrastructure': dict(zip(keys, values))}
+            return toml.dumps(d)
+
+        infra_config = pulumi.Output.all(*[v[1] for v in items]).apply(
+            _build_config
+        )
+        reference_infra.infra.add_blob_to_bucket(
+            'infrastructure-config',
+            bucket=self.config.config_destination,
+            contents=infra_config,
+            output_name='infrastructure.toml'
+        )
+
+
     # region ACCESS_CACHE
 
     @cached_property
-    def members_cache_bucket(self):
+    def gcp_members_cache_bucket(self):
         reference_infra = self.dataset_infrastructure['gcp'][self.config.common_dataset]
         return reference_infra.infra.create_bucket(
             f'{self.config.dataset_storage_prefix}members-group-cache',
@@ -310,7 +342,7 @@ class CPGInfrastructure:
             lifecycle_rules=[],
         )
 
-    def setup_access_cache_bucket(self):
+    def setup_gcp_access_cache_bucket(self):
         reference_infra = self.dataset_infrastructure['gcp'][self.config.common_dataset]
 
         group_cache_accessors = []
@@ -337,7 +369,7 @@ class CPGInfrastructure:
 
             reference_infra.infra.add_member_to_bucket(
                 f'{key}-members-group-cache-accessor',
-                bucket=self.members_cache_bucket,
+                bucket=self.gcp_members_cache_bucket,
                 member=account,
                 membership=BucketMembership.READ,
             )
@@ -873,6 +905,7 @@ class CPGDatasetInfrastructure:
         name = f'{self.infra.name()}-{self.dataset_config.dataset}-{namespace}'
         output_name = os.path.join(
             suffix,
+            'storage',
             f'{self.infra.name()}/{self.dataset_config.dataset}-{namespace}' + '.toml',
         )
 
