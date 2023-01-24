@@ -6,7 +6,7 @@ config = get_config()
 
 def write():
     try:
-        with AnyPath(dataset_path('mfranklin-infra-test/file.txt')).open('w+') as f:
+        with AnyPath(dataset_path('mfranklin-infra-test/file.txt', access_level='full')).open('w+') as f:
             f.write('Hello, world!')
 
         return True
@@ -15,7 +15,7 @@ def write():
 
 def read():
     try:
-        with AnyPath(dataset_path('mfranklin-infra-test/file.txt')).open() as f:
+        with AnyPath(dataset_path('mfranklin-infra-test/file.txt', access_level='full')).open() as f:
             contents = f.readline()
             print(f'Received contents: {contents!r}')
         return True
