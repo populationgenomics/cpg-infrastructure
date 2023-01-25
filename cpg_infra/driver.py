@@ -275,8 +275,8 @@ class CPGInfrastructure:
                     # sort on domains (higher priority)
 
                     _sorted_members = list(set(members))
-                    _sorted_members.sort(key=lambda m: m.split('@')[0])
-                    _sorted_members.sort(key=lambda m: m.split('@')[1])
+                    _sorted_members.sort(key=lambda m_: m_.split('@')[0])
+                    _sorted_members.sort(key=lambda m_: m_.split('@')[1])
                     return '\n'.join(_sorted_members)
 
                 if group.cache_members and isinstance(infra, GcpInfrastructure):
@@ -302,7 +302,9 @@ class CPGInfrastructure:
     def build_infrastructure_config_output(self) -> dict:
         reference_infra = self.dataset_infrastructure['gcp'][self.config.common_dataset]
         return {
-            'members_cache_location': reference_infra.infra.bucket_output_path(self.gcp_members_cache_bucket),
+            'members_cache_location': reference_infra.infra.bucket_output_path(
+                self.gcp_members_cache_bucket
+            ),
         }
 
     def output_infrastructure_config(self):
@@ -318,16 +320,13 @@ class CPGInfrastructure:
             d = {'infrastructure': dict(zip(keys, values))}
             return toml.dumps(d)
 
-        infra_config = pulumi.Output.all(*[v[1] for v in items]).apply(
-            _build_config
-        )
+        infra_config = pulumi.Output.all(*[v[1] for v in items]).apply(_build_config)
         reference_infra.infra.add_blob_to_bucket(
             'infrastructure-config',
             bucket=self.config.config_destination,
             contents=infra_config,
-            output_name='infrastructure.toml'
+            output_name='infrastructure.toml',
         )
-
 
     # region ACCESS_CACHE
 
