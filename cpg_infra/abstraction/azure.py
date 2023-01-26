@@ -332,13 +332,20 @@ class AzureInfra(CloudInfraBase):
 
     @staticmethod
     def _get_principal_type(obj):
+        # it's a 'cpg_infra.driver.CPGInfrastructure.GroupProvider.Group'
+        if hasattr(obj, 'is_group') and hasattr(obj, 'group'):
+            # cheeky catch for internal group
+            return AzureInfra._get_principal_type(obj.group)
+
         if isinstance(obj, az.managedidentity.UserAssignedIdentity):
             return 'ServicePrincipal'
         if isinstance(obj, azuread.group.Group):
             return 'Group'
+        if isinstance(obj, str):
+            # we don't have cases yet where we want to add a user by string, so sort of kludge
+            return 'ServicePrincipal'
 
-        # we don't have cases yet where we want to add a user by string, so sort of kludge
-        return 'ServicePrincipal'
+        raise ValueError(f'Unrecognised principal {obj} (type: {type(obj)})')
 
     def add_blob_to_bucket(self, resource_name, bucket, output_name, contents):
         raise NotImplementedError
