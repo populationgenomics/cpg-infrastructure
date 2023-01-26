@@ -2,6 +2,7 @@ encryptionsalt: v1:5XCoeF4ZR7Y=:v1:qSkpXOsdeu3/2u5u:3+lAw+SPKOJpKrnd4BCFHacE+OEi
 config:
   datasets:customer_id: C010ys3gt
   datasets:dataset_config_path: "production.yaml"
+  datasets:infrastructure_config: "cpg.toml"
   gcp:project: billing-admin-290403
   gcp:billing_project: billing-admin-290403
   gcp:user_project_override: "true"
