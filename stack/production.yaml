@@ -259,7 +259,7 @@ prophecy:
   - thousand-genomes
   enable_release: true
   enable_shared_project: 'true'
-  shared_project_budget: 250
+  shared_project_budget: 8300
   gcp:
     hail_service_account_full: prophecy-full-674@hail-295901.iam.gserviceaccount.com
     hail_service_account_standard: prophecy-standard-432@hail-295901.iam.gserviceaccount.com
