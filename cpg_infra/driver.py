@@ -192,8 +192,9 @@ class CPGInfrastructure:
         self.setup_common_dataset()
         self.setup_gcp_access_cache_bucket()
         self.deploy_datasets()
-        self.finalize_groups()
+        self.setup_gcp_sample_metadata_cloudrun_invoker()
 
+        self.finalize_groups()
         self.output_infrastructure_config()
 
     def setup_common_dataset(self):
@@ -371,6 +372,26 @@ class CPGInfrastructure:
                 member=account,
                 membership=BucketMembership.READ,
             )
+
+    @cached_property
+    def gcp_sample_metadata_invoker_group(self):
+        infra = self.dataset_infrastructure['gcp'][self.config.common_dataset].infra
+
+        return self.group_provider.create_group(
+            infra, cache_members=False, name='sample-metadata-invokers'
+        )
+
+    def setup_gcp_sample_metadata_cloudrun_invoker(self):
+        # pylint: disable
+        infra: GcpInfrastructure = self.dataset_infrastructure['gcp'][
+            self.config.common_dataset
+        ].infra
+        infra.add_cloudrun_invoker(
+            f'sample-metadata-cloudrun-invokers',
+            service=self.config.sample_metadata.gcp.service_name,  # SAMPLE_METADATA_SERVICE_NAME,
+            project=self.config.sample_metadata.gcp.project,  # SAMPLE_METADATA_PROJECT,
+            member=self.gcp_sample_metadata_invoker_group,
+        )
 
 
 class CPGDatasetInfrastructure:
@@ -1600,20 +1621,13 @@ class CPGDatasetInfrastructure:
         # now we give the sample_metadata_access_group access to cloud-run instance
         assert isinstance(self.infra, GcpInfrastructure)
 
-        for sm_type, group in self.sample_metadata_groups.items():
-            self.infra.add_cloudrun_invoker(
-                f'sample-metadata-{sm_type}-cloudrun-invoker',
-                service=self.config.sample_metadata.gcp.service_name,  # SAMPLE_METADATA_SERVICE_NAME,
-                project=self.config.sample_metadata.gcp.project,  # SAMPLE_METADATA_PROJECT,
-                member=group,
-            )
-
-        self.infra.add_cloudrun_invoker(
-            f'sample-metadata-analysis-group-cloudrun-invoker',
-            service=self.config.sample_metadata.gcp.service_name,  # SAMPLE_METADATA_SERVICE_NAME,
-            project=self.config.sample_metadata.gcp.project,  # SAMPLE_METADATA_PROJECT,
-            member=self.analysis_group,
+        self.root.gcp_sample_metadata_invoker_group.add_member(
+            f'sample-metadata-analysis-invoker', self.analysis_group
         )
+        for sm_type, group in self.sample_metadata_groups.items():
+            self.root.gcp_sample_metadata_invoker_group.add_member(
+                f'sample-metadata-{sm_type}-invoker', group
+            )
 
     def setup_sample_metadata_access_permissions(self):
         if not self.should_setup_sample_metadata:
