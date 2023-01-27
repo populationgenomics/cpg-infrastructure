@@ -565,9 +565,17 @@ class CPGDatasetInfrastructure:
         with open(filepath, encoding='utf-8') as f:
             d = yaml.safe_load(f) or {}
 
+        # TODO: fix "the group does not allow members outside the organization"
         for group in groups:
             group_name = group.name.removeprefix(self.dataset_config.dataset + '-')
             for member in d.get(group_name, []):
+
+                valid_extensions = ['populationgenomics.org.au', '.gserviceaccount.com']
+                if not any(member.endswith(ext) for ext in valid_extensions):
+                    print(f'GROUP MEMBERS OUTSIDE ORGANISATION, Skipping {member}')
+                    continue
+
+
                 h = self.compute_hash(self.dataset_config.dataset, member)
                 group.add_member(
                     self.infra.get_pulumi_name(f'{group.name}-member-{h}'),
