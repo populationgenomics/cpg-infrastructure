@@ -275,28 +275,30 @@ class CPGInfrastructure:
                     # sort on first bit of email second
                     # sort on domains (higher priority)
 
-                    _sorted_members = list(set(members))
+                    _sorted_members = list(set(str(m) for m in members))
                     _sorted_members.sort(key=lambda m_: m_.split('@')[0])
                     _sorted_members.sort(key=lambda m_: m_.split('@')[1])
+                    print(f'Got members for {group.name}: {_sorted_members}')
                     return '\n'.join(_sorted_members)
 
                 if group.cache_members and isinstance(infra, GcpInfrastructure):
                     _members = self.group_provider.resolve_group_members(group)
                     member_ids = [infra.member_id(m) for m in _members]
-                    if len(member_ids) == 0:
-                        members_contents = ''
-                    elif all(isinstance(m, str) for m in member_ids):
-                        members_contents = _process_members(member_ids)
-                    else:
-                        members_contents = pulumi.Output.all(*member_ids).apply(
-                            _process_members
-                        )
+                    members_contents = ''
+
+                    if len(member_ids) > 0:
+                        if all(isinstance(m, str) for m in member_ids):
+                            members_contents = _process_members(member_ids)
+                        else:
+                            members_contents = pulumi.Output.all(*member_ids).apply(
+                                _process_members
+                            )
 
                     # we'll create a blob with the members of the groups
                     infra.add_blob_to_bucket(
                         f'{group.name}-group-cache-members',
                         bucket=self.gcp_members_cache_bucket,
-                        contents=members_contents or '',
+                        contents=members_contents,
                         output_name=f'{group.name}-members.txt',
                     )
 
