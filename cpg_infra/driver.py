@@ -255,6 +255,17 @@ class CPGInfrastructure:
                 dataset_infra.main()
 
     def finalize_groups(self):
+        def _process_members(group_name, members):
+            # use .sort twice because python sort is in place and stable
+            # sort on first bit of email second
+            # sort on domains (higher priority)
+
+            _sorted_members = list(set(str(m) for m in members))
+            _sorted_members.sort(key=lambda m_: m_.split('@')[0])
+            _sorted_members.sort(key=lambda m_: m_.split('@')[1])
+            print(f'Got members for {group_name}: {_sorted_members}')
+            return '\n'.join(_sorted_members)
+
         # now resolve groups
         for cloud in self.group_provider.groups:
             # We're adding groups, but it does rely on some service being created
@@ -270,17 +281,6 @@ class CPGInfrastructure:
                         unique_resource_key=True,
                     )
 
-                def _process_members(members):
-                    # use .sort twice because python sort is in place and stable
-                    # sort on first bit of email second
-                    # sort on domains (higher priority)
-
-                    _sorted_members = list(set(str(m) for m in members))
-                    _sorted_members.sort(key=lambda m_: m_.split('@')[0])
-                    _sorted_members.sort(key=lambda m_: m_.split('@')[1])
-                    print(f'Got members for {group.name}: {_sorted_members}')
-                    return '\n'.join(_sorted_members)
-
                 if group.cache_members and isinstance(infra, GcpInfrastructure):
                     _members = self.group_provider.resolve_group_members(group)
                     member_ids = [infra.member_id(m) for m in _members]
@@ -288,10 +288,10 @@ class CPGInfrastructure:
 
                     if len(member_ids) > 0:
                         if all(isinstance(m, str) for m in member_ids):
-                            members_contents = _process_members(member_ids)
+                            members_contents = _process_members(group.name, member_ids)
                         else:
                             members_contents = pulumi.Output.all(*member_ids).apply(
-                                _process_members
+                                lambda ms: _process_members(group.name, ms)
                             )
 
                     # we'll create a blob with the members of the groups
@@ -574,7 +574,6 @@ class CPGDatasetInfrastructure:
                 if not any(member.endswith(ext) for ext in valid_extensions):
                     print(f'GROUP MEMBERS OUTSIDE ORGANISATION, Skipping {member}')
                     continue
-
 
                 h = self.compute_hash(self.dataset_config.dataset, member)
                 group.add_member(
