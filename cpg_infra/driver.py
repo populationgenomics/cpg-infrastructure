@@ -327,11 +327,14 @@ class CPGInfrastructure:
             return toml.dumps(d)
 
         infra_config = pulumi.Output.all(*[v[1] for v in items]).apply(_build_config)
+        bucket_name, suffix = self.config.config_destination[len('gs://'):].split(
+            '/', maxsplit=1
+        )
         reference_infra.infra.add_blob_to_bucket(
             'infrastructure-config',
-            bucket=self.config.config_destination,
+            bucket=bucket_name,
             contents=infra_config,
-            output_name='infrastructure.toml',
+            output_name=os.path.join(suffix, 'infrastructure.toml'),
         )
 
     # region ACCESS_CACHE
