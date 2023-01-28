@@ -1955,6 +1955,7 @@ class CPGDatasetInfrastructure:
             # Adding dependent groups in two ways for reference:
 
             transitive_groups = [
+                self.analysis_group,
                 self.test_read_group,
                 self.test_read_group,
                 self.test_full_group,
