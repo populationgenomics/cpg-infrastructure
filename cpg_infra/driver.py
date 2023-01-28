@@ -292,7 +292,7 @@ class CPGInfrastructure:
                         else:
                             members_contents = pulumi.Output.all(*member_ids).apply(
                                 lambda ms: _process_members(group.name, ms)
-                            )
+                            ).apply(lambda value: value or '')
 
                     # we'll create a blob with the members of the groups
                     infra.add_blob_to_bucket(
