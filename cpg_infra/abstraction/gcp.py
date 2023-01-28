@@ -482,15 +482,15 @@ class GcpInfrastructure(CloudInfraBase):
         if not unique_resource_key:
             resource_key = self.get_pulumi_name(resource_key)
 
-        gcp.cloudidentity.GroupMembership(
-            resource_key,
-            group=self.get_group_key(group),
-            preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
-                id=self.get_preferred_group_membership_key(member)
-            ),
-            roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
-            opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
-        )
+        # gcp.cloudidentity.GroupMembership(
+        #     resource_key,
+        #     group=self.get_group_key(group),
+        #     preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
+        #         id=self.get_preferred_group_membership_key(member)
+        #     ),
+        #     roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
+        #     opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
+        # )
 
     def create_secret(self, name: str, project: str = None) -> Any:
         return gcp.secretmanager.Secret(
