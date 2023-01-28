@@ -263,7 +263,6 @@ class CPGInfrastructure:
             _sorted_members = list(set(str(m) for m in members))
             _sorted_members.sort(key=lambda m_: m_.split('@')[0])
             _sorted_members.sort(key=lambda m_: m_.split('@')[1])
-            print(f'Got members for {group_name}: {_sorted_members}')
             return '\n'.join(_sorted_members)
 
         # now resolve groups
@@ -293,6 +292,8 @@ class CPGInfrastructure:
                             members_contents = pulumi.Output.all(*member_ids).apply(
                                 lambda ms: _process_members(group.name, ms)
                             ).apply(lambda value: value or '')
+
+                    print(f'Got members for {group.name}: {members_contents}')
 
                     # we'll create a blob with the members of the groups
                     infra.add_blob_to_bucket(
