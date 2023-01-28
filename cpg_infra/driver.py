@@ -293,7 +293,7 @@ class CPGInfrastructure:
                                 lambda ms: _process_members(group.name, ms)
                             ).apply(lambda value: value or '')
 
-                    print(f'Got members for {group.name}: {members_contents}')
+                    print(f'Got members for {group.name}: {members_contents!r}')
 
                     # we'll create a blob with the members of the groups
                     infra.add_blob_to_bucket(
