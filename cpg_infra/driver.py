@@ -255,7 +255,18 @@ class CPGInfrastructure:
                 dataset_infra.main()
 
     def finalize_groups(self):
-        def _process_members(group_name, members):
+
+        valid_extensions = ['populationgenomics.org.au', '.gserviceaccount.com']
+
+        def _member_filter(group_name, member):
+            f = any(member.endswith(ext) for ext in valid_extensions)
+            if not f:
+                print(
+                    f'GROUP MEMBER {group_name!r} OUTSIDE ORGANISATION, Skipping {member}'
+                )
+            return f
+
+        def _process_members(members):
             # use .sort twice because python sort is in place and stable
             # sort on first bit of email second
             # sort on domains (higher priority)
@@ -273,6 +284,11 @@ class CPGInfrastructure:
             for group in self.group_provider.static_group_order(cloud=cloud):
 
                 for resource_key, member in group.members.items():
+                    if isinstance(member, str) and not _member_filter(
+                        group.name, member
+                    ):
+                        continue
+
                     infra.add_group_member(
                         resource_key=resource_key,
                         group=group.group,
@@ -287,11 +303,13 @@ class CPGInfrastructure:
 
                     if len(member_ids) > 0:
                         if all(isinstance(m, str) for m in member_ids):
-                            members_contents = _process_members(group.name, member_ids)
+                            members_contents = _process_members(member_ids)
                         else:
-                            members_contents = pulumi.Output.all(*member_ids).apply(
-                                lambda ms: _process_members(group.name, ms)
-                            ).apply(lambda value: value or '')
+                            members_contents = (
+                                pulumi.Output.all(*member_ids)
+                                .apply(_process_members)
+                                .apply(lambda value: value or '')
+                            )
 
                     # we'll create a blob with the members of the groups
                     infra.add_blob_to_bucket(
@@ -325,7 +343,7 @@ class CPGInfrastructure:
             return toml.dumps(d)
 
         infra_config = pulumi.Output.all(*[v[1] for v in items]).apply(_build_config)
-        bucket_name, suffix = self.config.config_destination[len('gs://'):].split(
+        bucket_name, suffix = self.config.config_destination[len('gs://') :].split(
             '/', maxsplit=1
         )
         reference_infra.infra.add_blob_to_bucket(
@@ -571,11 +589,6 @@ class CPGDatasetInfrastructure:
         for group in groups:
             group_name = group.name.removeprefix(self.dataset_config.dataset + '-')
             for member in d.get(group_name, []):
-
-                valid_extensions = ['populationgenomics.org.au', '.gserviceaccount.com']
-                if not any(member.endswith(ext) for ext in valid_extensions):
-                    print(f'GROUP MEMBERS OUTSIDE ORGANISATION, Skipping {member}')
-                    continue
 
                 h = self.compute_hash(self.dataset_config.dataset, member)
                 group.add_member(
