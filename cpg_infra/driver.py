@@ -1954,6 +1954,7 @@ class CPGDatasetInfrastructure:
 
             transitive_groups = [
                 self.analysis_group,
+                self.data_manager_group,
                 self.test_read_group,
                 self.test_read_group,
                 self.test_full_group,
