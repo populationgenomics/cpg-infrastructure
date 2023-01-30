@@ -1,8 +1,8 @@
-pulumi==3.53.1
-pulumi-gcp==6.48.0
+pulumi==3.37.2
+pulumi-gcp==6.32.0
 google-cloud-billing-budgets==1.5.1
 requests==2.27.1
-PyYAML~=6.0
+PyYAML==5.4.1
 click==8.0.3
 cpg-utils
 xxhash==3.2.0

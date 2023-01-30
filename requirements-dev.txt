@@ -1,4 +1,3 @@
--r requirements.txt
 pre-commit
 pylint
-debugpy==1.6.3
+-r requirements.txt
