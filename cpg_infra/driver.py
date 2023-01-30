@@ -256,16 +256,6 @@ class CPGInfrastructure:
 
     def finalize_groups(self):
 
-        valid_extensions = ['populationgenomics.org.au', '.gserviceaccount.com']
-
-        def _member_filter(group_name, member):
-            f = any(member.endswith(ext) for ext in valid_extensions)
-            if not f:
-                print(
-                    f'GROUP MEMBER {group_name!r} OUTSIDE ORGANISATION, Skipping {member}'
-                )
-            return f
-
         def _process_members(members):
             # use .sort twice because python sort is in place and stable
             # sort on first bit of email second
@@ -284,10 +274,6 @@ class CPGInfrastructure:
             for group in self.group_provider.static_group_order(cloud=cloud):
 
                 for resource_key, member in group.members.items():
-                    if isinstance(member, str) and not _member_filter(
-                        group.name, member
-                    ):
-                        continue
 
                     infra.add_group_member(
                         resource_key=resource_key,
