@@ -255,7 +255,6 @@ class CPGInfrastructure:
                 dataset_infra.main()
 
     def finalize_groups(self):
-
         def _process_members(members):
             # use .sort twice because python sort is in place and stable
             # sort on first bit of email second
