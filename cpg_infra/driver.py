@@ -661,6 +661,14 @@ class CPGDatasetInfrastructure:
         return self.create_group('data-manager')
 
     @cached_property
+    def images_reader_group(self):
+        return self.create_group('images-reader')
+
+    @cached_property
+    def images_writer_group(self):
+        return self.create_group('images-writer')
+
+    @cached_property
     def analysis_group(self):
         return self.create_group('analysis', cache_members=True)
 
@@ -1670,12 +1678,12 @@ class CPGDatasetInfrastructure:
             ),
             SampleMetadataAccessorMembership(
                 name='main-read',
-                member=self.main_create_group,
+                member=self.main_read_group,
                 permissions=(SM_MAIN_READ,),
             ),
             SampleMetadataAccessorMembership(
                 name='main-write',
-                member=self.test_full_group,
+                member=self.main_create_group,
                 permissions=(SM_MAIN_READ, SM_MAIN_WRITE),
             ),
             SampleMetadataAccessorMembership(
@@ -1743,21 +1751,32 @@ class CPGDatasetInfrastructure:
 
         # mostly because this current format requires the project_id
         custom_container_registry = self.infra.create_container_registry('images')
+
+        self.infra.add_member_to_container_registry(
+            f'images-reader-in-container-registry',
+            registry=custom_container_registry,
+            member=self.images_reader_group,
+            membership=ContainerRegistryMembership.READER,
+        )
+        self.infra.add_member_to_container_registry(
+            f'images-writer-in-container-registry',
+            registry=custom_container_registry,
+            member=self.images_writer_group,
+            membership=ContainerRegistryMembership.WRITER,
+        )
+
+        self.images_writer_group.add_member(
+            f'standard-in-images-writer-group-member', self.standard_group
+        )
+        self.images_writer_group.add_member(
+            f'full-in-images-writer-group-member', self.full_group
+        )
+
         accounts = {'analysis': self.analysis_group, **self.access_level_groups}
         for kind, account in accounts.items():
-            self.infra.add_member_to_container_registry(
-                f'{kind}-images-reader-in-container-registry',
-                registry=custom_container_registry,
-                member=account,
-                membership=ContainerRegistryMembership.READER,
+            self.images_reader_group.add_member(
+                f'{kind}-in-images-reader-group-member', account
             )
-            if kind in ('standard', 'full'):
-                self.infra.add_member_to_container_registry(
-                    f'{kind}-images-writer-in-container-registry',
-                    registry=custom_container_registry,
-                    member=account,
-                    membership=ContainerRegistryMembership.WRITER,
-                )
 
     def setup_legacy_container_registries(self):
         """
@@ -1955,6 +1974,9 @@ class CPGDatasetInfrastructure:
             transitive_groups = [
                 self.analysis_group,
                 self.data_manager_group,
+                self.web_access_group,
+                self.metadata_access_group,
+                self.upload_group,
                 self.test_read_group,
                 self.test_read_group,
                 self.test_full_group,
@@ -1962,6 +1984,8 @@ class CPGDatasetInfrastructure:
                 self.main_read_group,
                 self.main_create_group,
                 self.full_group,
+                self.images_reader_group,
+                self.images_writer_group,
             ]
 
             for group in transitive_groups:
@@ -1988,6 +2012,7 @@ class CPGDatasetInfrastructure:
                     self.full_group,
                 ],
                 'main-list': [self.main_list_group],
+                'images-reader': [self.images_reader_group],
             }
             for target_group, groups in group_map.items():
                 transitive_group = self.group_provider.get_group(

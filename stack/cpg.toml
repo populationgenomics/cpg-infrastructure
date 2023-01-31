@@ -34,9 +34,6 @@ container_registry_name = "images"
 [infrastructure.web_service.gcp]
 server_machine_account = "web-server@analysis-runner.iam.gserviceaccount.com"
 
-[infrastructure.access_group_cache]
-process_machine_account = "access-group-cache@analysis-runner.iam.gserviceaccount.com"
-
 [infrastructure.notebooks.gcp]
 project = "notebooks-314505"
 

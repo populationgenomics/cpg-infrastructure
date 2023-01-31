@@ -117,11 +117,6 @@ class CPGInfrastructureConfig(DeserializableDataclass):
 
         gcp: GCP
 
-    # temporary
-    @dataclasses.dataclass(frozen=True)
-    class AccessGroupCache(DeserializableDataclass):
-        process_machine_account: str
-
     @dataclasses.dataclass(frozen=True)
     class Notebooks(DeserializableDataclass):
         @dataclasses.dataclass(frozen=True)
@@ -165,9 +160,6 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     notebooks: Notebooks | None = None
     cromwell: Cromwell | None = None
     sample_metadata: SampleMetadata | None = None
-
-    # temporary
-    access_group_cache: AccessGroupCache = None
 
     # When resources are renamed, it can be useful to explicitly apply changes in two
     # phases: delete followed by create; that's opposite of the default create followed by
