@@ -577,7 +577,7 @@ class CPGDatasetInfrastructure:
                 h = self.compute_hash(self.dataset_config.dataset, member)
                 group.add_member(
                     self.infra.get_pulumi_name(f'{group.name}-member-{h}'),
-                    member.lower(),
+                    member,
                 )
 
     @staticmethod
@@ -1640,11 +1640,12 @@ class CPGDatasetInfrastructure:
         assert isinstance(self.infra, GcpInfrastructure)
 
         self.root.gcp_sample_metadata_invoker_group.add_member(
-            f'sample-metadata-analysis-invoker', self.analysis_group
+            self.infra.get_pulumi_name(f'sample-metadata-analysis-invoker'),
+            self.analysis_group,
         )
         for sm_type, group in self.sample_metadata_groups.items():
             self.root.gcp_sample_metadata_invoker_group.add_member(
-                f'sample-metadata-{sm_type}-invoker', group
+                self.infra.get_pulumi_name(f'sample-metadata-{sm_type}-invoker'), group
             )
 
     def setup_sample_metadata_access_permissions(self):
