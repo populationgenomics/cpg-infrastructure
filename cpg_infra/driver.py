@@ -1029,6 +1029,12 @@ class CPGDatasetInfrastructure:
 
     def setup_storage_archive_bucket_permissions(self):
         self.infra.add_member_to_bucket(
+            'main-list-archive-bucket',
+            self.archive_bucket,
+            self.main_list_group,
+            BucketMembership.LIST,
+        )
+        self.infra.add_member_to_bucket(
             'full-archive-bucket-admin',
             self.archive_bucket,
             self.full_group,
@@ -1677,6 +1683,7 @@ class CPGDatasetInfrastructure:
                 member=self.test_full_group,
                 permissions=(SM_MAIN_READ, SM_TEST_READ, SM_TEST_WRITE),
             ),
+            # TODO: re-enable this
             # SampleMetadataAccessorMembership(
             #     name='main-read',
             #     member=self.main_read_group,
@@ -1766,6 +1773,7 @@ class CPGDatasetInfrastructure:
             membership=ContainerRegistryMembership.WRITER,
         )
 
+        # TODO: re-add this
         # self.images_writer_group.add_member(
         #     self.infra.get_pulumi_name(f'standard-in-images-writer-group-member'),
         #     self.standard_group,
@@ -1810,6 +1818,7 @@ class CPGDatasetInfrastructure:
         }
 
         for kind, account in kinds.items():
+            # TODO, this can be solved on high level by adding common-images-reader to analysis-runner container registry
 
             # Allow the service accounts to pull images. Note that the global project will
             # refer to the dataset, but the Docker images are stored in the 'analysis-runner'
@@ -1952,9 +1961,6 @@ class CPGDatasetInfrastructure:
 
     # endregion SHARED PROJECT
 
-    # region ACCESS GROUP CACHE
-
-    # endregion ACCESS GROUP CACHE
     # region DEPENDENCIES
 
     def setup_dependencies(self):
@@ -2031,6 +2037,7 @@ class CPGDatasetInfrastructure:
                     )
 
     # endregion DEPENDENCIES
+
     # region UTILS
 
     @staticmethod
