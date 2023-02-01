@@ -1683,17 +1683,16 @@ class CPGDatasetInfrastructure:
                 member=self.test_full_group,
                 permissions=(SM_MAIN_READ, SM_TEST_READ, SM_TEST_WRITE),
             ),
-            # TODO: re-enable this
-            # SampleMetadataAccessorMembership(
-            #     name='main-read',
-            #     member=self.main_read_group,
-            #     permissions=(SM_MAIN_READ,),
-            # ),
-            # SampleMetadataAccessorMembership(
-            #     name='main-write',
-            #     member=self.main_create_group,
-            #     permissions=(SM_MAIN_READ, SM_MAIN_WRITE),
-            # ),
+            SampleMetadataAccessorMembership(
+                name='main-read',
+                member=self.main_read_group,
+                permissions=(SM_MAIN_READ,),
+            ),
+            SampleMetadataAccessorMembership(
+                name='main-write',
+                member=self.main_create_group,
+                permissions=(SM_MAIN_READ, SM_MAIN_WRITE),
+            ),
             SampleMetadataAccessorMembership(
                 name='full',
                 member=self.full_group,
@@ -1773,22 +1772,21 @@ class CPGDatasetInfrastructure:
             membership=ContainerRegistryMembership.WRITER,
         )
 
-        # TODO: re-add this
-        # self.images_writer_group.add_member(
-        #     self.infra.get_pulumi_name(f'standard-in-images-writer-group-member'),
-        #     self.standard_group,
-        # )
-        # self.images_writer_group.add_member(
-        #     self.infra.get_pulumi_name(f'full-in-images-writer-group-member'),
-        #     self.full_group,
-        # )
-        #
-        # accounts = {'analysis': self.analysis_group, **self.access_level_groups}
-        # for kind, account in accounts.items():
-        #     self.images_reader_group.add_member(
-        #         self.infra.get_pulumi_name(f'{kind}-in-images-reader-group-member'),
-        #         account,
-        #     )
+        self.images_writer_group.add_member(
+            self.infra.get_pulumi_name(f'standard-in-images-writer-group-member'),
+            self.standard_group,
+        )
+        self.images_writer_group.add_member(
+            self.infra.get_pulumi_name(f'full-in-images-writer-group-member'),
+            self.full_group,
+        )
+
+        accounts = {'analysis': self.analysis_group, **self.access_level_groups}
+        for kind, account in accounts.items():
+            self.images_reader_group.add_member(
+                self.infra.get_pulumi_name(f'{kind}-in-images-reader-group-member'),
+                account,
+            )
 
     def setup_legacy_container_registries(self):
         """
