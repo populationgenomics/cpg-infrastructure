@@ -1745,8 +1745,30 @@ class CPGDatasetInfrastructure:
         + cpg-common container registries
         :return:
         """
+        self.setup_container_read_write_permissions()
         self.setup_dataset_container_registry()
         self.setup_legacy_container_registries()
+
+    def setup_container_read_write_permissions(self):
+        """
+        Add members to images-reader/writer groups
+        :return:
+        """
+        self.images_writer_group.add_member(
+            self.infra.get_pulumi_name(f'standard-in-images-writer-group-member'),
+            self.standard_group,
+        )
+        self.images_writer_group.add_member(
+            self.infra.get_pulumi_name(f'full-in-images-writer-group-member'),
+            self.full_group,
+        )
+
+        accounts = {'analysis': self.analysis_group, **self.access_level_groups}
+        for kind, account in accounts.items():
+            self.images_reader_group.add_member(
+                self.infra.get_pulumi_name(f'{kind}-in-images-reader-group-member'),
+                account,
+            )
 
     def setup_dataset_container_registry(self):
         """
@@ -1771,22 +1793,6 @@ class CPGDatasetInfrastructure:
             member=self.images_writer_group,
             membership=ContainerRegistryMembership.WRITER,
         )
-
-        self.images_writer_group.add_member(
-            self.infra.get_pulumi_name(f'standard-in-images-writer-group-member'),
-            self.standard_group,
-        )
-        self.images_writer_group.add_member(
-            self.infra.get_pulumi_name(f'full-in-images-writer-group-member'),
-            self.full_group,
-        )
-
-        accounts = {'analysis': self.analysis_group, **self.access_level_groups}
-        for kind, account in accounts.items():
-            self.images_reader_group.add_member(
-                self.infra.get_pulumi_name(f'{kind}-in-images-reader-group-member'),
-                account,
-            )
 
     def setup_legacy_container_registries(self):
         """
