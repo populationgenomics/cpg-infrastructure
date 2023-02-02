@@ -28,6 +28,7 @@
     "constraint": [
         "structural-constraint"
     ],
+    "cpginfradev": ["cpg-infrastructure"],
     "epileptic-enceph": [
         "automated-interpretation-pipeline",
         "rare-disease"

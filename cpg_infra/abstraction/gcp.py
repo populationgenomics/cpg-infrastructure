@@ -429,7 +429,6 @@ class GcpInfrastructure(CloudInfraBase):
     def create_machine_account(
         self, name: str, project: str = None, *, resource_key: str = None
     ) -> Any:
-
         if project and isinstance(project, gcp.organizations.Project):
             project = project.project_id
 
@@ -517,7 +516,6 @@ class GcpInfrastructure(CloudInfraBase):
         membership: SecretMembership,
         project: str = None,
     ) -> Any:
-
         if membership == SecretMembership.ADMIN:
             role = 'roles/secretmanager.secretVersionManager'
         elif membership == SecretMembership.ACCESSOR:
@@ -557,7 +555,6 @@ class GcpInfrastructure(CloudInfraBase):
     def add_member_to_container_registry(
         self, resource_key: str, registry, member, membership, project=None
     ) -> Any:
-
         if membership == ContainerRegistryMembership.READER:
             role = 'roles/artifactregistry.reader'
         elif membership == ContainerRegistryMembership.WRITER:

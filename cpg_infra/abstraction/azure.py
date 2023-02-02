@@ -377,7 +377,6 @@ class AzureInfra(CloudInfraBase):
 
     @staticmethod
     def _get_object_id(obj):  # pylint: disable=too-many-return-statements
-
         if hasattr(obj, 'is_group') and hasattr(obj, 'group'):
             # cheeky catch for internal group
             return AzureInfra._get_object_id(obj.group)
@@ -484,7 +483,6 @@ class AzureInfra(CloudInfraBase):
     ) -> list[Any]:
         roles = []
         for role_type, role in self._container_membership_to_roles(membership).items():
-
             roles.append(
                 az.authorization.RoleAssignment(
                     self.get_pulumi_name(resource_key + '-' + role_type),

@@ -205,7 +205,6 @@ class CPGInfrastructure:
         dataset_config = self.datasets[self.config.common_dataset]
 
         for deploy_location in dataset_config.deploy_locations:
-
             if deploy_location not in self.dataset_infrastructure:
                 self.dataset_infrastructure[deploy_location] = {}
 
@@ -271,9 +270,7 @@ class CPGInfrastructure:
             infra = self.dataset_infrastructure[cloud][self.config.common_dataset].infra
 
             for group in self.group_provider.static_group_order(cloud=cloud):
-
                 for resource_key, member in group.members.items():
-
                     infra.add_group_member(
                         resource_key=resource_key,
                         group=group.group,
@@ -374,7 +371,6 @@ class CPGInfrastructure:
             )
 
         for key, account in group_cache_accessors:
-
             reference_infra.infra.add_member_to_bucket(
                 f'{key}-members-group-cache-accessor',
                 bucket=self.gcp_members_cache_bucket,
@@ -457,7 +453,6 @@ class CPGDatasetInfrastructure:
         return group
 
     def main(self):
-
         self.setup_access_groups()
         self.setup_externally_specified_members()
 
@@ -541,7 +536,6 @@ class CPGDatasetInfrastructure:
 
     # region PERSON ACCESS
     def setup_externally_specified_members(self):
-
         if not INFRA_MEMBERS_PATH:
             return
 
@@ -573,7 +567,6 @@ class CPGDatasetInfrastructure:
         for group in groups:
             group_name = group.name.removeprefix(self.dataset_config.dataset + '-')
             for member in d.get(group_name, []):
-
                 h = self.compute_hash(self.dataset_config.dataset, member)
                 group.add_member(
                     self.infra.get_pulumi_name(f'{group.name}-member-{h}'),
@@ -822,7 +815,6 @@ class CPGDatasetInfrastructure:
         )
 
     def setup_storage_outputs(self):
-
         buckets = {
             'main': {
                 'default': self.infra.bucket_output_path(self.main_bucket),
@@ -852,7 +844,6 @@ class CPGDatasetInfrastructure:
             self.infra.name(), {}
         )
         for namespace, al_buckets in buckets.items():
-
             configs_to_merge = []
             for dependent_dataset in self.dataset_config.depends_on:
                 if config := stacks_to_reference[dependent_dataset].storage_tomls.get(
@@ -1159,9 +1150,7 @@ class CPGDatasetInfrastructure:
         )
 
     def setup_storage_main_upload_buckets_permissions(self):
-
         for bname, main_upload_bucket in self.main_upload_buckets.items():
-
             # main_upload SA has ADMIN
             self.infra.add_member_to_bucket(
                 f'main-upload-service-account-{bname}-bucket-creator',
@@ -1264,7 +1253,6 @@ class CPGDatasetInfrastructure:
         ]
 
         for bucket_name, bucket in buckets:
-
             self.infra.add_member_to_bucket(
                 f'test-full-{bucket_name}-admin',
                 bucket,
@@ -1362,7 +1350,6 @@ class CPGDatasetInfrastructure:
         self.setup_hail_wheels_bucket_permissions()
 
     def setup_hail_bucket_permissions(self):
-
         for (
             access_level,
             hail_machine_account,
@@ -1453,7 +1440,6 @@ class CPGDatasetInfrastructure:
             access_level,
             machine_account,
         ) in self.cromwell_machine_accounts_by_access_level.items():
-
             # To use a service account for VMs, Cromwell accounts need
             # to be allowed to use themselves ;)
             self.infra.add_member_to_machine_account_access(
@@ -1578,7 +1564,6 @@ class CPGDatasetInfrastructure:
                 access_level,
                 hail_account,
             ) in self.hail_accounts_by_access_level.items():
-
                 # Allow hail account to create a cluster
                 self.infra.add_member_to_dataproc_api(
                     f'hail-service-account-{access_level}-dataproc-admin',
@@ -1843,7 +1828,6 @@ class CPGDatasetInfrastructure:
         self.setup_notebooks_account_permissions()
 
     def setup_notebooks_account_permissions(self):
-
         # allow access group to use notebook account
         self.infra.add_member_to_machine_account_access(
             'notebook-account-users',
@@ -1883,14 +1867,12 @@ class CPGDatasetInfrastructure:
     # region ANALYSIS RUNNER
 
     def setup_analysis_runner(self):
-
         self.setup_analysis_runner_config_access()
 
         if isinstance(self.infra, GcpInfrastructure):
             self.setup_analysis_runner_access()
 
     def setup_analysis_runner_access(self):
-
         assert isinstance(self.infra, GcpInfrastructure)
         self.infra.add_cloudrun_invoker(
             f'analysis-runner-analysis-invoker',
@@ -1971,7 +1953,6 @@ class CPGDatasetInfrastructure:
         self.setup_dependencies_group_memberships()
 
     def setup_dependencies_group_memberships(self):
-
         # duplicate reference to avoid mutating config
         dependencies = list(self.dataset_config.depends_on)
 
@@ -1982,7 +1963,6 @@ class CPGDatasetInfrastructure:
             dependencies.append(self.config.common_dataset)
 
         for dependency in dependencies:
-
             # Adding dependent groups in two ways for reference:
 
             transitive_groups = [

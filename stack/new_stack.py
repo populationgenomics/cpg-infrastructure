@@ -186,7 +186,7 @@ def main(
         raise ValueError(f'Expected dataset {dataset} to match {DATASET_REGEX}.')
 
     if os.path.basename(os.getcwd()) != 'stack':
-        raise Exception(
+        raise ValueError(
             f'You should run this in the analysis-runner/stack directory, got {os.getcwd()}'
         )
 
@@ -616,7 +616,6 @@ def create_stack(
         if dataset in production_config:
             existing_config = production_config[dataset]
             if existing_config != dataset_config:
-
                 keys_to_check = set(
                     list(existing_config.keys()) + list(dataset_config.keys())
                 )

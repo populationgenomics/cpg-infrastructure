@@ -200,7 +200,6 @@ class CPGDatasetComponents(Enum):
 
     @staticmethod
     def default_component_for_infrastructure():
-
         return {
             'dry-run': list(CPGDatasetComponents),
             'gcp': list(CPGDatasetComponents),
