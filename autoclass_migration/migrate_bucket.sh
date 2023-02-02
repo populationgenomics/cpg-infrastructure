@@ -9,7 +9,7 @@ if [[ -z "$BUCKET" ]]; then
 fi
 
 if [[ -z "$SLACK_WEBHOOK" ]]; then
-    echo "No Slack webhook"
+    echo "No Slack webhook specified"
     exit 1
 fi
 
@@ -107,7 +107,9 @@ if [[ OBJECT_VERSIONING = "Enabled" ]]; then
 fi
 
 # Restore the lifecycle configuration.
-gsutil lifecycle set /tmp/lifecycle_config.json gs://$BUCKET
+if ! grep "has no lifecycle configuration" /tmp/lifecycle_config.json; then
+    gsutil lifecycle set /tmp/lifecycle_config.json gs://$BUCKET
+fi
 
 # Restore the Requester Pays setting.
 if [[ REQUESTER_PAYS = "Enabled" ]]; then
