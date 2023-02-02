@@ -239,7 +239,6 @@ def _migrate_stack(gcp_project_id, dataset):
 
 
 def _test():
-
     with open(f'pulumi-production-test-migrated.json', 'w+', encoding='utf-8') as f:
         json.dump(
             {

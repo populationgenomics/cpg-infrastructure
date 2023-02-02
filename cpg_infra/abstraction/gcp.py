@@ -32,7 +32,9 @@ class GcpInfrastructure(CloudInfraBase):
         self, config: CPGInfrastructureConfig, dataset_config: CPGDatasetConfig
     ):
         super().__init__(config=config, dataset_config=dataset_config)
-        self.region = dataset_config.gcp.region or config.gcp.region
+        self.region = config.gcp.region
+        if dataset_config and dataset_config.gcp.region:
+            self.region = dataset_config.gcp.region
 
     @cached_property
     def organization(self):
@@ -52,6 +54,22 @@ class GcpInfrastructure(CloudInfraBase):
     def finalise(self):
         # Make sure this API is initialised somewhere
         _ = self._svc_serviceusage
+
+    @staticmethod
+    def member_id(member):
+        if isinstance(member, gcp.serviceaccount.Account):
+            return member.email
+
+        if isinstance(member, gcp.cloudidentity.Group):
+            return member.group_key.id
+
+        if isinstance(member, str):
+            return member
+
+        if isinstance(member, pulumi.Output):
+            return member
+
+        raise NotImplementedError(f'Invalid member type {type(member)}')
 
     # region SERVICES
     @cached_property
@@ -301,7 +319,12 @@ class GcpInfrastructure(CloudInfraBase):
             project=project or self.project.project_id,
         )
 
-    def get_member_key(self, member):
+    def get_member_key(self, member):  # pylint: disable=too-many-return-statements
+        # it's a 'cpg_infra.driver.CPGInfrastructure.GroupProvider.Group'
+        if hasattr(member, 'is_group') and hasattr(member, 'group'):
+            # cheeky catch for internal group
+            return self.get_member_key(member.group)
+
         if isinstance(member, gcp.serviceaccount.Account):
             return pulumi.Output.concat('serviceAccount:', member.email)
 
@@ -325,6 +348,9 @@ class GcpInfrastructure(CloudInfraBase):
         raise NotImplementedError(f'Invalid member type {type(member)}')
 
     def get_preferred_group_membership_key(self, member):
+        if hasattr(member, 'is_group') and hasattr(member, 'group'):
+            # cheeky catch for internal group
+            return self.get_preferred_group_membership_key(member.group)
         if isinstance(member, gcp.cloudidentity.Group):
             return member.group_key.id
         if isinstance(member, gcp.serviceaccount.Account):
@@ -345,9 +371,9 @@ class GcpInfrastructure(CloudInfraBase):
             # return pulumi.Output.concat('group:', group.group_key.id)
 
         if isinstance(group, str):
-            if group.endswith('@populationgenomics.org.au') and not group.startswith(
-                'group:'
-            ):
+            if group.endswith(
+                '@' + self.config.gcp.groups_domain
+            ) and not group.startswith('group:'):
                 return f'group:{group}'
 
             return group
@@ -403,7 +429,6 @@ class GcpInfrastructure(CloudInfraBase):
     def create_machine_account(
         self, name: str, project: str = None, *, resource_key: str = None
     ) -> Any:
-
         if project and isinstance(project, gcp.organizations.Project):
             project = project.project_id
 
@@ -437,7 +462,7 @@ class GcpInfrastructure(CloudInfraBase):
         ).private_key.apply(lambda s: base64.b64decode(s).decode('utf-8'))
 
     def create_group(self, name: str) -> Any:
-        mail = f'{name}@populationgenomics.org.au'
+        mail = f'{name}@{self.config.gcp.groups_domain}'
         return gcp.cloudidentity.Group(
             self.get_pulumi_name(name + '-group'),
             display_name=name,
@@ -447,12 +472,17 @@ class GcpInfrastructure(CloudInfraBase):
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
         )
 
-    def add_group_member(self, resource_key: str, group, member) -> Any:
+    def add_group_member(
+        self, resource_key: str, group, member, unique_resource_key: bool = False
+    ) -> Any:
         if self.config.disable_group_memberships:
             return
 
+        if not unique_resource_key:
+            resource_key = self.get_pulumi_name(resource_key)
+
         gcp.cloudidentity.GroupMembership(
-            self.get_pulumi_name(resource_key),
+            resource_key,
             group=self.get_group_key(group),
             preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
                 id=self.get_preferred_group_membership_key(member)
@@ -486,7 +516,6 @@ class GcpInfrastructure(CloudInfraBase):
         membership: SecretMembership,
         project: str = None,
     ) -> Any:
-
         if membership == SecretMembership.ADMIN:
             role = 'roles/secretmanager.secretVersionManager'
         elif membership == SecretMembership.ACCESSOR:
@@ -526,7 +555,6 @@ class GcpInfrastructure(CloudInfraBase):
     def add_member_to_container_registry(
         self, resource_key: str, registry, member, membership, project=None
     ) -> Any:
-
         if membership == ContainerRegistryMembership.READER:
             role = 'roles/artifactregistry.reader'
         elif membership == ContainerRegistryMembership.WRITER:

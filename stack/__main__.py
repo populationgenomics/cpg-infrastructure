@@ -7,8 +7,8 @@ import os
 import pulumi
 import yaml
 
-from cpg_utils.config import get_config
-from cpg_infra.config import CPGInfrastructureConfig
+from cpg_utils.config import get_config, set_config_paths
+from cpg_infra.config import CPGInfrastructureConfig, CPGDatasetConfig
 from cpg_infra.driver import CPGInfrastructure
 
 
@@ -19,14 +19,25 @@ def from_pulumi():
      * sets up the environment
      * builds the stack using the driver functions
     """
-    config = CPGInfrastructureConfig.from_dict(get_config())
 
     pconfig = pulumi.Config()
 
     dataset_config_path = pconfig.get('dataset_config_path')
+    if not dataset_config_path:
+        raise ValueError('Your pulumi config did not contain a "dataset_config_path"')
+
+    if infrastructure_config_path := pconfig.get('infrastructure_config'):
+        set_config_paths([infrastructure_config_path])
+
+    config = CPGInfrastructureConfig.from_dict(get_config())
+
     with open(dataset_config_path, encoding='utf-8') as f:
         dataset_configs = yaml.safe_load(f)
-    CPGInfrastructure(config).deploy_all_from_dataset_configs(dataset_configs)
+
+    instantiated_configs = [
+        CPGDatasetConfig.instantiate(dataset=k, **v) for k, v in dataset_configs.items()
+    ]
+    CPGInfrastructure(config, instantiated_configs).main()
 
 
 if __name__ == '__main__':
