@@ -41,6 +41,9 @@ gsutil autoclass get gs://$BUCKET | grep False
 # Store the permissions.
 gsutil iam get gs://$BUCKET > /tmp/iam.json
 
+# Store the object versioning setting.
+OBJECT_VERSIONING=$(gsutil versioning get gs://$BUCKET | cut -f 2 -d ' ')
+
 # Store the lifecycle configuration.
 gsutil lifecycle get gs://$BUCKET > /tmp/lifecycle_config.json
 
@@ -98,8 +101,10 @@ if [[ BUCKET_SIZE -gt 0 ]]; then
     gcloud storage rm --recursive gs://$TMP_BUCKET/
 fi
 
-# Reenable object versioning.
-gcloud storage buckets update gs://$BUCKET --versioning
+# Restore object versioning.
+if [[ OBJECT_VERSIONING == "Enabled" ]]; then
+    gsutil versioning set on gs://$BUCKET
+fi
 
 # Restore the lifecycle configuration.
 gsutil lifecycle set /tmp/lifecycle_config.json gs://$BUCKET
