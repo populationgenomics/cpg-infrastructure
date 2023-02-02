@@ -1,0 +1,17 @@
+{
+  "taskGroups": [
+    {
+      "taskSpec": {
+        "computeResource": {
+          "cpuMilli": 16000,
+          "memoryMib": 16384
+        }
+      }
+    }
+  ],
+  "allocationPolicy": {
+    "serviceAccount": {
+      "email": "autoclass-migration@cpg-common.iam.gserviceaccount.com"
+    }
+  }
+}
