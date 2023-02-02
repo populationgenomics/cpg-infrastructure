@@ -26,6 +26,15 @@ from cpg_infra.config import CPGInfrastructureConfig, CPGDatasetConfig
 class AWSInfra(CloudInfraBase):
     """AWS implementation for cloud abstraction"""
 
+    @staticmethod
+    def member_id(member):
+        if isinstance(member, str):
+            return member
+        if isinstance(member, pulumi.Output):
+            return member
+
+        return member.id
+
     def __init__(
         self, config: CPGInfrastructureConfig, dataset_config: CPGDatasetConfig
     ):
@@ -174,7 +183,6 @@ class AWSInfra(CloudInfraBase):
 
     def _create_budget(self, resource_key, budget, project, **kwargs):
         if self.config.aws and self.config.aws.subscriber_sns_topic_arns:
-
             notifications = [
                 aws.budgets.BudgetNotification(
                     threshold=threshold,
@@ -198,7 +206,7 @@ class AWSInfra(CloudInfraBase):
             kwargs['notifications'] = kwargs['notification']
 
         return aws.budgets.Budget(
-            self.resource_prefix() + resource_key,
+            self.get_pulumi_name(resource_key),
             budget_type='COST',
             cost_filters=[
                 aws.budgets.BudgetCostFilterArgs(
@@ -251,7 +259,7 @@ class AWSInfra(CloudInfraBase):
         lifecycle_rules = [lr for lr in lifecycle_rules if lr]
 
         bucket = aws.s3.Bucket(
-            self.resource_prefix() + unique_bucket_name,
+            self.get_pulumi_name(unique_bucket_name),
             bucket=unique_bucket_name,
             lifecycle_rules=lifecycle_rules,
             request_payer='Requester' if requester_pays else 'BucketOwner',
@@ -275,7 +283,7 @@ class AWSInfra(CloudInfraBase):
         self, name: str, project: str = None, *, resource_key: str = None
     ) -> Any:
         machine_account = aws.iam.User(
-            self.resource_prefix() + 'machine-account-' + name,
+            self.get_pulumi_name('machine-account-' + name),
             path='/system/',
             name=self.dataset + '-' + name,
             tags=self.get_tags(project or self.dataset),
@@ -289,25 +297,27 @@ class AWSInfra(CloudInfraBase):
         pass
 
     def get_credentials_for_machine_account(self, resource_key, account):
-        return aws.iam.AccessKey(
-            self.resource_prefix() + resource_key, user=account.name
-        )
+        return aws.iam.AccessKey(self.get_pulumi_name(resource_key), user=account.name)
 
     def create_group(self, name: str) -> Any:
         group = aws.iam.Group(
-            self.resource_prefix() + 'group-' + name,
+            self.get_pulumi_name('group-' + name),
             name=self.config.dataset_storage_prefix + name,
             path='/users/',
         )
         self.entity_to_name[group] = name
         return group
 
-    def add_group_member(self, resource_key: str, group, member) -> Any:
+    def add_group_member(
+        self, resource_key: str, group, member, unique_resource_key: bool = False
+    ) -> Any:
+        if not unique_resource_key:
+            resource_key = self.get_pulumi_name(resource_key)
         self.group_memberships[group][resource_key] = member
 
     def create_secret(self, name: str, project: str = None) -> Any:
         secret = aws.secretsmanager.Secret(
-            self.resource_prefix() + 'secret-' + name,
+            self.get_pulumi_name('secret-' + name),
             name=name,
             tags=self.get_tags(project),
         )
@@ -326,14 +336,14 @@ class AWSInfra(CloudInfraBase):
 
     def add_secret_version(self, resource_key: str, secret: Any, contents: Any):
         return aws.secretsmanager.SecretVersion(
-            self.resource_prefix() + resource_key,
+            self.get_pulumi_name(resource_key),
             secret_id=secret.id,
             secret_string=contents,
         )
 
     def create_container_registry(self, name: str):
         return aws.ecr.Repository(
-            self.resource_prefix() + 'container-registry-' + name,
+            self.get_pulumi_name('container-registry-' + name),
             name=name,
             tags=self.get_tags(),
         )
@@ -350,7 +360,7 @@ class AWSInfra(CloudInfraBase):
 
     def add_blob_to_bucket(self, resource_name, bucket, output_name, contents):
         return aws.s3.BucketObject(
-            self.resource_prefix() + resource_name,
+            self.get_pulumi_name(resource_name),
             bucket=bucket,
             key=output_name,
             content=contents,
