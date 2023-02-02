@@ -22,7 +22,7 @@ post_to_slack() {
 report_exit_status() {
     rv=$?
 
-    if [[ $rv == 0 ]]; then
+    if [[ $rv = 0 ]]; then
         post_to_slack ":white_check_mark: migration for $BUCKET finished successfully"
     else
         post_to_slack ":x: migration for $BUCKET failed"
@@ -102,7 +102,7 @@ if [[ BUCKET_SIZE -gt 0 ]]; then
 fi
 
 # Restore object versioning.
-if [[ OBJECT_VERSIONING == "Enabled" ]]; then
+if [[ OBJECT_VERSIONING = "Enabled" ]]; then
     gsutil versioning set on gs://$BUCKET
 fi
 
