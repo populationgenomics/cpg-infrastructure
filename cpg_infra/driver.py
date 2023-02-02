@@ -173,8 +173,9 @@ class CPGInfrastructure:
 
     def resolve_dataset_order(self):
         """
-        This is now obsolete because we setup all datasets, and then deploy
-        so they all exist before the actual deploy.
+        This isn't strictly required to deploy as resources aren't dependent,
+        but sometimes is a useful exercise to sort resources because I *think*
+        it influences the order pulumi uses to deploy.
         """
         reference_dataset = (
             [self.config.common_dataset] if self.config.common_dataset else []
@@ -189,50 +190,21 @@ class CPGInfrastructure:
         return graphlib.TopologicalSorter(deps).static_order()
 
     def main(self):
-        self.setup_common_dataset()
+        self.setup_datasets()
         self.setup_gcp_access_cache_bucket()
-        self.deploy_datasets()
         self.setup_gcp_sample_metadata_cloudrun_invoker()
+
+        self.deploy_datasets()
 
         self.finalize_groups()
         self.output_infrastructure_config()
 
-    def setup_common_dataset(self):
-        infra_map: dict[str, Type[CloudInfraBase]] = {
-            c.name(): c for c in CloudInfraBase.__subclasses__()
-        }
-
-        dataset_config = self.datasets[self.config.common_dataset]
-
-        for deploy_location in dataset_config.deploy_locations:
-            if deploy_location not in self.dataset_infrastructure:
-                self.dataset_infrastructure[deploy_location] = {}
-
-            dataset_infra = CPGDatasetInfrastructure(
-                root=self,
-                config=self.config,
-                infra=infra_map[deploy_location](
-                    config=self.config,
-                    dataset_config=dataset_config,
-                ),
-                dataset_config=dataset_config,
-                group_provider=self.group_provider,
-            )
-            self.dataset_infrastructure[deploy_location][
-                self.config.common_dataset
-            ] = dataset_infra
-            dataset_infra.main()
-
-    def deploy_datasets(self):
+    def setup_datasets(self):
         infra_map: dict[str, Type[CloudInfraBase]] = {
             c.name(): c for c in CloudInfraBase.__subclasses__()
         }
 
         for dataset in self.resolve_dataset_order():
-            if dataset == self.config.common_dataset:
-                # we set it up manually first
-                continue
-
             dataset_config = self.datasets[dataset]
 
             for deploy_location in dataset_config.deploy_locations:
@@ -251,18 +223,30 @@ class CPGInfrastructure:
                     group_provider=self.group_provider,
                 )
                 self.dataset_infrastructure[deploy_location][dataset] = dataset_infra
-                dataset_infra.main()
+
+    def deploy_datasets(self):
+        for cloud_datasets in self.dataset_infrastructure.values():
+            for dataset in self.resolve_dataset_order():
+                if dataset not in cloud_datasets:
+                    continue
+
+                cloud_datasets[dataset].main()
+
+        for dataset in self.resolve_dataset_order():
+            if dataset == self.config.common_dataset:
+                # we set it up manually first
+                continue
 
     def finalize_groups(self):
-        def _process_members(members):
-            # use .sort twice because python sort is in place and stable
-            # sort on first bit of email second
-            # sort on domains (higher priority)
+        def _email_key(m_):
+            """
+            Sort on domain, then on name
+            """
+            s = m_.split('@')
+            return s[1], s[0]
 
-            _sorted_members = list(set(str(m) for m in members))
-            _sorted_members.sort(key=lambda m_: m_.split('@')[0])
-            _sorted_members.sort(key=lambda m_: m_.split('@')[1])
-            return '\n'.join(_sorted_members)
+        def _process_members(members):
+            return '\n'.join(sorted(set(str(m) for m in members), key=_email_key))
 
         # now resolve groups
         for cloud in self.group_provider.groups:
@@ -1732,7 +1716,22 @@ class CPGDatasetInfrastructure:
         """
         self.setup_container_read_write_permissions()
         self.setup_dataset_container_registry()
-        self.setup_legacy_container_registries()
+        self.setup_analysis_runner_container_registry()
+
+    def setup_analysis_runner_container_registry(self):
+        if not isinstance(self.infra, GcpInfrastructure):
+            return
+
+        if self.dataset_config.dataset != self.config.common_dataset:
+            return
+
+        self.infra.add_member_to_container_registry(
+            f'images-reader-in-analysis-runner',
+            registry=self.config.analysis_runner.gcp.container_registry_name,
+            project=self.config.analysis_runner.gcp.project,
+            member=self.images_reader_group,
+            membership=ContainerRegistryMembership.READER,
+        )
 
     def setup_container_read_write_permissions(self):
         """
@@ -1778,48 +1777,6 @@ class CPGDatasetInfrastructure:
             member=self.images_writer_group,
             membership=ContainerRegistryMembership.WRITER,
         )
-
-    def setup_legacy_container_registries(self):
-        """
-        Setup permissions for analysis-runner artifact registries
-        """
-        # TODO: This will eventually be mostly solved by the cpg-common
-        #       dataset with permissions through inheritance.
-        if not isinstance(self.infra, GcpInfrastructure):
-            return
-        try:
-            if not self.config.analysis_runner.gcp.project:
-                return
-        except AttributeError:
-            # gross catch nulls
-            return
-
-        container_registries = [
-            (
-                self.config.analysis_runner.gcp.project,
-                self.config.analysis_runner.gcp.container_registry_name,
-            ),
-        ]
-
-        kinds = {
-            'analysis-group': self.analysis_group,
-            **self.access_level_groups,
-        }
-
-        for kind, account in kinds.items():
-            # TODO, this can be solved on high level by adding common-images-reader to analysis-runner container registry
-
-            # Allow the service accounts to pull images. Note that the global project will
-            # refer to the dataset, but the Docker images are stored in the 'analysis-runner'
-            # and 'cpg-common' projects' Artifact Registry repositories.
-            for project, registry_name in container_registries:
-                self.infra.add_member_to_container_registry(
-                    f'{kind}-images-reader-in-{project}',
-                    registry=registry_name,
-                    project=project,
-                    member=account,
-                    membership=ContainerRegistryMembership.READER,
-                )
 
     # endregion CONTAINER REGISTRY
     # region NOTEBOOKS
