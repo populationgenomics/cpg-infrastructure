@@ -15,8 +15,7 @@ import xxhash
 import pulumi
 import cpg_utils.config
 
-from cpg_infra.abstraction.azure import AzureInfra
-from cpg_infra.abstraction.gcp import GcpInfrastructure
+from cpg_infra.abstraction import AzureInfra, GcpInfrastructure
 from cpg_infra.abstraction.base import (
     CloudInfraBase,
     DryRunInfra,

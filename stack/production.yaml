@@ -66,10 +66,14 @@ common:
     gcp:
     - storage
     - container-registry
+    aws:
+      - storage
+      - container-registry
   create_container_registry: 'true'
   deploy_locations:
   - gcp
   - azure
+  - aws
   enable_release: false
   gcp:
     project: cpg-common

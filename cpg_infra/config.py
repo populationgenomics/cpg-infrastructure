@@ -89,6 +89,9 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         region: str
         tenant: str
 
+    class AWS(DeserializableDataclass):
+        subscriber_sns_topic_arns: str | None = None
+
     @dataclasses.dataclass(frozen=True)
     class Hail(DeserializableDataclass):
         @dataclasses.dataclass(frozen=True)
@@ -154,6 +157,8 @@ class CPGInfrastructureConfig(DeserializableDataclass):
 
     gcp: GCP | None = None
     azure: Azure | None = None
+    aws: AWS | None = None
+
     hail: Hail | None = None
     analysis_runner: AnalysisRunner | None = None
     web_service: WebService | None = None
@@ -205,8 +210,13 @@ class CPGDatasetComponents(Enum):
             'gcp': list(CPGDatasetComponents),
             'azure': [
                 CPGDatasetComponents.STORAGE,
+                CPGDatasetComponents.CONTAINER_REGISTRY,
                 CPGDatasetComponents.HAIL_ACCOUNTS,
                 # CPGDatasetComponents.SAMPLE_METADATA,
+            ],
+            'aws': [
+                CPGDatasetComponents.STORAGE,
+                CPGDatasetComponents.CONTAINER_REGISTRY,
             ],
         }
 
