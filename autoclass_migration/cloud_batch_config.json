@@ -2,6 +2,11 @@
   "taskGroups": [
     {
       "taskSpec": {
+        "runnables": [
+          {
+            "timeout": "172800s"
+          }
+        ],
         "computeResource": {
           "cpuMilli": 16000,
           "memoryMib": 16384

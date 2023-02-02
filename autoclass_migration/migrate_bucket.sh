@@ -44,7 +44,8 @@ gsutil iam get gs://$BUCKET > /tmp/iam.json
 # Store the lifecycle configuration.
 gsutil lifecycle get gs://$BUCKET > /tmp/lifecycle_config.json
 
-# TODO: Store the Requester Pays status.
+# Store the Requester Pays setting.
+REQUESTER_PAYS=$(gsutil requesterpays get gs://cpg-fewgenomes-test | cut -f 2 -d ' ')
 
 # Remove all IAM permissions to prevent modifications while we perform the temporary copy.
 gsutil iam set -e '' <(echo "{}") gs://$BUCKET
@@ -103,7 +104,10 @@ gcloud storage buckets update gs://$BUCKET --versioning
 # Restore the lifecycle configuration.
 gsutil lifecycle set /tmp/lifecycle_config.json gs://$BUCKET
 
-# TODO: restore Requester Pays
+# Restore the Requester Pays setting.
+if [[ REQUESTER_PAYS = "Enabled" ]]; then
+    gsutil requesterpays set on gs://$BUCKET
+fi
 
 # Restore the permissions.
 gsutil iam set -e '' /tmp/iam.json gs://$BUCKET
