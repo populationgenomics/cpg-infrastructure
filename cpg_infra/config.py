@@ -29,6 +29,7 @@ class DeserializableDataclass:
             value = self.__dict__.get(fieldname)
             if not value:
                 continue
+
             dtypes = []
             # determine which type we should try to parse the value as
             # handle unions (eg: None | DType)
@@ -44,6 +45,8 @@ class DeserializableDataclass:
                     continue
 
             elif issubclass(ftype, DeserializableDataclass):
+                if isinstance(value, ftype):
+                    continue
                 dtypes.append(ftype)
 
             e = None
@@ -74,16 +77,17 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     @dataclasses.dataclass(frozen=True)
     class GCP(DeserializableDataclass):
         customer_id: str
+        region: str
         billing_project_id: str
         billing_account_id: int
+        groups_domain: str
         budget_notification_pubsub: str | None
-        reference_bucket_name: str
         config_bucket_name: str
 
-    # @dataclasses.dataclass(frozen=True)
-    # class Azure(DeserializableDataclass):
-    #     # TODO: Azure specific config
-    #     subscription_id: str
+    @dataclasses.dataclass(frozen=True)
+    class Azure(DeserializableDataclass):
+        region: str
+        tenant: str
 
     class AWS(DeserializableDataclass):
         subscriber_sns_topic_arns: str | None = None
@@ -116,11 +120,6 @@ class CPGInfrastructureConfig(DeserializableDataclass):
 
         gcp: GCP
 
-    # temporary
-    @dataclasses.dataclass(frozen=True)
-    class AccessGroupCache(DeserializableDataclass):
-        process_machine_account: str
-
     @dataclasses.dataclass(frozen=True)
     class Notebooks(DeserializableDataclass):
         @dataclasses.dataclass(frozen=True)
@@ -151,23 +150,21 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     domain: str
     dataset_storage_prefix: str
     budget_currency: str
-    reference_dataset: str
+    common_dataset: str
+    web_url_template: str
+
+    config_destination: str
 
     gcp: GCP | None = None
-    # azure: Azure | None
+    azure: Azure | None = None
     aws: AWS | None = None
+
     hail: Hail | None = None
     analysis_runner: AnalysisRunner | None = None
     web_service: WebService | None = None
     notebooks: Notebooks | None = None
     cromwell: Cromwell | None = None
     sample_metadata: SampleMetadata | None = None
-
-    config_destination: str | None = None
-    web_url_template: str | None = None
-
-    # temporary
-    access_group_cache: AccessGroupCache | None = None
 
     # When resources are renamed, it can be useful to explicitly apply changes in two
     # phases: delete followed by create; that's opposite of the default create followed by
@@ -208,7 +205,6 @@ class CPGDatasetComponents(Enum):
 
     @staticmethod
     def default_component_for_infrastructure():
-
         return {
             'dry-run': list(CPGDatasetComponents),
             'gcp': list(CPGDatasetComponents),
@@ -232,15 +228,35 @@ class CPGDatasetConfig(DeserializableDataclass):
     required to construct the dataset infrastructure
     """
 
+    def __post_init__(self):
+        try:
+            super().__post_init__()
+        except TypeError as e:
+            raise TypeError(
+                f'Could not instantiate {self.__class__.__name__} for {self.dataset!r}: {str(e)}'
+            ) from e
+
+    @dataclasses.dataclass(frozen=True)
+    class Gcp(DeserializableDataclass):
+        project: str
+        region: str | None = None
+
+        hail_service_account_test: str = None
+        hail_service_account_standard: str = None
+        hail_service_account_full: str = None
+
+    @dataclasses.dataclass(frozen=True)
+    class Azure(DeserializableDataclass):
+        region: str | None = None
+
+        hail_service_account_test: str = None
+        hail_service_account_standard: str = None
+        hail_service_account_full: str = None
+
     dataset: str
 
-    gcp_hail_service_account_test: str | None = None
-    gcp_hail_service_account_standard: str | None = None
-    gcp_hail_service_account_full: str | None = None
-
-    azure_hail_service_account_test: str | None = None
-    azure_hail_service_account_standard: str | None = None
-    azure_hail_service_account_full: str | None = None
+    gcp: Gcp
+    azure: Azure = None
 
     deployment_service_account_test: str | None = None
     deployment_service_account_standard: str | None = None
@@ -256,6 +272,7 @@ class CPGDatasetConfig(DeserializableDataclass):
     shared_project_budget: int = None
     # give access for this dataset to access any other it depends on
     depends_on: list[str] = dataclasses.field(default_factory=list)
+    depends_on_readonly: list[str] = dataclasses.field(default_factory=list)
 
     # extra places that collaborators can upload data too
     additional_upload_buckets: list[str] = dataclasses.field(default_factory=list)
@@ -263,12 +280,20 @@ class CPGDatasetConfig(DeserializableDataclass):
     # convenience place for plumbing extra service-accounts for SM
     sm_read_only_sas: list[str] = dataclasses.field(default_factory=list)
     sm_read_write_sas: list[str] = dataclasses.field(default_factory=list)
+    archive_age: int = 30
 
     components: dict[str, list[CPGDatasetComponents]] = dataclasses.field(
         default_factory=dict
     )
 
-    archive_age: int = 30
+    @classmethod
+    def instantiate(cls, **kwargs):
+        if components := kwargs.get('components'):
+            kwargs['components'] = {
+                k: [CPGDatasetComponents(c) for c in comps]
+                for k, comps in components.items()
+            }
+        return cls(**kwargs)
 
     @classmethod
     def from_pulumi(cls, config, **kwargs):

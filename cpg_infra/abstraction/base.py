@@ -23,7 +23,6 @@ from collections import defaultdict
 
 from cpg_infra.config import (
     CPGDatasetConfig,
-    CPGDatasetComponents,
     CPGInfrastructureConfig,
 )
 
@@ -85,11 +84,16 @@ class CloudInfraBase(ABC):
     ):
         super().__init__()
         self.config = config
-        self.dataset = dataset_config.dataset
-        self.components = dataset_config.components.get(
-            self.name(),
-            CPGDatasetComponents.default_component_for_infrastructure()[self.name()],
-        )
+        self.dataset_config = dataset_config
+
+    @property
+    def dataset(self):
+        return self.dataset_config.dataset
+
+    def get_pulumi_name(self, key: str):
+        assert self.dataset, 'Dataset config was not set'
+        key = key.removeprefix(self.dataset + '-')
+        return f'{self.dataset}-{self.name()}-' + key
 
     @abstractmethod
     def finalise(self):
@@ -98,6 +102,12 @@ class CloudInfraBase(ABC):
     @staticmethod
     @abstractmethod
     def name():
+        pass
+
+    @staticmethod
+    @abstractmethod
+    def member_id(member):
+        """Get the identifier for the user, that can be used in the group-cache"""
         pass
 
     # region PROJECT
@@ -219,7 +229,9 @@ class CloudInfraBase(ABC):
         """
 
     @abstractmethod
-    def add_group_member(self, resource_key: str, group, member) -> Any:
+    def add_group_member(
+        self, resource_key: str, group, member, unique_resource_key: bool = False
+    ) -> Any:
         pass
 
     # SECRETS
@@ -273,12 +285,19 @@ class CloudInfraBase(ABC):
 class DryRunInfra(CloudInfraBase):
     """DryRun infrastructure (just prints resources)"""
 
+    def finalise(self):
+        pass
+
     @staticmethod
     def name():
         return 'dry-run'
 
     def get_dataset_project_id(self):
         return self.dataset
+
+    @staticmethod
+    def member_id(member):
+        return member
 
     def create_project(self, name):
         print(f'Creating project: {name}')
@@ -336,9 +355,11 @@ class DryRunInfra(CloudInfraBase):
 
     def create_group(self, name: str) -> Any:
         print(f'Creating Group: {name}')
-        return name + '@populationgenomics.org.au'
+        return f'{name}@{self.config.gcp.groups_domain}'
 
-    def add_group_member(self, resource_key: str, group, member) -> Any:
+    def add_group_member(
+        self, resource_key: str, group, member, unique_resource_key: bool = False
+    ) -> Any:
         print(f'{resource_key} :: Add {member} to {group}')
 
     def create_secret(self, name: str, project: str = None) -> Any:
@@ -358,7 +379,7 @@ class DryRunInfra(CloudInfraBase):
         processor: Callable[[Any], Any] = None,
     ):
         _processor = processor or (lambda el: el)
-        return f'{resource_key} :: {secret}.add_version("{_processor(contents)}")'
+        return f'{resource_key} :: {secret}.add_version({_processor(contents)!r})'
 
     def add_member_to_container_registry(
         self, resource_key: str, registry, member, membership, project=None
@@ -369,3 +390,12 @@ class DryRunInfra(CloudInfraBase):
         self, resource_key: str, member, project: str = None
     ):
         return f'{resource_key} :: {member} can list buckets'
+
+    def bucket_output_path(self, bucket):
+        return f'Fake://{bucket}'
+
+    def add_blob_to_bucket(self, resource_name, bucket, output_name, contents):
+        return f'Add blob to FAKE://{bucket}/{output_name} < {contents!r}'
+
+    def create_container_registry(self, name: str):
+        return f'ContainerRegistry: {name}'
