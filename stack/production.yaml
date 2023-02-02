@@ -1,10 +1,12 @@
 acute-care:
   enable_release: true
+  enable_shared_project: true
   gcp:
     hail_service_account_full: acute-care-full-677@hail-295901.iam.gserviceaccount.com
     hail_service_account_standard: acute-care-standard-211@hail-295901.iam.gserviceaccount.com
     hail_service_account_test: acute-care-test-952@hail-295901.iam.gserviceaccount.com
     project: acute-care-321904
+  shared_project_budget: 35
 ag-hidden:
   archive_age: 90
   enable_release: false
