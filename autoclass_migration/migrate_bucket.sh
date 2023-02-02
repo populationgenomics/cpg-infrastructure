@@ -13,13 +13,97 @@ if [[ -z "$SLACK_WEBHOOK" ]]; then
     exit 1
 fi
 
-BUCKET=gs://$BUCKET  # Add gs:// prefix
+post_to_slack() {
+        curl -X POST -H 'Content-type: application/json' \
+            --data '{"text":"'"$1"'"}' \
+            $SLACK_WEBHOOK
+}
+
+report_exit_status() {
+    rv=$?
+
+    if [[ $rv == 0 ]]; then
+        post_to_slack ":white_check_mark: migration for $BUCKET finished successfully"
+    else
+        post_to_slack ":x: migration for $BUCKET failed"
+    fi
+
+    exit $rv
+}
+
+trap "report_exit_status" EXIT
+
+post_to_slack "Starting migration for $BUCKET"
 
 # First check that Autoclass hasn't already been enabled.
-gsutil autoclass get $BUCKET | grep False
+gsutil autoclass get gs://$BUCKET | grep False
 
-curl -X POST -H 'Content-type: application/json' \
-    --data '{"text":"Test notification"}' \
-    $SLACK_WEBHOOK
+# Store the permissions.
+gsutil iam get gs://$BUCKET > /tmp/iam.json
 
-echo "All done"
+# Store the lifecycle configuration.
+gsutil lifecycle get gs://$BUCKET > /tmp/lifecycle_config.json
+
+# TODO: Store the Requester Pays status.
+
+# Remove all IAM permissions to prevent modifications while we perform the temporary copy.
+gsutil iam set -e '' <(echo "{}") gs://$BUCKET
+
+# Determine total size.
+BUCKET_SIZE=$(gsutil du -s gs://$BUCKET | cut -f 1 -d ' ')
+post_to_slack "Bucket size for $BUCKET: $BUCKET_SIZE"
+
+# Only need to perform a copy if the bucket is non-empty.
+if [[ BUCKET_SIZE -gt 0 ]]; then
+    # Create a temporary bucket.
+    TMP_BUCKET=$BUCKET-autoclass-migration-tmp
+    gcloud storage buckets create gs://$TMP_BUCKET \
+        --location=australia-southeast1 \
+        --uniform-bucket-level-access
+
+    # Copy all data to the temporary bucket.
+    gcloud storage cp -r "gs://$BUCKET/*" "gs://$TMP_BUCKET"
+
+    # Compare total bucket sizes to make sure the copy completed successfully.
+    TMP_BUCKET_SIZE=$(gsutil du -s gs://$TMP_BUCKET | cut -f 1 -d ' ')
+    if [[ BUCKET_SIZE -ne TMP_BUCKET_SIZE ]]; then
+        post_to_slack "Temporary copy size mismatch for $BUCKET: $BUCKET_SIZE vs $TMP_BUCKET_SIZE"
+        exit 1
+    fi
+fi
+
+# Delete the original bucket.
+gcloud storage rm --recursive gs://$BUCKET/
+
+# Recreate the bucket, this time with Autoclass enabled.
+gcloud storage buckets create gs://$BUCKET \
+    --location=australia-southeast1 \
+    --uniform-bucket-level-access \
+    --enable-autoclass
+
+# Only need to perform a copy if the bucket is non-empty.
+if [[ BUCKET_SIZE -gt 0 ]]; then
+    # Copy all data to back from the temporary bucket.
+    gcloud storage cp -r "gs://$TMP_BUCKET/*" "gs://$BUCKET"
+
+    # Compare total bucket sizes to make sure the copy completed successfully.
+    BUCKET_SIZE=$(gsutil du -s gs://$BUCKET | cut -f 1 -d ' ')
+    if [[ BUCKET_SIZE -ne TMP_BUCKET_SIZE ]]; then
+        post_to_slack "Back-copy size mismatch for $BUCKET: $BUCKET_SIZE vs $TMP_BUCKET_SIZE"
+        exit 1
+    fi
+
+    # Delete the temporary bucket.
+    gcloud storage rm --recursive gs://$TMP_BUCKET/
+fi
+
+# Reenable object versioning.
+gcloud storage buckets update gs://$BUCKET --versioning
+
+# Restore the lifecycle configuration.
+gsutil lifecycle set /tmp/lifecycle_config.json gs://$BUCKET
+
+# TODO: restore Requester Pays
+
+# Restore the permissions.
+gsutil iam set -e '' /tmp/iam.json gs://$BUCKET

@@ -13,5 +13,8 @@
     "serviceAccount": {
       "email": "autoclass-migration@cpg-common.iam.gserviceaccount.com"
     }
+  },
+  "logsPolicy": {
+    "destination": "CLOUD_LOGGING"
   }
 }
