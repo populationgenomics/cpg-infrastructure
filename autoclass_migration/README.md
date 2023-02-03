@@ -24,11 +24,11 @@ If not already present, build the Docker image:
 gcloud builds submit --tag australia-southeast1-docker.pkg.dev/cpg-common/images/autoclass-migration:latest .
 ```
 
-Start a batch job for each bucket to migrate, e.g. to migrate all buckets in the `fewgenomes` project:
+Start a batch job for each bucket to migrate, e.g. to migrate all buckets in the `fewgenomes` project, using the billing project `cpg-common`:
 
 ```sh
 GCP_PROJECT=fewgenomes
-
+export BILLING_PROJECT=cpg-common
 export SLACK_WEBHOOK=$(gcloud secrets versions access latest --secret=slack-autoclass-migration-webhook)
 
 for b in $(gcloud storage ls --project=$GCP_PROJECT); do
