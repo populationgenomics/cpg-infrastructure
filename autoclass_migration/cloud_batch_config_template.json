@@ -4,6 +4,15 @@
       "taskSpec": {
         "runnables": [
           {
+            "container": {
+              "imageUri": "australia-southeast1-docker.pkg.dev/cpg-common/images/autoclass-migration:latest"
+            },
+            "environment": {
+              "variables": {
+                "BUCKET": "$BUCKET",
+                "SLACK_WEBHOOK": "$SLACK_WEBHOOK"
+              }
+            },
             "timeout": "172800s"
           }
         ],
@@ -17,7 +26,12 @@
   "allocationPolicy": {
     "serviceAccount": {
       "email": "autoclass-migration@cpg-common.iam.gserviceaccount.com"
-    }
+    },
+    "instances": [
+      {
+        "policy": { "machineType": "e2-highcpu-16" }
+      }
+    ]
   },
   "logsPolicy": {
     "destination": "CLOUD_LOGGING"

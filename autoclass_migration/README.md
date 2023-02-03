@@ -6,7 +6,7 @@ We use [Cloud Batch](https://cloud.google.com/batch/docs/create-run-job) to exec
 
 We use VMs with a moderate number of cores, as that helps with parallelizing the copy of many small blobs.
 
-The dedicated service account `autoclass-migration@cpg-common.iam.gserviceaccount.com` must exist and have permissions to create and delete buckets, as well as perform the data transfer. Also make sure that the necessary [Cloud Batch permissions](https://cloud.google.com/batch/docs/get-started#project-prerequisites) have been granted.
+The dedicated service account `autoclass-migration@cpg-common.iam.gserviceaccount.com` must exist and have permissions to create and delete buckets, as well as perform the data transfer. Also make sure that the necessary [Cloud Batch](https://cloud.google.com/batch/docs/get-started#project-prerequisites) and Artifact Registry Reader permissions have been granted.
 
 ## How to run
 
@@ -16,17 +16,23 @@ Switch Google Cloud projects:
 gcloud config set project cpg-common
 ```
 
-Then for each bucket `$BUCKET` to migrate, set the environment variable (e.g. `export BUCKET=cpg-fewgenomes-test` _without_ `gs://` prefix) and run:
+If not already present, build the Docker image:
+
+```sh
+gcloud builds submit --tag australia-southeast1-docker.pkg.dev/cpg-common/images/autoclass-migration:latest .
+```
+
+Start a batch job for each bucket to migrate, e.g.:
 
 ```sh
 export SLACK_WEBHOOK=$(gcloud secrets versions access latest --secret=slack-autoclass-migration-webhook)
 
-# Assumes $BUCKET is exported.
-gcloud batch jobs submit autoclass-migrate-$BUCKET \
-    --config=cloud_batch_config.json \
-    --location=asia-southeast1 \
-    --machine-type=e2-highcpu-16 \
-    --script-text="$(envsubst < migrate_bucket.sh)"
+for BUCKET in cpg-fewgenomes-test cpg-fewgenomes-test-analysis; do
+    export BUCKET
+
+    gcloud batch jobs submit autoclass-migrate-$BUCKET \
+        --config=<(envsubst < cloud_batch_config_template.json) \
+        --location=asia-southeast1
 ```
 
-We're using `asia-southeast1` instead of `australia-southeast1` above, as at the time of writing, Cloud Batch is not available in the latter region. Since we're not copying data from bucket to bucket (without routing it through the VM), that doesn't cause additional network egress fees.
+We're using `asia-southeast1` instead of `australia-southeast1` above, as at the time of writing, Cloud Batch is not available in Australia. Since we're not copying data from bucket to bucket (without routing it through the VM), that doesn't cause additional network egress fees.

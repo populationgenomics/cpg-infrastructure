@@ -14,8 +14,9 @@ if [[ -z "$SLACK_WEBHOOK" ]]; then
 fi
 
 post_to_slack() {
-    curl -X POST -H 'Content-type: application/json' \
-        --data '{"text":"'"$1"'"}' \
+    curl --fail --silent --show-error  -X POST \
+        -H 'Content-type: application/json' \
+        -d '{"text":"'"$1"'"}' \
         $SLACK_WEBHOOK
 }
 
