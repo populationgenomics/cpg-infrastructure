@@ -37,9 +37,12 @@ trap "report_exit_status" EXIT
 post_to_slack "Starting migration for $BUCKET"
 
 # First check that Autoclass hasn't already been enabled.
-gsutil autoclass get gs://$BUCKET | grep False
+if gsutil autoclass get gs://$BUCKET | grep True; then
+    post_to_slack "Autoclass is already enabled for $BUCKET"
+    exit 0
+fi
 
-# Store the permissions.
+# Store the IAM permissions.
 gsutil iam get gs://$BUCKET > /tmp/iam.json
 
 # Store the object versioning setting.
@@ -117,5 +120,5 @@ if [[ REQUESTER_PAYS = "Enabled" ]]; then
     gsutil requesterpays set on gs://$BUCKET
 fi
 
-# Restore the permissions.
+# Restore the IAM permissions.
 gsutil iam set -e '' /tmp/iam.json gs://$BUCKET

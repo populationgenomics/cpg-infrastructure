@@ -1,6 +1,6 @@
 # Autoclass migration
 
-This folder contains scripts to help with the automation of migrating Google Cloud Storage buckets to be [Autoclass](https://cloud.google.com/storage/docs/autoclass)-enabled. At the time of writing, the Autoclass setting can only be applied at bucket _creation_ time, hence shuffling all data to an intermediate bucket (and back) is necessary, incurring some downtime.
+This folder contains a [script](migrate_bucket.sh) to automate the migration of Google Cloud Storage buckets to [Autoclass](https://cloud.google.com/storage/docs/autoclass). At the time of writing, the Autoclass setting can only be applied at bucket _creation_ time, hence shuffling all data to an intermediate bucket (and back) is necessary, incurring some downtime.
 
 We use [Cloud Batch](https://cloud.google.com/batch/docs/create-run-job) to execute the migration, as [Cloud Run jobs](https://cloud.google.com/run/docs/quickstarts/jobs/create-execute) are limited to 1h of execution time and 4 cores.
 
@@ -33,6 +33,7 @@ for BUCKET in cpg-fewgenomes-test cpg-fewgenomes-test-analysis; do
     gcloud batch jobs submit autoclass-migrate-$BUCKET \
         --config=<(envsubst < cloud_batch_config_template.json) \
         --location=asia-southeast1
+done
 ```
 
 We're using `asia-southeast1` instead of `australia-southeast1` above, as at the time of writing, Cloud Batch is not available in Australia. Since we're not copying data from bucket to bucket (without routing it through the VM), that doesn't cause additional network egress fees.
