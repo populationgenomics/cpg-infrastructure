@@ -8,6 +8,8 @@ We use VMs with a moderate number of cores, as that helps with parallelizing the
 
 The dedicated service account `autoclass-migration@cpg-common.iam.gserviceaccount.com` must exist and have permissions to create and delete buckets, as well as perform the data transfer. Also make sure that the necessary [Cloud Batch](https://cloud.google.com/batch/docs/get-started#project-prerequisites) and Artifact Registry Reader permissions have been granted.
 
+To help keep track of the migration progress, the script sends messages to a Slack channel. The corresponding Slack webhook needs to be stored in the `slack-autoclass-migration-webhook` secret.
+
 ## How to run
 
 Switch Google Cloud projects:
