@@ -64,7 +64,7 @@ gsutil -u $BILLING_PROJECT iam set -e '' <(echo "{}") gs://$BUCKET
 
 # Determine total size.
 BUCKET_SIZE=$(gsutil -u $BILLING_PROJECT du -s gs://$BUCKET | cut -f 1 -d ' ')
-post_to_slack "Bucket size for $BUCKET: $BUCKET_SIZE"
+post_to_slack "Bucket size for $BUCKET: $BUCKET_SIZE B"
 
 # Only need to perform a copy if the bucket is non-empty.
 if [[ BUCKET_SIZE -gt 0 ]]; then
@@ -80,7 +80,7 @@ if [[ BUCKET_SIZE -gt 0 ]]; then
     # Compare total bucket sizes to make sure the copy completed successfully.
     TMP_BUCKET_SIZE=$(gsutil -u $BILLING_PROJECT du -s gs://$TMP_BUCKET | cut -f 1 -d ' ')
     if [[ BUCKET_SIZE -ne TMP_BUCKET_SIZE ]]; then
-        post_to_slack "Temporary copy size mismatch for $BUCKET: $BUCKET_SIZE vs $TMP_BUCKET_SIZE"
+        post_to_slack "Temporary copy size mismatch for $BUCKET: $BUCKET_SIZE B vs $TMP_BUCKET_SIZE B"
         exit 1
     fi
 fi
@@ -102,7 +102,7 @@ if [[ BUCKET_SIZE -gt 0 ]]; then
     # Compare total bucket sizes to make sure the copy completed successfully.
     BUCKET_SIZE=$(gsutil -u $BILLING_PROJECT du -s gs://$BUCKET | cut -f 1 -d ' ')
     if [[ BUCKET_SIZE -ne TMP_BUCKET_SIZE ]]; then
-        post_to_slack "Back-copy size mismatch for $BUCKET: $BUCKET_SIZE vs $TMP_BUCKET_SIZE"
+        post_to_slack "Back-copy size mismatch for $BUCKET: $BUCKET_SIZE B vs $TMP_BUCKET_SIZE B"
         exit 1
     fi
 
