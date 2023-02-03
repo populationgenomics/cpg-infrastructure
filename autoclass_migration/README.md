@@ -32,7 +32,8 @@ export SLACK_WEBHOOK=$(gcloud secrets versions access latest --secret=slack-auto
 for b in $(gcloud storage ls --project=$GCP_PROJECT); do
     export BUCKET=$(echo $b | cut -f 3 -d '/')
     # Only consider buckets that have a "cpg-" prefix.
-    if [[ $BUCKET == cpg-* ]]; then
+    # Don't change the "-archive" bucket, as that's immediate cold storage.
+    if [[ $BUCKET = cpg-* && $BUCKET != *-archive ]]; then
         gcloud batch jobs submit autoclass-migrate-$BUCKET \
             --config=<(envsubst < cloud_batch_config_template.json) \
             --location=asia-southeast1
