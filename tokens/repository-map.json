@@ -55,7 +55,8 @@
         "sv-workflows"
     ],
     "hgdp": [
-        "hgdp"
+        "hgdp",
+        "sv-workflows"
     ],
     "ibmdx": [
         "automated-interpretation-pipeline",

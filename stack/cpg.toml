@@ -2,13 +2,14 @@
 domain = "populationgenomics.org.au"
 dataset_storage_prefix = "cpg-"
 budget_currency = "AUD"
-reference_dataset = "common"
-config_destination = "gs://cpg-config/templates/storage/"
+common_dataset = "common"
+config_destination = "gs://cpg-config/templates/"
 web_url_template = "https://{namespace}-web.populationgenomics.org.au/{dataset}"
 
 #disable_group_memberships = "true"
 
 [infrastructure.gcp]
+groups_domain = "populationgenomics.org.au"
 region = "australia-southeast1"
 customer_id = "C010ys3gt"
 billing_account_id = '01D012-20A6A2-CBD343'
@@ -32,9 +33,6 @@ container_registry_name = "images"
 
 [infrastructure.web_service.gcp]
 server_machine_account = "web-server@analysis-runner.iam.gserviceaccount.com"
-
-[infrastructure.access_group_cache]
-process_machine_account = "access-group-cache@analysis-runner.iam.gserviceaccount.com"
 
 [infrastructure.notebooks.gcp]
 project = "notebooks-314505"

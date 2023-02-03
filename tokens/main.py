@@ -62,6 +62,9 @@ def main():
     with open('../stack/production.yaml', encoding='utf-8') as f:
         production_config = yaml.safe_load(f)
 
+    with open('../stack/dev.yaml', encoding='utf-8') as f:
+        production_config.update(yaml.safe_load(f))
+
     invalid_datasets = set(ALLOWED_REPOS.keys()) - set(production_config.keys())
     if invalid_datasets:
         raise ValueError(
@@ -90,7 +93,6 @@ def main():
                 entries[infra]['projectId'] = infra_config.get('project')
 
             for access_level in 'test', 'standard', 'full':
-
                 # removes -\d{3}@hail-295901.iam.gserviceaccount.com
                 hail_user = infra_config.get(
                     f'hail_service_account_{access_level}', ''

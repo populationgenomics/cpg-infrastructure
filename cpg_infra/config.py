@@ -29,6 +29,7 @@ class DeserializableDataclass:
             value = self.__dict__.get(fieldname)
             if not value:
                 continue
+
             dtypes = []
             # determine which type we should try to parse the value as
             # handle unions (eg: None | DType)
@@ -44,6 +45,8 @@ class DeserializableDataclass:
                     continue
 
             elif issubclass(ftype, DeserializableDataclass):
+                if isinstance(value, ftype):
+                    continue
                 dtypes.append(ftype)
 
             e = None
@@ -77,6 +80,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         region: str
         billing_project_id: str
         billing_account_id: int
+        groups_domain: str
         budget_notification_pubsub: str | None
         config_bucket_name: str
 
@@ -113,11 +117,6 @@ class CPGInfrastructureConfig(DeserializableDataclass):
 
         gcp: GCP
 
-    # temporary
-    @dataclasses.dataclass(frozen=True)
-    class AccessGroupCache(DeserializableDataclass):
-        process_machine_account: str
-
     @dataclasses.dataclass(frozen=True)
     class Notebooks(DeserializableDataclass):
         @dataclasses.dataclass(frozen=True)
@@ -148,7 +147,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     domain: str
     dataset_storage_prefix: str
     budget_currency: str
-    reference_dataset: str
+    common_dataset: str
     web_url_template: str
 
     config_destination: str
@@ -161,9 +160,6 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     notebooks: Notebooks | None = None
     cromwell: Cromwell | None = None
     sample_metadata: SampleMetadata | None = None
-
-    # temporary
-    access_group_cache: AccessGroupCache = None
 
     # When resources are renamed, it can be useful to explicitly apply changes in two
     # phases: delete followed by create; that's opposite of the default create followed by
@@ -204,7 +200,6 @@ class CPGDatasetComponents(Enum):
 
     @staticmethod
     def default_component_for_infrastructure():
-
         return {
             'dry-run': list(CPGDatasetComponents),
             'gcp': list(CPGDatasetComponents),
@@ -267,6 +262,7 @@ class CPGDatasetConfig(DeserializableDataclass):
     shared_project_budget: int = None
     # give access for this dataset to access any other it depends on
     depends_on: list[str] = dataclasses.field(default_factory=list)
+    depends_on_readonly: list[str] = dataclasses.field(default_factory=list)
 
     # extra places that collaborators can upload data too
     additional_upload_buckets: list[str] = dataclasses.field(default_factory=list)
