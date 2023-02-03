@@ -75,12 +75,12 @@ post_to_slack "Bucket size for $BUCKET: $BUCKET_SIZE B"
 if [[ BUCKET_SIZE -gt 0 ]]; then
     # Create a temporary bucket.
     TMP_BUCKET=$BUCKET-autoclass-migration-tmp
-    gcloud --project=$GCP_PROJECT --billing-project=$BILLING_PROJECT storage buckets create gs://$TMP_BUCKET \
-        --location=australia-southeast1 \
-        --uniform-bucket-level-access
+    gsutil --project=$GCP_PROJECT -u $BILLING_PROJECT mb gs://$TMP_BUCKET \
+        -l australia-southeast1 \
+        -b on
 
     # Copy all data to the temporary bucket.
-    gcloud --billing-project=$BILLING_PROJECT storage cp -r "gs://$BUCKET/*" "gs://$TMP_BUCKET"
+    gsutil -u $BILLING_PROJECT -m cp -r "gs://$BUCKET/*" "gs://$TMP_BUCKET"
 
     # Compare total bucket sizes to make sure the copy completed successfully.
     TMP_BUCKET_SIZE=$(gsutil -u $BILLING_PROJECT du -s gs://$TMP_BUCKET | cut -f 1 -d ' ')
@@ -91,18 +91,18 @@ if [[ BUCKET_SIZE -gt 0 ]]; then
 fi
 
 # Delete the original bucket.
-gcloud --billing-project=$BILLING_PROJECT storage rm --recursive gs://$BUCKET/
+gsutil -u $BILLING_PROJECT -m rm -r gs://$BUCKET
 
 # Recreate the bucket, this time with Autoclass enabled.
-gcloud --project=$GCP_PROJECT --billing-project=$BILLING_PROJECT storage buckets create gs://$BUCKET \
-    --location=australia-southeast1 \
-    --uniform-bucket-level-access \
-    --enable-autoclass
+gsutil --project=$GCP_PROJECT -u $BILLING_PROJECT mb gs://$BUCKET \
+    -l australia-southeast1 \
+    -b on \
+    --autoclass
 
 # Only need to perform a copy if the bucket is non-empty.
 if [[ BUCKET_SIZE -gt 0 ]]; then
     # Copy all data to back from the temporary bucket.
-    gcloud --billing-project=$BILLING_PROJECT storage cp -r "gs://$TMP_BUCKET/*" "gs://$BUCKET"
+    gsutil -u $BILLING_PROJECT -m cp -r "gs://$TMP_BUCKET/*" "gs://$BUCKET"
 
     # Compare total bucket sizes to make sure the copy completed successfully.
     BUCKET_SIZE=$(gsutil -u $BILLING_PROJECT du -s gs://$BUCKET | cut -f 1 -d ' ')
@@ -112,7 +112,7 @@ if [[ BUCKET_SIZE -gt 0 ]]; then
     fi
 
     # Delete the temporary bucket.
-    gcloud --billing-project=$BILLING_PROJECT storage rm --recursive gs://$TMP_BUCKET/
+    gsutil -u $BILLING_PROJECT -m rm -r gs://$TMP_BUCKET
 fi
 
 # Restore object versioning.
