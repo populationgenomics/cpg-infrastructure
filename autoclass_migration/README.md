@@ -22,17 +22,21 @@ If not already present, build the Docker image:
 gcloud builds submit --tag australia-southeast1-docker.pkg.dev/cpg-common/images/autoclass-migration:latest .
 ```
 
-Start a batch job for each bucket to migrate, e.g.:
+Start a batch job for each bucket to migrate, e.g. to migrate all buckets in the `fewgenomes` project:
 
 ```sh
+GCP_PROJECT=fewgenomes
+
 export SLACK_WEBHOOK=$(gcloud secrets versions access latest --secret=slack-autoclass-migration-webhook)
 
-for BUCKET in cpg-fewgenomes-test cpg-fewgenomes-test-analysis; do
-    export BUCKET
-
-    gcloud batch jobs submit autoclass-migrate-$BUCKET \
-        --config=<(envsubst < cloud_batch_config_template.json) \
-        --location=asia-southeast1
+for b in $(gcloud storage ls --project=$GCP_PROJECT); do
+    export BUCKET=$(echo $b | cut -f 3 -d '/')
+    # Only consider buckets that have a "cpg-" prefix.
+    if [[ $BUCKET == cpg-* ]]; then
+        gcloud batch jobs submit autoclass-migrate-$BUCKET \
+            --config=<(envsubst < cloud_batch_config_template.json) \
+            --location=asia-southeast1
+    fi
 done
 ```
 
