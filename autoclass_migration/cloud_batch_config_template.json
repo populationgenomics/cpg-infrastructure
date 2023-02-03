@@ -9,8 +9,9 @@
             },
             "environment": {
               "variables": {
-                "BUCKET": "$BUCKET",
                 "BILLING_PROJECT": "$BILLING_PROJECT",
+                "BUCKET": "$BUCKET",
+                "GCP_PROJECT": "$GCP_PROJECT",
                 "SLACK_WEBHOOK": "$SLACK_WEBHOOK"
               }
             },

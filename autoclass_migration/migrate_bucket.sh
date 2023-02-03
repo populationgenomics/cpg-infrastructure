@@ -3,6 +3,11 @@
 set -o pipefail
 set -ex
 
+if [[ -z "$GCP_PROJECT" ]]; then
+    echo "No GCP project specified"
+    exit 1
+fi
+
 if [[ -z "$BUCKET" ]]; then
     echo "No bucket specified"
     exit 1
@@ -70,7 +75,7 @@ post_to_slack "Bucket size for $BUCKET: $BUCKET_SIZE B"
 if [[ BUCKET_SIZE -gt 0 ]]; then
     # Create a temporary bucket.
     TMP_BUCKET=$BUCKET-autoclass-migration-tmp
-    gcloud --billing-project=$BILLING_PROJECT storage buckets create gs://$TMP_BUCKET \
+    gcloud --project=$GCP_PROJECT --billing-project=$BILLING_PROJECT storage buckets create gs://$TMP_BUCKET \
         --location=australia-southeast1 \
         --uniform-bucket-level-access
 
@@ -89,7 +94,7 @@ fi
 gcloud --billing-project=$BILLING_PROJECT storage rm --recursive gs://$BUCKET/
 
 # Recreate the bucket, this time with Autoclass enabled.
-gcloud --billing-project=$BILLING_PROJECT storage buckets create gs://$BUCKET \
+gcloud --project=$GCP_PROJECT --billing-project=$BILLING_PROJECT storage buckets create gs://$BUCKET \
     --location=australia-southeast1 \
     --uniform-bucket-level-access \
     --enable-autoclass
