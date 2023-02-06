@@ -1,5 +1,6 @@
 cpginfradev:
   enable_release: true
+  autoclass: true
   gcp:
     hail_service_account_full: michaeldev-full-347@hail-295901.iam.gserviceaccount.com
     hail_service_account_standard: michaeldev-standard-929@hail-295901.iam.gserviceaccount.com

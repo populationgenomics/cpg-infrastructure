@@ -295,6 +295,7 @@ class GcpInfrastructure(CloudInfraBase):
         unique=False,
         requester_pays=False,
         versioning: bool = True,
+        autoclass: bool = False,
         project: str = None,
     ) -> Any:
         unique_bucket_name = name
@@ -309,6 +310,7 @@ class GcpInfrastructure(CloudInfraBase):
             location=self.region,
             uniform_bucket_level_access=True,
             versioning=gcp.storage.BucketVersioningArgs(enabled=versioning),
+            autoclass=gcp.storage.BucketAutoclass(enabled=autoclass),
             labels={'bucket': unique_bucket_name},
             # duplicate the array to avoid adding the lifecycle rule to an existing list
             lifecycle_rules=[

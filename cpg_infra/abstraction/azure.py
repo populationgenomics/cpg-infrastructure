@@ -270,8 +270,12 @@ class AzureInfra(CloudInfraBase):
         unique: bool = False,
         requester_pays: bool = False,
         versioning: bool = True,
+        autoclass: bool = False,
         project: str = None,
     ) -> Any:
+        # Autoclass is not supported on Azure yet.
+        assert not autoclass
+
         # Policies are set at the storage account level
         # the rules are generated using other function calls
         # e.g. bucket_rule_archive
