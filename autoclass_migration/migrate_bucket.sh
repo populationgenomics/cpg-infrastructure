@@ -66,7 +66,8 @@ gsutil -u "$BILLING_PROJECT" iam set -e '' <(echo "{}") "gs://$BUCKET"
 
 # Determine total size.
 BUCKET_SIZE=$(gsutil -u "$BILLING_PROJECT" du -s "gs://$BUCKET" | cut -f 1 -d ' ')
-post_to_slack "Bucket size for $BUCKET: $BUCKET_SIZE B"
+BUCKET_SIZE_IEC=$(echo "$BUCKET_SIZE" | numfmt --to=iec)
+post_to_slack "Bucket size for $BUCKET: ${BUCKET_SIZE_IEC}B"
 
 # Only need to perform a copy if the bucket is non-empty.
 if [[ $BUCKET_SIZE -gt 0 ]]; then
