@@ -24,10 +24,7 @@ if [[ -z "$SLACK_WEBHOOK" ]]; then
 fi
 
 post_to_slack() {
-    curl --fail --silent --show-error  -X POST \
-        -H 'Content-type: application/json' \
-        -d '{"text":"'"$1"'"}' \
-        "$SLACK_WEBHOOK"
+    curl --fail --silent --show-error  -X POST -H 'Content-type: application/json' -d '{"text":"'"$1"'"}' "$SLACK_WEBHOOK"
 }
 
 report_exit_status() {
@@ -75,10 +72,7 @@ post_to_slack "Bucket size for $BUCKET: $BUCKET_SIZE B"
 if [[ $BUCKET_SIZE -gt 0 ]]; then
     # Create a temporary bucket.
     TMP_BUCKET=$BUCKET-autoclass-migration-tmp
-    gsutil -u "$BILLING_PROJECT" mb "gs://$TMP_BUCKET" \
-        -p "$GCP_PROJECT" \
-        -l australia-southeast1 \
-        -b on
+    gsutil -u "$BILLING_PROJECT" mb -p "$GCP_PROJECT" -l australia-southeast1 -b on "gs://$TMP_BUCKET"
 
     # Copy all data to the temporary bucket.
     gsutil -u "$BILLING_PROJECT" -m cp -r "gs://$BUCKET/*" "gs://$TMP_BUCKET"
@@ -95,11 +89,7 @@ fi
 gsutil -u "$BILLING_PROJECT" -m rm -r "gs://$BUCKET"
 
 # Recreate the bucket, this time with Autoclass enabled.
-gsutil -u "$BILLING_PROJECT" mb "gs://$BUCKET" \
-    -p "$GCP_PROJECT" \
-    -l australia-southeast1 \
-    -b on \
-    --autoclass
+gsutil -u "$BILLING_PROJECT" mb -p "$GCP_PROJECT" -l australia-southeast1 -b on --autoclass "gs://$BUCKET"
 
 # Only need to perform a copy if the bucket is non-empty.
 if [[ $BUCKET_SIZE -gt 0 ]]; then
