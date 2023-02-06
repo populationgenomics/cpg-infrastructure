@@ -15,7 +15,7 @@
                 "SLACK_WEBHOOK": "$SLACK_WEBHOOK"
               }
             },
-            "timeout": "172800s"
+            "timeout": "604800s"
           }
         ],
         "computeResource": {
