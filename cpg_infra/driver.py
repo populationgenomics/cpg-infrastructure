@@ -769,7 +769,7 @@ class CPGDatasetInfrastructure:
 
         self.setup_storage_common_test_access()
         self.infra.give_member_ability_to_list_buckets(
-            'project-buckets-lister', self.analysis_group
+            'project-buckets-lister', self.main_list_group
         )
         self.setup_storage_archive_bucket_permissions()
         self.setup_storage_main_bucket_permissions()
