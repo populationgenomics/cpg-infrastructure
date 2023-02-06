@@ -281,7 +281,7 @@ class CPGInfrastructure:
                     infra.add_blob_to_bucket(
                         f'{group.name}-group-cache-members',
                         bucket=self.gcp_members_cache_bucket,
-                        contents=members_contents,
+                        contents=members_contents + '\n',
                         output_name=f'{group.name}-members.txt',
                     )
 
