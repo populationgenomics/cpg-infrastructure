@@ -75,7 +75,8 @@ post_to_slack "Bucket size for $BUCKET: $BUCKET_SIZE B"
 if [[ $BUCKET_SIZE -gt 0 ]]; then
     # Create a temporary bucket.
     TMP_BUCKET=$BUCKET-autoclass-migration-tmp
-    gsutil --project="$GCP_PROJECT" -u "$BILLING_PROJECT" mb "gs://$TMP_BUCKET" \
+    gsutil -u "$BILLING_PROJECT" mb "gs://$TMP_BUCKET" \
+        -p "$GCP_PROJECT" \
         -l australia-southeast1 \
         -b on
 
@@ -94,7 +95,8 @@ fi
 gsutil -u "$BILLING_PROJECT" -m rm -r "gs://$BUCKET"
 
 # Recreate the bucket, this time with Autoclass enabled.
-gsutil --project="$GCP_PROJECT" -u "$BILLING_PROJECT" mb "gs://$BUCKET" \
+gsutil -u "$BILLING_PROJECT" mb "gs://$BUCKET" \
+    -p "$GCP_PROJECT" \
     -l australia-southeast1 \
     -b on \
     --autoclass
