@@ -265,16 +265,16 @@ class CPGInfrastructure:
                 if group.cache_members and isinstance(infra, GcpInfrastructure):
                     _members = self.group_provider.resolve_group_members(group)
                     member_ids = [infra.member_id(m) for m in _members]
-                    members_contents = ''
+                    members_contents = '\n'
 
                     if len(member_ids) > 0:
                         if all(isinstance(m, str) for m in member_ids):
-                            members_contents = _process_members(member_ids)
+                            members_contents = _process_members(member_ids) + '\n'
                         else:
                             members_contents = (
                                 pulumi.Output.all(*member_ids)
                                 .apply(_process_members)
-                                .apply(lambda value: value or '')
+                                .apply(lambda value: (value or '') + '\n')
                             )
 
                     # we'll create a blob with the members of the groups
