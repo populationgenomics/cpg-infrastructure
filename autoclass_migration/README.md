@@ -32,6 +32,7 @@ export BILLING_PROJECT=cpg-common
 export SLACK_WEBHOOK=$(gcloud secrets versions access latest --secret=slack-autoclass-migration-webhook)
 
 for b in $(gcloud storage ls --project=$GCP_PROJECT); do
+    # `export` is necessary for `envsubst` below.
     export BUCKET=$(echo "$b" | cut -f 3 -d '/')
     # Only consider buckets that have a "cpg-" prefix.
     # Don't change the "-archive" bucket, as that's immediate cold storage.
