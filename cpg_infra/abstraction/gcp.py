@@ -310,7 +310,7 @@ class GcpInfrastructure(CloudInfraBase):
             location=self.region,
             uniform_bucket_level_access=True,
             versioning=gcp.storage.BucketVersioningArgs(enabled=versioning),
-            autoclass=gcp.storage.BucketAutoclass(enabled=autoclass),
+            autoclass=gcp.storage.BucketAutoclassArgs(enabled=autoclass),
             labels={'bucket': unique_bucket_name},
             # duplicate the array to avoid adding the lifecycle rule to an existing list
             lifecycle_rules=[
