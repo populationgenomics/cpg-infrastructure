@@ -273,9 +273,6 @@ class AzureInfra(CloudInfraBase):
         autoclass: bool = False,
         project: str = None,
     ) -> Any:
-        # Autoclass is not supported on Azure yet.
-        assert not autoclass
-
         # Policies are set at the storage account level
         # the rules are generated using other function calls
         # e.g. bucket_rule_archive
@@ -297,7 +294,7 @@ class AzureInfra(CloudInfraBase):
 
         self.storage_account_lifecycle_rules.extend(lifecycle_rules)
 
-        return az.storage.BlobContainer(
+        resource = az.storage.BlobContainer(
             self.get_pulumi_name(name + '-blob-container'),
             account_name=self.storage_account.name,
             resource_group_name=project or self.resource_group.name,
@@ -305,6 +302,17 @@ class AzureInfra(CloudInfraBase):
             metadata={'bucket': name},
             # TODO: work out requester_pays in Azure
         )
+
+        # Autoclass is not supported on Azure. We don't assert here, as some datasets
+        # exist on both GCP (where Autoclass is enabled) and Azure, like cpg-common.
+        if autoclass:
+            pulumi.warn('Ignoring `autoclass` on Azure', resource=resource)
+
+        # Requester Pays is not available on Azure.
+        if requester_pays:
+            pulumi.warn('Ignoring `requester_pays` on Azure', resource=resource)
+
+        return resource
 
     @staticmethod
     def bucket_membership_to_role(membership: BucketMembership):
