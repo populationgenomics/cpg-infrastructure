@@ -1,9 +1,14 @@
 cpginfradev:
+  autoclass: true
+  components:
+    gcp:
+    - storage
+    - storage
+    - hail-accounts
+    - analysis-runner
   enable_release: true
   gcp:
     hail_service_account_full: michaeldev-full-347@hail-295901.iam.gserviceaccount.com
     hail_service_account_standard: michaeldev-standard-929@hail-295901.iam.gserviceaccount.com
     hail_service_account_test: michaeldev-test-383@hail-295901.iam.gserviceaccount.com
     project: michael-dev-303721
-  components:
-    gcp: [storage, storage, hail-accounts, analysis-runner]

@@ -5,19 +5,39 @@ this script modifies the Pulumi state to reflect those changes."""
 
 import sys
 import json
+import yaml
 
 
 def main():
     """Main entry point."""
 
-    if len(sys.argv) < 4:
-        print(f'syntax: {sys.argv[0]} <input.json> <output.json> <bucket-names>...')
+    if len(sys.argv) < 5:
+        print(
+            f'syntax: {sys.argv[0]} <config.yaml> <gcp-project> <state.json> <bucket-names>...'
+        )
         sys.exit(1)
 
     with open(sys.argv[1], 'rt', encoding='utf-8') as f:
+        config = yaml.safe_load(f)
+
+    found = False
+    for dataset in config.values():
+        if dataset['gcp']['project'] == sys.argv[2]:
+            dataset['autoclass'] = True
+            found = True
+            break
+
+    if not found:
+        print(f'Error: no dataset found for GCP project {sys.argv[2]}')
+        sys.exit(1)
+
+    with open(sys.argv[1], 'wt', encoding='utf-8') as f:
+        yaml.dump(config, f)
+
+    with open(sys.argv[3], 'rt', encoding='utf-8') as f:
         content = json.load(f)
 
-    bucket_names = set(sys.argv[3:])
+    bucket_names = set(sys.argv[4:])
     for resource in content['checkpoint']['latest']['resources']:
         if (
             resource['type'] == 'gcp:storage/bucket:Bucket'
@@ -40,7 +60,7 @@ def main():
         print(f'Error: could not find the following buckets {bucket_names}')
         sys.exit(1)
 
-    with open(sys.argv[2], 'wt', encoding='utf-8') as f:
+    with open(sys.argv[3], 'wt', encoding='utf-8') as f:
         json.dump(content, f, indent=4)
 
 
