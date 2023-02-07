@@ -142,6 +142,7 @@ class CloudInfraBase(ABC):
         unique: bool = False,
         requester_pays: bool = False,
         versioning: bool = True,
+        autoclass: bool = False,
         project: str = None,
     ) -> Any:
         """
@@ -317,6 +318,7 @@ class DryRunInfra(CloudInfraBase):
         unique: bool = False,
         requester_pays: bool = False,
         versioning: bool = True,
+        autoclass: bool = False,
         project: str = None,
     ) -> Any:
         print(f'Create bucket: {name} w/ rules: {", ".join(lifecycle_rules)}')
