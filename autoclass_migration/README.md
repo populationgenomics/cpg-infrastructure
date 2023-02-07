@@ -36,8 +36,11 @@ for b in $(gsutil ls -p $GCP_PROJECT); do
     export BUCKET=$(echo "$b" | cut -f 3 -d '/')
     # Only consider buckets that have a "cpg-" prefix.
     # Don't change the "-archive" bucket, as that's immediate cold storage.
-    # Don't change "-tmp" buckets, as those get cleared out automatically.
-    if [[ "$BUCKET" = cpg-* && "$BUCKET" != *-archive && "$BUCKET" != *-tmp ]]; then
+    # Don't change "-tmp" and "-hail" buckets, as those get cleared out automatically.
+    if [[ "$BUCKET" = cpg-* && \
+          "$BUCKET" != *-archive && \
+          "$BUCKET" != *-tmp && \
+          "$BUCKET" != *-hail ]]; then
         gcloud batch jobs submit "autoclass-migrate-$BUCKET" \
             --config=<(envsubst < cloud_batch_config_template.json) \
             --location=asia-southeast1
