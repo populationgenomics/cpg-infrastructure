@@ -76,7 +76,7 @@ if [[ $BUCKET_SIZE -gt 0 ]]; then
     gsutil -u "$BILLING_PROJECT" mb -p "$GCP_PROJECT" -l australia-southeast1 -b on "gs://$TMP_BUCKET"
 
     # Copy all data to the temporary bucket.
-    gsutil -u "$BILLING_PROJECT" -m cp -r "gs://$BUCKET/*" "gs://$TMP_BUCKET"
+    gsutil -u "$BILLING_PROJECT" -m -o GSUtil:parallel_thread_count=32 cp -r "gs://$BUCKET/*" "gs://$TMP_BUCKET"
 
     # Compare total bucket sizes to make sure the copy completed successfully.
     TMP_BUCKET_SIZE=$(gsutil -u "$BILLING_PROJECT" du -s "gs://$TMP_BUCKET" | cut -f 1 -d ' ')
@@ -87,7 +87,7 @@ if [[ $BUCKET_SIZE -gt 0 ]]; then
 fi
 
 # Delete the original bucket.
-gsutil -u "$BILLING_PROJECT" -m rm -r "gs://$BUCKET"
+gsutil -u "$BILLING_PROJECT" -m -o GSUtil:parallel_thread_count=32 rm -r "gs://$BUCKET"
 
 # Recreate the bucket, this time with Autoclass enabled.
 gsutil -u "$BILLING_PROJECT" mb -p "$GCP_PROJECT" -l australia-southeast1 -b on --autoclass "gs://$BUCKET"
@@ -95,7 +95,7 @@ gsutil -u "$BILLING_PROJECT" mb -p "$GCP_PROJECT" -l australia-southeast1 -b on 
 # Only need to perform a copy if the bucket is non-empty.
 if [[ $BUCKET_SIZE -gt 0 ]]; then
     # Copy all data to back from the temporary bucket.
-    gsutil -u "$BILLING_PROJECT" -m cp -r "gs://$TMP_BUCKET/*" "gs://$BUCKET"
+    gsutil -u "$BILLING_PROJECT" -m -o GSUtil:parallel_thread_count=32 cp -r "gs://$TMP_BUCKET/*" "gs://$BUCKET"
 
     # Compare total bucket sizes to make sure the copy completed successfully.
     BUCKET_SIZE=$(gsutil -u "$BILLING_PROJECT" du -s "gs://$BUCKET" | cut -f 1 -d ' ')
@@ -105,7 +105,7 @@ if [[ $BUCKET_SIZE -gt 0 ]]; then
     fi
 
     # Delete the temporary bucket.
-    gsutil -u "$BILLING_PROJECT" -m rm -r "gs://$TMP_BUCKET"
+    gsutil -u "$BILLING_PROJECT" -m -o GSUtil:parallel_thread_count=32 rm -r "gs://$TMP_BUCKET"
 fi
 
 # Restore object versioning.
