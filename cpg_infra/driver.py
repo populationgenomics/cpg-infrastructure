@@ -165,7 +165,9 @@ class CPGInfrastructure:
         self.config = config
         self.datasets = {d.dataset: d for d in dataset_configs}
 
-        self.group_provider = CPGInfrastructure.GroupProvider(group_prefix=self.config.group_prefix)
+        self.group_provider = CPGInfrastructure.GroupProvider(
+            group_prefix=self.config.group_prefix
+        )
 
         # { cloud: { name: DatasetInfrastructure } }
         self.dataset_infrastructure: dict[
