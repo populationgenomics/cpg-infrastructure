@@ -92,6 +92,7 @@ epileptic-enceph:
     hail_service_account_test: epileptic-enceph-test-285@hail-295901.iam.gserviceaccount.com
     project: epileptic-enceph
 fewgenomes:
+  autoclass: true
   enable_release: false
   gcp:
     hail_service_account_full: fewgenomes-full-915@hail-295901.iam.gserviceaccount.com
@@ -263,12 +264,12 @@ prophecy:
   - thousand-genomes
   enable_release: true
   enable_shared_project: 'true'
-  shared_project_budget: 8300
   gcp:
     hail_service_account_full: prophecy-full-674@hail-295901.iam.gserviceaccount.com
     hail_service_account_standard: prophecy-standard-432@hail-295901.iam.gserviceaccount.com
     hail_service_account_test: prophecy-test-998@hail-295901.iam.gserviceaccount.com
     project: prophecy-339301
+  shared_project_budget: 8300
 ravenscroft-arch:
   archive_age: 90
   enable_release: false
