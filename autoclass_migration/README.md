@@ -31,16 +31,15 @@ export GCP_PROJECT=fewgenomes
 export BILLING_PROJECT=cpg-common
 export SLACK_WEBHOOK=$(gcloud secrets versions access latest --secret=slack-autoclass-migration-webhook)
 
-for b in $(gsutil ls -p $GCP_PROJECT); do
+for b in $(gsutil ls -p "$GCP_PROJECT"); do
     # `export` is necessary for `envsubst` below.
     export BUCKET=$(echo "$b" | cut -f 3 -d '/')
-    # Only consider buckets that have a "cpg-" prefix.
-    # Don't change the "-archive" bucket, as that's immediate cold storage.
-    # Don't change "-tmp" and "-hail" buckets, as those get cleared out automatically.
+    # See driver.py regarding why some buckets don't get migrated.
     if [[ "$BUCKET" = cpg-* && \
           "$BUCKET" != *-archive && \
-          "$BUCKET" != *-tmp && \
-          "$BUCKET" != *-hail ]]; then
+          "$BUCKET" != *-cache && \
+          "$BUCKET" != *-hail && \
+          "$BUCKET" != *-tmp ]]; then
         gcloud batch jobs submit "autoclass-migrate-$BUCKET" \
             --config=<(envsubst < cloud_batch_config_template.json) \
             --location=asia-southeast1
@@ -49,3 +48,28 @@ done
 ```
 
 We're using `asia-southeast1` instead of `australia-southeast1` above, as at the time of writing, Cloud Batch is not available in Australia. Since we're not copying data from bucket to bucket (without routing it through the VM), that doesn't cause additional network egress fees.
+
+## Updating the Pulumi state
+
+Since this migration happens outside of Pulumi, the infrastructure state needs to be updated manually. E.g. for a given `$GCP_PROJECT` for which the above migrations have successfully completed, run the following:
+
+```sh
+BUCKET_NAMES=()
+for b in $(gsutil ls -p "$GCP_PROJECT"); do
+    BUCKET=$(echo "$b" | cut -f 3 -d '/')
+    if [[ "$BUCKET" = cpg-* && \
+          "$BUCKET" != *-archive && \
+          "$BUCKET" != *-cache && \
+          "$BUCKET" != *-hail && \
+          "$BUCKET" != *-tmp ]]; then
+          BUCKET_NAMES+=("$BUCKET")
+    fi
+done
+
+gsutil cp gs://cpg-pulumi-state/.pulumi/stacks/production.json /tmp && \
+./fix_pulumi_state.py ../stack/production.yaml "$GCP_PROJECT" /tmp/production.json "${BUCKET_NAMES[@]}" && \
+gsutil cp /tmp/production.json gs://cpg-pulumi-state/.pulumi/stacks/ && \
+git commit -a -m "Update Autoclass setting for $GCP_PROJECT"
+```
+
+Don't forget to open a GitHub PR with the changes afterwards.
