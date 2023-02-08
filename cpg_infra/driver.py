@@ -93,11 +93,12 @@ class CPGInfrastructure:
             def __repr__(self):
                 return f'GROUP("{self.name}")'
 
-        def __init__(self):
+        def __init__(self, group_prefix: str | None = None):
             self.groups: dict[
                 str, dict[str, CPGInfrastructure.GroupProvider.Group]
             ] = defaultdict()
 
+            self.group_prefix = group_prefix or ''
             self._cached_resolved_members: dict[str, list] = {}
 
         def get_group(self, infra_name: str, group_name: str):
@@ -119,7 +120,7 @@ class CPGInfrastructure:
                 name=name,
                 cache_members=cache_members,
                 members=members or {},
-                group=infra.create_group(name),
+                group=infra.create_group(self.group_prefix + name),
             )
             self.groups[infra.name()][name] = group
 
@@ -164,7 +165,7 @@ class CPGInfrastructure:
         self.config = config
         self.datasets = {d.dataset: d for d in dataset_configs}
 
-        self.group_provider = CPGInfrastructure.GroupProvider()
+        self.group_provider = CPGInfrastructure.GroupProvider(group_prefix=self.config.group_prefix)
 
         # { cloud: { name: DatasetInfrastructure } }
         self.dataset_infrastructure: dict[

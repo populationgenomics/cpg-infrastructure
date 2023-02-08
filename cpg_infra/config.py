@@ -166,6 +166,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     # delete, which can end up with missing permissions. To implement the first phase
     # (delete), simply change this to 'True', then revert to reapply group memberships
     disable_group_memberships: bool = False
+    group_prefix: str = ''
 
     budget_notification_thresholds: list[float] = dataclasses.field(
         default_factory=lambda: [0.5, 0.9, 1.0]
