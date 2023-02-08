@@ -73,3 +73,11 @@ git commit -a -m "Update Autoclass setting for $GCP_PROJECT"
 ```
 
 Don't forget to open a GitHub PR with the changes afterwards.
+
+## Tracking overall migration progress
+
+To see which Google Cloud projects have _not_ been migrated yet, run:
+
+```sh
+./print_remaining_projects.py ../stack/production.yaml
+```
