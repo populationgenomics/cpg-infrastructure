@@ -67,9 +67,12 @@ for b in $(gsutil ls -p "$GCP_PROJECT"); do
 done
 
 gsutil cp gs://cpg-pulumi-state/.pulumi/stacks/production.json /tmp && \
+git switch -c "autoclass-$GCP_PROJECT" && \
 ./fix_pulumi_state.py ../stack/production.yaml "$GCP_PROJECT" /tmp/production.json "${BUCKET_NAMES[@]}" && \
 gsutil cp /tmp/production.json gs://cpg-pulumi-state/.pulumi/stacks/ && \
-git commit -a -m "Update Autoclass setting for $GCP_PROJECT"
+git commit -a -m "Update Autoclass setting for $GCP_PROJECT" && \
+gh pr create -f -r illusional && \
+git switch main
 ```
 
 Don't forget to open a GitHub PR with the changes afterwards.
