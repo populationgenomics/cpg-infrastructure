@@ -269,12 +269,12 @@ class CPGInfrastructure:
 
                     if len(member_ids) > 0:
                         if all(isinstance(m, str) for m in member_ids):
-                            members_contents = _process_members(member_ids) + '\n'
+                            members_contents = _process_members(member_ids) or '\n'
                         else:
                             members_contents = (
                                 pulumi.Output.all(*member_ids)
                                 .apply(_process_members)
-                                .apply(lambda value: (value or '') + '\n')
+                                .apply(lambda value: value or '\n')
                             )
 
                     # we'll create a blob with the members of the groups
