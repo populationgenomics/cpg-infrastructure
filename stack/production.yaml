@@ -119,6 +119,7 @@ genomic-autopsy:
     project: genomic-autopsy
 gtex:
   archive_age: 90
+  autoclass: true
   enable_release: false
   gcp:
     hail_service_account_full: gtex-full-991@hail-295901.iam.gserviceaccount.com
