@@ -15,13 +15,6 @@ ag-hidden:
     hail_service_account_standard: ag-hidden-standard-002@hail-295901.iam.gserviceaccount.com
     hail_service_account_test: ag-hidden-test-013@hail-295901.iam.gserviceaccount.com
     project: ag-hidden
-ancestry:
-  enable_release: false
-  gcp:
-    hail_service_account_full: ancestry-full-029@hail-295901.iam.gserviceaccount.com
-    hail_service_account_standard: ancestry-standard-732@hail-295901.iam.gserviceaccount.com
-    hail_service_account_test: ancestry-test-355@hail-295901.iam.gserviceaccount.com
-    project: ancestry-310609
 bioheart:
   archive_age: 90
   enable_release: true
@@ -242,13 +235,6 @@ ourdna-browser:
     hail_service_account_standard: ourdna-browser-standard-810@hail-295901.iam.gserviceaccount.com
     hail_service_account_test: ourdna-browser-test-528@hail-295901.iam.gserviceaccount.com
     project: ourdna-browser
-ozrefdb:
-  enable_release: false
-  gcp:
-    hail_service_account_full: ozrefdb-full-353@hail-295901.iam.gserviceaccount.com
-    hail_service_account_standard: ozrefdb-standard-044@hail-295901.iam.gserviceaccount.com
-    hail_service_account_test: ozrefdb-test-942@hail-295901.iam.gserviceaccount.com
-    project: ozrefdb
 perth-neuro:
   enable_release: true
   enable_shared_project: 'true'
