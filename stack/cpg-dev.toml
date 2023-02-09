@@ -5,7 +5,7 @@ budget_currency = "AUD"
 common_dataset = "cpginfradev"
 config_destination = "gs://cpg-config/templates/"
 web_url_template = "https://{namespace}-web.populationgenomics.org.au/{dataset}"
-
+group_prefix = 'dev-'
 #disable_group_memberships = "true"
 
 [infrastructure.gcp]
