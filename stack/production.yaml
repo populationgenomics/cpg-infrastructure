@@ -385,6 +385,7 @@ tob-wgs:
     project: tob-wgs
 tx-adapt:
   archive_age: 90
+  autoclass: true
   depends_on:
   - gtex
   enable_release: false
