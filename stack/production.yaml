@@ -391,6 +391,7 @@ udn-aus:
     project: udn-aus
 udn-aus-training:
   archive_age: 90
+  autoclass: true
   enable_release: false
   gcp:
     hail_service_account_full: udn-aus-training-full-476@hail-295901.iam.gserviceaccount.com
