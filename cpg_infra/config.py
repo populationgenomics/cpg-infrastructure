@@ -167,6 +167,9 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     # delete, which can end up with missing permissions. To implement the first phase
     # (delete), simply change this to 'True', then revert to reapply group memberships
     disable_group_memberships: bool = False
+    # sometimes it's useful to prefix the group names if you're using two different stacks
+    # under the same organization. This allows you to avoid clashes :)
+    group_prefix: str | None = None
 
     budget_notification_thresholds: list[float] = dataclasses.field(
         default_factory=lambda: [0.5, 0.9, 1.0]
@@ -271,7 +274,13 @@ class CPGDatasetConfig(DeserializableDataclass):
     # convenience place for plumbing extra service-accounts for SM
     sm_read_only_sas: list[str] = dataclasses.field(default_factory=list)
     sm_read_write_sas: list[str] = dataclasses.field(default_factory=list)
+
+    # Grace period for archive storage tier buckets.
     archive_age: int = 30
+
+    # Whether to use Autoclass (https://cloud.google.com/storage/docs/autoclass)
+    # for non-archive buckets. Currently only supported on GCP.
+    autoclass: bool = False
 
     components: dict[str, list[CPGDatasetComponents]] = dataclasses.field(
         default_factory=dict

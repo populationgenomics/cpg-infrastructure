@@ -93,11 +93,12 @@ class CPGInfrastructure:
             def __repr__(self):
                 return f'GROUP("{self.name}")'
 
-        def __init__(self):
+        def __init__(self, group_prefix: str | None = None):
             self.groups: dict[
                 str, dict[str, CPGInfrastructure.GroupProvider.Group]
             ] = defaultdict()
 
+            self.group_prefix = group_prefix or ''
             self._cached_resolved_members: dict[str, list] = {}
 
         def get_group(self, infra_name: str, group_name: str):
@@ -119,7 +120,7 @@ class CPGInfrastructure:
                 name=name,
                 cache_members=cache_members,
                 members=members or {},
-                group=infra.create_group(name),
+                group=infra.create_group(self.group_prefix + name),
             )
             self.groups[infra.name()][name] = group
 
@@ -164,7 +165,9 @@ class CPGInfrastructure:
         self.config = config
         self.datasets = {d.dataset: d for d in dataset_configs}
 
-        self.group_provider = CPGInfrastructure.GroupProvider()
+        self.group_provider = CPGInfrastructure.GroupProvider(
+            group_prefix=self.config.group_prefix
+        )
 
         # { cloud: { name: DatasetInfrastructure } }
         self.dataset_infrastructure: dict[
@@ -328,6 +331,7 @@ class CPGInfrastructure:
             f'{self.config.dataset_storage_prefix}members-group-cache',
             unique=True,
             versioning=True,
+            autoclass=False,  # Always accessed frequently.
             lifecycle_rules=[],
         )
 
@@ -1024,6 +1028,7 @@ class CPGDatasetInfrastructure:
                 self.infra.bucket_rule_archive(days=self.dataset_config.archive_age),
                 self.infra.bucket_rule_undelete(),
             ],
+            autoclass=False,  # Manually managed cold tier.
         )
 
     # region MAIN BUCKETS
@@ -1178,7 +1183,9 @@ class CPGDatasetInfrastructure:
     @cached_property
     def main_bucket(self):
         return self.infra.create_bucket(
-            'main', lifecycle_rules=[self.infra.bucket_rule_undelete()]
+            'main',
+            lifecycle_rules=[self.infra.bucket_rule_undelete()],
+            autoclass=self.dataset_config.autoclass,
         )
 
     @cached_property
@@ -1187,18 +1194,23 @@ class CPGDatasetInfrastructure:
             'main-tmp',
             lifecycle_rules=[self.infra.bucket_rule_temporary()],
             versioning=False,
+            autoclass=False,  # Gets cleared out automatically.
         )
 
     @cached_property
     def main_analysis_bucket(self):
         return self.infra.create_bucket(
-            'main-analysis', lifecycle_rules=[self.infra.bucket_rule_undelete()]
+            'main-analysis',
+            lifecycle_rules=[self.infra.bucket_rule_undelete()],
+            autoclass=self.dataset_config.autoclass,
         )
 
     @cached_property
     def main_web_bucket(self):
         return self.infra.create_bucket(
-            'main-web', lifecycle_rules=[self.infra.bucket_rule_undelete()]
+            'main-web',
+            lifecycle_rules=[self.infra.bucket_rule_undelete()],
+            autoclass=self.dataset_config.autoclass,
         )
 
     @cached_property
@@ -1206,7 +1218,9 @@ class CPGDatasetInfrastructure:
         main_upload_undelete = self.infra.bucket_rule_undelete(days=30)
         main_upload_buckets = {
             'main-upload': self.infra.create_bucket(
-                'main-upload', lifecycle_rules=[main_upload_undelete]
+                'main-upload',
+                lifecycle_rules=[main_upload_undelete],
+                autoclass=self.dataset_config.autoclass,
             )
         }
 
@@ -1215,6 +1229,7 @@ class CPGDatasetInfrastructure:
                 additional_upload_bucket,
                 lifecycle_rules=[main_upload_undelete],
                 unique=True,
+                autoclass=self.dataset_config.autoclass,
             )
 
         return main_upload_buckets
@@ -1263,19 +1278,25 @@ class CPGDatasetInfrastructure:
     @cached_property
     def test_bucket(self):
         return self.infra.create_bucket(
-            'test', lifecycle_rules=[self.infra.bucket_rule_undelete()]
+            'test',
+            lifecycle_rules=[self.infra.bucket_rule_undelete()],
+            autoclass=self.dataset_config.autoclass,
         )
 
     @cached_property
     def test_analysis_bucket(self):
         return self.infra.create_bucket(
-            'test-analysis', lifecycle_rules=[self.infra.bucket_rule_undelete()]
+            'test-analysis',
+            lifecycle_rules=[self.infra.bucket_rule_undelete()],
+            autoclass=self.dataset_config.autoclass,
         )
 
     @cached_property
     def test_web_bucket(self):
         return self.infra.create_bucket(
-            'test-web', lifecycle_rules=[self.infra.bucket_rule_undelete()]
+            'test-web',
+            lifecycle_rules=[self.infra.bucket_rule_undelete()],
+            autoclass=self.dataset_config.autoclass,
         )
 
     @cached_property
@@ -1284,12 +1305,15 @@ class CPGDatasetInfrastructure:
             'test-tmp',
             lifecycle_rules=[self.infra.bucket_rule_temporary()],
             versioning=False,
+            autoclass=False,  # Gets cleared out automatically.
         )
 
     @cached_property
     def test_upload_bucket(self):
         return self.infra.create_bucket(
-            'test-upload', lifecycle_rules=[self.infra.bucket_rule_undelete()]
+            'test-upload',
+            lifecycle_rules=[self.infra.bucket_rule_undelete()],
+            autoclass=self.dataset_config.autoclass,
         )
 
     # endregion TEST BUCKETS
@@ -1323,6 +1347,7 @@ class CPGDatasetInfrastructure:
             'release',
             lifecycle_rules=[self.infra.bucket_rule_undelete()],
             requester_pays=True,
+            autoclass=self.dataset_config.autoclass,
         )
 
     # endregion RELEASE BUCKETS
@@ -1406,7 +1431,9 @@ class CPGDatasetInfrastructure:
     @cached_property
     def hail_bucket(self):
         return self.infra.create_bucket(
-            'hail', lifecycle_rules=[self.infra.bucket_rule_temporary()]
+            'hail',
+            lifecycle_rules=[self.infra.bucket_rule_temporary()],
+            autoclass=False,  # Gets cleared out automatically.
         )
 
     # endregion HAIL

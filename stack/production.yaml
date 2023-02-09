@@ -42,12 +42,14 @@ broad-rgp:
   archive_age: 90
   deploy_locations:
   - gcp
-  enable_release: false
+  enable_release: true
+  enable_shared_project: true
   gcp:
     hail_service_account_full: broad-rgp-full-682@hail-295901.iam.gserviceaccount.com
     hail_service_account_standard: broad-rgp-standard-352@hail-295901.iam.gserviceaccount.com
     hail_service_account_test: broad-rgp-test-319@hail-295901.iam.gserviceaccount.com
     project: broad-rgp
+  shared_project_budget: 100
 circa:
   archive_age: 90
   enable_release: false
@@ -90,6 +92,7 @@ epileptic-enceph:
     hail_service_account_test: epileptic-enceph-test-285@hail-295901.iam.gserviceaccount.com
     project: epileptic-enceph
 fewgenomes:
+  autoclass: true
   enable_release: false
   gcp:
     hail_service_account_full: fewgenomes-full-915@hail-295901.iam.gserviceaccount.com
@@ -116,6 +119,7 @@ genomic-autopsy:
     project: genomic-autopsy
 gtex:
   archive_age: 90
+  autoclass: true
   enable_release: false
   gcp:
     hail_service_account_full: gtex-full-991@hail-295901.iam.gserviceaccount.com
@@ -261,12 +265,12 @@ prophecy:
   - thousand-genomes
   enable_release: true
   enable_shared_project: 'true'
-  shared_project_budget: 8300
   gcp:
     hail_service_account_full: prophecy-full-674@hail-295901.iam.gserviceaccount.com
     hail_service_account_standard: prophecy-standard-432@hail-295901.iam.gserviceaccount.com
     hail_service_account_test: prophecy-test-998@hail-295901.iam.gserviceaccount.com
     project: prophecy-339301
+  shared_project_budget: 8300
 ravenscroft-arch:
   archive_age: 90
   enable_release: false
@@ -382,6 +386,7 @@ tob-wgs:
     project: tob-wgs
 tx-adapt:
   archive_age: 90
+  autoclass: true
   depends_on:
   - gtex
   enable_release: false
@@ -408,6 +413,7 @@ udn-aus-training:
     project: udn-aus-training
 validation:
   archive_age: 90
+  autoclass: true
   enable_release: true
   gcp:
     hail_service_account_full: validation-full-567@hail-295901.iam.gserviceaccount.com
