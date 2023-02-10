@@ -195,6 +195,7 @@ mcri-lrp:
     hail_service_account_test: mcri-lrp-test-419@hail-295901.iam.gserviceaccount.com
     project: mcri-lrp
 mgrb:
+  autoclass: true
   enable_release: false
   gcp:
     hail_service_account_full: mgrb-full-205@hail-295901.iam.gserviceaccount.com
