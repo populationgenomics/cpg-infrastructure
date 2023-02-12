@@ -636,6 +636,7 @@ class CPGDatasetInfrastructure:
 
         if isinstance(self.infra, GcpInfrastructure):
             self.setup_gcp_monitoring_access()
+            self.setup_service_account_generation_permission()
 
     @cached_property
     def data_manager_group(self):
@@ -725,6 +726,16 @@ class CPGDatasetInfrastructure:
         self.web_access_group.add_member(
             self.infra.get_pulumi_name('analysis-in-web-access'),
             member=self.analysis_group,
+        )
+
+    def setup_service_account_generation_permission(self):
+        if not isinstance(self.infra, GcpInfrastructure):
+            return
+
+        self.infra.add_project_role(
+            'data-manager-credentials-generator',
+            role='roles/iam.serviceAccountKeyAdmin',
+            member=self.data_manager_group,
         )
 
     def setup_access_level_group_memberships(self):
@@ -1918,6 +1929,13 @@ class CPGDatasetInfrastructure:
                 'shared-project-serviceusage-consumer',
                 role='roles/serviceusage.serviceUsageConsumer',
                 member=shared_ma,
+                project=shared_project,
+            )
+
+            self.infra.add_project_role(
+                'shared-project-data-manager-credentials-generator',
+                role='roles/iam.serviceAccountKeyAdmin',
+                member=self.data_manager_group,
                 project=shared_project,
             )
 
