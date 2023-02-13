@@ -87,6 +87,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     @dataclasses.dataclass(frozen=True)
     class Azure(DeserializableDataclass):
         region: str
+        subscription: str
         tenant: str
 
     @dataclasses.dataclass(frozen=True)
