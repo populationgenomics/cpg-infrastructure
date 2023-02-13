@@ -162,6 +162,7 @@ kccg-genomics-med:
     project: kccg-genomics-med
 kidgen:
   archive_age: 90
+  autoclass: true
   enable_release: false
   gcp:
     hail_service_account_full: kidgen-full-116@hail-295901.iam.gserviceaccount.com
