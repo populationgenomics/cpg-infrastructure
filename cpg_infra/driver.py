@@ -642,7 +642,6 @@ class CPGDatasetInfrastructure:
 
         if isinstance(self.infra, GcpInfrastructure):
             self.setup_gcp_monitoring_access()
-            self.setup_service_account_generation_permission()
 
     @cached_property
     def data_manager_group(self):
