@@ -24,7 +24,8 @@ from cpg_infra.abstraction.base import (
     UNDELETE_PERIOD_IN_DAYS,
     ARCHIVE_PERIOD_IN_DAYS,
     TMP_BUCKET_PERIOD_IN_DAYS,
-    ContainerRegistryMembership, MachineAccountRole,
+    ContainerRegistryMembership,
+    MachineAccountRole,
 )
 
 AZURE_BILLING_START_DATE = '2017-06-01T00:00:00Z'
