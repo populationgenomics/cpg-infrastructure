@@ -58,7 +58,7 @@ class MachineAccountRole(Enum):
     """Roles for users to interact with machine-account"""
 
     ACCESS = 'access'
-    CREDENTIALS_GENERATOR = 'credentials-generator'
+    ADMIN = 'admin'
 
 
 class CloudInfraBase(ABC):

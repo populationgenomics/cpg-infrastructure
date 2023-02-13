@@ -798,7 +798,7 @@ class CPGDatasetInfrastructure:
                 'data-manager-credentials-generator',
                 machine_account=self.main_upload_account,
                 member=self.data_manager_group,
-                role=MachineAccountRole.CREDENTIALS_GENERATOR,
+                role=MachineAccountRole.ADMIN,
             )
 
         self.setup_storage_outputs()
@@ -1478,7 +1478,8 @@ class CPGDatasetInfrastructure:
                 f'cromwell-runner-{access_level}-service-account-user',
                 machine_account,
                 self.config.cromwell.gcp.runner_machine_account,
-                role=MachineAccountRole.CREDENTIALS_GENERATOR,
+                # admin access / credentials generator is the same thing
+                role=MachineAccountRole.ADMIN,
             )
 
         if isinstance(self.infra, GcpInfrastructure):
@@ -1574,7 +1575,7 @@ class CPGDatasetInfrastructure:
                 f'hail-service-account-{access_level}-dataproc-service-account-user',
                 spark_accounts[access_level],
                 hail_account,
-                role=MachineAccountRole.CREDENTIALS_GENERATOR,
+                role=MachineAccountRole.ADMIN,
             )
 
         if isinstance(self.infra, GcpInfrastructure):
@@ -1941,7 +1942,7 @@ class CPGDatasetInfrastructure:
                 'shared-project-sa-data-manager-credentials-generator',
                 machine_account=shared_ma,
                 member=self.data_manager_group,
-                role=MachineAccountRole.CREDENTIALS_GENERATOR,
+                role=MachineAccountRole.ADMIN,
             )
 
         for bname, bucket in shared_buckets.items():
