@@ -54,6 +54,13 @@ class ContainerRegistryMembership(Enum):
     WRITER = 'writer'
 
 
+class MachineAccountRole(Enum):
+    """Roles for users to interact with machine-account"""
+
+    ACCESS = 'access'
+    CREDENTIALS_GENERATOR = 'credentials-generator'
+
+
 class CloudInfraBase(ABC):
     """
     Base class for interacting with a specific cloud. ALL methods
@@ -198,8 +205,13 @@ class CloudInfraBase(ABC):
         pass
 
     @abstractmethod
-    def add_member_to_machine_account_access(
-        self, resource_key: str, machine_account, member, project: str = None
+    def add_member_to_machine_account_role(
+        self,
+        resource_key: str,
+        machine_account,
+        member,
+        role: MachineAccountRole,
+        project: str = None,
     ) -> Any:
         pass
 
@@ -333,8 +345,13 @@ class DryRunInfra(CloudInfraBase):
         print(f'Creating SA: {name}')
         return name + '@generated.service-account'
 
-    def add_member_to_machine_account_access(
-        self, resource_key: str, machine_account, member, project: str = None
+    def add_member_to_machine_account_role(
+        self,
+        resource_key: str,
+        machine_account,
+        member,
+        role: MachineAccountRole,
+        project: str = None,
     ) -> Any:
         print(f'Allow {member} to access {machine_account}')
 

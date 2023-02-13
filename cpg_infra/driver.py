@@ -23,6 +23,7 @@ from cpg_infra.abstraction.base import (
     SecretMembership,
     BucketMembership,
     ContainerRegistryMembership,
+    MachineAccountRole,
 )
 from cpg_infra.config import (
     CPGDatasetConfig,
@@ -376,9 +377,14 @@ class CPGInfrastructure:
 
     def setup_gcp_sample_metadata_cloudrun_invoker(self):
         # pylint: disable
-        infra: GcpInfrastructure = self.dataset_infrastructure['gcp'][
-            self.config.common_dataset
-        ].infra
+        infra = self.dataset_infrastructure['gcp'][self.config.common_dataset].infra
+
+        if not isinstance(infra, GcpInfrastructure):
+            raise ValueError(
+                f'Dataset_infrastructure for {self.config.common_dataset!r} was not of '
+                f'type GCPInfrastructure, this is probably a bug'
+            )
+
         infra.add_cloudrun_invoker(
             f'sample-metadata-cloudrun-invokers',
             service=self.config.sample_metadata.gcp.service_name,  # SAMPLE_METADATA_SERVICE_NAME,
@@ -728,16 +734,6 @@ class CPGDatasetInfrastructure:
             member=self.analysis_group,
         )
 
-    def setup_service_account_generation_permission(self):
-        if not isinstance(self.infra, GcpInfrastructure):
-            return
-
-        self.infra.add_project_role(
-            'data-manager-credentials-generator',
-            role='roles/iam.serviceAccountKeyAdmin',
-            member=self.data_manager_group,
-        )
-
     def setup_access_level_group_memberships(self):
         for (
             kind,
@@ -799,6 +795,12 @@ class CPGDatasetInfrastructure:
 
         if isinstance(self.infra, GcpInfrastructure):
             self.setup_storage_gcp_requester_pays_access()
+            self.infra.add_member_to_machine_account_role(
+                'data-manager-credentials-generator',
+                machine_account=self.main_upload_account,
+                member=self.data_manager_group,
+                role=MachineAccountRole.CREDENTIALS_GENERATOR,
+            )
 
         self.setup_storage_outputs()
 
@@ -1464,18 +1466,20 @@ class CPGDatasetInfrastructure:
         ) in self.cromwell_machine_accounts_by_access_level.items():
             # To use a service account for VMs, Cromwell accounts need
             # to be allowed to use themselves ;)
-            self.infra.add_member_to_machine_account_access(
+            self.infra.add_member_to_machine_account_role(
                 f'cromwell-service-account-{access_level}-service-account-user',
                 machine_account,
                 machine_account,
+                role=MachineAccountRole.ACCESS,
             )
 
             # TODO: test if this is necessary, I don't think it should be :suss:
             # Allow the Cromwell SERVER to run worker VMs using the Cromwell SAs
-            self.infra.add_member_to_machine_account_access(
+            self.infra.add_member_to_machine_account_role(
                 f'cromwell-runner-{access_level}-service-account-user',
                 machine_account,
-                self.config.cromwell.gcp.runner_machine_account,  # CROMWELL_RUNNER_ACCOUNT,
+                self.config.cromwell.gcp.runner_machine_account,
+                role=MachineAccountRole.CREDENTIALS_GENERATOR,
             )
 
         if isinstance(self.infra, GcpInfrastructure):
@@ -1567,10 +1571,11 @@ class CPGDatasetInfrastructure:
         spark_accounts = self.dataproc_machine_accounts_by_access_level
         for access_level, hail_account in self.hail_accounts_by_access_level.items():
             # Allow the hail account to run jobs AS the spark user
-            self.infra.add_member_to_machine_account_access(
+            self.infra.add_member_to_machine_account_role(
                 f'hail-service-account-{access_level}-dataproc-service-account-user',
                 spark_accounts[access_level],
                 hail_account,
+                role=MachineAccountRole.CREDENTIALS_GENERATOR,
             )
 
         if isinstance(self.infra, GcpInfrastructure):
@@ -1824,10 +1829,11 @@ class CPGDatasetInfrastructure:
 
     def setup_notebooks_account_permissions(self):
         # allow access group to use notebook account
-        self.infra.add_member_to_machine_account_access(
+        self.infra.add_member_to_machine_account_role(
             'notebook-account-users',
             machine_account=self.notebook_account,
             member=self.analysis_group,
+            role=MachineAccountRole.ACCESS,
         )
 
         # Grant the notebook account the same permissions as the access group members.
@@ -1932,11 +1938,11 @@ class CPGDatasetInfrastructure:
                 project=shared_project,
             )
 
-            self.infra.add_project_role(
-                'shared-project-data-manager-credentials-generator',
-                role='roles/iam.serviceAccountKeyAdmin',
+            self.infra.add_member_to_machine_account_role(
+                'shared-project-sa-data-manager-credentials-generator',
+                machine_account=shared_ma,
                 member=self.data_manager_group,
-                project=shared_project,
+                role=MachineAccountRole.CREDENTIALS_GENERATOR,
             )
 
         for bname, bucket in shared_buckets.items():

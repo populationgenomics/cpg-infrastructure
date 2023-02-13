@@ -19,6 +19,7 @@ from cpg_infra.abstraction.base import (
     SecretMembership,
     ContainerRegistryMembership,
     BUCKET_DELETE_INCOMPLETE_UPLOAD_PERIOD_IN_DAYS,
+    MachineAccountRole,
 )
 from cpg_infra.config import CPGDatasetConfig, CPGInfrastructureConfig
 
@@ -447,14 +448,27 @@ class GcpInfrastructure(CloudInfraBase):
         )
 
     # pylint: disable=unused-argument
-    def add_member_to_machine_account_access(
-        self, resource_key: str, machine_account, member, project: str = None
+    def add_member_to_machine_account_role(
+        self,
+        resource_key: str,
+        machine_account,
+        member,
+        role: MachineAccountRole,
+        project=None,
     ) -> Any:
-        # TODO: action project here
+        # no actioning project, as you're adding to a specific resource
+
+        if role == MachineAccountRole.ACCESS:
+            _role = 'roles/iam.serviceAccountUser'
+        elif role == MachineAccountRole.CREDENTIALS_GENERATOR:
+            _role = 'roles/iam.serviceAccountKeyAdmin'
+        else:
+            raise ValueError(f'Unsupported member type: {role}')
+
         gcp.serviceaccount.IAMMember(
             self.get_pulumi_name(resource_key),
             service_account_id=machine_account.name,
-            role='roles/iam.serviceAccountUser',
+            role=_role,
             member=self.get_member_key(member),
             opts=pulumi.resource.ResourceOptions(
                 depends_on=[self._svc_cloudidentity, self._svc_iam]
