@@ -5,6 +5,7 @@ Azure implementation for abstract infrastructure
 If we want custom role / permissions, potentially look at:
     https://www.pulumi.com/registry/packages/azure-native/api-docs/authorization/roledefinition/
 """
+import logging
 import re
 from datetime import date
 
@@ -24,6 +25,7 @@ from cpg_infra.abstraction.base import (
     ARCHIVE_PERIOD_IN_DAYS,
     TMP_BUCKET_PERIOD_IN_DAYS,
     ContainerRegistryMembership,
+    MachineAccountRole,
 )
 
 AZURE_BILLING_START_DATE = '2017-06-01T00:00:00Z'
@@ -372,10 +374,18 @@ class AzureInfra(CloudInfraBase):
             resource_group_name=self.resource_group.name,
         )
 
-    def add_member_to_machine_account_access(
-        self, resource_key: str, machine_account, member, project: str = None
+    def add_member_to_machine_account_role(
+        self,
+        resource_key: str,
+        machine_account,
+        member,
+        role: MachineAccountRole,
+        project: str = None,
     ) -> Any:
-        pass
+        logging.warning(
+            f'{self.get_pulumi_name(resource_key)} :: Adding members to machine '
+            f'accounts has not been implemented'
+        )
 
     def get_credentials_for_machine_account(self, resource_key, account):
         pass
