@@ -48,7 +48,6 @@ class AzureInfra(CloudInfraBase):
         self.storage_account_lifecycle_rules = []
         self.storage_account_undelete_rule = None
 
-        # data = az.authorization.get_client_config()
         self.subscription_id = '/subscriptions/' + self.config.azure.subscription
         self.tenant = self.config.azure.tenant
 
