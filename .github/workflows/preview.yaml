@@ -1,0 +1,70 @@
+name: Preview
+
+on:
+  pull_request:
+    types: ["synchronize"]
+
+permissions:
+  id-token: write
+  pull-requests: write
+  contents: read
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    # required for Azure
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
+        repository: populationgenomics/cpg-infrastructure-private
+        path: cpg-infrastructure-private
+        ssh-key: ${{ secrets.INFRA_PRIVATE_DEPLOY_TOKEN }}
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+          cache: "pip" # caching pip dependencies
+
+      - id: "auth-azure"
+        name: "Authenticate to Azure Cloud"
+        uses: azure/login@v1
+        with:
+          creds: '{"clientId":"${{ secrets.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}","tenantId":"${{ secrets.AZURE_TENANT_ID }}"}'
+          # for workflow identity federation
+          # client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          # tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          # subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - id: "google-cloud-auth"
+        name: "Authenticate to Google Cloud"
+        uses: "google-github-actions/auth@v1"
+        with:
+          workload_identity_provider: "projects/1051897107465/locations/global/workloadIdentityPools/github-pool/providers/github-provider"
+          service_account: "pulumi@cpg-common.iam.gserviceaccount.com"
+
+      - id: "google-cloud-sdk-setup"
+        name: "Set up Cloud SDK"
+        uses: google-github-actions/setup-gcloud@v1
+
+      # check gsauth has worked
+      - run: gsutil ls gs://cpg-pulumi-state/
+
+      - run: pip install .
+
+      - uses: pulumi/actions@v4
+        with:
+          command: preview
+          stack-name: production
+          cloud-url: gs://cpg-pulumi-state/
+          comment-on-pr: true
+          diff: true
+        env:
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+#          INFRA_MEMBERS_PATH: ${{ github.workspace }}
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_LOCATION_NAME: "australiaeast"
