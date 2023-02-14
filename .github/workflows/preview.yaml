@@ -2,7 +2,7 @@ name: Preview
 
 on:
   pull_request:
-    types: ["synchronize"]
+    types: ["created", "synchronize"]
 
 permissions:
   id-token: write
