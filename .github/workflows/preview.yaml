@@ -59,7 +59,7 @@ jobs:
           cloud-url: gs://cpg-pulumi-state/
           comment-on-pr: true
 #          No diff for cpg-infrastructure to avoid leaking personal details
-          diff: true
+          diff: false
         env:
           PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
 #          INFRA_MEMBERS_PATH: ${{ github.workspace }}
