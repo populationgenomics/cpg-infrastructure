@@ -49,9 +49,6 @@ jobs:
         name: "Set up Cloud SDK"
         uses: google-github-actions/setup-gcloud@v1
 
-      # check gsauth has worked
-      - run: gsutil ls gs://cpg-pulumi-state/
-
       - run: pip install .
 
       - uses: pulumi/actions@v4
@@ -61,7 +58,8 @@ jobs:
           stack-name: production
           cloud-url: gs://cpg-pulumi-state/
           comment-on-pr: true
-          diff: true
+#          No diff for cpg-infrastructure to avoid leaking personal details
+#          diff: true
         env:
           PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
 #          INFRA_MEMBERS_PATH: ${{ github.workspace }}

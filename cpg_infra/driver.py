@@ -2085,7 +2085,7 @@ class CPGDatasetInfrastructure:
 
 
 def test():
-    infra_config_dict = dict(cpg_utils.config.get_config())
+    infra_config_dict = dict(cpg_utils.config.get_config(print_config=False))
     infra_config_dict['infrastructure']['reference_dataset'] = 'fewgenomes'
     infra_config = CPGInfrastructureConfig.from_dict(infra_config_dict)
 
