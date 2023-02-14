@@ -57,6 +57,7 @@ jobs:
       - uses: pulumi/actions@v4
         with:
           command: preview
+          work-dir: cpg-infrastructure-private/
           stack-name: production
           cloud-url: gs://cpg-pulumi-state/
           comment-on-pr: true
