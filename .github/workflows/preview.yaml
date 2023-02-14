@@ -18,9 +18,10 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: actions/checkout@v3
-        repository: populationgenomics/cpg-infrastructure-private
-        path: cpg-infrastructure-private
-        ssh-key: ${{ secrets.INFRA_PRIVATE_DEPLOY_TOKEN }}
+        with:
+          repository: populationgenomics/cpg-infrastructure-private
+          path: cpg-infrastructure-private
+          ssh-key: ${{ secrets.INFRA_PRIVATE_DEPLOY_TOKEN }}
 
       - uses: actions/setup-python@v4
         with:
