@@ -76,6 +76,9 @@
     "lof-curation": [
         "variant-curation-portal"
     ],
+    "mackenzie": [
+        "ourdna"
+    ],
     "mcri-lrp": [
         "automated-interpretation-pipeline",
         "rare-disease"
