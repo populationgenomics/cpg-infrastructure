@@ -59,10 +59,12 @@ def get_token(environment: str, hail_user: str) -> str:
 def main():
     """Main entry point."""
 
-    with open('../stack/production.yaml', encoding='utf-8') as f:
+    with open(
+        '../../cpg-infrastructure-private/production.yaml', encoding='utf-8'
+    ) as f:
         production_config = yaml.safe_load(f)
 
-    with open('../stack/dev.yaml', encoding='utf-8') as f:
+    with open('../../cpg-infrastructure-private/dev.yaml', encoding='utf-8') as f:
         production_config.update(yaml.safe_load(f))
 
     invalid_datasets = set(ALLOWED_REPOS.keys()) - set(production_config.keys())
