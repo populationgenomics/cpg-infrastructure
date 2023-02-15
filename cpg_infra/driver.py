@@ -873,13 +873,18 @@ class CPGDatasetInfrastructure:
                 ),
             },
         }
-
+        dependent_datasets = set(
+            [
+                *(self.dataset_config.depends_on or []),
+                *(self.dataset_config.depends_on_readonly or []),
+            ]
+        )
         stacks_to_reference = self.root.dataset_infrastructure.get(
             self.infra.name(), {}
         )
         for namespace, al_buckets in buckets.items():
             configs_to_merge = []
-            for dependent_dataset in self.dataset_config.depends_on:
+            for dependent_dataset in dependent_datasets:
                 if config := stacks_to_reference[dependent_dataset].storage_tomls.get(
                     namespace
                 ):
