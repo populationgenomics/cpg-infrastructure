@@ -830,9 +830,9 @@ class CPGDatasetInfrastructure:
             )
 
             self.infra.add_project_role(
-                'data-manager-get-iam-policy',
+                'data-manager-project-browser',
                 member=self.data_manager_group,
-                role='resourcemanager.projects.getIamPolicy',
+                role='roles/browser',
             )
 
         self.setup_storage_outputs()
@@ -1513,7 +1513,7 @@ class CPGDatasetInfrastructure:
                 machine_account,
                 self.config.cromwell.gcp.runner_machine_account,
                 # admin access / credentials generator is the same thing
-                role=MachineAccountRole.ADMIN,
+                role=MachineAccountRole.ACCESS,
             )
 
         if isinstance(self.infra, GcpInfrastructure):
@@ -1609,7 +1609,7 @@ class CPGDatasetInfrastructure:
                 f'hail-service-account-{access_level}-dataproc-service-account-user',
                 spark_accounts[access_level],
                 hail_account,
-                role=MachineAccountRole.ADMIN,
+                role=MachineAccountRole.ACCESS,
             )
 
         if isinstance(self.infra, GcpInfrastructure):
@@ -1982,14 +1982,7 @@ class CPGDatasetInfrastructure:
             self.infra.add_project_role(
                 'data-manager-shared-project-viewer',
                 member=self.data_manager_group,
-                role='resourcemanager.projects.get',
-                project=shared_project,
-            )
-
-            self.infra.add_project_role(
-                'data-manager-shared-project-get-iam-policy',
-                member=self.data_manager_group,
-                role='resourcemanager.projects.getIamPolicy',
+                role='roles/browser.projects.get',
                 project=shared_project,
             )
 
