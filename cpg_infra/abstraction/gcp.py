@@ -461,6 +461,8 @@ class GcpInfrastructure(CloudInfraBase):
         if role == MachineAccountRole.ACCESS:
             _role = 'roles/iam.serviceAccountUser'
         elif role == MachineAccountRole.ADMIN:
+            _role = 'roles/iam.serviceAccountAdmin'
+        elif role == MachineAccountRole.CREDENTIALS_ADMIN:
             _role = 'roles/iam.serviceAccountKeyAdmin'
         else:
             raise ValueError(f'Unsupported member type: {role}')

@@ -59,6 +59,7 @@ class MachineAccountRole(Enum):
 
     ACCESS = 'access'
     ADMIN = 'admin'
+    CREDENTIALS_ADMIN = 'credentials-admin'
 
 
 class CloudInfraBase(ABC):
