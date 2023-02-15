@@ -59,7 +59,7 @@ OBJECT_VERSIONING=$(gsutil -u "$BILLING_PROJECT" versioning get "gs://$BUCKET" |
 gsutil -u "$BILLING_PROJECT" lifecycle get "gs://$BUCKET" > /tmp/lifecycle_config.json
 
 # Store the Requester Pays setting.
-REQUESTER_PAYS=$(gsutil -u "$BILLING_PROJECT" requesterpays get gs://cpg-fewgenomes-test | cut -f 2 -d ' ')
+REQUESTER_PAYS=$(gsutil -u "$BILLING_PROJECT" requesterpays get "gs://$BUCKET" | cut -f 2 -d ' ')
 
 # Remove all IAM permissions to prevent modifications while we perform the temporary copy.
 gsutil -u "$BILLING_PROJECT" iam set -e '' <(echo "{}") "gs://$BUCKET"
