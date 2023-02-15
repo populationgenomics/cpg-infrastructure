@@ -830,9 +830,9 @@ class CPGDatasetInfrastructure:
             )
 
             self.infra.add_project_role(
-                'data-manager-project-browser',
+                'data-manager-project-iam-viewer',
                 member=self.data_manager_group,
-                role='roles/browser',
+                role='roles/iam.roleViewer',
             )
 
         self.setup_storage_outputs()
@@ -1980,9 +1980,9 @@ class CPGDatasetInfrastructure:
             )
 
             self.infra.add_project_role(
-                'data-manager-shared-project-viewer',
+                'data-manager-shared-iam-viewer',
                 member=self.data_manager_group,
-                role='roles/browser.projects.get',
+                role='roles/iam.roleViewer',
                 project=shared_project,
             )
 
