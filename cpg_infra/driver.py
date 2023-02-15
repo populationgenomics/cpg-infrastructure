@@ -7,7 +7,7 @@ import os.path
 import graphlib
 from typing import Type, Any, Iterator, Iterable
 from collections import defaultdict, namedtuple
-from functools import cached_property
+from functools import cached_property, lru_cache
 
 import yaml
 import toml
@@ -62,9 +62,47 @@ TOML_CONFIG_JOINER = '\n||||'
 #         - user.name@domain.com
 #       data-manager:
 #         - user.name2@domain.com
-INFRA_MEMBERS_PATH = os.getenv(
-    'INFRA_MEMBERS_PATH', os.path.abspath('../../cpg-infrastructure-private/')
-)
+
+potential_infra_paths_locations = [
+    os.path.abspath('../../cpg-infrastructure-private/'),
+    os.path.abspath('./cpg-infrastructure-private/'),
+    os.getcwd(),
+]
+
+
+@lru_cache
+def get_members_path():
+    """
+    Get members path by first checking INFRA_MEMBERS_PATH env variable,
+    then check for a Pulumi.yaml file in a number of potential locations,
+    which would give us a reasonable indication if the members are there.
+        ../cpg-infrastructure-private/
+        ./cpg-infrastructure-private/
+        ./
+    """
+    if provided_path := os.getenv('INFRA_MEMBERS_PATH'):
+        if os.path.exists(provided_path):
+            return provided_path
+        raise ValueError(
+            f'The provided members repository path did not exist: {provided_path}'
+        )
+
+    for infra_path in potential_infra_paths_locations:
+        if not infra_path:
+            continue
+
+        pulumi_file_path = os.path.join(infra_path, 'Pulumi.yaml')
+        if os.path.exists(pulumi_file_path):
+            print('Got infra path: ' + infra_path)
+            return infra_path
+
+    potential_locations = ''.join(
+        f'- {p}' for p in potential_infra_paths_locations if p
+    )
+    raise ValueError(
+        f'Could not find the members repository in: {potential_locations}\n'
+        f'consider setting the "INFRA_MEMBERS_PATH" environment variable.'
+    )
 
 
 class CPGInfrastructure:
@@ -530,16 +568,6 @@ class CPGDatasetInfrastructure:
 
     # region PERSON ACCESS
     def setup_externally_specified_members(self):
-        if not INFRA_MEMBERS_PATH:
-            return
-
-        if not os.path.exists(INFRA_MEMBERS_PATH):
-            raise ValueError(
-                f'Could not find the "cpg-infrastructure-private" repo at: '
-                f'{INFRA_MEMBERS_PATH}, consider setting the '
-                f'"INFRA_MEMBERS_PATH" environment variable'
-            )
-
         groups = [
             self.data_manager_group,
             self.analysis_group,
@@ -549,7 +577,7 @@ class CPGDatasetInfrastructure:
         ]
 
         filepath = os.path.join(
-            INFRA_MEMBERS_PATH, f'{self.dataset_config.dataset}/members.yaml'
+            get_members_path(), f'{self.dataset_config.dataset}/members.yaml'
         )
 
         if not os.path.exists(filepath):
@@ -2057,7 +2085,7 @@ class CPGDatasetInfrastructure:
 
 
 def test():
-    infra_config_dict = dict(cpg_utils.config.get_config())
+    infra_config_dict = dict(cpg_utils.config.get_config(print_config=False))
     infra_config_dict['infrastructure']['reference_dataset'] = 'fewgenomes'
     infra_config = CPGInfrastructureConfig.from_dict(infra_config_dict)
 
