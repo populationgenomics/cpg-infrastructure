@@ -798,7 +798,13 @@ class CPGDatasetInfrastructure:
                 'data-manager-credentials-generator',
                 machine_account=self.main_upload_account,
                 member=self.data_manager_group,
-                role=MachineAccountRole.ADMIN,
+                role=MachineAccountRole.CREDENTIALS_ADMIN,
+            )
+
+            self.infra.add_project_role(
+                'data-manager-get-iam-policy',
+                member=self.data_manager_group,
+                role='resourcemanager.projects.getIamPolicy',
             )
 
         self.setup_storage_outputs()
@@ -1942,7 +1948,21 @@ class CPGDatasetInfrastructure:
                 'shared-project-sa-data-manager-credentials-generator',
                 machine_account=shared_ma,
                 member=self.data_manager_group,
-                role=MachineAccountRole.ADMIN,
+                role=MachineAccountRole.CREDENTIALS_ADMIN,
+            )
+
+            self.infra.add_project_role(
+                'data-manager-shared-project-viewer',
+                member=self.data_manager_group,
+                role='resourcemanager.projects.get',
+                project=shared_project,
+            )
+
+            self.infra.add_project_role(
+                'data-manager-shared-project-get-iam-policy',
+                member=self.data_manager_group,
+                role='resourcemanager.projects.getIamPolicy',
+                project=shared_project,
             )
 
         for bname, bucket in shared_buckets.items():
