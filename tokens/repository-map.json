@@ -9,9 +9,6 @@
         "automated-interpretation-pipeline",
         "rare-disease"
     ],
-    "ancestry": [
-        "ancestry"
-    ],
     "bioheart": [],
     "brain-malf": [
         "automated-interpretation-pipeline",
@@ -75,6 +72,9 @@
     ],
     "lof-curation": [
         "variant-curation-portal"
+    ],
+    "mackenzie": [
+        "ourdna"
     ],
     "mcri-lrp": [
         "automated-interpretation-pipeline",
