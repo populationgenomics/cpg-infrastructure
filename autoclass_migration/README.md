@@ -69,7 +69,7 @@ done
 cd $HOME/cpg-infrastructure-private && \
 gsutil cp gs://cpg-pulumi-state/.pulumi/stacks/production.json /tmp && \
 git switch -c "autoclass-$GCP_PROJECT" && \
-$HOME/cpg-infrastructure/autoclass_migration/fix_pulumi_state.py ../stack/production.yaml "$GCP_PROJECT" /tmp/production.json "${BUCKET_NAMES[@]}" && \
+$HOME/cpg-infrastructure/autoclass_migration/fix_pulumi_state.py production.yaml "$GCP_PROJECT" /tmp/production.json "${BUCKET_NAMES[@]}" && \
 gsutil cp /tmp/production.json gs://cpg-pulumi-state/.pulumi/stacks/ && \
 git commit -a -m "Update Autoclass setting for $GCP_PROJECT" && \
 gh pr create -f -r illusional && \
