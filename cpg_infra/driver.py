@@ -1075,10 +1075,7 @@ class CPGDatasetInfrastructure:
     def archive_bucket(self):
         return self.infra.create_bucket(
             'archive',
-            lifecycle_rules=[
-                self.infra.bucket_rule_archive(days=self.dataset_config.archive_age),
-                self.infra.bucket_rule_undelete(),
-            ],
+            lifecycle_rules=[self.infra.bucket_rule_undelete()],
             autoclass=False,  # Manually managed cold tier.
         )
 

@@ -275,9 +275,6 @@ class CPGDatasetConfig(DeserializableDataclass):
     sm_read_only_sas: list[str] = dataclasses.field(default_factory=list)
     sm_read_write_sas: list[str] = dataclasses.field(default_factory=list)
 
-    # Grace period for archive storage tier buckets.
-    archive_age: int = 30
-
     # Whether to use Autoclass (https://cloud.google.com/storage/docs/autoclass)
     # for non-archive buckets. Currently only supported on GCP.
     autoclass: bool = False
