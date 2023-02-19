@@ -145,7 +145,6 @@ class CPGInfrastructureConfig(DeserializableDataclass):
 
         gcp: GCP
 
-
     @dataclasses.dataclass(frozen=True)
     class Billing(DeserializableDataclass):
         coordinator_machine_account: str
