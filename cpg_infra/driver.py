@@ -1708,6 +1708,16 @@ class CPGDatasetInfrastructure:
     def setup_sample_metadata_access_permissions(self):
         if not self.should_setup_sample_metadata:
             return
+
+        if self.config.billing and self.config.billing.coordinator_machine_account:
+            # make sure billing_coordinator can access sample metadata
+            self.sample_metadata_groups[SM_MAIN_WRITE].add_member(
+                self.infra.get_pulumi_name(
+                    'sample-metadata-main-read-billing-coordinator'
+                ),
+                self.config.billing.coordinator_machine_account,
+            )
+
         sm_access_levels: list[SampleMetadataAccessorMembership] = [
             SampleMetadataAccessorMembership(
                 name='human',
