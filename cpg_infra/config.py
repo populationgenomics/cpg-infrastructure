@@ -145,6 +145,11 @@ class CPGInfrastructureConfig(DeserializableDataclass):
 
         gcp: GCP
 
+
+    @dataclasses.dataclass(frozen=True)
+    class Billing(DeserializableDataclass):
+        coordinator_machine_account: str
+
     domain: str
     dataset_storage_prefix: str
     budget_currency: str
@@ -161,6 +166,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     notebooks: Notebooks | None = None
     cromwell: Cromwell | None = None
     sample_metadata: SampleMetadata | None = None
+    billing: Billing | None = None
 
     # When resources are renamed, it can be useful to explicitly apply changes in two
     # phases: delete followed by create; that's opposite of the default create followed by
