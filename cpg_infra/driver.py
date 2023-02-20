@@ -1711,7 +1711,7 @@ class CPGDatasetInfrastructure:
 
         if self.config.billing and self.config.billing.coordinator_machine_account:
             # make sure billing_coordinator can access sample metadata
-            self.sample_metadata_groups[SM_MAIN_WRITE].add_member(
+            self.sample_metadata_groups[SM_MAIN_READ].add_member(
                 self.infra.get_pulumi_name(
                     'sample-metadata-main-read-billing-coordinator'
                 ),
