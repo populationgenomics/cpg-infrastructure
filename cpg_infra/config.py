@@ -285,7 +285,7 @@ class CPGDatasetConfig(DeserializableDataclass):
 
     # Whether to use Autoclass (https://cloud.google.com/storage/docs/autoclass)
     # for non-archive buckets. Currently only supported on GCP.
-    autoclass: bool = False
+    autoclass: bool = True
 
     components: dict[str, list[CPGDatasetComponents]] = dataclasses.field(
         default_factory=dict
