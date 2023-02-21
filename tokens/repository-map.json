@@ -55,6 +55,9 @@
         "hgdp",
         "sv-workflows"
     ],
+    "hgdp-1kg": [
+        "cpg-methods"
+    ],
     "ibmdx": [
         "automated-interpretation-pipeline",
         "rare-disease"
