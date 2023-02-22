@@ -288,7 +288,9 @@ class CPGInfrastructure:
             return s[1], s[0]
 
         def _process_members(members):
-            return '\n'.join(sorted(set(str(m) for m in members), key=_email_key))
+            return '\n'.join(
+                sorted(set(str(m).lower() for m in members), key=_email_key)
+            )
 
         # now resolve groups
         for cloud in self.group_provider.groups:
