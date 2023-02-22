@@ -89,7 +89,6 @@ async def migrate_billing_data(start, end, dataset_to_topic) -> int:
     # this should reduce the need for the date-range iterator
     result = 0
     for chunk in get_billing_data(start, end).to_dataframe_iterable():
-
         # Add id and topic to the row
         s = time.time()
         chunk.insert(0, 'id', chunk.apply(billing_row_to_key, axis=1))

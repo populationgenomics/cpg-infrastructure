@@ -128,7 +128,6 @@ def get_finalised_entries_for_batch(
     # Now go through each job within the batch withOUT a dataset
     # and proportion a fraction of them to each relevant dataset.
     for job in jobs_with_no_dataset:
-
         job_id = job['job_id']
         if not job['cost']:
             continue
@@ -155,7 +154,7 @@ def get_finalised_entries_for_batch(
                 labels[k] = str(v)
 
             # Remove any labels with falsey values e.g. None, '', 0
-            labels = dict(filter(lambda l: l[1], labels.items()))
+            labels = dict(filter(lambda lbl: lbl[1], labels.items()))
 
             gross_cost = utils.get_total_hail_cost(
                 currency_conversion_rate, raw_cost=raw_cost
@@ -242,7 +241,7 @@ def get_finalised_entries_for_dataset_batch_and_job(
         labels[k] = str(v)
 
     # Remove any labels with falsey values e.g. None, '', 0
-    labels = dict(filter(lambda l: l[1], labels.items()))
+    labels = dict(filter(lambda lbl: lbl[1], labels.items()))
 
     for batch_resource, raw_cost in job['cost'].items():
         if batch_resource.startswith('service-fee'):
@@ -297,14 +296,12 @@ def migrate_entries_from_bq(
     logger.debug('Migrating seqr data to BQ')
     result = 0
     istart, iend = utils.process_default_start_and_end(start, end)
-    logger.info(
-        f'Migrating seqr BQ data [{istart.isoformat()}, {iend.isoformat()}]'
-    )
+    logger.info(f'Migrating seqr BQ data [{istart.isoformat()}, {iend.isoformat()}]')
     # pylint: disable=too-many-branches
     _query = f"""
-        SELECT 
-            service, sku, usage_start_time, usage_end_time, labels, system_labels, 
-            location, export_time, cost, currency, currency_conversion_rate, usage, 
+        SELECT
+            service, sku, usage_start_time, usage_end_time, labels, system_labels,
+            location, export_time, cost, currency, currency_conversion_rate, usage,
             credits, invoice, cost_type, adjustment_info
         FROM `{GCP_BILLING_BQ_TABLE}`
         WHERE export_time >= @start
@@ -329,9 +326,7 @@ def migrate_entries_from_bq(
             json_objs_iter = [rapidjson.load(f)]
     else:
         df_bq_result = (
-            utils.get_bigquery_client()
-            .query(_query, job_config=job_config)
-            .result()
+            utils.get_bigquery_client().query(_query, job_config=job_config).result()
         )
         if mode == 'local':
             # page everything to disk, slower
@@ -340,21 +335,23 @@ def migrate_entries_from_bq(
                 f.write(json_str)
             json_objs_iter = [rapidjson.loads(json_str)]
         else:
+
             def generator():
                 for df in df_bq_result.to_dataframe_iterable():
-                    pr
+                    logger.info('Received another page of records from bigquery')
                     yield df.to_dict(orient='records')
+
             json_objs_iter = generator()
 
     for json_objs in json_objs_iter:
-
         entries = []
         param_map, current_date = None, None
         for obj in json_objs:
-
             labels = obj['labels']
 
-            usage_start_time = utils.get_date_time_from_value('usage_start_time', obj['usage_start_time'])
+            usage_start_time = utils.get_date_time_from_value(
+                'usage_start_time', obj['usage_start_time']
+            )
             dates = ['usage_start_time', 'usage_end_time', 'export_time']
             for k in dates:
                 obj[k] = utils.to_bq_time(utils.get_date_time_from_value(k, obj[k]))
@@ -363,7 +360,10 @@ def migrate_entries_from_bq(
             # Otherwise, determine proportion cost across topics
             if usage_start_time.timestamp() < SEQR_FIRST_LOAD.timestamp():
                 param_map = {'seqr': (1.0, 1)}
-            elif current_date is None or usage_start_time.timestamp() > current_date.timestamp():
+            elif (
+                current_date is None
+                or usage_start_time.timestamp() > current_date.timestamp()
+            ):
                 current_date, param_map = get_ratios_from_date(
                     dt=usage_start_time, prop_map=prop_map
                 )
@@ -387,7 +387,6 @@ def migrate_entries_from_bq(
             )
 
             for dataset, (ratio, dataset_size) in param_map.items():
-
                 new_entry = obj.copy()
 
                 new_entry['topic'] = dataset
@@ -410,7 +409,6 @@ def migrate_entries_from_bq(
                 table=utils.GCP_AGGREGATE_DEST_TABLE, objs=entries, dry_run=False
             )
         elif mode == 'local':
-
             with open(
                 os.path.join(
                     output_path,
@@ -526,7 +524,6 @@ async def get_analysis_objects_for_seqr_hosting_prop_map(
     # if there are no ES-indices, or es-indices don't cover the range,
     # then full in the remainder of the range
     if not start_es_date or start < start_es_date:
-
         joint_calls = await aapi.query_analyses_async(
             AnalysisQueryModel(
                 type=AnalysisType('joint-calling'),
@@ -631,7 +628,6 @@ def get_seqr_hosting_prop_map_from(
         relevant_analyses, min_date=min_date
     )
     for analysis_day, samples in day_samples:
-
         # now we just need to sum up all sizes_by_date starting from the start to now
         # only selecting the sampleIDs we want
 

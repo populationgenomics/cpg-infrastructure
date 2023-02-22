@@ -77,7 +77,6 @@ def get_finalised_entries_for_batch(batch: dict) -> List[Dict]:
     resource_usage = defaultdict(float)
     resource_cost = defaultdict(float)
     for job in batch['jobs']:
-
         for batch_resource, usage in job['resources'].items():
             resource_usage[batch_resource] += usage
 
@@ -105,7 +104,7 @@ def get_finalised_entries_for_batch(batch: dict) -> List[Dict]:
         labels['url'] = utils.HAIL_UI_URL.replace('{batch_id}', str(batch_id))
 
         # Remove any labels with falsey values e.g. None, '', 0
-        labels = dict(filter(lambda l: l[1], labels.items()))
+        labels = dict(filter(lambda lbl: lbl[1], labels.items()))
 
         cost = utils.get_total_hail_cost(currency_conversion_rate, raw_cost=raw_cost)
         usage = resource_usage.get(batch_resource, 0)

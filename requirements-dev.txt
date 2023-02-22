@@ -1,3 +1,4 @@
 pre-commit
 pylint
 -r requirements.txt
+-r cpg_infra/billing_aggregator/aggregate/requirements.txt

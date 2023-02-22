@@ -53,10 +53,11 @@ T = TypeVar('T')
 
 DEFAULT_TOPIC = 'admin'
 
-GCP_PROJECT = 'billing-admin-290403'
+GCP_PROJECT = os.getenv('BILLING_PROJECT_ID')
 
-GCP_BILLING_BQ_TABLE = (
-    f'{GCP_PROJECT}.billing.gcp_billing_export_v1_01D012_20A6A2_CBD343'
+GCP_BILLING_BQ_TABLE = os.getenv(
+    'GCP_BILLING_SOURCE_TABLE',
+    f'{GCP_PROJECT}.billing.gcp_billing_export_v1_01D012_20A6A2_CBD343',
 )
 GCP_AGGREGATE_DEST_TABLE = os.getenv(
     'GCP_AGGREGATE_DEST_TABLE', 'billing-admin-290403.billing_aggregate.aggregate'
@@ -263,6 +264,7 @@ def to_bq_time(time: datetime):
     """Convert datetime to transport datetime for bigquery"""
     return time.strftime('%Y-%m-%d %H:%M:%S')
 
+
 def get_date_time_from_value(key, value):
     """
     Guess datetime from some value
@@ -273,11 +275,11 @@ def get_date_time_from_value(key, value):
         if value.isdigit():
             value = int(value)
     if isinstance(value, (int, float)):
-        return datetime.fromtimestamp(
-            int(value / 1000)
-        )
+        return datetime.fromtimestamp(int(value / 1000))
 
-    raise ValueError(f'Unable to determine {key} datetime conversion format: {value} :: {type(value)}')
+    raise ValueError(
+        f'Unable to determine {key} datetime conversion format: {value} :: {type(value)}'
+    )
 
 
 def get_hail_token() -> str:
@@ -383,7 +385,6 @@ async def get_finished_batches_for_date(
     logger.info(f'Getting batches for range: [{start}, {end}]')
 
     while True:
-
         n_requests += 1
         jresponse = await get_batches(
             billing_project=billing_project, last_batch_id=last_batch_id, token=token
@@ -606,7 +607,6 @@ def upsert_rows_into_bigquery(
     inserted_ids = set()
 
     for chunk_idx, chunked_objs in enumerate(chunk(objs, chunk_size)):
-
         _query = f"""
             SELECT id FROM `{table}`
             WHERE id IN UNNEST(@ids);

@@ -145,7 +145,6 @@ class CPGInfrastructureConfig(DeserializableDataclass):
 
     @dataclasses.dataclass(frozen=True)
     class Billing(DeserializableDataclass):
-
         @dataclasses.dataclass(frozen=True)
         class GCP(DeserializableDataclass):
             project_id: str
@@ -156,7 +155,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
             source_bq_table: str
             destination_bq_table: str
             slack_channel: str
-            slack_token_secret_name: str    # created in gcp.billing_project_id
+            slack_token_secret_name: str  # created in gcp.billing_project_id
             functions: list[str]
             interval_hours: int = 4
 

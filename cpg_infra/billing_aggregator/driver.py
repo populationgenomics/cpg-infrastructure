@@ -44,7 +44,7 @@ def setup_billing_aggregator(config: CPGInfrastructureConfig):
         return
 
     # File path to where the Cloud Function's source code is located.
-    if not (0 < config.billing.aggregator.interval_hours <= 24):
+    if not 0 < config.billing.aggregator.interval_hours <= 24:
         raise ValueError(
             f'Invalid aggregator interval, {config.billing.aggregator.interval_hours} '
             f'hours (0, 24]'
@@ -62,8 +62,8 @@ def setup_billing_aggregator(config: CPGInfrastructureConfig):
     # We will store the source code to the Cloud Function
     # in a Google Cloud Storage bucket.
     function_bucket = gcp.storage.Bucket(
-        f"billing-aggregator-source-bucket",
-        name=f"{config.dataset_storage_prefix}aggregator-source-bucket",
+        f'billing-aggregator-source-bucket',
+        name=f'{config.dataset_storage_prefix}aggregator-source-bucket',
         location=config.gcp.region,
         project=config.billing.gcp.project_id,
         uniform_bucket_level_access=True,
@@ -118,7 +118,7 @@ def setup_billing_aggregator(config: CPGInfrastructureConfig):
 
     for function in config.billing.aggregator.functions:
         # Create the function and it's corresponding pubsub and subscription.
-        fxn, _, _ = create_cloud_function(
+        _ = create_cloud_function(
             name=function,
             config=config,
             service_account=config.billing.coordinator_machine_account,
