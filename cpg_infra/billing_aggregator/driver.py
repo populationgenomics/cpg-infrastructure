@@ -51,6 +51,13 @@ def setup_billing_aggregator(config: CPGInfrastructureConfig):
             f'hours (0, 24]'
         )
 
+    if 24 % config.billing.aggregator.interval_hours != 0:
+        print(
+            f'The aggregator interval ({config.billing.aggregator.interval_hours}hrs) '
+            f'does not cleanly fit into 24 hours, this means there might be '
+            f'two runs within the interval period'
+        )
+
     # Set environment variable to the correct project
 
     # Start by enabling cloud function services
@@ -162,7 +169,8 @@ def create_cloud_function(
     env = {
         'GCP_AGGREGATE_DEST_TABLE': config.billing.aggregator.destination_bq_table,
         'GCP_BILLING_SOURCE_TABLE': config.billing.aggregator.source_bq_table,
-        'DEFAULT_INTERVAL_HOURS': config.billing.aggregator.interval_hours,
+        # cover at least the previous period as well
+        'DEFAULT_INTERVAL_HOURS': config.billing.aggregator.interval_hours * 2,
         'BILLING_PROJECT_ID': config.billing.gcp.project_id,
     }
     fxn = gcp.cloudfunctions.Function(
