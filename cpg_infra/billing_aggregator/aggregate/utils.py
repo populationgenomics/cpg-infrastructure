@@ -54,14 +54,8 @@ T = TypeVar('T')
 DEFAULT_TOPIC = 'admin'
 
 GCP_PROJECT = os.getenv('BILLING_PROJECT_ID')
-
-GCP_BILLING_BQ_TABLE = os.getenv(
-    'GCP_BILLING_SOURCE_TABLE',
-    f'{GCP_PROJECT}.billing.gcp_billing_export_v1_01D012_20A6A2_CBD343',
-)
-GCP_AGGREGATE_DEST_TABLE = os.getenv(
-    'GCP_AGGREGATE_DEST_TABLE', 'billing-admin-290403.billing_aggregate.aggregate'
-)
+GCP_BILLING_BQ_TABLE = os.getenv('GCP_BILLING_SOURCE_TABLE')
+GCP_AGGREGATE_DEST_TABLE = os.getenv('GCP_AGGREGATE_DEST_TABLE')
 
 assert GCP_AGGREGATE_DEST_TABLE
 logger.info(f'GCP_AGGREGATE_DEST_TABLE: {GCP_AGGREGATE_DEST_TABLE}')

@@ -27,6 +27,7 @@ from base64 import b64encode
 
 import pulumi
 import pulumi_gcp as gcp
+from cpg_utils.cloud import read_secret
 
 from cpg_infra.config import CPGInfrastructureConfig
 
@@ -110,7 +111,11 @@ def setup_billing_aggregator(config: CPGInfrastructureConfig):
         type='slack',
         user_labels={'channel_name': config.billing.aggregator.slack_channel},
         sensitive_labels=gcp.monitoring.NotificationChannelSensitiveLabelsArgs(
-            auth_token=config.billing.aggregator.slack_token_secret_name,
+            auth_token=read_secret(
+                project_id=config.billing.gcp.project_id,
+                secret_name=config.billing.aggregator.slack_token_secret_name,
+                fail_gracefully=False,
+            ),
         ),
         description='Slack notification channel for all cost aggregator functions',
         project=config.billing.gcp.project_id,
