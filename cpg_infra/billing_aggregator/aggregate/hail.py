@@ -156,7 +156,10 @@ def from_pubsub(data=None, _=None):
 
 
 async def main(
-    start: datetime = None, end: datetime = None, mode: str = 'prod',output_path: str=None,
+    start: datetime = None,
+    end: datetime = None,
+    mode: str = 'prod',
+    output_path: str = None,
 ) -> int:
     """Main body function"""
     logger.info(f'Running Hail Billing Aggregation for [{start}, {end}]')
@@ -185,5 +188,12 @@ if __name__ == '__main__':
     logging.getLogger('asyncio').setLevel(logging.ERROR)
     logging.getLogger('urllib3').setLevel(logging.WARNING)
 
-    test_start, test_end = datetime(2023, 1,1), None
-    asyncio.new_event_loop().run_until_complete(main(start=test_start, end=test_end, mode='local', output_path=os.path.join(os.getcwd(), 'hail')))
+    test_start, test_end = datetime(2023, 1, 1), None
+    asyncio.new_event_loop().run_until_complete(
+        main(
+            start=test_start,
+            end=test_end,
+            mode='local',
+            output_path=os.path.join(os.getcwd(), 'hail'),
+        )
+    )

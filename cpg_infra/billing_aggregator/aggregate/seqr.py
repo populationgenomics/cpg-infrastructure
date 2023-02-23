@@ -898,7 +898,11 @@ async def main(
         os.makedirs(os.path.join(output_path, suffix), exist_ok=True)
 
     result += migrate_entries_from_bq(
-        start, end, seqr_hosting_prop_map, mode=mode, output_path=os.path.join(output_path, 'gcp')
+        start,
+        end,
+        seqr_hosting_prop_map,
+        mode=mode,
+        output_path=os.path.join(output_path, 'gcp'),
     )
 
     def func_get_finalised_entries(batch):
@@ -946,5 +950,10 @@ if __name__ == '__main__':
 
     test_start, test_end = datetime(2023, 2, 1), None
     asyncio.new_event_loop().run_until_complete(
-        main(start=test_start, end=test_end, mode='local', output_path=os.path.join(os.getcwd(), 'seqr'))
+        main(
+            start=test_start,
+            end=test_end,
+            mode='local',
+            output_path=os.path.join(os.getcwd(), 'seqr'),
+        )
     )

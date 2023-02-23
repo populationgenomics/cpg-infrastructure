@@ -109,8 +109,9 @@ def setup_billing_aggregator(config: CPGInfrastructureConfig):
 
     # Create one pubsub to be triggered by the cloud scheduler
     pubsub = gcp.pubsub.Topic(
-        f'billing-aggregator-topic', project=config.billing.gcp.project_id,
-        opts=pulumi.ResourceOptions(depends_on=[pubsub_service])
+        f'billing-aggregator-topic',
+        project=config.billing.gcp.project_id,
+        opts=pulumi.ResourceOptions(depends_on=[pubsub_service]),
     )
 
     # Create a cron job to run the function on some interval
@@ -124,7 +125,7 @@ def setup_billing_aggregator(config: CPGInfrastructureConfig):
         project=config.billing.gcp.project_id,
         region=config.gcp.region,
         time_zone='Australia/Sydney',
-        opts=pulumi.ResourceOptions(depends_on=[scheduler_service])
+        opts=pulumi.ResourceOptions(depends_on=[scheduler_service]),
     )
 
     # Create slack notification channel for all functions

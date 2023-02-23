@@ -460,8 +460,8 @@ async def process_entries_from_hail_in_chunks(
     entry_chunk_size=500,
     batch_group_chunk_size=30,
     log_prefix: str = '',
-    mode: str='prod',
-    output_path: str = './'
+    mode: str = 'prod',
+    output_path: str = './',
 ) -> int:
     """
     Process all the seqr entries from hail batch,
@@ -474,10 +474,9 @@ async def process_entries_from_hail_in_chunks(
         if mode == 'prod' or mode == 'dry-run':
             return upsert_rows_into_bigquery(
                 table=GCP_AGGREGATE_DEST_TABLE, objs=entries, dry_run=mode == 'dry-run'
-                )
+            )
 
         elif mode == 'local':
-
             counter = 1
             filename = os.path.join(output_path, f'processed-hail-{counter}.json')
             while os.path.exists(filename):
