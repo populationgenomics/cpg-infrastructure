@@ -19,6 +19,7 @@ import aiohttp
 import pandas as pd
 import google.cloud.logging
 import google.cloud.bigquery as bq
+import rapidjson
 
 from cpg_utils.cloud import read_secret
 from google.api_core.exceptions import ClientError
@@ -459,7 +460,8 @@ async def process_entries_from_hail_in_chunks(
     entry_chunk_size=500,
     batch_group_chunk_size=30,
     log_prefix: str = '',
-    dry_run=False,
+    mode: str='prod',
+    output_path: str = './'
 ) -> int:
     """
     Process all the seqr entries from hail batch,
@@ -467,6 +469,28 @@ async def process_entries_from_hail_in_chunks(
 
     Break them down by dataset, and then proportion the rest of the costs.
     """
+
+    def insert_entries(entries):
+        if mode == 'prod' or mode == 'dry-run':
+            return upsert_rows_into_bigquery(
+                table=GCP_AGGREGATE_DEST_TABLE, objs=entries, dry_run=mode == 'dry-run'
+                )
+
+        elif mode == 'local':
+
+            counter = 1
+            filename = os.path.join(output_path, f'processed-hail-{counter}.json')
+            while os.path.exists(filename):
+                counter += 1
+                filename = os.path.join(output_path, f'processed-hail-{counter}.json')
+            with open(filename, 'w+', encoding='utf-8') as file:
+                logger.info(f'Writing {len(entries)} to {filename}')
+                # needs to be JSONL (line delimited JSON)
+                file.writelines(rapidjson.dumps(e) + '\n' for e in entries)
+
+            return len(entries)
+
+        raise ValueError(f'Invalid mode: {mode}')
 
     # pylint: disable=too-many-locals
     token = get_hail_token()
@@ -512,9 +536,7 @@ async def process_entries_from_hail_in_chunks(
                     f'Expecting large number of jobs ({len(jobs)}) from '
                     f"batch {batch['id']}, inserting contents early"
                 )
-                result += upsert_rows_into_bigquery(
-                    table=GCP_AGGREGATE_DEST_TABLE, objs=entries, dry_run=dry_run
-                )
+                result += insert_entries(entries)
                 entries = []
 
             entries_for_batch = func_get_finalised_entries_for_batch(batch)
@@ -523,15 +545,10 @@ async def process_entries_from_hail_in_chunks(
             s = sum(sys.getsizeof(e) for e in entries) / 1024 / 1024
             if s > 10:
                 logger.info(f'Size of entries: {s} MB, inserting early')
-                result += upsert_rows_into_bigquery(
-                    table=GCP_AGGREGATE_DEST_TABLE, objs=entries, dry_run=dry_run
-                )
+                result += insert_entries(entries)
                 entries = []
 
-        result += upsert_rows_into_bigquery(
-            table=GCP_AGGREGATE_DEST_TABLE, objs=entries, dry_run=dry_run
-        )
-
+        result += insert_entries(entries)
     return result
 
 

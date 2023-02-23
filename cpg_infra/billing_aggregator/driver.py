@@ -61,9 +61,26 @@ def setup_billing_aggregator(config: CPGInfrastructureConfig):
     # Set environment variable to the correct project
 
     # Start by enabling cloud function services
-    cloud_service = gcp.projects.Service(
-        'cloudfunctions-service',
+    functions_service = gcp.projects.Service(
+        'billing-aggregator-cloudfunctions-service',
         service='cloudfunctions.googleapis.com',
+        disable_on_destroy=False,
+    )
+
+    pubsub_service = gcp.projects.Service(
+        'billing-aggregator-pubsub-service',
+        service='pubsub.googleapis.com',
+        disable_on_destroy=False,
+    )
+    scheduler_service = gcp.projects.Service(
+        'billing-aggregator-cloudscheduler-service',
+        service='cloudscheduler.googleapis.com',
+        disable_on_destroy=False,
+    )
+
+    build_service = gcp.projects.Service(
+        'billing-aggregator-cloudbuild-service',
+        service='cloudbuild.googleapis.com',
         disable_on_destroy=False,
     )
 
@@ -92,7 +109,8 @@ def setup_billing_aggregator(config: CPGInfrastructureConfig):
 
     # Create one pubsub to be triggered by the cloud scheduler
     pubsub = gcp.pubsub.Topic(
-        f'billing-aggregator-topic', project=config.billing.gcp.project_id
+        f'billing-aggregator-topic', project=config.billing.gcp.project_id,
+        opts=pulumi.ResourceOptions(depends_on=[pubsub_service])
     )
 
     # Create a cron job to run the function on some interval
@@ -106,7 +124,7 @@ def setup_billing_aggregator(config: CPGInfrastructureConfig):
         project=config.billing.gcp.project_id,
         region=config.gcp.region,
         time_zone='Australia/Sydney',
-        opts=pulumi.ResourceOptions(depends_on=[pubsub]),
+        opts=pulumi.ResourceOptions(depends_on=[scheduler_service])
     )
 
     # Create slack notification channel for all functions
@@ -116,7 +134,7 @@ def setup_billing_aggregator(config: CPGInfrastructureConfig):
         f'billing-aggregator-slack-notification-channel',
         display_name=f'Billing Aggregator Slack Notification Channel',
         type='slack',
-        user_labels={'channel_name': config.billing.aggregator.slack_channel},
+        labels={'channel_name': config.billing.aggregator.slack_channel},
         sensitive_labels=gcp.monitoring.NotificationChannelSensitiveLabelsArgs(
             auth_token=read_secret(
                 project_id=config.billing.gcp.project_id,
@@ -135,7 +153,7 @@ def setup_billing_aggregator(config: CPGInfrastructureConfig):
             config=config,
             service_account=config.billing.coordinator_machine_account,
             pubsub_topic=pubsub,
-            cloud_service=cloud_service,
+            cloud_services=[functions_service, build_service],
             function_bucket=function_bucket,
             source_archive_object=source_archive_object,
             notification_channel=slack_channel,
@@ -152,7 +170,7 @@ def create_cloud_function(
     service_account: str,
     pubsub_topic: gcp.pubsub.Topic,
     function_bucket: gcp.storage.Bucket,
-    cloud_service: gcp.projects.Service,
+    cloud_services: list[gcp.projects.Service],
     source_archive_object: gcp.storage.BucketObject,
     notification_channel: gcp.monitoring.NotificationChannel,
 ):
@@ -174,7 +192,7 @@ def create_cloud_function(
         'BILLING_PROJECT_ID': config.billing.gcp.project_id,
     }
     fxn = gcp.cloudfunctions.Function(
-        f'{name}-billing-function',
+        f'billing-aggregator-{name}-billing-function',
         entry_point=f'{name}',
         runtime='python310',
         event_trigger=trigger,
@@ -187,14 +205,7 @@ def create_cloud_function(
         service_account_email=service_account,
         available_memory_mb=1024,
         timeout=540,  # MAX timeout
-        opts=pulumi.ResourceOptions(
-            depends_on=[
-                pubsub_topic,
-                cloud_service,
-                function_bucket,
-                source_archive_object,
-            ]
-        ),
+        opts=pulumi.ResourceOptions(depends_on=cloud_services),
     )
 
     # Slack notifications
@@ -223,7 +234,7 @@ def create_cloud_function(
         ),
     )
     alert_policy = gcp.monitoring.AlertPolicy(
-        f'{name}-billing-function-error-alert',
+        f'billing-aggregator-{name}-alert',
         display_name=f'{name.capitalize()} Billing Function Error Alert',
         combiner='OR',
         notification_channels=[notification_channel.id],

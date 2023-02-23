@@ -27,6 +27,7 @@ TO DO :
     or some other metric (exome vs genome)
 - Getting latest cram for sample by sequence type (eg: exome / genome)
 """
+import shutil
 from typing import Literal
 
 import os
@@ -409,10 +410,11 @@ def migrate_entries_from_bq(
                 table=utils.GCP_AGGREGATE_DEST_TABLE, objs=entries, dry_run=False
             )
         elif mode == 'local':
+            if not os.path.exists(output_path):
+                os.mkdir(output_path)
             with open(
                 os.path.join(
                     output_path,
-                    'load',
                     f'seqr-hosting-{istart.isoformat()}-{iend.isoformat()}.json',
                 ),
                 'w+',
@@ -891,9 +893,12 @@ async def main(
         start, end, seqr_project_map=seqr_project_map
     )
     result = 0
+    shutil.rmtree(output_path)
+    for suffix in 'gcp', 'hail':
+        os.makedirs(os.path.join(output_path, suffix), exist_ok=True)
 
     result += migrate_entries_from_bq(
-        start, end, seqr_hosting_prop_map, mode=mode, output_path=output_path
+        start, end, seqr_hosting_prop_map, mode=mode, output_path=os.path.join(output_path, 'gcp')
     )
 
     def func_get_finalised_entries(batch):
@@ -904,7 +909,8 @@ async def main(
         end=end,
         billing_project=SEQR_HAIL_BILLING_PROJECT,
         func_get_finalised_entries_for_batch=func_get_finalised_entries,
-        dry_run=mode == 'dry-run',
+        mode=mode,
+        output_path=os.path.join(output_path, 'hail'),
     )
 
     if mode == 'dry-run':
@@ -938,7 +944,7 @@ if __name__ == '__main__':
     logging.getLogger('asyncio').setLevel(logging.ERROR)
     logging.getLogger('urllib3').setLevel(logging.WARNING)
 
-    test_start, test_end = datetime(2023, 2, 15), None
+    test_start, test_end = datetime(2023, 2, 1), None
     asyncio.new_event_loop().run_until_complete(
-        main(start=test_start, end=test_end, mode='prod', output_path=os.getcwd())
+        main(start=test_start, end=test_end, mode='local', output_path=os.path.join(os.getcwd(), 'seqr'))
     )
