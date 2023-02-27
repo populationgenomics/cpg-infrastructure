@@ -53,7 +53,9 @@ def get_billing_projects():
     """
 
     server_config = json.loads(
-        read_secret(utils.ANALYSIS_RUNNER_PROJECT_ID, 'server-config', fail_gracefully=False)
+        read_secret(
+            utils.ANALYSIS_RUNNER_PROJECT_ID, 'server-config', fail_gracefully=False
+        )
     )
     ds = list(set(server_config.keys()) - EXCLUDED_BATCH_PROJECTS)
     return ds

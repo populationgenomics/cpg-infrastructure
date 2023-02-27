@@ -156,7 +156,9 @@ def billing_row_to_key(row) -> str:
 def get_dataset_to_topic_map() -> Dict[str, str]:
     """Get the server-config from the secret manager"""
     server_config = json.loads(
-        read_secret(utils.ANALYSIS_RUNNER_PROJECT_ID, 'server-config', fail_gracefully=False)
+        read_secret(
+            utils.ANALYSIS_RUNNER_PROJECT_ID, 'server-config', fail_gracefully=False
+        )
     )
     return {v['gcp']['projectId']: k for k, v in server_config.items()}
 

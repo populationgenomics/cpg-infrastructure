@@ -237,12 +237,12 @@ def create_cloud_function(
         notification_channels=[notification_channel.id],
         conditions=[alert_condition],
         alert_strategy=gcp.monitoring.AlertPolicyAlertStrategyArgs(
-        notification_rate_limit=(
-            gcp.monitoring.AlertPolicyAlertStrategyNotificationRateLimitArgs(
-                period='300s'
-            )
+            notification_rate_limit=(
+                gcp.monitoring.AlertPolicyAlertStrategyNotificationRateLimitArgs(
+                    period='300s'
+                )
+            ),
         ),
-    ),
         opts=pulumi.ResourceOptions(depends_on=[fxn]),
     )
 
