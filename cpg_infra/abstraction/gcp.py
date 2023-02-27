@@ -180,7 +180,7 @@ class GcpInfrastructure(CloudInfraBase):
             org_id=self.organization.org_id,
             project_id=name,
             name=name,
-            billing_account=self.config.gcp.billing_account_id,
+            billing_account=self.config.billing.gcp.account_id,
             opts=pulumi.resource.ResourceOptions(
                 depends_on=[self._svc_cloudbilling], protect=True
             ),
@@ -207,7 +207,7 @@ class GcpInfrastructure(CloudInfraBase):
                     nanos=0,
                 )
             ),
-            billing_account=self.config.gcp.billing_account_id,
+            billing_account=self.config.billing.gcp.account_id,
             display_name=project.name,
             budget_filter=budget_filter,
             opts=pulumi.resource.ResourceOptions(

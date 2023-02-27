@@ -1,4 +1,4 @@
-pulumi==3.37.2
+pulumi==3.55.0
 pulumi-gcp==6.49.0
 pulumi-azure-native==1.80.0
 pulumi-azuread==5.28.0

@@ -78,8 +78,6 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     class GCP(DeserializableDataclass):
         customer_id: str
         region: str
-        billing_project_id: str
-        billing_account_id: int
         groups_domain: str
         budget_notification_pubsub: str | None
         config_bucket_name: str
@@ -147,7 +145,23 @@ class CPGInfrastructureConfig(DeserializableDataclass):
 
     @dataclasses.dataclass(frozen=True)
     class Billing(DeserializableDataclass):
+        @dataclasses.dataclass(frozen=True)
+        class GCP(DeserializableDataclass):
+            project_id: str
+            account_id: int
+
+        @dataclasses.dataclass(frozen=True)
+        class GCPAggregator(DeserializableDataclass):
+            source_bq_table: str
+            destination_bq_table: str
+            slack_channel: str
+            slack_token_secret_name: str  # created in gcp.billing_project_id
+            functions: list[str]
+            interval_hours: int = 4
+
         coordinator_machine_account: str
+        gcp: GCP
+        aggregator: GCPAggregator | None = None
 
     domain: str
     dataset_storage_prefix: str

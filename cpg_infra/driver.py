@@ -31,6 +31,8 @@ from cpg_infra.config import (
     CPGInfrastructureConfig,
 )
 
+from cpg_infra.billing_aggregator.driver import setup_billing_aggregator
+
 
 SampleMetadataAccessorMembership = namedtuple(
     'SampleMetadataAccessorMembership',
@@ -237,7 +239,7 @@ class CPGInfrastructure:
         self.setup_gcp_sample_metadata_cloudrun_invoker()
 
         self.deploy_datasets()
-
+        setup_billing_aggregator(self.config)
         self.finalize_groups()
         self.output_infrastructure_config()
 
@@ -353,9 +355,9 @@ class CPGInfrastructure:
             return toml.dumps(d)
 
         infra_config = pulumi.Output.all(*[v[1] for v in items]).apply(_build_config)
-        bucket_name, suffix = self.config.config_destination[len('gs://') :].split(
-            '/', maxsplit=1
-        )
+        bucket_name, suffix = self.config.config_destination.removeprefix(
+            'gs://'
+        ).split('/', maxsplit=1)
         reference_infra.infra.add_blob_to_bucket(
             'infrastructure-config',
             bucket=bucket_name,
