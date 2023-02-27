@@ -258,14 +258,10 @@ def archive_folder(path: str) -> pulumi.AssetArchive:
     # but just the code files. Otherwise the deploy fails.
     with contextlib.chdir(path):
         for filename in os.listdir('.'):
-            # if file == '__init__.py':
-            #     continue
             if not any(filename.endswith(ext) for ext in allowed_extensions):
                 continue
 
             with open(filename, encoding='utf-8') as file:
+                # do it this way to stop any issues with changing paths
                 assets[filename] = pulumi.StringAsset(file.read())
-            # assets[filename] = pulumi.FileAsset(path=location)
-        # skip any other files,
-        print(f'Creating archive with assets: {assets}')
         return pulumi.AssetArchive(assets)
