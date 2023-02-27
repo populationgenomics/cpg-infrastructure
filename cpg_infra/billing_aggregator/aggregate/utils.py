@@ -75,6 +75,7 @@ ANALYSIS_RUNNER_PROJECT_ID = 'analysis-runner'
 DEFAULT_RANGE_INTERVAL = timedelta(hours=int(os.getenv('DEFAULT_INTERVAL_HOURS', '4')))
 
 SEQR_PROJECT_ID = 'seqr-308602'
+HAIL_PROJECT_ID = 'hail-295901'
 
 HAIL_BASE = 'https://batch.hail.populationgenomics.org.au'
 HAIL_UI_URL = HAIL_BASE + '/batches/{batch_id}'
@@ -82,15 +83,15 @@ HAIL_BATCHES_API = HAIL_BASE + '/api/v1alpha/batches'
 HAIL_JOBS_API = HAIL_BASE + '/api/v1alpha/batches/{batch_id}/jobs/resources'
 
 HAIL_PROJECT_FIELD = {
-    'id': 'hail-295901',
+    'id': HAIL_PROJECT_ID,
     'number': '805950571114',
-    'name': 'hail-295901',
+    'name': HAIL_PROJECT_ID,
     'labels': [],
     'ancestry_numbers': '/648561325637/',
     'ancestors': [
         {
             'resource_name': 'projects/805950571114',
-            'display_name': 'hail-295901',
+            'display_name': HAIL_PROJECT_ID,
         },
         {
             'resource_name': 'organizations/648561325637',
@@ -114,7 +115,7 @@ SEQR_PROJECT_FIELD = {
 }
 
 
-_BQ_CLIENT: bq.Client = None
+_BQ_CLIENT: bq.Client
 
 
 def get_bigquery_client():
