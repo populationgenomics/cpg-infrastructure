@@ -52,7 +52,7 @@ logger.setLevel(logging.INFO)
 ##########################
 
 
-def from_request(request):
+def from_request(request, *args, **kwargs):
     """
     From request object, get start and end time if present
     """
@@ -60,7 +60,7 @@ def from_request(request):
     asyncio.new_event_loop().run_until_complete(main(start, end))
 
 
-def from_pubsub(data, _):
+def from_pubsub(data, *args):
     """
     From pubsub message, get start and end time if present
     """
@@ -156,7 +156,7 @@ def billing_row_to_key(row) -> str:
 def get_dataset_to_topic_map() -> Dict[str, str]:
     """Get the server-config from the secret manager"""
     server_config = json.loads(
-        read_secret(utils.ANALYSIS_RUNNER_PROJECT_ID, 'server-config')
+        read_secret(utils.ANALYSIS_RUNNER_PROJECT_ID, 'server-config', fail_gracefully=False)
     )
     return {v['gcp']['projectId']: k for k, v in server_config.items()}
 

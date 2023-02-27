@@ -21,7 +21,7 @@ TODO:
 
     - action monthly billing function
 """
-
+import contextlib
 import os
 from base64 import b64encode
 
@@ -102,7 +102,7 @@ def setup_billing_aggregator(config: CPGInfrastructureConfig):
     # source code. ('main.py' and 'requirements.txt'.)
     source_archive_object = gcp.storage.BucketObject(
         'billing-aggregator-source-code',
-        name=f'aggregator-source-code.tar',
+        name=f'aggregator-source-code.zip',
         bucket=function_bucket.name,
         source=archive,
     )
@@ -148,7 +148,7 @@ def setup_billing_aggregator(config: CPGInfrastructureConfig):
     )
 
     for function in config.billing.aggregator.functions:
-        # Create the function and it's corresponding pubsub and subscription.
+        # Create the function, the trigger and subscription.
         _ = create_cloud_function(
             name=function,
             config=config,
@@ -186,15 +186,18 @@ def create_cloud_function(
 
     # Create the Cloud Function
     env = {
+        'SETUP_GCP_LOGGING': 'true',
         'GCP_AGGREGATE_DEST_TABLE': config.billing.aggregator.destination_bq_table,
         'GCP_BILLING_SOURCE_TABLE': config.billing.aggregator.source_bq_table,
         # cover at least the previous period as well
         'DEFAULT_INTERVAL_HOURS': config.billing.aggregator.interval_hours * 2,
         'BILLING_PROJECT_ID': config.billing.gcp.project_id,
+        'GOOGLE_FUNCTION_SOURCE': f'{name}.py',
     }
     fxn = gcp.cloudfunctions.Function(
         f'billing-aggregator-{name}-billing-function',
-        entry_point=f'{name}',
+        name=f'{name}-aggregator-function',
+        entry_point='from_request',
         runtime='python310',
         event_trigger=trigger,
         source_archive_bucket=function_bucket.name,
@@ -227,20 +230,19 @@ def create_cloud_function(
         ),
         display_name='Function warning/error',
     )
-    alert_rate = gcp.monitoring.AlertPolicyAlertStrategyArgs(
-        notification_rate_limit=(
-            gcp.monitoring.AlertPolicyAlertStrategyNotificationRateLimitArgs(
-                period='300s'
-            )
-        ),
-    )
     alert_policy = gcp.monitoring.AlertPolicy(
         f'billing-aggregator-{name}-alert',
         display_name=f'{name.capitalize()} Billing Function Error Alert',
         combiner='OR',
         notification_channels=[notification_channel.id],
         conditions=[alert_condition],
-        alert_strategy=alert_rate,
+        alert_strategy=gcp.monitoring.AlertPolicyAlertStrategyArgs(
+        notification_rate_limit=(
+            gcp.monitoring.AlertPolicyAlertStrategyNotificationRateLimitArgs(
+                period='300s'
+            )
+        ),
+    ),
         opts=pulumi.ResourceOptions(depends_on=[fxn]),
     )
 
@@ -250,12 +252,20 @@ def create_cloud_function(
 def archive_folder(path: str) -> pulumi.AssetArchive:
     assets = {}
     allowed_extensions = ['.py', '.txt']
-    for file in os.listdir(path):
-        location = os.path.join(path, file)
-        if os.path.isdir(location) and not location.startswith('__'):
-            assets[file] = pulumi.FileArchive(location)
-        elif any(location.endswith(ext) for ext in allowed_extensions):
-            assets[file] = pulumi.FileAsset(path=location)
-        # skip any other files,
 
-    return pulumi.AssetArchive(assets)
+    # python 3.11 thing, but allows you to temporarily change directory
+    # into the path we're archiving, so we're not archiving the directory,
+    # but just the code files. Otherwise the deploy fails.
+    with contextlib.chdir(path):
+        for filename in os.listdir('.'):
+            # if file == '__init__.py':
+            #     continue
+            if not any(filename.endswith(ext) for ext in allowed_extensions):
+                continue
+
+            with open(filename, encoding='utf-8') as file:
+                assets[filename] = pulumi.StringAsset(file.read())
+            # assets[filename] = pulumi.FileAsset(path=location)
+        # skip any other files,
+        print(f'Creating archive with assets: {assets}')
+        return pulumi.AssetArchive(assets)

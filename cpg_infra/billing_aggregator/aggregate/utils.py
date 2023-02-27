@@ -287,7 +287,7 @@ def get_hail_token() -> str:
             return config['default']
 
     assert GCP_PROJECT
-    return read_secret(GCP_PROJECT, 'aggregate-billing-hail-token')
+    return read_secret(GCP_PROJECT, 'aggregate-billing-hail-token', fail_gracefully=False)
 
 
 def get_credits(
