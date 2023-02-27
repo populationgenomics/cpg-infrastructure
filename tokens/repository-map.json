@@ -129,7 +129,8 @@
     ],
     "seqr": [
         "hail-elasticsearch-pipelines",
-        "production-pipelines"
+        "production-pipelines",
+        "seqr-private"
     ],
     "sgs-somatic-mtn": [
         "sgs-somatic-mutation"
