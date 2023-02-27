@@ -473,12 +473,12 @@ async def process_entries_from_hail_in_chunks(
     """
 
     def insert_entries(entries):
-        if mode == 'prod' or mode == 'dry-run':
+        if mode in ('prod', 'dry-run'):
             return upsert_rows_into_bigquery(
                 table=GCP_AGGREGATE_DEST_TABLE, objs=entries, dry_run=mode == 'dry-run'
             )
 
-        elif mode == 'local':
+        if mode == 'local':
             counter = 1
             filename = os.path.join(output_path, f'processed-hail-{counter}.json')
             while os.path.exists(filename):

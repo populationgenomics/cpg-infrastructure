@@ -1,3 +1,4 @@
+# pylint: disable=unused-argument
 """
 Cloud function that runs once a month that synchronises a portion of data from:
 
