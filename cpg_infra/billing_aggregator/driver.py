@@ -98,13 +98,16 @@ def setup_billing_aggregator(config: CPGInfrastructureConfig):
     # archive, which we create using the pulumi.AssetArchive primitive.
     archive = archive_folder(PATH_TO_SOURCE_CODE)
 
-    # Create the single Cloud Storage object, which contains all of the function's
-    # source code. ('main.py' and 'requirements.txt'.)
+    # Create the single Cloud Storage object, which contains the source code
     source_archive_object = gcp.storage.BucketObject(
         'billing-aggregator-source-code',
-        name=f'aggregator-source-code.zip',
+        # updating the source archive object does not trigger the cloud function
+        # to actually updating the source because it's based on the name,
+        # allow Pulumi to create a new name each time it gets updated
+        # name=f'aggregator-source-code.zip',
         bucket=function_bucket.name,
         source=archive,
+        opts=pulumi.ResourceOptions(replace_on_changes=['*']),
     )
 
     # Create one pubsub to be triggered by the cloud scheduler
@@ -128,7 +131,7 @@ def setup_billing_aggregator(config: CPGInfrastructureConfig):
         opts=pulumi.ResourceOptions(depends_on=[scheduler_service]),
     )
 
-    # Create slack notification channel for all functions
+    # Create a Slack notification channel for all functions
     # Use cli command below to retrieve the required 'labels'
     # $ gcloud beta monitoring channel-descriptors describe slack
     slack_channel = gcp.monitoring.NotificationChannel(
@@ -180,8 +183,10 @@ def create_cloud_function(
     """
 
     # Trigger for the function, subscribe to the pubusub topic
-    trigger = gcp.cloudfunctions.FunctionEventTriggerArgs(
-        event_type='google.pubsub.topic.publish', resource=pubsub_topic.name
+    trigger = gcp.cloudfunctionsv2.FunctionEventTriggerArgs(
+        event_type='google.cloud.pubsub.topic.v1.messagePublished',
+        trigger_region='australia-southeast1',
+        pubsub_topic=pubsub_topic.id,
     )
 
     # Create the Cloud Function
@@ -192,23 +197,36 @@ def create_cloud_function(
         # cover at least the previous period as well
         'DEFAULT_INTERVAL_HOURS': config.billing.aggregator.interval_hours * 2,
         'BILLING_PROJECT_ID': config.billing.gcp.project_id,
-        'GOOGLE_FUNCTION_SOURCE': f'{name}.py',
     }
-    fxn = gcp.cloudfunctions.Function(
+    fxn = gcp.cloudfunctionsv2.Function(
         f'billing-aggregator-{name}-billing-function',
-        name=f'{name}-aggregator-function',
-        entry_point='from_request',
-        runtime='python310',
+        # name=f'{name}-aggregator-function',
         event_trigger=trigger,
-        source_archive_bucket=function_bucket.name,
-        source_archive_object=source_archive_object.name,
+        build_config=gcp.cloudfunctionsv2.FunctionBuildConfigArgs(
+            runtime='python311',
+            entry_point='from_request',
+            environment_variables={
+                'GOOGLE_FUNCTION_SOURCE': f'{name}.py',
+            },
+            source=gcp.cloudfunctionsv2.FunctionBuildConfigSourceArgs(
+                storage_source=gcp.cloudfunctionsv2.FunctionBuildConfigSourceStorageSourceArgs(
+                    bucket=function_bucket.name,
+                    object=source_archive_object.name,
+                ),
+            ),
+        ),
+        service_config=gcp.cloudfunctionsv2.FunctionServiceConfigArgs(
+            max_instance_count=1,
+            min_instance_count=0,
+            available_memory='512M',
+            timeout_seconds=540,
+            environment_variables=env,
+            ingress_settings='ALLOW_INTERNAL_ONLY',
+            all_traffic_on_latest_revision=True,
+            service_account_email=service_account,
+        ),
         project=config.billing.gcp.project_id,
-        region=config.gcp.region,
-        build_environment_variables=env,
-        environment_variables=env,
-        service_account_email=service_account,
-        available_memory_mb=1024,
-        timeout=540,  # MAX timeout
+        location=config.gcp.region,
         opts=pulumi.ResourceOptions(depends_on=cloud_services),
     )
 
@@ -251,7 +269,7 @@ def create_cloud_function(
 
 def archive_folder(path: str) -> pulumi.AssetArchive:
     assets = {}
-    allowed_extensions = ['.py', '.txt']
+    allowed_extensions = {'.py', '.txt'}
 
     # python 3.11 thing, but allows you to temporarily change directory
     # into the path we're archiving, so we're not archiving the directory,
@@ -259,6 +277,7 @@ def archive_folder(path: str) -> pulumi.AssetArchive:
     with contextlib.chdir(path):
         for filename in os.listdir('.'):
             if not any(filename.endswith(ext) for ext in allowed_extensions):
+                print(f'Skipping {filename} for invalid extension')
                 continue
 
             with open(filename, encoding='utf-8') as file:
