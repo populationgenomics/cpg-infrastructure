@@ -135,6 +135,9 @@
     "sgs-somatic-mtn": [
         "sgs-somatic-mutation"
     ],
+    "talos": [
+        "automated-interpretation-pipeline"
+    ],
     "thousand-genomes": [
         "cuKING",
         "joint-calling",
