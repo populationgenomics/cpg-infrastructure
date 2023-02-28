@@ -8,6 +8,7 @@ import graphlib
 from typing import Type, Any, Iterator, Iterable
 from collections import defaultdict, namedtuple
 from functools import cached_property, lru_cache
+from toml_sort import TomlSort
 
 import yaml
 import toml
@@ -105,6 +106,10 @@ def get_members_path():
         f'Could not find the members repository in: {potential_locations}\n'
         f'consider setting the "INFRA_MEMBERS_PATH" environment variable.'
     )
+
+
+def dict_to_toml(d):
+    return TomlSort(toml.dumps(d)).sorted()
 
 
 class CPGInfrastructure:
@@ -352,7 +357,8 @@ class CPGInfrastructure:
             keys = [v[0] for v in items]
             # nest in .infrastructure
             d = {'infrastructure': dict(zip(keys, values))}
-            return toml.dumps(d)
+
+            return dict_to_toml(d)
 
         infra_config = pulumi.Output.all(*[v[1] for v in items]).apply(_build_config)
         bucket_name, suffix = self.config.config_destination.removeprefix(
@@ -877,18 +883,16 @@ class CPGDatasetInfrastructure:
                 ),
             },
         }
-        dependent_datasets = set(
-            [
-                *(self.dataset_config.depends_on or []),
-                *(self.dataset_config.depends_on_readonly or []),
-            ]
-        )
+        dependent_datasets = {*(self.dataset_config.depends_on or []), *(self.dataset_config.depends_on_readonly or [])}
+        if self.dataset_config.dataset != self.config.common_dataset:
+            dependent_datasets.add(self.config.common_dataset)
+
         stacks_to_reference = self.root.dataset_infrastructure.get(
             self.infra.name(), {}
         )
         for namespace, al_buckets in buckets.items():
             configs_to_merge = []
-            for dependent_dataset in dependent_datasets:
+            for dependent_dataset in sorted(dependent_datasets):
                 if config := stacks_to_reference[dependent_dataset].storage_tomls.get(
                     namespace
                 ):
@@ -1005,7 +1009,7 @@ class CPGDatasetInfrastructure:
         else:
             config_dict = storage_dict
 
-        d = toml.dumps(config_dict)
+        d = dict_to_toml(config_dict)
         return d
 
     def _pulumi_prepare_storage_outputs_main_function(self, arg):
@@ -1038,7 +1042,7 @@ class CPGDatasetInfrastructure:
         else:
             config_dict = storage_dict
 
-        d = toml.dumps(config_dict)
+        d = dict_to_toml(config_dict)
         return d
 
     def setup_storage_gcp_requester_pays_access(self):
