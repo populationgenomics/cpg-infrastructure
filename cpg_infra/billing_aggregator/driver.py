@@ -187,6 +187,7 @@ def create_cloud_function(
         event_type='google.cloud.pubsub.topic.v1.messagePublished',
         trigger_region='australia-southeast1',
         pubsub_topic=pubsub_topic.id,
+        retry_policy='RETRY_POLICY_DO_NOT_RETRY',
     )
 
     # Create the Cloud Function
