@@ -883,7 +883,10 @@ class CPGDatasetInfrastructure:
                 ),
             },
         }
-        dependent_datasets = {*(self.dataset_config.depends_on or []), *(self.dataset_config.depends_on_readonly or [])}
+        dependent_datasets = {
+            *(self.dataset_config.depends_on or []),
+            *(self.dataset_config.depends_on_readonly or []),
+        }
         if self.dataset_config.dataset != self.config.common_dataset:
             dependent_datasets.add(self.config.common_dataset)
 
