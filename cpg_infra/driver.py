@@ -109,6 +109,12 @@ def get_members_path():
 
 
 def dict_to_toml(d):
+    """
+    Convert dictionary to a sorted (and stable) TOML
+    """
+    # there's not an easy way to convert dictionary to the
+    # internal tomlkit.TOMLDocument, as it has its own parser,
+    # so let's just easy dump to string, to use the library from there.
     return TomlSort(toml.dumps(d)).sorted()
 
 
