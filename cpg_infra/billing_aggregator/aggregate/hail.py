@@ -169,9 +169,10 @@ async def main(
     start, end = utils.process_default_start_and_end(start, end)
 
     # result = await migrate_hail_data(start, end, hail_token, dry_run=dry_run)
-    if os.path.exists(output_path):
-        shutil.rmtree(output_path)
-    os.makedirs(output_path, exist_ok=True)
+    if output_path:
+        if os.path.exists(output_path):
+            shutil.rmtree(output_path)
+        os.makedirs(output_path, exist_ok=True)
     result = await utils.process_entries_from_hail_in_chunks(
         start=start,
         end=end,
@@ -191,12 +192,12 @@ if __name__ == '__main__':
     logging.getLogger('asyncio').setLevel(logging.ERROR)
     logging.getLogger('urllib3').setLevel(logging.WARNING)
 
-    test_start, test_end = datetime(2023, 1, 1), None
+    test_start, test_end = None, None
     asyncio.new_event_loop().run_until_complete(
         main(
             start=test_start,
             end=test_end,
-            mode='local',
-            output_path=os.path.join(os.getcwd(), 'hail'),
+            mode='prod',
+            # output_path=os.path.join(os.getcwd(), 'hail'),
         )
     )
