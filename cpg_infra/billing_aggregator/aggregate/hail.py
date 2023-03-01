@@ -141,11 +141,12 @@ def get_finalised_entries_for_batch(batch: dict) -> List[Dict]:
     return entries
 
 
-def from_request(request):
+def from_request(*args, **kwargs):
     """
     From request object, get start and end time if present
     """
-    start, end = utils.get_start_and_end_from_request(request)
+    print('args: ', args, kwargs)
+    start, end = utils.get_start_and_end_from_request(None)
     asyncio.new_event_loop().run_until_complete(main(start, end))
 
 

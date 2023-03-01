@@ -115,7 +115,7 @@ SEQR_PROJECT_FIELD = {
 }
 
 
-_BQ_CLIENT: bq.Client
+_BQ_CLIENT: bq.Client | None = None
 
 
 def get_bigquery_client():
@@ -801,7 +801,7 @@ def get_start_and_end_from_request(
     if request:
         print(request)
         # return request.params['start'], request.params['end']
-    return (None, None)
+    return None, None
 
 
 def date_range_iterator(
