@@ -114,7 +114,13 @@ class CloudInfraBase(ABC):
         pass
 
     @abstractmethod
-    def create_monthly_budget(self, resource_key: str, *, project, budget):
+    def create_monthly_budget(
+        self,
+        resource_key: str,
+        *,
+        budget,
+        project=None,
+    ):
         pass
 
     @abstractmethod

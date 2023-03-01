@@ -182,7 +182,13 @@ class AzureInfra(CloudInfraBase):
         #     ),
         # )
 
-    def create_monthly_budget(self, resource_key: str, *, project, budget: int):
+    def create_monthly_budget(
+        self,
+        resource_key: str,
+        *,
+        budget,
+        project=None,
+    ):
         raise NotImplementedError
         # # No start date here that's an issue
         # filters = az.consumption.BudgetFilterArgs(
