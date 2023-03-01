@@ -7,10 +7,9 @@ import os.path
 import graphlib
 from typing import Type, Any, Iterator, Iterable
 from collections import defaultdict, namedtuple
-from functools import cached_property, lru_cache
+from functools import cached_property
 from toml_sort import TomlSort
 
-import yaml
 import toml
 import xxhash
 import pulumi
@@ -56,56 +55,6 @@ AccessLevel = str
 ACCESS_LEVELS: Iterable[AccessLevel] = ('test', 'standard', 'full')
 NON_NAME_REGEX = re.compile(r'[^A-Za-z\d_-]')
 TOML_CONFIG_JOINER = '\n||||'
-
-# This INFRA_MEMBERS_PATH is a folder with directories the name of the datasets
-# with a file called `members.yaml` in each, listing the group name, then the members
-# eg:
-#   cpg-infra-private/dataset-name/members.yaml:
-#       analysis:
-#         - user.name@domain.com
-#       data-manager:
-#         - user.name2@domain.com
-
-potential_infra_paths_locations = [
-    os.path.abspath('../../cpg-infrastructure-private/'),
-    os.path.abspath('./cpg-infrastructure-private/'),
-    os.getcwd(),
-]
-
-
-@lru_cache
-def get_members_path():
-    """
-    Get members path by first checking INFRA_MEMBERS_PATH env variable,
-    then check for a Pulumi.yaml file in a number of potential locations,
-    which would give us a reasonable indication if the members are there.
-        ../cpg-infrastructure-private/
-        ./cpg-infrastructure-private/
-        ./
-    """
-    if provided_path := os.getenv('INFRA_MEMBERS_PATH'):
-        if os.path.exists(provided_path):
-            return provided_path
-        raise ValueError(
-            f'The provided members repository path did not exist: {provided_path}'
-        )
-
-    for infra_path in potential_infra_paths_locations:
-        if not infra_path:
-            continue
-
-        pulumi_file_path = os.path.join(infra_path, 'Pulumi.yaml')
-        if os.path.exists(pulumi_file_path):
-            print('Got infra path: ' + infra_path)
-            return infra_path
-
-    potential_locations = ''.join(
-        f'- {p}' for p in potential_infra_paths_locations if p
-    )
-    raise ValueError(
-        f'Could not find the members repository in: {potential_locations}\n'
-        f'consider setting the "INFRA_MEMBERS_PATH" environment variable.'
-    )
 
 
 def dict_to_toml(d):
@@ -503,6 +452,7 @@ class CPGDatasetInfrastructure:
     def main(self):
         self.setup_access_groups()
         self.setup_externally_specified_members()
+        self.setup_billing()
 
         # optional components
         if self.should_setup_storage:
@@ -592,19 +542,9 @@ class CPGDatasetInfrastructure:
             self.web_access_group,
         ]
 
-        filepath = os.path.join(
-            get_members_path(), f'{self.dataset_config.dataset}/members.yaml'
-        )
-
-        if not os.path.exists(filepath):
-            return
-
-        with open(filepath, encoding='utf-8') as f:
-            d = yaml.safe_load(f) or {}
-
         for group in groups:
             group_name = group.name.removeprefix(self.dataset_config.dataset + '-')
-            for member in d.get(group_name, []):
+            for member in self.dataset_config.members.get(group_name, []):
                 h = self.compute_hash(self.dataset_config.dataset, member)
                 group.add_member(
                     self.infra.get_pulumi_name(f'{group.name}-member-{h}'),
@@ -625,6 +565,23 @@ class CPGDatasetInfrastructure:
         return initials + '-' + computed_hash
 
     # endregion
+
+    # region BILLING
+
+    def setup_billing(self):
+        if not isinstance(self.infra, GcpInfrastructure):
+            # pass here for now, as budgets are not well implemented on Azure yet
+            return
+
+        budget = self.dataset_config.budgets.get(self.infra.name())
+        if not budget:
+            raise ValueError(
+                f'No budget for {self.dataset_config.dataset}.{self.infra.name()}'
+            )
+
+        self.infra.create_monthly_budget('monthly-budget', budget=budget.monthly_budget)
+
+    # endregion BILLING
 
     # region ACCESS GROUPS
 
@@ -1971,11 +1928,16 @@ class CPGDatasetInfrastructure:
             raise ValueError(
                 'Requested shared project, but no bucket is available to share.'
             )
-
-        if not self.dataset_config.shared_project_budget:
+        budget = self.dataset_config.budgets.get(self.infra.name())
+        if not budget:
+            raise ValueError(
+                f'No budget was available for {self.dataset_config.dataset}.{self.infra.name()}'
+            )
+        if not budget.shared_total_budget:
             raise ValueError(
                 'Requested shared project, but the dataset configuration option '
-                '"shared_project_budget" was not specified.'
+                f'"{self.dataset_config.dataset}.budgets.{self.infra.name()}'
+                '.shared_total_budget" was not specified.'
             )
 
         shared_buckets = {'release': self.release_bucket}
@@ -2144,6 +2106,7 @@ def test():
                 hail_service_account_standard='fewgenomes-standard@service-account',
                 hail_service_account_full='fewgenomes-full@service-account',
             ),
+            budgets={'dry-run': CPGDatasetConfig.Budget(monthly_budget=100)},
         )
     ]
     infra = CPGInfrastructure(infra_config, configs)
