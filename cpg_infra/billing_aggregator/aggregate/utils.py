@@ -799,7 +799,8 @@ def get_start_and_end_from_request(
     Get the start and end times from the cloud function request.
     """
     if request:
-        return request.params['start'], request.params['end']
+        print(request)
+        # return request.params['start'], request.params['end']
     return (None, None)
 
 
