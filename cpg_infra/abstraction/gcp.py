@@ -208,7 +208,7 @@ class GcpInfrastructure(CloudInfraBase):
                 )
             ),
             billing_account=self.config.billing.gcp.account_id,
-            display_name=project.name,
+            display_name=(project or self.project).name,
             budget_filter=budget_filter,
             opts=pulumi.resource.ResourceOptions(
                 depends_on=[self._svc_cloudbillingbudgets]
@@ -224,6 +224,7 @@ class GcpInfrastructure(CloudInfraBase):
         budget: int,
         start_date: date = date(2022, 1, 1),
     ):
+        project = project or self.project
         return self.create_budget(
             resource_key=self.get_pulumi_name(resource_key),
             budget=budget,
@@ -240,13 +241,14 @@ class GcpInfrastructure(CloudInfraBase):
             project=project,
         )
 
-    def create_monthly_budget(self, resource_key: str, *, project, budget: int):
+    def create_monthly_budget(self, resource_key: str, *, budget, project=None):
+        project = project or self.project
         return self.create_budget(
             resource_key=self.get_pulumi_name(resource_key),
             budget=budget,
             budget_filter=gcp.billing.BudgetBudgetFilterArgs(
                 projects=[pulumi.Output.concat('projects/', project.number)],
-                calendar_period='month',
+                calendar_period='MONTH',
             ),
             project=project,
         )

@@ -19,6 +19,10 @@ import toml
 # parsed into the structure we want, and because the python.dataclasses
 # won't do that automatically for us :(
 class DeserializableDataclass:
+    @classmethod
+    def instantiate(cls, **kwargs):
+        return cls(**kwargs)
+
     def __post_init__(self):
         """
         Do correct initialization of subclasses where appropriate
@@ -266,7 +270,18 @@ class CPGDatasetConfig(DeserializableDataclass):
         hail_service_account_standard: str = None
         hail_service_account_full: str = None
 
+    @dataclasses.dataclass(frozen=True)
+    class Budget(DeserializableDataclass):
+        # dollars
+
+        monthly_budget: int
+        shared_total_budget: int | None = None
+        # if overriding from the default CpgInfrastructure.currency
+        currency: str | None = None
+
     dataset: str
+
+    budgets: dict[str, Budget]
 
     gcp: Gcp
     azure: Azure = None
@@ -282,7 +297,6 @@ class CPGDatasetConfig(DeserializableDataclass):
     # creates a release requester-pays bucket
     enable_release: bool = False
     enable_shared_project: bool = False
-    shared_project_budget: int = None
     # give access for this dataset to access any other it depends on
     depends_on: list[str] = dataclasses.field(default_factory=list)
     depends_on_readonly: list[str] = dataclasses.field(default_factory=list)
@@ -305,6 +319,9 @@ class CPGDatasetConfig(DeserializableDataclass):
         default_factory=dict
     )
 
+    # often set later from a separate repo
+    members: dict[str, list[str]] = dataclasses.field(default_factory=dict)
+
     @classmethod
     def instantiate(cls, **kwargs):
         if components := kwargs.get('components'):
@@ -312,7 +329,7 @@ class CPGDatasetConfig(DeserializableDataclass):
                 k: [CPGDatasetComponents(c) for c in comps]
                 for k, comps in components.items()
             }
-        return cls(**kwargs)
+        return super().instantiate(**kwargs)
 
     @classmethod
     def from_pulumi(cls, config, **kwargs):
