@@ -185,8 +185,8 @@ def get_total_hail_cost(currency_conversion_rate, raw_cost):
 
 def get_schema_json(file: str) -> dict[str, any]:
     """Get a schema (in JSON) from the schema directory"""
-    pwd = Path(__file__).parent.parent.resolve()
-    schema_path = pwd / 'schema' / file
+    pwd = Path(__file__).parent.resolve()
+    schema_path = pwd / file
     try:
         with open(schema_path, 'r', encoding='utf-8') as f:
             return json.load(f)
