@@ -270,7 +270,7 @@ def create_cloud_function(
 
 def archive_folder(path: str) -> pulumi.AssetArchive:
     assets = {}
-    allowed_extensions = {'.py', '.txt'}
+    allowed_extensions = {'.py', '.txt', '.json'}
 
     # python 3.11 thing, but allows you to temporarily change directory
     # into the path we're archiving, so we're not archiving the directory,
