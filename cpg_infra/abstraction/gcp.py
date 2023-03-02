@@ -249,6 +249,7 @@ class GcpInfrastructure(CloudInfraBase):
             budget_filter=gcp.billing.BudgetBudgetFilterArgs(
                 projects=[pulumi.Output.concat('projects/', project.number)],
                 calendar_period='MONTH',
+                credit_types_treatment='INCLUDE_ALL_CREDITS',
             ),
             project=project,
         )
