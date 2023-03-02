@@ -115,7 +115,7 @@ SEQR_PROJECT_FIELD = {
 }
 
 
-_BQ_CLIENT: bq.Client
+_BQ_CLIENT: bq.Client | None = None
 
 
 def get_bigquery_client():
@@ -799,8 +799,9 @@ def get_start_and_end_from_request(
     Get the start and end times from the cloud function request.
     """
     if request:
-        return request.params['start'], request.params['end']
-    return (None, None)
+        print(request)
+        # return request.params['start'], request.params['end']
+    return None, None
 
 
 def date_range_iterator(

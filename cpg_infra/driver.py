@@ -1948,7 +1948,7 @@ class CPGDatasetInfrastructure:
         self.infra.create_fixed_budget(
             f'shared-budget',
             project=shared_project,
-            budget=self.dataset_config.shared_project_budget,
+            budget=budget.shared_total_budget,
         )
 
         shared_ma = self.infra.create_machine_account(

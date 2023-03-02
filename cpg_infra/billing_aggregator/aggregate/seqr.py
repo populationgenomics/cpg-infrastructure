@@ -288,7 +288,7 @@ def migrate_entries_from_bq(
     end: datetime,
     prop_map: ProportionateMapType,
     mode: RunMode,
-    output_path: str,
+    output_path: str | None,
 ) -> int:
     """
     Migrate entries from BQ to GCP, using the given proportionate maps
@@ -893,16 +893,22 @@ async def main(
         start, end, seqr_project_map=seqr_project_map
     )
     result = 0
-    shutil.rmtree(output_path)
-    for suffix in 'gcp', 'hail':
-        os.makedirs(os.path.join(output_path, suffix), exist_ok=True)
+    bq_output_path = None
+    hail_output_path = None
+    if output_path:
+        bq_output_path = os.path.join(output_path, 'gcp')
+        hail_output_path = os.path.join(output_path, 'hail')
+
+        shutil.rmtree(output_path)
+        for suffix in 'gcp', 'hail':
+            os.makedirs(os.path.join(output_path, suffix), exist_ok=True)
 
     result += migrate_entries_from_bq(
         start,
         end,
         seqr_hosting_prop_map,
         mode=mode,
-        output_path=os.path.join(output_path, 'gcp'),
+        output_path=bq_output_path,
     )
 
     def func_get_finalised_entries(batch):
@@ -914,7 +920,7 @@ async def main(
         billing_project=SEQR_HAIL_BILLING_PROJECT,
         func_get_finalised_entries_for_batch=func_get_finalised_entries,
         mode=mode,
-        output_path=os.path.join(output_path, 'hail'),
+        output_path=hail_output_path,
     )
 
     if mode == 'dry-run':
@@ -925,11 +931,12 @@ async def main(
         logger.info(f'Inserted {result} entries')
 
 
-def from_request(request):
+def from_request(*args, **kwargs):
     """
     From request object, get start and end time if present
     """
-    start, end = utils.get_start_and_end_from_request(request)
+    print('args: ', args, kwargs)
+    start, end = utils.get_start_and_end_from_request(None)
     asyncio.new_event_loop().run_until_complete(main(start, end))
 
 
@@ -948,12 +955,12 @@ if __name__ == '__main__':
     logging.getLogger('asyncio').setLevel(logging.ERROR)
     logging.getLogger('urllib3').setLevel(logging.WARNING)
 
-    test_start, test_end = datetime(2023, 2, 1), None
+    test_start, test_end = None, None
     asyncio.new_event_loop().run_until_complete(
         main(
             start=test_start,
             end=test_end,
-            mode='local',
-            output_path=os.path.join(os.getcwd(), 'seqr'),
+            mode='prod',
+            # output_path=os.path.join(os.getcwd(), 'seqr'),
         )
     )

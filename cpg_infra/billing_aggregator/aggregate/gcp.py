@@ -53,11 +53,12 @@ logger.setLevel(logging.INFO)
 ##########################
 
 
-def from_request(request, *args, **kwargs):
+def from_request(*args, **kwargs):
     """
     From request object, get start and end time if present
     """
-    start, end = utils.get_start_and_end_from_request(request)
+    print('args: ', args, kwargs)
+    start, end = utils.get_start_and_end_from_request(None)
     asyncio.new_event_loop().run_until_complete(main(start, end))
 
 
@@ -91,6 +92,9 @@ async def migrate_billing_data(start, end, dataset_to_topic) -> int:
     result = 0
     for chunk in get_billing_data(start, end).to_dataframe_iterable():
         # Add id and topic to the row
+        if len(chunk) == 0:
+            continue
+
         s = time.time()
         chunk.insert(0, 'id', chunk.apply(billing_row_to_key, axis=1))
         chunk.insert(0, 'topic', chunk.apply(get_topic, axis=1))

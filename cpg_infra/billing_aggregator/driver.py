@@ -192,7 +192,7 @@ def create_cloud_function(
 
     # Create the Cloud Function
     env = {
-        'SETUP_GCP_LOGGING': 'true',
+        # 'SETUP_GCP_LOGGING': 'true',
         'GCP_AGGREGATE_DEST_TABLE': config.billing.aggregator.destination_bq_table,
         'GCP_BILLING_SOURCE_TABLE': config.billing.aggregator.source_bq_table,
         # cover at least the previous period as well
