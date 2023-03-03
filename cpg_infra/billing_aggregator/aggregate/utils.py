@@ -883,7 +883,7 @@ def process_default_start_and_end(
     """
     if not end:
         # start right now
-        end = datetime.now()
+        end = datetime.utcnow()
     if not start:
         start = end - interval
 
