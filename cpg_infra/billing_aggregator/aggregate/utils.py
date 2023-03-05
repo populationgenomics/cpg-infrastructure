@@ -13,7 +13,7 @@ import logging
 from io import StringIO
 from pathlib import Path
 from datetime import date, datetime, timedelta
-from typing import Any, Iterator, Sequence, TypeVar, Iterable, Optional, Union
+from typing import Any, Iterator, Sequence, TypeVar, Iterable, Type
 
 import aiohttp
 import pandas as pd
@@ -128,7 +128,7 @@ def get_bigquery_client():
 
 async def async_retry_transient_get_json_request(
     url,
-    errors: Union[Exception, tuple[Exception, ...]],
+    errors: Type[Exception] | tuple[Type[Exception], ...],
     *args,
     attempts=5,
     session=None,
@@ -223,7 +223,7 @@ def get_formatted_bq_schema() -> list[bq.SchemaField]:
     return _format_bq_schema_json(get_bq_schema_json())
 
 
-def parse_date_only_string(d: Optional[str]) -> Optional[date]:
+def parse_date_only_string(d: str | None) -> date | None:
     """Convert date string to date, allow for None"""
     if not d:
         return None
@@ -556,7 +556,7 @@ async def process_entries_from_hail_in_chunks(
 RE_matcher = re.compile(r'-\d+$')
 
 
-def billing_row_to_topic(row, dataset_to_gcp_map: dict) -> Optional[str]:
+def billing_row_to_topic(row, dataset_to_gcp_map: dict) -> str | None:
     """Convert a billing row to a topic name"""
     project_id = None
 
@@ -793,7 +793,7 @@ def get_unit_for_batch_resource_type(batch_resource_type: str) -> str:
 
 def get_start_and_end_from_request(
     request,
-) -> tuple[Optional[datetime], Optional[datetime]]:
+) -> tuple[datetime | None, datetime | None]:
     """
     Get the start and end times from the cloud function request.
     """
@@ -833,7 +833,7 @@ def date_range_iterator(
         yield dt_from, dt_to
 
 
-def get_start_and_end_from_data(data) -> tuple[Optional[datetime], Optional[datetime]]:
+def get_start_and_end_from_data(data) -> tuple[datetime | None, datetime | None]:
     """
     Get the start and end times from the cloud function data.
     """
@@ -872,8 +872,8 @@ def get_start_and_end_from_data(data) -> tuple[Optional[datetime], Optional[date
 
 
 def process_default_start_and_end(
-    start: Optional[datetime],
-    end: Optional[datetime],
+    start: datetime | None,
+    end: datetime | None,
     interval: timedelta = DEFAULT_RANGE_INTERVAL,
 ) -> tuple[datetime, datetime]:
     """
@@ -891,8 +891,8 @@ def process_default_start_and_end(
 
 
 def get_date_intervals_for(
-    start: Optional[datetime],
-    end: Optional[datetime],
+    start: datetime | None,
+    end: datetime | None,
     interval: timedelta = DEFAULT_RANGE_INTERVAL,
 ) -> Iterator[tuple[datetime, datetime]]:
     """
