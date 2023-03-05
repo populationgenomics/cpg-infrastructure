@@ -79,7 +79,7 @@ HAIL_PROJECT_ID = 'hail-295901'
 
 HAIL_BASE = 'https://batch.hail.populationgenomics.org.au'
 HAIL_UI_URL = HAIL_BASE + '/batches/{batch_id}'
-HAIL_BATCHES_API = HAIL_BASE + '/api/v1alpha/batches'
+HAIL_BATCHES_API = HAIL_BASE + '/api/v1alpha/batches/completed'
 HAIL_JOBS_API = HAIL_BASE + '/api/v1alpha/batches/{batch_id}/jobs/resources'
 
 HAIL_PROJECT_FIELD = {
@@ -328,29 +328,24 @@ def get_credits(
     return hail_credits
 
 
-async def get_batches(
+async def get_completed_batches(
     token: str,
-    billing_project: Optional[str] = None,
-    last_batch_id: Optional[Any] = None,
+    last_completed_timestamp: Any | None = None,
+    limit: int | None = None,
 ) -> dict[str, any]:
     """
-    Get list of batches for a billing project with no filtering.
-    (optional): billing_project
-        If no billing_project is set, this endpoint returns batches
-        from all BPs the user (aggregate-billing) is a part of.
-    (optional): last_batch_id (found in requests)
+    Get list of completed batches for the calling user,
+    no filtering on billing_projects is done
+    (optional): last_completed_timestamp (found in body of previous request)
     """
 
-    qparams = {}
     params = []
-    if billing_project:
-        qparams['billing_project'] = billing_project
-    else:
-        params = ['q=']
 
-    params.extend(f'q={k}:{v}' for k, v in qparams.items())
-    if last_batch_id:
-        params.append(f'last_batch_id={last_batch_id}')
+    if last_completed_timestamp:
+        params.append(f'last_completed_timestamp={last_completed_timestamp}')
+
+    if limit:
+        params.append(f'limit={limit}')
 
     q = '?' + '&'.join(params)
     url = HAIL_BATCHES_API + q
@@ -368,7 +363,7 @@ async def get_finished_batches_for_date(
     start: datetime,
     end: datetime,
     token: str,
-    billing_project: Optional[str] = None,
+    billing_project: str | None = None,
 ) -> list[dict[str, any]]:
     """
     Get all the batches that started on {date} and are complete.
@@ -376,7 +371,7 @@ async def get_finished_batches_for_date(
     when we find a batch that started before the date.
     """
     batches = []
-    last_batch_id = None
+    last_completed_timestamp = None
     n_requests = 0
     skipped = 0
 
@@ -384,26 +379,30 @@ async def get_finished_batches_for_date(
 
     while True:
         n_requests += 1
-        jresponse = await get_batches(
-            billing_project=billing_project, last_batch_id=last_batch_id, token=token
+        jresponse = await get_completed_batches(
+            last_completed_timestamp=last_completed_timestamp, token=token
         )
 
-        if 'last_batch_id' in jresponse and jresponse['last_batch_id'] == last_batch_id:
+        if (
+            'last_completed_timestamp' in jresponse
+            and jresponse['last_completed_timestamp'] == last_completed_timestamp
+        ):
             raise ValueError(
-                f'Something weird is happening with last_batch_job: {last_batch_id}'
+                'Something weird is happening with last_completed_timestamp: '
+                f'{last_completed_timestamp}'
             )
-        last_batch_id = jresponse.get('last_batch_id')
+        last_completed_timestamp = jresponse.get('last_completed_timestamp')
         if not jresponse.get('batches'):
             logger.error(f'No batches found for range: [{start}, {end}]')
             return batches
         for b in jresponse['batches']:
             # batch not finished or not finished within the (start, end) range
-            if not b['time_completed'] or not b['complete']:
-                skipped += 1
-                continue
 
             time_completed = parse_hail_time(b['time_completed'])
             in_date_range = start <= time_completed < end
+
+            if billing_project and billing_project != b.get('billing_project'):
+                continue
 
             if time_completed < start:
                 logger.info(
