@@ -40,6 +40,7 @@ PATH_TO_MONTHLY_AGGREGATE_SOURCE_CODE = os.path.join(
 
 class BillingAggregator:
     """Billing aggregator Infrastructure (as code) for Pulumi"""
+
     def __init__(self, config: CPGInfrastructureConfig):
         self.config = config
 
