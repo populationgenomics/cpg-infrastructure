@@ -1,0 +1,2 @@
+include cpg_infra/*/**/*.txt
+include cpg_infra/*/**/*.json
