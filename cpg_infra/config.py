@@ -161,6 +161,8 @@ class CPGInfrastructureConfig(DeserializableDataclass):
             slack_channel: str
             slack_token_secret_name: str  # created in gcp.billing_project_id
             functions: list[str]
+            billing_sheet_id: str | None = None
+            monthly_summary_table: str | None = None
             interval_hours: int = 4
 
         coordinator_machine_account: str

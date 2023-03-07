@@ -31,7 +31,7 @@ from cpg_infra.config import (
     CPGInfrastructureConfig,
 )
 
-from cpg_infra.billing_aggregator.driver import setup_billing_aggregator
+from cpg_infra.billing_aggregator.driver import BillingAggregator
 
 
 SampleMetadataAccessorMembership = namedtuple(
@@ -199,7 +199,7 @@ class CPGInfrastructure:
         self.setup_gcp_sample_metadata_cloudrun_invoker()
 
         self.deploy_datasets()
-        setup_billing_aggregator(self.config)
+        BillingAggregator(self.config).main()
         self.finalize_groups()
         self.output_infrastructure_config()
 
