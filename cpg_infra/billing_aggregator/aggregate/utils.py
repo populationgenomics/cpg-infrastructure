@@ -962,11 +962,3 @@ def get_hail_entry(
         'cost_type': 'regular',
         'adjustment_info': None,
     }
-
-
-if __name__ == '__main__':
-    json_str = "{'start': '2022-01-01', 'end': '2022-01-02'}"
-    json_strt, json_end = datetime.fromisoformat('2022-01-01'), datetime.fromisoformat(
-        '2022-01-02'
-    )
-    get_start_and_end_from_data({'message': json_str})

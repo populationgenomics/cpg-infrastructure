@@ -161,8 +161,13 @@ def get_finalised_entries_for_batch(
                 currency_conversion_rate, raw_cost=raw_cost
             )
             raw_usage = job['resources'].get(batch_resource, 0)
+
+            # Distribute the remaining cost across all datasets proportionately
             for dataset, (fraction, dataset_size) in prop_map.items():
-                # Distribute the remaining cost across all datasets proportionately
+                # 2023-03-07 mfranklin: I know this key isn't unique, but to avoid
+                # issues with changing the resource_id again, we'll only use the
+                # batch_id as the key as it's sensible for us to assume that all the
+                # entries exist if one of the entries exists
                 key = '-'.join(
                     (
                         SERVICE_ID,
@@ -172,7 +177,6 @@ def get_finalised_entries_for_batch(
                         str(batch_id),
                         'job',
                         str(job_id),
-                        batch_resource,
                     )
                 )
                 entries.append(
@@ -253,6 +257,10 @@ def get_finalised_entries_for_dataset_batch_and_job(
 
         cost = utils.get_total_hail_cost(currency_conversion_rate, raw_cost=raw_cost)
 
+        # 2023-03-07 mfranklin: I know this key isn't unique, but to avoid issues
+        # with changing the resource_id again, we'll only use the batch_id as the key
+        # as it's sensible for us to assume that all the entries exist if one of the
+        # entries exists
         key = '-'.join(
             (
                 SERVICE_ID,
@@ -261,7 +269,6 @@ def get_finalised_entries_for_dataset_batch_and_job(
                 str(batch_id),
                 'job',
                 str(job_id),
-                batch_resource,
             )
         )
         entries.append(

@@ -112,13 +112,14 @@ def get_finalised_entries_for_batch(batch: dict) -> List[Dict]:
 
         cost = utils.get_total_hail_cost(currency_conversion_rate, raw_cost=raw_cost)
         usage = resource_usage.get(batch_resource, 0)
+        # 2023-03-07 mfranklin: I know this key isn't unique, but to avoid issues
+        # with changing the resource_id again, we'll only use the batch_id as the key
+        # as it's sensible for us to assume that all the entries exist if one of the
+        # entries exists
+        key = f'{SERVICE_ID}-{dataset}-batch-{batch_id}'.replace('/', '-')
         entries.append(
             utils.get_hail_entry(
-                key=(
-                    f'{SERVICE_ID}-{dataset}-batch-{batch_id}-{batch_resource}'.replace(
-                        '/', '-'
-                    )
-                ),
+                key=key,
                 topic=dataset,
                 service_id=SERVICE_ID,
                 description='Hail compute',
