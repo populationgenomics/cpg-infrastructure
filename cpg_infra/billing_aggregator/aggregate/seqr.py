@@ -162,7 +162,7 @@ def get_finalised_entries_for_batch(
             )
             raw_usage = job['resources'].get(batch_resource, 0)
 
-            # Distribute the remaining cost across all datasets proportionately
+            # Distribute the remaining cost across all datasets proportionally
             for dataset, (fraction, dataset_size) in prop_map.items():
                 # 2023-03-07 mfranklin: I know this key isn't unique, but to avoid
                 # issues with changing the resource_id again, we'll only use the
