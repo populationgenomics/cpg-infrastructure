@@ -77,61 +77,66 @@ def get_finalised_entries_for_batch(batch: dict) -> List[Dict]:
     batch_id = batch['id']
     dataset = batch['billing_project']
     currency_conversion_rate = utils.get_currency_conversion_rate_for_time(start_time)
+    attributes = batch.get('attributes', {})
+    batch_url = utils.HAIL_UI_URL.replace('{batch_id}', str(batch_id))
 
-    resource_usage = defaultdict(float)
-    resource_cost = defaultdict(float)
     for job in batch['jobs']:
-        for batch_resource, usage in job['resources'].items():
-            resource_usage[batch_resource] += usage
+        for batch_resource, raw_cost in job['cost'].items():
+            if batch_resource.startswith('service-fee'):
+                continue
 
-        for batch_resource, cost in job['cost'].items():
-            resource_cost[batch_resource] += cost
+            job_id = job['job_id']
 
-    for batch_resource, raw_cost in resource_cost.items():
-        if batch_resource.startswith('service-fee'):
-            continue
+            labels = {
+                'dataset': dataset,
+                'batch_id': str(batch_id),
+                'job_id': str(job_id),
+                'batch_resource': batch_resource,
+                'batch_name': attributes.get('name'),
+                'url': batch_url,
+            }
 
-        attributes = batch.get('attributes', {})
-        labels = {
-            'dataset': dataset,
-            'batch_id': str(batch_id),
-            'batch_resource': batch_resource,
-            'batch_name': attributes.get('name'),
-        }
+            # Add all batch attributes, removing any duped labels
+            labels.update(attributes)
+            labels.update(job.get('attributes', {}))
+            if labels.get('name'):
+                labels.pop('name')
 
-        # Add all batch attributes, removing any duped labels
-        labels.update(attributes)
-        if labels.get('name'):
-            labels.pop('name')
+            # Remove any labels with falsey values e.g. None, '', 0
+            labels = dict(filter(lambda lbl: lbl[1], labels.items()))
 
-        # Construct url
-        labels['url'] = utils.HAIL_UI_URL.replace('{batch_id}', str(batch_id))
+            cost = utils.get_total_hail_cost(currency_conversion_rate, raw_cost=raw_cost)
+            usage = job['resources'].get(batch_resource, 0)
 
-        # Remove any labels with falsey values e.g. None, '', 0
-        labels = dict(filter(lambda lbl: lbl[1], labels.items()))
-
-        cost = utils.get_total_hail_cost(currency_conversion_rate, raw_cost=raw_cost)
-        usage = resource_usage.get(batch_resource, 0)
-        # 2023-03-07 mfranklin: I know this key isn't unique, but to avoid issues
-        # with changing the resource_id again, we'll only use the batch_id as the key
-        # as it's sensible for us to assume that all the entries exist if one of the
-        # entries exists
-        key = f'{SERVICE_ID}-{dataset}-batch-{batch_id}'.replace('/', '-')
-        entries.append(
-            utils.get_hail_entry(
-                key=key,
-                topic=dataset,
-                service_id=SERVICE_ID,
-                description='Hail compute',
-                cost=cost,
-                currency_conversion_rate=currency_conversion_rate,
-                usage=usage,
-                batch_resource=batch_resource,
-                start_time=start_time,
-                end_time=end_time,
-                labels=labels,
+            # 2023-03-07 mfranklin: I know this key isn't unique, but to avoid issues
+            # with changing the resource_id again, we'll only use the batch_id + job_id
+            # as the key as it's sensible for us to assume that all the entries exist if
+            # one of the entries exists.
+            key = '-'.join(
+                (
+                    SERVICE_ID,
+                    dataset,
+                    'batch',
+                    str(batch_id),
+                    'job',
+                    str(job_id),
+                )
+            ).replace('/', '-')
+            entries.append(
+                utils.get_hail_entry(
+                    key=key,
+                    topic=dataset,
+                    service_id=SERVICE_ID,
+                    description='Hail compute',
+                    cost=cost,
+                    currency_conversion_rate=currency_conversion_rate,
+                    usage=usage,
+                    batch_resource=batch_resource,
+                    start_time=start_time,
+                    end_time=end_time,
+                    labels=labels,
+                )
             )
-        )
 
     entries.extend(
         utils.get_credits(
