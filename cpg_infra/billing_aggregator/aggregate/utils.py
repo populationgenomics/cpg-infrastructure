@@ -391,6 +391,11 @@ async def get_finished_batches_for_date(
                 'Something weird is happening with last_completed_timestamp: '
                 f'{last_completed_timestamp}'
             )
+        if n_requests > 0 and n_requests % 100 == 0:
+            min_time_completed = min(b['time_completed'] for b in batches)
+            print(
+                f'At {n_requests} requests ({min_time_completed}) for getting completed batches'
+            )
         last_completed_timestamp = jresponse.get('last_completed_timestamp')
         if not jresponse.get('batches'):
             logger.error(f'No batches found for range: [{start}, {end}]')
@@ -750,13 +755,13 @@ def get_currency_conversion_rate_for_time(time: datetime):
     the job finishes.
     """
 
-    key = f'{time.year}-{str(time.month).zfill(2)}'
+    key = f'{time.year}{str(time.month).zfill(2)}'
     if key not in CACHED_CURRENCY_CONVERSION:
         logger.info(f'Looking up currency conversion rate for {key}')
         query = f"""
             SELECT currency_conversion_rate
             FROM {GCP_BILLING_BQ_TABLE}
-            WHERE DATE(_PARTITIONTIME) = DATE('{time.date()}')
+            WHERE invoice.month = "{key}"
             LIMIT 1
         """
         query_result = get_bigquery_client().query(query).result()
@@ -962,11 +967,3 @@ def get_hail_entry(
         'cost_type': 'regular',
         'adjustment_info': None,
     }
-
-
-if __name__ == '__main__':
-    json_str = "{'start': '2022-01-01', 'end': '2022-01-02'}"
-    json_strt, json_end = datetime.fromisoformat('2022-01-01'), datetime.fromisoformat(
-        '2022-01-02'
-    )
-    get_start_and_end_from_data({'message': json_str})
