@@ -15,9 +15,7 @@
 
 disable=f-string-without-interpolation,logging-fstring-interpolation,inherit-non-class,
             too-few-public-methods,fixme,line-too-long,too-many-statements,
-            too-many-lines,too-many-instance-attributes,R0801,c-extension-no-member,no-member,
-            no-self-use
-
+            too-many-lines,too-many-instance-attributes,R0801,c-extension-no-member,no-member
 
 # Overriding variable name patterns to allow short 1- or 2-letter variables
 attr-rgx=[a-z_][a-z0-9_]{0,30}$
