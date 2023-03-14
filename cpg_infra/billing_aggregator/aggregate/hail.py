@@ -105,7 +105,9 @@ def get_finalised_entries_for_batch(batch: dict) -> List[Dict]:
             # Remove any labels with falsey values e.g. None, '', 0
             labels = dict(filter(lambda lbl: lbl[1], labels.items()))
 
-            cost = utils.get_total_hail_cost(currency_conversion_rate, raw_cost=raw_cost)
+            cost = utils.get_total_hail_cost(
+                currency_conversion_rate, raw_cost=raw_cost
+            )
             usage = job['resources'].get(batch_resource, 0)
 
             # 2023-03-07 mfranklin: I know this key isn't unique, but to avoid issues
