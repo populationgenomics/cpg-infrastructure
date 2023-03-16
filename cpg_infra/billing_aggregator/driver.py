@@ -284,7 +284,7 @@ class BillingAggregator:
         env: dict,
         source_file: str | None = None,
         memory: str = '512M',
-        cpu: int | None = None
+        cpu: int | None = None,
     ):
         """
         Create a single Cloud Function. Include the pubsub trigger and event alerts
