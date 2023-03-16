@@ -25,6 +25,10 @@ from cpg_infra.abstraction.base import (
     ContainerRegistryMembership,
     MachineAccountRole,
 )
+from cpg_infra.abstraction.hailbatch import (
+    HailBatchBillingProject,
+    HailBatchBillingProjectMembership,
+)
 from cpg_infra.config import (
     CPGDatasetConfig,
     CPGDatasetComponents,
@@ -257,7 +261,45 @@ class CPGInfrastructure:
         # now resolve groups
         for cloud in self.group_provider.groups:
             # We're adding groups, but it does rely on some service being created
-            infra = self.dataset_infrastructure[cloud][self.config.common_dataset].infra
+            data_provider = self.dataset_infrastructure[cloud][
+                self.config.common_dataset
+            ]
+            infra = data_provider.infra
+
+            if data_provider.should_setup_hail:
+                members = self.group_provider.resolve_group_members(
+                    data_provider.analysis_group
+                )
+                if self.config.billing.hail_aggregator_username:
+                    HailBatchBillingProjectMembership(
+                        infra.get_pulumi_name(
+                            f'batch-billing-member-billing-aggregator'
+                        ),
+                        billing_project=data_provider.hail_batch_billing_project,
+                        user=self.config.billing.hail_aggregator_username,
+                    )
+
+                def _make_add_member_function(_data_provider, _infra):
+                    # bind loop variables so they're available in
+                    # the functional context below
+
+                    def _add_member_to_billing_project(_analysis_members):
+                        for m in _analysis_members:
+                            h = _data_provider.compute_hash(
+                                _data_provider.dataset_config.dataset, m
+                            )
+                            hail_id = re.sub(r'[^A-Za-z]', '', m.split('@')[0])
+                            HailBatchBillingProjectMembership(
+                                _infra.get_pulumi_name(f'batch-billing-member-{h}'),
+                                billing_project=_data_provider.hail_batch_billing_project,
+                                user=hail_id,
+                            )
+
+                    return _add_member_to_billing_project
+
+                pulumi.Output.all(*members).apply(
+                    _make_add_member_function(data_provider, infra)
+                )
 
             for group in self.group_provider.static_group_order(cloud=cloud):
                 for resource_key, member in group.members.items():
@@ -1380,8 +1422,35 @@ class CPGDatasetInfrastructure:
     # region HAIL
 
     def setup_hail(self):
+        self.setup_hail_billing_project()
         self.setup_hail_bucket_permissions()
         self.setup_hail_wheels_bucket_permissions()
+
+    @cached_property
+    def hail_batch_billing_project(self):
+
+        if isinstance(self.infra, GcpInfrastructure):
+            if not self.config.hail.gcp:
+                raise ValueError('config.hail.gcp was not set to find hail_batch_url')
+            hail_batch_url = self.config.hail.gcp.hail_batch_url
+        elif isinstance(self.infra, AzureInfra):
+            if not self.config.hail.azure:
+                raise ValueError('config.hail.azure was not set to find hail_batch_url')
+            hail_batch_url = self.config.hail.azure.hail_batch_url
+        elif isinstance(self.infra, DryRunInfra):
+            return None
+        else:
+            raise ValueError(f'Unknown infra type {type(self.infra)} for building hail_batch_billing_project')
+
+        return HailBatchBillingProject(
+            self.infra.get_pulumi_name('batch-billing-project'),
+            billing_project_name=self.dataset_config.dataset,
+            batch_uri=hail_batch_url,
+            token_category=self.infra.name(),
+        )
+
+    def setup_hail_billing_project(self):
+        _ = self.hail_batch_billing_project
 
     def setup_hail_bucket_permissions(self):
         for (

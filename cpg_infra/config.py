@@ -97,8 +97,14 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         @dataclasses.dataclass(frozen=True)
         class GCP(DeserializableDataclass):
             wheel_bucket_name: str
+            hail_batch_url: str
+
+        @dataclasses.dataclass(frozen=True)
+        class Azure(DeserializableDataclass):
+            hail_batch_url: str
 
         gcp: GCP
+        azure: Azure | None = None
 
     @dataclasses.dataclass(frozen=True)
     class AnalysisRunner(DeserializableDataclass):
@@ -168,6 +174,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         coordinator_machine_account: str
         gcp: GCP
         aggregator: GCPAggregator | None = None
+        hail_aggregator_username: str | None = None
 
     domain: str
     dataset_storage_prefix: str
