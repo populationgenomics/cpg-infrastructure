@@ -242,9 +242,13 @@ class BillingAggregator:
         )
 
         for function in self.config.billing.aggregator.functions:
-            memory = '512M'
+            memory = '256M'
+            cpu = None
             if function in ('hail', 'seqr'):
+                # Give more memory + balance with CPU by this table:
+                # https://cloud.google.com/functions/docs/configuring/memory
                 memory = '2048M'
+                cpu = 1
             # Create the function, the trigger and subscription.
             _ = self.create_cloud_function(
                 resource_name=f'billing-aggregator-{function}-billing-function',
@@ -255,6 +259,7 @@ class BillingAggregator:
                 source_archive_object=source_archive_object,
                 notification_channel=self.slack_channel,
                 memory=memory,
+                cpu=cpu,
                 env={
                     # 'SETUP_GCP_LOGGING': 'true',
                     'GCP_AGGREGATE_DEST_TABLE': self.config.billing.aggregator.destination_bq_table,
@@ -279,6 +284,7 @@ class BillingAggregator:
         env: dict,
         source_file: str | None = None,
         memory: str = '512M',
+        cpu: int | None = None
     ):
         """
         Create a single Cloud Function. Include the pubsub trigger and event alerts
@@ -316,6 +322,7 @@ class BillingAggregator:
                 max_instance_count=1,
                 min_instance_count=0,
                 available_memory=memory,
+                available_cpu=cpu,
                 timeout_seconds=540,
                 environment_variables=env,
                 ingress_settings='ALLOW_INTERNAL_ONLY',
