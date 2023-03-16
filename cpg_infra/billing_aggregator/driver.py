@@ -278,7 +278,7 @@ class BillingAggregator:
         notification_channel: gcp.monitoring.NotificationChannel,
         env: dict,
         source_file: str | None = None,
-        memory: str='512M'
+        memory: str = '512M',
     ):
         """
         Create a single Cloud Function. Include the pubsub trigger and event alerts
