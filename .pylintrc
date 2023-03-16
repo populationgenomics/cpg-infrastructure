@@ -30,6 +30,6 @@ max-line-length=88
 # Maximum number of locals for function / method body
 max-locals=40
 # Maximum number of arguments for function / method
-max-args=10
+max-args=15
 # Maximum number of branches per function
 max-branches=30
