@@ -242,6 +242,9 @@ class BillingAggregator:
         )
 
         for function in self.config.billing.aggregator.functions:
+            memory = '512M'
+            if function in ('hail', 'seqr'):
+                memory = '2048M'
             # Create the function, the trigger and subscription.
             _ = self.create_cloud_function(
                 resource_name=f'billing-aggregator-{function}-billing-function',
@@ -251,6 +254,7 @@ class BillingAggregator:
                 pubsub_topic=pubsub,
                 source_archive_object=source_archive_object,
                 notification_channel=self.slack_channel,
+                memory=memory,
                 env={
                     # 'SETUP_GCP_LOGGING': 'true',
                     'GCP_AGGREGATE_DEST_TABLE': self.config.billing.aggregator.destination_bq_table,
@@ -274,6 +278,7 @@ class BillingAggregator:
         notification_channel: gcp.monitoring.NotificationChannel,
         env: dict,
         source_file: str | None = None,
+        memory: str = '512M',
     ):
         """
         Create a single Cloud Function. Include the pubsub trigger and event alerts
@@ -310,7 +315,7 @@ class BillingAggregator:
             service_config=gcp.cloudfunctionsv2.FunctionServiceConfigArgs(
                 max_instance_count=1,
                 min_instance_count=0,
-                available_memory='512M',
+                available_memory=memory,
                 timeout_seconds=540,
                 environment_variables=env,
                 ingress_settings='ALLOW_INTERNAL_ONLY',
@@ -375,7 +380,7 @@ def archive_folder(path: str) -> pulumi.AssetArchive:
     with contextlib.chdir(path):
         for filename in os.listdir('.'):
             if not any(filename.endswith(ext) for ext in allowed_extensions):
-                print(f'Skipping {filename} for invalid extension')
+                # print(f'Skipping {filename} for invalid extension')
                 continue
 
             with open(filename, encoding='utf-8') as file:
