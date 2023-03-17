@@ -17,7 +17,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/checkout@v3
         with:
           repository: populationgenomics/cpg-infrastructure-private
           path: cpg-infrastructure-private
