@@ -9,6 +9,9 @@
         "automated-interpretation-pipeline",
         "rare-disease"
     ],
+    "all-datasets": [
+        "cpg-infrastructure"
+    ],
     "bioheart": [],
     "brain-malf": [
         "automated-interpretation-pipeline",
