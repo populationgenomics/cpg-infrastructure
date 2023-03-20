@@ -21,8 +21,9 @@ from cpg_utils.hail_batch import (
 from cpg_utils.config import get_config
 
 
-def prepare_git(job):
-    """Sets up the given job with the same git repository."""
+def prepare_job(job):
+    """Sets up the given job to run scripts in the same repository."""
+    job.image(get_config()['workflow']['driver_image'])
     copy_common_env(job)
     authenticate_cloud_credentials_in_job(job)
     prepare_git_job(
@@ -49,16 +50,17 @@ def main():
     job_output_paths = {}
     for dataset in sys.argv[1:]:
         job = batch.new_job(name=f'Process {dataset}')
-        prepare_git(job)
+        prepare_job(job)
 
         path = output_path(f'{dataset}.json.gz', dataset='common', category='analysis')
+
         job.command(f'disk_usage.py {dataset} {path}')
 
         job_output_paths[job] = path
 
     # Process the combined output of all jobs.
     treemap_job = batch.new_job(name='Combined treemap')
-    prepare_git(treemap_job)
+    prepare_job(treemap_job)
     for job in job_output_paths:
         treemap_job.depends_on(job)
 
