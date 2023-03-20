@@ -4,11 +4,15 @@
 
 import datetime
 import subprocess
+import os
 import sys
 import yaml
 
+ALL_DATASETS = 'all-datasets'
+
 
 def main():
+    """Main entrypoint."""
     if len(sys.argv) != 2:
         print('Usage: submit.py <config.yaml>')
         sys.exit(1)
@@ -17,7 +21,6 @@ def main():
         config = yaml.safe_load(f)
 
     # Generate a list of all datasets to invoke main.py with.
-    ALL_DATASETS = 'all-datasets'
     datasets = sorted(list(set(config.keys()) - {ALL_DATASETS}))
 
     subprocess.check_output(
@@ -27,7 +30,7 @@ def main():
             '--dataset',
             ALL_DATASETS,
             '--access-level',
-            'full',
+            os.getenv('ACCESS_LEVEL', 'full'),
             '--output-dir',
             f'storage_visualization_{datetime.date.today().strftime("%y-%m-%d")}',
             '--description',

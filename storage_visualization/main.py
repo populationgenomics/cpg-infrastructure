@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+"""Main entrypoint for the storage visualization driver."""
+
 import sys
 
 import hailtop.batch as hb
@@ -13,14 +15,26 @@ from cpg_utils.git import (
 from cpg_utils.hail_batch import (
     authenticate_cloud_credentials_in_job,
     copy_common_env,
-    image_path,
     remote_tmpdir,
     output_path,
 )
 from cpg_utils.config import get_config
 
 
+def prepare_git(job):
+    """Sets up the given job with the same git repository."""
+    copy_common_env(job)
+    authenticate_cloud_credentials_in_job(job)
+    prepare_git_job(
+        job=job,
+        organisation=get_organisation_name_from_current_directory(),
+        repo_name=get_repo_name_from_current_directory(),
+        commit=get_git_commit_ref_of_current_repository(),
+    )
+
+
 def main():
+    """Main entrypoint."""
     if len(sys.argv) < 2:
         print('Usage: main.py <dataset1> <dataset2> ...')
         sys.exit(1)
@@ -32,24 +46,28 @@ def main():
     batch = hb.Batch(name='Storage visualization driver', backend=service_backend)
 
     # Process all datasets in parallel, as separate jobs.
-    dataset_jobs = []
+    job_output_paths = {}
     for dataset in sys.argv[1:]:
         job = batch.new_job(name=f'Process {dataset}')
+        prepare_git(job)
 
-        copy_common_env(job)
-        authenticate_cloud_credentials_in_job(job)
+        path = output_path(f'{dataset}.json.gz', dataset='common', category='analysis')
+        job.command(f'disk_usage.py {dataset} {path}')
 
-        # Make disk_usage.py available to child job.
-        prepare_git_job(
-            job=job,
-            organisation=get_organisation_name_from_current_directory(),
-            repo_name=get_repo_name_from_current_directory(),
-            commit=get_git_commit_ref_of_current_repository(),
-        )
+        job_output_paths[job] = path
 
-        job.command(f'disk_usage.py {dataset}')
+    # Process the combined output of all jobs.
+    treemap_job = batch.new_job(name='Combined treemap')
+    prepare_git(treemap_job)
+    for job in job_output_paths:
+        treemap_job.depends_on(job)
 
-        dataset_jobs.append(job)
+    web_path = output_path('treemap.html', dataset='common', category='web')
+    treemap_job.command(
+        f'treemap.py --output {web_path} --group-by-dataset {" ".join(f"--input {path}" for path in job_output_paths.values())}'
+    )
+
+    batch.run(wait=False)
 
 
 if __name__ == '__main__':

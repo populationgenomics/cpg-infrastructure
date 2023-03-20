@@ -6,8 +6,9 @@ from collections import defaultdict
 import gzip
 import json
 import logging
+import sys
 from cloudpathlib import AnyPath
-from cpg_utils.hail_batch import get_config, output_path
+from cpg_utils.hail_batch import get_config
 from google.cloud import storage
 
 
@@ -57,11 +58,15 @@ def aggregate_level(name: str) -> str:
 
 def main():
     """Main entrypoint."""
+    if len(sys.argv) != 3:
+        print('Usage: disk_usage.py <dataset> <output.json.gz>')
+        sys.exit(1)
+
     # Don't print DEBUG logs from urllib3.connectionpool.
     logging.getLogger().setLevel(logging.INFO)
 
     storage_client = storage.Client()
-    dataset = get_config()['workflow']['dataset']
+    dataset = sys.argv[1]
     access_level = get_config()['workflow']['access_level']
 
     aggregate_stats = defaultdict(lambda: defaultdict(int))
@@ -94,7 +99,7 @@ def main():
 
         logging.info(f'{bucket_name} contains {count} blobs.')
 
-    output = output_path('disk_usage.json.gz', 'analysis')
+    output = sys.argv[2]
     logging.info(f'Writing results to {output}...')
     with AnyPath(output).open('wb') as f:
         with gzip.open(f, 'wt') as gzf:
