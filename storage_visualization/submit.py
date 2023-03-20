@@ -26,7 +26,6 @@ def main():
     subprocess.check_output(
         [
             'analysis-runner',
-            'submit',
             '--dataset',
             ALL_DATASETS,
             '--access-level',
