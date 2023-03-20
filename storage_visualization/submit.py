@@ -30,6 +30,8 @@ def main():
             ALL_DATASETS,
             '--access-level',
             os.getenv('ACCESS_LEVEL', 'full'),
+            '--config',
+            'storage_visualization/slack.toml',
             '--output-dir',
             f'storage_visualization_{datetime.date.today().strftime("%y-%m-%d")}',
             '--description',

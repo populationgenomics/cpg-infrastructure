@@ -1,0 +1,4 @@
+[slack]
+channel = 'team-software'
+token_secret_id = 'slack-production-bot-token'
+token_project_id = 'cpg-common'
