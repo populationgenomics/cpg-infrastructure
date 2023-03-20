@@ -34,7 +34,7 @@ def main():
             f'storage_visualization_{datetime.date.today().strftime("%y-%m-%d")}',
             '--description',
             'Storage visualization',
-            'main.py',
+            'storage_visualization/main.py',
         ]
         + datasets
     )

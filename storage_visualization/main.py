@@ -54,7 +54,7 @@ def main():
 
         path = output_path(f'{dataset}.json.gz', dataset='common', category='analysis')
 
-        job.command(f'disk_usage.py {dataset} {path}')
+        job.command(f'storage_visualization/disk_usage.py {dataset} {path}')
 
         job_output_paths[job] = path
 
@@ -66,7 +66,7 @@ def main():
 
     web_path = output_path('treemap.html', dataset='common', category='web')
     treemap_job.command(
-        f'treemap.py --output {web_path} --group-by-dataset {" ".join(f"--input {path}" for path in job_output_paths.values())}'
+        f'storage_visualization/treemap.py --output {web_path} --group-by-dataset {" ".join(f"--input {path}" for path in job_output_paths.values())}'
     )
 
     batch.run(wait=False)
