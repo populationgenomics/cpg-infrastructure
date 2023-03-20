@@ -56,8 +56,11 @@ def main():
         job = batch.new_job(name=f'process-{dataset}')
         prepare_job(job, clone_repository=True)
 
-        path = output_path(f'{dataset}.json.gz', dataset='common', category='analysis')
+        # Reading all blob metadata is expensive and can take a long time, so don't risk
+        # getting preempted.
+        job._preemptible = False  # pylint: disable=protected-access
 
+        path = output_path(f'{dataset}.json.gz', dataset='common', category='analysis')
         job.command(f'storage_visualization/disk_usage.py {dataset} {path}')
 
         job_output_paths[job] = path

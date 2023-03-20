@@ -29,7 +29,7 @@ def main():
             '--dataset',
             ALL_DATASETS,
             '--access-level',
-            os.getenv('ACCESS_LEVEL', 'full'),
+            os.getenv('ACCESS_LEVEL', 'standard'),
             '--config',
             'storage_visualization/slack.toml',
             '--output-dir',
