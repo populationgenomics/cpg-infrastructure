@@ -242,11 +242,11 @@ class BillingAggregator:
         )
 
         for function in self.config.billing.aggregator.functions:
-            memory = '256M'
-            cpu = None
+            # Balance CPU by this table:
+            # https://cloud.google.com/functions/docs/configuring/memory
+            memory = '1024M'
+            cpu = 0.583
             if function in ('hail', 'seqr'):
-                # Give more memory + balance with CPU by this table:
-                # https://cloud.google.com/functions/docs/configuring/memory
                 memory = '2048M'
                 cpu = 1
             # Create the function, the trigger and subscription.
