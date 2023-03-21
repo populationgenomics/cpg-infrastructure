@@ -20,22 +20,20 @@ from cpg_utils.hail_batch import (
     output_path,
     web_url,
 )
-from cpg_utils.slack import slack_message_cmd
+from cpg_utils.slack import send_message
 
 
-def prepare_job(job, clone_repository):
+def prepare_job(job):
     """Sets up the given job to run scripts in the same repository."""
     job.image(get_config()['workflow']['driver_image'])
     copy_common_env(job)
     authenticate_cloud_credentials_in_job(job)
-
-    if clone_repository:
-        prepare_git_job(
-            job=job,
-            organisation=get_organisation_name_from_current_directory(),
-            repo_name=get_repo_name_from_current_directory(),
-            commit=get_git_commit_ref_of_current_repository(),
-        )
+    prepare_git_job(
+        job=job,
+        organisation=get_organisation_name_from_current_directory(),
+        repo_name=get_repo_name_from_current_directory(),
+        commit=get_git_commit_ref_of_current_repository(),
+    )
 
 
 def main():
@@ -54,7 +52,7 @@ def main():
     job_output_paths = {}
     for dataset in sys.argv[1:]:
         job = batch.new_job(name=f'process-{dataset}')
-        prepare_job(job, clone_repository=True)
+        prepare_job(job)
 
         # Reading all blob metadata is expensive and can take a long time, so don't risk
         # getting preempted.
@@ -67,7 +65,7 @@ def main():
 
     # Process the combined output of all jobs to generate a web report.
     treemap_job = batch.new_job(name='treemap')
-    prepare_job(treemap_job, clone_repository=True)
+    prepare_job(treemap_job)
     for job in job_output_paths:
         treemap_job.depends_on(job)
 
@@ -77,12 +75,12 @@ def main():
     )
 
     # Send a Slack message when the HTML page has been generated.
-    slack_job = batch.new_job(name='slack')
-    prepare_job(slack_job, clone_repository=False)
+    slack_job = batch.new_python_job(name='slack')
+    copy_common_env(slack_job)
     slack_job.depends_on(treemap_job)
-    slack_message_cmd(
-        slack_job,
-        text=f'New storage visualization: {web_url("treemap.html", dataset="common")}',
+    slack_job.call(
+        send_message,
+        'New storage visualization: ' + web_url('treemap.html', dataset='common'),
     )
 
     batch.run(wait=False)
