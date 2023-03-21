@@ -1,4 +1,4 @@
 analysis-runner
-hail
+hail==0.2.111
 humanize
 plotly
