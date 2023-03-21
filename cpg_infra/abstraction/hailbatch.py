@@ -69,16 +69,20 @@ def get_hail_batch_billing_project(name: str, token_category: str, batch_uri: st
 class HailBatchBillingProjectProvider(pulumi.dynamic.ResourceProvider):
     """Pulumi provider for a Hail Batch Billing Project"""
 
-    def create(self, inputs):
+    def create(self, props) -> pulumi.dynamic.CreateResult:
+        batch_uri = props['batch_uri']
+        name = props['name']
+        token_category = props['token_category']
+
         previous_result = get_hail_batch_billing_project(
-            inputs['name'], inputs['token_category'], inputs['batch_uri']
+            name, token_category, batch_uri
         )
-        hail_auth_token = get_hail_batch_token(inputs['token_category'])
+        hail_auth_token = get_hail_batch_token(token_category)
 
         if previous_result and previous_result['status'] == 'closed':
             # reopen instead of create
             url = HAIL_REOPEN_BILLING_PROJECT_PATH.format(
-                hail_batch_url=inputs['batch_uri'], billing_project=inputs['name']
+                hail_batch_url=batch_uri, billing_project=name
             )
             resp = requests.post(
                 url, headers={'Authorization': f'Bearer {hail_auth_token}'}, timeout=60
@@ -86,7 +90,7 @@ class HailBatchBillingProjectProvider(pulumi.dynamic.ResourceProvider):
             resp.raise_for_status()
         else:
             url = HAIL_CREATE_BILLING_PROJECT_PATH.format(
-                hail_batch_url=inputs['batch_uri'], billing_project=inputs['name']
+                hail_batch_url=batch_uri, billing_project=name
             )
             resp = requests.post(
                 url, headers={'Authorization': f'Bearer {hail_auth_token}'}, timeout=60
@@ -94,8 +98,8 @@ class HailBatchBillingProjectProvider(pulumi.dynamic.ResourceProvider):
             resp.raise_for_status()
 
         return pulumi.dynamic.CreateResult(
-            id_=f"{inputs['token_category']}::{inputs['batch_uri']}::{inputs['name']}",
-            outs=inputs,
+            id_=f"{token_category}::{batch_uri}::{name}",
+            outs=props,
         )
 
     def read(self, id_: str, props) -> pulumi.dynamic.ReadResult:
