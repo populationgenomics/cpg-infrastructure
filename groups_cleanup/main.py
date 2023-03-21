@@ -4,7 +4,7 @@
 
 from urllib.parse import urlencode
 import sys
-import regex
+import re
 import googleapiclient.discovery
 
 CUSTOMER_ID = 'C010ys3gt'
@@ -84,7 +84,7 @@ def main():
         print('Usage: submit.py <member_regex>')
         sys.exit(1)
 
-    member_regex = regex.compile(sys.argv[1])
+    member_regex = re.compile(sys.argv[1])
 
     service = googleapiclient.discovery.build('cloudidentity', 'v1')
     groups = list_all_groups(service)
