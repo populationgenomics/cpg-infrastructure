@@ -279,6 +279,15 @@ class CPGInfrastructure:
                         user=self.config.billing.hail_aggregator_username,
                     )
 
+                for name in data_provider.hail_accounts_by_access_level:
+                    # not perfect, but it at least represents the cpg username format
+                    hail_username = f'{data_provider.dataset_config.dataset}-{name}'
+                    HailBatchBillingProjectMembership(
+                        infra.get_pulumi_name(f'batch-billing-member-hail-{name}'),
+                        billing_project=data_provider.hail_batch_billing_project,
+                        user=hail_username,
+                    )
+
                 def _make_add_member_function(_data_provider, _infra):
                     # bind loop variables so they're available in
                     # the functional context below
@@ -1428,7 +1437,6 @@ class CPGDatasetInfrastructure:
 
     @cached_property
     def hail_batch_billing_project(self):
-
         if isinstance(self.infra, GcpInfrastructure):
             if not self.config.hail.gcp:
                 raise ValueError('config.hail.gcp was not set to find hail_batch_url')
@@ -1440,7 +1448,10 @@ class CPGDatasetInfrastructure:
         elif isinstance(self.infra, DryRunInfra):
             return None
         else:
-            raise ValueError(f'Unknown infra type {type(self.infra)} for building hail_batch_billing_project')
+            raise ValueError(
+                f'Unknown infra type {type(self.infra)} for '
+                'building hail_batch_billing_project'
+            )
 
         return HailBatchBillingProject(
             self.infra.get_pulumi_name('batch-billing-project'),
