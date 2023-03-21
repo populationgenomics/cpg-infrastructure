@@ -1,4 +1,4 @@
-analysis-runner
-hail==0.2.111
+# Don't list hail or analysis-runner, as hail has protobuf version requirements that
+# are incompatible with pulumi.
 humanize
 plotly
