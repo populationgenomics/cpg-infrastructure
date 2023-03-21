@@ -11,7 +11,7 @@ CUSTOMER_ID = 'C010ys3gt'
 PAGE_SIZE = 1000  # How many results to fetch per request.
 
 
-def find_all_groups(service):
+def list_all_groups(service):
     """Returns a dictionary of all groups in the domain, mapping addresses to group resource names."""
     groups = {}
     next_page_token = ''
@@ -87,7 +87,7 @@ def main():
     member_regex = regex.compile(sys.argv[1])
 
     service = googleapiclient.discovery.build('cloudidentity', 'v1')
-    groups = find_all_groups(service)
+    groups = list_all_groups(service)
     for group_address, group_name in groups.items():
         print(f'Processing {group_address} ({group_name})')
         members = list_members(service, group_name)
