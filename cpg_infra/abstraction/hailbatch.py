@@ -16,6 +16,9 @@ HAIL_GET_BILLING_PROJECT_PATH = (
 HAIL_CREATE_BILLING_PROJECT_PATH = (
     '{hail_batch_url}/api/v1alpha/billing_projects/{billing_project}/create'
 )
+HAIL_REOPEN_BILLING_PROJECT_PATH = (
+    '{hail_batch_url}/api/v1alpha/billing_projects/{billing_project}/reopen'
+)
 HAIL_CLOSE_BILLING_PROJECT_PATH = (
     '{hail_batch_url}/api/v1alpha/billing_projects/{billing_project}/close'
 )
@@ -47,18 +50,48 @@ def get_hail_batch_token(token_category) -> str:
     )
 
 
+def get_hail_batch_billing_project(name: str, token_category: str, batch_uri: str):
+    """Get a Hail Batch Billing Project"""
+    hail_auth_token = get_hail_batch_token(token_category)
+    url = HAIL_GET_BILLING_PROJECT_PATH.format(
+        hail_batch_url=batch_uri, billing_project=name
+    )
+    resp = requests.get(
+        url, headers={'Authorization': f'Bearer {hail_auth_token}'}, timeout=60
+    )
+    if resp.status_code == 404:
+        return None
+    resp.raise_for_status()
+
+    return resp.json()
+
+
 class HailBatchBillingProjectProvider(pulumi.dynamic.ResourceProvider):
     """Pulumi provider for a Hail Batch Billing Project"""
 
     def create(self, inputs):
+        previous_result = get_hail_batch_billing_project(
+            inputs['name'], inputs['token_category'], inputs['batch_uri']
+        )
         hail_auth_token = get_hail_batch_token(inputs['token_category'])
-        url = HAIL_CREATE_BILLING_PROJECT_PATH.format(
-            hail_batch_url=inputs['batch_uri'], billing_project=inputs['name']
-        )
-        resp = requests.post(
-            url, headers={'Authorization': f'Bearer {hail_auth_token}'}, timeout=60
-        )
-        resp.raise_for_status()
+
+        if previous_result and previous_result['status'] == 'closed':
+            # reopen instead of create
+            url = HAIL_REOPEN_BILLING_PROJECT_PATH.format(
+                hail_batch_url=inputs['batch_uri'], billing_project=inputs['name']
+            )
+            resp = requests.post(
+                url, headers={'Authorization': f'Bearer {hail_auth_token}'}, timeout=60
+            )
+            resp.raise_for_status()
+        else:
+            url = HAIL_CREATE_BILLING_PROJECT_PATH.format(
+                hail_batch_url=inputs['batch_uri'], billing_project=inputs['name']
+            )
+            resp = requests.post(
+                url, headers={'Authorization': f'Bearer {hail_auth_token}'}, timeout=60
+            )
+            resp.raise_for_status()
 
         return pulumi.dynamic.CreateResult(
             id_=f"{inputs['token_category']}::{inputs['batch_uri']}::{inputs['name']}",
@@ -66,18 +99,15 @@ class HailBatchBillingProjectProvider(pulumi.dynamic.ResourceProvider):
         )
 
     def read(self, id_: str, props) -> pulumi.dynamic.ReadResult:
-        hail_auth_token = get_hail_batch_token(props['token_category'])
-        url = HAIL_GET_BILLING_PROJECT_PATH.format(
-            hail_batch_url=props['batch_uri'], billing_project=props['name']
-        )
-        resp = requests.get(
-            url, headers={'Authorization': f'Bearer {hail_auth_token}'}, timeout=60
+        resp = get_hail_batch_billing_project(
+            props['name'], props['token_category'], props['batch_uri']
         )
 
-        if resp.status_code == 404:
-            return pulumi.dynamic.ReadResult(None, None)
+        if not resp:
+            return pulumi.dynamic.ReadResult(None, {})
 
-        resp.raise_for_status()
+        if resp['status'] == 'closed':
+            return pulumi.dynamic.ReadResult(None, {})
 
         return pulumi.dynamic.ReadResult(id_=id_, outs=props)
 
@@ -172,8 +202,23 @@ class HailBatchBillingProjectMembershipProvider(pulumi.dynamic.ResourceProvider)
             raise ValueError(f'Could not delete user from billing project: {resp.text}')
 
     def read(self, id_: str, props) -> pulumi.dynamic.ReadResult:
-        # TODO: implement read from hail batch to determine if still present
-        return pulumi.dynamic.ReadResult(id_=id_, outs=props)
+        bp_components = props['billing_project'].split('::')
+        token_category, batch_uri, billing_project_name = bp_components
+        resp = get_hail_batch_billing_project(
+            billing_project_name, token_category, batch_uri
+        )
+
+        if not resp:
+            return pulumi.dynamic.ReadResult(None, {})
+
+        if resp['status'] == 'closed':
+            return pulumi.dynamic.ReadResult(None, {})
+
+        user = props['user']
+        if user in resp['users']:
+            return pulumi.dynamic.ReadResult(id_=id_, outs=props)
+
+        return pulumi.dynamic.ReadResult(None, {})
 
 
 class HailBatchBillingProject(pulumi.dynamic.Resource):
