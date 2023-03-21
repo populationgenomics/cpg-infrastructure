@@ -159,7 +159,8 @@ def main():
     fig.update_traces(root_color='lightgrey')
 
     logging.info(f'Writing result to {args.output}')
-    fig.write_html(args.output)
+    with AnyPath(args.output).open('wt') as f:
+        fig.write_html(f)
 
 
 if __name__ == '__main__':
