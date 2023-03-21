@@ -18,9 +18,10 @@ from cpg_utils.hail_batch import (
     copy_common_env,
     remote_tmpdir,
     output_path,
-    web_url,
+    # web_url,
 )
-from cpg_utils.slack import send_message
+
+# from cpg_utils.slack import send_message
 
 
 def prepare_job(job):
@@ -75,13 +76,13 @@ def main():
     )
 
     # Send a Slack message when the HTML page has been generated.
-    slack_job = batch.new_python_job(name='slack')
-    copy_common_env(slack_job)
-    slack_job.depends_on(treemap_job)
-    slack_job.call(
-        send_message,
-        'New storage visualization: ' + web_url('treemap.html', dataset='common'),
-    )
+    # slack_job = batch.new_python_job(name='slack')
+    # copy_common_env(slack_job)
+    # slack_job.depends_on(treemap_job)
+    # slack_job.call(
+    #    send_message,
+    #    'New storage visualization: ' + web_url('treemap.html', dataset='common'),
+    # )
 
     batch.run(wait=False)
 
