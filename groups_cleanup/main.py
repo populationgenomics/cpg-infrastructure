@@ -94,7 +94,7 @@ def main():
         for member_address, member_name in members.items():
             if member_regex.fullmatch(member_address):
                 print(f'  Deleting {member_address} ({member_name})')
-                # service.groups().memberships().delete(name=member_name).execute()
+                service.groups().memberships().delete(name=member_name).execute()
 
 
 if __name__ == '__main__':
