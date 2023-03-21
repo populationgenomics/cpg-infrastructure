@@ -3,10 +3,11 @@
 """Submits `main.py` to the analysis-runner, with a full set of dataset names based on a yaml config."""
 
 import datetime
-import subprocess
 import os
 import sys
 import yaml
+
+from analysis_runner.cli_analysisrunner import run_analysis_runner
 
 ALL_DATASETS = 'all-datasets'
 
@@ -23,22 +24,14 @@ def main():
     # Generate a list of all datasets to invoke main.py with.
     datasets = sorted(list(set(config.keys()) - {ALL_DATASETS}))
 
-    subprocess.check_output(
-        [
-            'analysis-runner',
-            '--dataset',
-            ALL_DATASETS,
-            '--access-level',
-            os.getenv('ACCESS_LEVEL', 'standard'),
-            '--config',
-            'storage_visualization/slack.toml',
-            '--output-dir',
-            f'storage_visualization_{datetime.date.today().strftime("%y-%m-%d")}',
-            '--description',
-            'Storage visualization',
-            'storage_visualization/main.py',
-        ]
-        + datasets
+    run_analysis_runner(
+        dataset=ALL_DATASETS,
+        access_level=os.getenv('ACCESS_LEVEL', 'standard'),
+        config=['storage_visualization/slack.toml'],
+        output_dir='storage_visualization/'
+        + datetime.date.today().strftime('%y-%m-%d'),
+        description='Storage visualization',
+        script=['storage_visualization/main.py'] + datasets,
     )
 
 
