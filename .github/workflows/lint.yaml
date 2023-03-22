@@ -18,7 +18,10 @@ jobs:
 
       - name: Install packages
         run: |
-          pip install -r requirements-dev.txt -r cpg_infra/billing_aggregator/aggregate/requirements.txt
+          pip install \
+              -r requirements-dev.txt \
+              -r cpg_infra/billing_aggregator/aggregate/requirements.txt \
+              -r storage_visualization/requirements.txt
 
       - name: pre-commit
         run: pre-commit run --all-files

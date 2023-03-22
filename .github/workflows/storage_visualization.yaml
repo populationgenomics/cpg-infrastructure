@@ -1,0 +1,33 @@
+name: Storage visualization
+
+on:
+  # Run every Sunday morning.
+  schedule:
+    - cron: "0 0 * * 0"
+  # Run on demand.
+  workflow_dispatch:
+
+jobs:
+  submit_batch:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout this repository (cpg-infrastructure).
+      - uses: actions/checkout@v3
+
+      # Checkout the private repository (cpg-infrastructure-private).
+      - uses: actions/checkout@v3
+        with:
+          repository: populationgenomics/cpg-infrastructure-private
+          path: cpg-infrastructure-private
+          ssh-key: ${{ secrets.INFRA_PRIVATE_DEPLOY_TOKEN }}
+
+      - name: "Authenticate to Google Cloud"
+        id: "google-cloud-auth"
+        uses: "google-github-actions/auth@v1"
+        with:
+          credentials_json: "${{ secrets.GCP_STORAGE_VISUALIZATION_CREDENTIALS }}"
+          project_id: cpg-common
+
+      - name: "Submit batch"
+        run: storage_visualization/submit.py cpg-infrastructure-private/production.yaml

@@ -16,7 +16,10 @@ jobs:
     environment: production
 
     steps:
+      # Checkout this repository (cpg-infrastructure).
       - uses: actions/checkout@v3
+
+      # Checkout the private repository (cpg-infrastructure-private).
       - uses: actions/checkout@v3
         with:
           repository: populationgenomics/cpg-infrastructure-private
