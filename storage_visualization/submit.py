@@ -7,7 +7,10 @@ import os
 import sys
 import yaml
 
-from analysis_runner.cli_analysisrunner import run_analysis_runner
+# See requirements.txt for why we're disabling the linter warnings here.
+from analysis_runner.cli_analysisrunner import (
+    run_analysis_runner,
+)  # pylint: disable=import-error
 
 ALL_DATASETS = 'all-datasets'
 

@@ -4,7 +4,8 @@
 
 import sys
 
-import hailtop.batch as hb
+# See requirements.txt for why we're disabling the linter warnings here.
+import hailtop.batch as hb  # pylint: disable=import-error
 
 from cpg_utils.config import get_config
 from cpg_utils.git import (
