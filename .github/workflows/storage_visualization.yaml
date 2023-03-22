@@ -31,4 +31,3 @@ jobs:
 
       - name: "Submit batch"
         run: storage_visualization/submit.py cpg-infrastructure-private/production.yaml
-
