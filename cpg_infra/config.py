@@ -213,9 +213,6 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         default_factory=lambda: [0.5, 0.9, 1.0]
     )
 
-
-
-
     @staticmethod
     def from_toml(path):
         with open(path, encoding='utf-8') as f:

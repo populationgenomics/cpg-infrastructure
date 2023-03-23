@@ -248,8 +248,7 @@ class CPGInfrastructure:
                 continue
 
     def setup_hail_batch_billing_project_members(self):
-
-        for deploy_location, datasets in self.dataset_infrastructure.items():
+        for datasets in self.dataset_infrastructure.values():
             for dataset in datasets.values():
                 if not dataset.should_setup_hail:
                     continue
