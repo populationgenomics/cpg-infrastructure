@@ -31,8 +31,6 @@ class DeserializableDataclass:
 
         for fieldname, ftype in fields.items():
             value = self.__dict__.get(fieldname)
-            if fieldname == 'member_to_hail_account':
-                print('member_to_hail_account', value)
 
             if not value:
                 continue
