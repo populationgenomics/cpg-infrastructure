@@ -31,9 +31,11 @@ class DeserializableDataclass:
 
         for fieldname, ftype in fields.items():
             value = self.__dict__.get(fieldname)
+            if fieldname == 'member_to_hail_account':
+                print('member_to_hail_account', value)
+
             if not value:
                 continue
-
             dtypes = []
             # determine which type we should try to parse the value as
             # handle unions (eg: None | DType)
@@ -184,6 +186,10 @@ class CPGInfrastructureConfig(DeserializableDataclass):
 
     config_destination: str
 
+    # useful for mapping a member's email to their hail account
+    # (must be the same ID across environments)
+    member_to_hail_account: dict[str, str]
+
     gcp: GCP | None = None
     azure: Azure | None = None
     hail: Hail | None = None
@@ -207,9 +213,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         default_factory=lambda: [0.5, 0.9, 1.0]
     )
 
-    # useful for mapping a member's email to their hail account
-    # (must be the same ID across environments)
-    member_to_hail_account: dict[str, str] = dataclasses.field(default_factory=dict)
+
 
 
     @staticmethod

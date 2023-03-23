@@ -284,17 +284,23 @@ class CPGInfrastructure:
 
                     def _add_member_to_billing_project(_analysis_members):
                         # print(f'Got members to add to billing project: {_data_provider.dataset_config.dataset}: {_analysis_members}')
+                        added_members = set()
                         for m in _analysis_members:
                             if not isinstance(m, str):
                                 continue
                             h = _data_provider.compute_hash(
                                 _data_provider.dataset_config.dataset, m
                             )
-                            if m in self.config.member_to_hail_account:
-                                hail_id = self.config.member_to_hail_account[m]
-                            else:
-                                hail_id = re.sub(r'[^A-Za-z]', '', m.split('@')[0])
-                            print(f'{_data_provider.dataset_config.dataset} :: {m} -> {hail_id}')
+                            if m not in self.config.member_to_hail_account:
+                                continue
+
+                            hail_id = self.config.member_to_hail_account[m]
+                            if hail_id in added_members:
+                                # sometimes this happens if a user has multiple emails
+                                continue
+
+                            added_members.add(hail_id)
+
                             HailBatchBillingProjectMembership(
                                 _infra.get_pulumi_name(f'batch-billing-member-{h}'),
                                 billing_project=_data_provider.hail_batch_billing_project,
