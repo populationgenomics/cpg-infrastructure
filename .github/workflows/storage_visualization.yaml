@@ -37,4 +37,5 @@ jobs:
       - run: pip install analysis-runner
 
       - name: "Submit batch"
-        run: storage_visualization/submit.py cpg-infrastructure-private/production.yaml
+        # Automatically confirm to run with "full" access level.
+        run: yes | storage_visualization/submit.py cpg-infrastructure-private/production.yaml
