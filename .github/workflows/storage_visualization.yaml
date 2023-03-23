@@ -29,5 +29,8 @@ jobs:
           credentials_json: "${{ secrets.GCP_STORAGE_VISUALIZATION_CREDENTIALS }}"
           project_id: cpg-common
 
+      - name: Install dependencies
+        run: pip install analysis-runner
+
       - name: "Submit batch"
         run: storage_visualization/submit.py cpg-infrastructure-private/production.yaml
