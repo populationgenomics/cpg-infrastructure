@@ -98,7 +98,7 @@ class HailBatchBillingProjectProvider(pulumi.dynamic.ResourceProvider):
             resp.raise_for_status()
 
         return pulumi.dynamic.CreateResult(
-            id_=f"{token_category}::{batch_uri}::{name}",
+            id_=f'{token_category}::{batch_uri}::{name}',
             outs=props,
         )
 
