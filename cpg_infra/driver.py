@@ -162,7 +162,7 @@ class CPGInfrastructure:
                 else:
                     resolved_members.append(member)
 
-            self._cached_resolved_members[group.name] = resolved_members
+            self._cached_resolved_members[group.name] = list(set(resolved_members))
             return resolved_members
 
     def __init__(
@@ -206,6 +206,7 @@ class CPGInfrastructure:
         self.deploy_datasets()
         BillingAggregator(self.config).main()
         self.finalize_groups()
+        self.setup_hail_batch_billing_project_members()
         self.output_infrastructure_config()
 
     def setup_datasets(self):
@@ -246,6 +247,66 @@ class CPGInfrastructure:
                 # we set it up manually first
                 continue
 
+    def setup_hail_batch_billing_project_members(self):
+
+        for deploy_location, datasets in self.dataset_infrastructure.items():
+            for dataset in datasets.values():
+                if not dataset.should_setup_hail:
+                    continue
+
+                infra = dataset.infra
+                members = self.group_provider.resolve_group_members(
+                    dataset.analysis_group
+                )
+                if self.config.billing.hail_aggregator_username:
+                    HailBatchBillingProjectMembership(
+                        infra.get_pulumi_name(
+                            f'batch-billing-member-billing-aggregator'
+                        ),
+                        billing_project=dataset.hail_batch_billing_project,
+                        user=self.config.billing.hail_aggregator_username,
+                    )
+
+                for (
+                    name,
+                    hail_account,
+                ) in dataset.hail_accounts_by_access_level.items():
+                    # not perfect, but it at least represents the cpg username format
+                    HailBatchBillingProjectMembership(
+                        infra.get_pulumi_name(f'batch-billing-member-hail-{name}'),
+                        billing_project=dataset.hail_batch_billing_project,
+                        user=hail_account.username,
+                    )
+
+                def _make_add_member_function(_data_provider, _infra):
+                    # bind loop variables so they're available in
+                    # the functional context below
+
+                    def _add_member_to_billing_project(_analysis_members):
+                        # print(f'Got members to add to billing project: {_data_provider.dataset_config.dataset}: {_analysis_members}')
+                        for m in _analysis_members:
+                            if not isinstance(m, str):
+                                continue
+                            h = _data_provider.compute_hash(
+                                _data_provider.dataset_config.dataset, m
+                            )
+                            if m in self.config.member_to_hail_account:
+                                hail_id = self.config.member_to_hail_account[m]
+                            else:
+                                hail_id = re.sub(r'[^A-Za-z]', '', m.split('@')[0])
+                            print(f'{_data_provider.dataset_config.dataset} :: {m} -> {hail_id}')
+                            HailBatchBillingProjectMembership(
+                                _infra.get_pulumi_name(f'batch-billing-member-{h}'),
+                                billing_project=_data_provider.hail_batch_billing_project,
+                                user=hail_id,
+                            )
+
+                    return _add_member_to_billing_project
+
+                pulumi.Output.all(*members).apply(
+                    _make_add_member_function(dataset, infra)
+                )
+
     def finalize_groups(self):
         def _email_key(m_):
             """
@@ -266,52 +327,6 @@ class CPGInfrastructure:
                 self.config.common_dataset
             ]
             infra = data_provider.infra
-
-            if data_provider.should_setup_hail:
-                members = self.group_provider.resolve_group_members(
-                    data_provider.analysis_group
-                )
-                if self.config.billing.hail_aggregator_username:
-                    HailBatchBillingProjectMembership(
-                        infra.get_pulumi_name(
-                            f'batch-billing-member-billing-aggregator'
-                        ),
-                        billing_project=data_provider.hail_batch_billing_project,
-                        user=self.config.billing.hail_aggregator_username,
-                    )
-
-                for (
-                    name,
-                    hail_account,
-                ) in data_provider.hail_accounts_by_access_level.items():
-                    # not perfect, but it at least represents the cpg username format
-                    HailBatchBillingProjectMembership(
-                        infra.get_pulumi_name(f'batch-billing-member-hail-{name}'),
-                        billing_project=data_provider.hail_batch_billing_project,
-                        user=hail_account.username,
-                    )
-
-                def _make_add_member_function(_data_provider, _infra):
-                    # bind loop variables so they're available in
-                    # the functional context below
-
-                    def _add_member_to_billing_project(_analysis_members):
-                        for m in _analysis_members:
-                            h = _data_provider.compute_hash(
-                                _data_provider.dataset_config.dataset, m
-                            )
-                            hail_id = re.sub(r'[^A-Za-z]', '', m.split('@')[0])
-                            HailBatchBillingProjectMembership(
-                                _infra.get_pulumi_name(f'batch-billing-member-{h}'),
-                                billing_project=_data_provider.hail_batch_billing_project,
-                                user=hail_id,
-                            )
-
-                    return _add_member_to_billing_project
-
-                pulumi.Output.all(*members).apply(
-                    _make_add_member_function(data_provider, infra)
-                )
 
             for group in self.group_provider.static_group_order(cloud=cloud):
                 for resource_key, member in group.members.items():
@@ -1695,7 +1710,7 @@ class CPGDatasetInfrastructure:
                 # Give hail worker permissions to submit jobs.
                 self.infra.add_member_to_dataproc_api(
                     f'hail-service-account-{access_level}-dataproc-worker',
-                    account=hail_account,
+                    account=hail_account.cloud_id,
                     role=f'{self.infra.organization.id}/roles/DataprocWorkerWithoutStorageAccess',
                 )
 
