@@ -29,5 +29,12 @@ jobs:
           credentials_json: "${{ secrets.GCP_STORAGE_VISUALIZATION_CREDENTIALS }}"
           project_id: cpg-common
 
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: "pip" # caching pip dependencies
+
+      - run: pip install analysis-runner
+
       - name: "Submit batch"
         run: storage_visualization/submit.py cpg-infrastructure-private/production.yaml
