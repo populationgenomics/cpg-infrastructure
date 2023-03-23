@@ -15,7 +15,6 @@ from cpg_utils.git import (
     get_repo_name_from_current_directory,
 )
 from cpg_utils.hail_batch import (
-    authenticate_cloud_credentials_in_job,
     copy_common_env,
     remote_tmpdir,
     output_path,
@@ -28,8 +27,6 @@ def prepare_job(job, clone_repo):
     """Sets up the given job to run scripts in the same repository."""
     job.image(get_config()['workflow']['driver_image'])
     copy_common_env(job)
-    authenticate_cloud_credentials_in_job(job)
-
     if clone_repo:
         prepare_git_job(
             job=job,
