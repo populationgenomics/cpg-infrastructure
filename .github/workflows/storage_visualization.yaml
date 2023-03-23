@@ -6,6 +6,7 @@ on:
     - cron: "0 0 * * 0"
   # Run on demand.
   workflow_dispatch:
+  push: ['add-storage-viz-reqs']
 
 jobs:
   submit_batch:
@@ -28,6 +29,13 @@ jobs:
         with:
           credentials_json: "${{ secrets.GCP_STORAGE_VISUALIZATION_CREDENTIALS }}"
           project_id: cpg-common
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: "pip" # caching pip dependencies
+
+      - run: pip install -r storage_visualization/requirements.txt analysis-runner
 
       - name: "Submit batch"
         run: storage_visualization/submit.py cpg-infrastructure-private/production.yaml
