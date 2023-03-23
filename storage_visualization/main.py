@@ -18,7 +18,6 @@ from cpg_utils.hail_batch import (
     copy_common_env,
     remote_tmpdir,
     output_path,
-    web_url,
 )
 from cpg_utils.slack import send_message
 
@@ -81,7 +80,8 @@ def main():
     slack_job.depends_on(treemap_job)
     slack_job.call(
         send_message,
-        'New storage visualization: ' + web_url('treemap.html', dataset='common'),
+        'Storage visualization: '
+        + output_path('treemap.html', dataset='common', category='web_url'),
     )
 
     batch.run(wait=False)
