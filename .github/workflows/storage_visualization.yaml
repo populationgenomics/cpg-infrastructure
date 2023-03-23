@@ -34,7 +34,7 @@ jobs:
           python-version: "3.11"
           cache: "pip" # caching pip dependencies
 
-      - run: pip install -r storage_visualization/requirements.txt analysis-runner
+      - run: pip install analysis-runner
 
       - name: "Submit batch"
         run: storage_visualization/submit.py cpg-infrastructure-private/production.yaml
