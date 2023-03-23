@@ -33,6 +33,7 @@ from cpg_infra.config import (
     CPGDatasetConfig,
     CPGDatasetComponents,
     CPGInfrastructureConfig,
+    HailAccount,
 )
 
 from cpg_infra.billing_aggregator.driver import BillingAggregator
@@ -279,13 +280,15 @@ class CPGInfrastructure:
                         user=self.config.billing.hail_aggregator_username,
                     )
 
-                for name in data_provider.hail_accounts_by_access_level:
+                for (
+                    name,
+                    hail_account,
+                ) in data_provider.hail_accounts_by_access_level.items():
                     # not perfect, but it at least represents the cpg username format
-                    hail_username = f'{data_provider.dataset_config.dataset}-{name}'
                     HailBatchBillingProjectMembership(
                         infra.get_pulumi_name(f'batch-billing-member-hail-{name}'),
                         billing_project=data_provider.hail_batch_billing_project,
-                        user=hail_username,
+                        user=hail_account.username,
                     )
 
                 def _make_add_member_function(_data_provider, _infra):
@@ -541,7 +544,7 @@ class CPGDatasetInfrastructure:
         machine_accounts: dict[str, list] = defaultdict(list)
 
         for access_level, account in self.hail_accounts_by_access_level.items():
-            machine_accounts['hail'].append((access_level, account))
+            machine_accounts['hail'].append((access_level, account.cloud_id))
         for access_level, account in self.deployment_accounts_by_access_level.items():
             machine_accounts['deployment'].append((access_level, account))
         for (
@@ -1472,7 +1475,7 @@ class CPGDatasetInfrastructure:
             self.infra.add_member_to_bucket(
                 f'hail-service-account-{access_level}-hail-bucket-admin',
                 self.hail_bucket,
-                hail_machine_account,
+                hail_machine_account.cloud_id,
                 BucketMembership.MUTATE,
             )
 
@@ -1508,11 +1511,10 @@ class CPGDatasetInfrastructure:
             )
 
     @cached_property
-    def hail_accounts_by_access_level(self):
+    def hail_accounts_by_access_level(self) -> dict[str, HailAccount]:
         if not self.should_setup_hail:
             return {}
 
-        accounts = {}
         if isinstance(self.infra, GcpInfrastructure):
             accounts = {
                 'test': self.dataset_config.gcp.hail_service_account_test,
@@ -1530,6 +1532,7 @@ class CPGDatasetInfrastructure:
             }
         else:
             return {}
+
         accounts = {cat: ac for cat, ac in accounts.items() if ac}
         return accounts
 
@@ -1610,14 +1613,12 @@ class CPGDatasetInfrastructure:
 
             # Allow the Hail service account to access its corresponding cromwell key
             if self.should_setup_hail:
-                if hail_service_account := self.hail_accounts_by_access_level.get(
-                    access_level
-                ):
+                if hail_account := self.hail_accounts_by_access_level.get(access_level):
                     self.infra.add_secret_member(
                         f'cromwell-service-account-{access_level}-self-accessor',
                         project=self.config.analysis_runner.gcp.project,  # ANALYSIS_RUNNER_PROJECT,
                         secret=secret,
-                        member=hail_service_account,
+                        member=hail_account.cloud_id,
                         membership=SecretMembership.ACCESSOR,
                     )
 
@@ -1641,7 +1642,7 @@ class CPGDatasetInfrastructure:
             self.infra.add_group_member(
                 f'hail-service-account-{access_level}-cromwell-access',
                 group=self.config.cromwell.gcp.access_group_id,  # CROMWELL_ACCESS_GROUP_ID,
-                member=hail_account,
+                member=hail_account.cloud_id,
             )
 
         # Allow the Cromwell service accounts to run workflows.
@@ -1667,7 +1668,7 @@ class CPGDatasetInfrastructure:
             self.infra.add_member_to_machine_account_role(
                 f'hail-service-account-{access_level}-dataproc-service-account-user',
                 spark_accounts[access_level],
-                hail_account,
+                hail_account.cloud_id,
                 role=MachineAccountRole.ACCESS,
             )
 
@@ -1687,7 +1688,7 @@ class CPGDatasetInfrastructure:
                 # Allow hail account to create a cluster
                 self.infra.add_member_to_dataproc_api(
                     f'hail-service-account-{access_level}-dataproc-admin',
-                    account=hail_account,
+                    account=hail_account.cloud_id,
                     role='admin',
                 )
 

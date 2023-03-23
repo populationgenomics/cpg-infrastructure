@@ -248,6 +248,14 @@ class CPGDatasetComponents(Enum):
 
 
 @dataclasses.dataclass(frozen=True)
+class HailAccount(DeserializableDataclass):
+    """Represents a hail account on a specific cloud"""
+
+    username: str
+    cloud_id: str
+
+
+@dataclasses.dataclass(frozen=True)
 class CPGDatasetConfig(DeserializableDataclass):
     """
     Configuration that describes the minimum information
@@ -267,17 +275,17 @@ class CPGDatasetConfig(DeserializableDataclass):
         project: str
         region: str | None = None
 
-        hail_service_account_test: str = None
-        hail_service_account_standard: str = None
-        hail_service_account_full: str = None
+        hail_service_account_test: HailAccount = None
+        hail_service_account_standard: HailAccount = None
+        hail_service_account_full: HailAccount = None
 
     @dataclasses.dataclass(frozen=True)
     class Azure(DeserializableDataclass):
         region: str | None = None
 
-        hail_service_account_test: str = None
-        hail_service_account_standard: str = None
-        hail_service_account_full: str = None
+        hail_service_account_test: HailAccount = None
+        hail_service_account_standard: HailAccount = None
+        hail_service_account_full: HailAccount = None
 
     @dataclasses.dataclass(frozen=True)
     class Budget(DeserializableDataclass):
