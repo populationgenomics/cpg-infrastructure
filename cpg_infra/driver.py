@@ -25,10 +25,15 @@ from cpg_infra.abstraction.base import (
     ContainerRegistryMembership,
     MachineAccountRole,
 )
+from cpg_infra.abstraction.hailbatch import (
+    HailBatchBillingProject,
+    HailBatchBillingProjectMembership,
+)
 from cpg_infra.config import (
     CPGDatasetConfig,
     CPGDatasetComponents,
     CPGInfrastructureConfig,
+    HailAccount,
 )
 
 from cpg_infra.billing_aggregator.driver import BillingAggregator
@@ -157,7 +162,7 @@ class CPGInfrastructure:
                 else:
                     resolved_members.append(member)
 
-            self._cached_resolved_members[group.name] = resolved_members
+            self._cached_resolved_members[group.name] = list(set(resolved_members))
             return resolved_members
 
     def __init__(
@@ -201,6 +206,7 @@ class CPGInfrastructure:
         self.deploy_datasets()
         BillingAggregator(self.config).main()
         self.finalize_groups()
+        self.setup_hail_batch_billing_project_members()
         self.output_infrastructure_config()
 
     def setup_datasets(self):
@@ -241,6 +247,71 @@ class CPGInfrastructure:
                 # we set it up manually first
                 continue
 
+    def setup_hail_batch_billing_project_members(self):
+        for datasets in self.dataset_infrastructure.values():
+            for dataset in datasets.values():
+                if not dataset.should_setup_hail:
+                    continue
+
+                infra = dataset.infra
+                members = self.group_provider.resolve_group_members(
+                    dataset.analysis_group
+                )
+                if self.config.billing.hail_aggregator_username:
+                    HailBatchBillingProjectMembership(
+                        infra.get_pulumi_name(
+                            f'batch-billing-member-billing-aggregator'
+                        ),
+                        billing_project=dataset.hail_batch_billing_project,
+                        user=self.config.billing.hail_aggregator_username,
+                    )
+
+                for (
+                    name,
+                    hail_account,
+                ) in dataset.hail_accounts_by_access_level.items():
+                    # not perfect, but it at least represents the cpg username format
+                    HailBatchBillingProjectMembership(
+                        infra.get_pulumi_name(f'batch-billing-member-hail-{name}'),
+                        billing_project=dataset.hail_batch_billing_project,
+                        user=hail_account.username,
+                    )
+
+                def _make_add_member_function(_data_provider, _infra):
+                    # bind loop variables so they're available in
+                    # the functional context below
+
+                    def _add_member_to_billing_project(_analysis_members):
+                        # print(f'Got members to add to billing project: {_data_provider.dataset_config.dataset}: {_analysis_members}')
+                        added_members = set()
+                        for m in _analysis_members:
+                            if not isinstance(m, str):
+                                continue
+                            h = _data_provider.compute_hash(
+                                _data_provider.dataset_config.dataset, m
+                            )
+                            if m not in self.config.member_to_hail_account:
+                                continue
+
+                            hail_id = self.config.member_to_hail_account[m]
+                            if hail_id in added_members:
+                                # sometimes this happens if a user has multiple emails
+                                continue
+
+                            added_members.add(hail_id)
+
+                            HailBatchBillingProjectMembership(
+                                _infra.get_pulumi_name(f'batch-billing-member-{h}'),
+                                billing_project=_data_provider.hail_batch_billing_project,
+                                user=hail_id,
+                            )
+
+                    return _add_member_to_billing_project
+
+                pulumi.Output.all(*members).apply(
+                    _make_add_member_function(dataset, infra)
+                )
+
     def finalize_groups(self):
         def _email_key(m_):
             """
@@ -257,7 +328,10 @@ class CPGInfrastructure:
         # now resolve groups
         for cloud in self.group_provider.groups:
             # We're adding groups, but it does rely on some service being created
-            infra = self.dataset_infrastructure[cloud][self.config.common_dataset].infra
+            data_provider = self.dataset_infrastructure[cloud][
+                self.config.common_dataset
+            ]
+            infra = data_provider.infra
 
             for group in self.group_provider.static_group_order(cloud=cloud):
                 for resource_key, member in group.members.items():
@@ -490,7 +564,7 @@ class CPGDatasetInfrastructure:
         machine_accounts: dict[str, list] = defaultdict(list)
 
         for access_level, account in self.hail_accounts_by_access_level.items():
-            machine_accounts['hail'].append((access_level, account))
+            machine_accounts['hail'].append((access_level, account.cloud_id))
         for access_level, account in self.deployment_accounts_by_access_level.items():
             machine_accounts['deployment'].append((access_level, account))
         for (
@@ -1380,8 +1454,37 @@ class CPGDatasetInfrastructure:
     # region HAIL
 
     def setup_hail(self):
+        self.setup_hail_billing_project()
         self.setup_hail_bucket_permissions()
         self.setup_hail_wheels_bucket_permissions()
+
+    @cached_property
+    def hail_batch_billing_project(self):
+        if isinstance(self.infra, GcpInfrastructure):
+            if not self.config.hail.gcp:
+                raise ValueError('config.hail.gcp was not set to find hail_batch_url')
+            hail_batch_url = self.config.hail.gcp.hail_batch_url
+        elif isinstance(self.infra, AzureInfra):
+            if not self.config.hail.azure:
+                raise ValueError('config.hail.azure was not set to find hail_batch_url')
+            hail_batch_url = self.config.hail.azure.hail_batch_url
+        elif isinstance(self.infra, DryRunInfra):
+            return None
+        else:
+            raise ValueError(
+                f'Unknown infra type {type(self.infra)} for '
+                'building hail_batch_billing_project'
+            )
+
+        return HailBatchBillingProject(
+            self.infra.get_pulumi_name('batch-billing-project'),
+            billing_project_name=self.dataset_config.dataset,
+            batch_uri=hail_batch_url,
+            token_category=self.infra.name(),
+        )
+
+    def setup_hail_billing_project(self):
+        _ = self.hail_batch_billing_project
 
     def setup_hail_bucket_permissions(self):
         for (
@@ -1392,7 +1495,7 @@ class CPGDatasetInfrastructure:
             self.infra.add_member_to_bucket(
                 f'hail-service-account-{access_level}-hail-bucket-admin',
                 self.hail_bucket,
-                hail_machine_account,
+                hail_machine_account.cloud_id,
                 BucketMembership.MUTATE,
             )
 
@@ -1428,11 +1531,10 @@ class CPGDatasetInfrastructure:
             )
 
     @cached_property
-    def hail_accounts_by_access_level(self):
+    def hail_accounts_by_access_level(self) -> dict[str, HailAccount]:
         if not self.should_setup_hail:
             return {}
 
-        accounts = {}
         if isinstance(self.infra, GcpInfrastructure):
             accounts = {
                 'test': self.dataset_config.gcp.hail_service_account_test,
@@ -1450,6 +1552,7 @@ class CPGDatasetInfrastructure:
             }
         else:
             return {}
+
         accounts = {cat: ac for cat, ac in accounts.items() if ac}
         return accounts
 
@@ -1530,14 +1633,12 @@ class CPGDatasetInfrastructure:
 
             # Allow the Hail service account to access its corresponding cromwell key
             if self.should_setup_hail:
-                if hail_service_account := self.hail_accounts_by_access_level.get(
-                    access_level
-                ):
+                if hail_account := self.hail_accounts_by_access_level.get(access_level):
                     self.infra.add_secret_member(
                         f'cromwell-service-account-{access_level}-self-accessor',
                         project=self.config.analysis_runner.gcp.project,  # ANALYSIS_RUNNER_PROJECT,
                         secret=secret,
-                        member=hail_service_account,
+                        member=hail_account.cloud_id,
                         membership=SecretMembership.ACCESSOR,
                     )
 
@@ -1561,7 +1662,7 @@ class CPGDatasetInfrastructure:
             self.infra.add_group_member(
                 f'hail-service-account-{access_level}-cromwell-access',
                 group=self.config.cromwell.gcp.access_group_id,  # CROMWELL_ACCESS_GROUP_ID,
-                member=hail_account,
+                member=hail_account.cloud_id,
             )
 
         # Allow the Cromwell service accounts to run workflows.
@@ -1587,7 +1688,7 @@ class CPGDatasetInfrastructure:
             self.infra.add_member_to_machine_account_role(
                 f'hail-service-account-{access_level}-dataproc-service-account-user',
                 spark_accounts[access_level],
-                hail_account,
+                hail_account.cloud_id,
                 role=MachineAccountRole.ACCESS,
             )
 
@@ -1607,14 +1708,14 @@ class CPGDatasetInfrastructure:
                 # Allow hail account to create a cluster
                 self.infra.add_member_to_dataproc_api(
                     f'hail-service-account-{access_level}-dataproc-admin',
-                    account=hail_account,
+                    account=hail_account.cloud_id,
                     role='admin',
                 )
 
                 # Give hail worker permissions to submit jobs.
                 self.infra.add_member_to_dataproc_api(
                     f'hail-service-account-{access_level}-dataproc-worker',
-                    account=hail_account,
+                    account=hail_account.cloud_id,
                     role=f'{self.infra.organization.id}/roles/DataprocWorkerWithoutStorageAccess',
                 )
 

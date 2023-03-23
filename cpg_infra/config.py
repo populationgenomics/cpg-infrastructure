@@ -31,9 +31,9 @@ class DeserializableDataclass:
 
         for fieldname, ftype in fields.items():
             value = self.__dict__.get(fieldname)
+
             if not value:
                 continue
-
             dtypes = []
             # determine which type we should try to parse the value as
             # handle unions (eg: None | DType)
@@ -97,8 +97,14 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         @dataclasses.dataclass(frozen=True)
         class GCP(DeserializableDataclass):
             wheel_bucket_name: str
+            hail_batch_url: str
+
+        @dataclasses.dataclass(frozen=True)
+        class Azure(DeserializableDataclass):
+            hail_batch_url: str
 
         gcp: GCP
+        azure: Azure | None = None
 
     @dataclasses.dataclass(frozen=True)
     class AnalysisRunner(DeserializableDataclass):
@@ -168,6 +174,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         coordinator_machine_account: str
         gcp: GCP
         aggregator: GCPAggregator | None = None
+        hail_aggregator_username: str | None = None
 
     domain: str
     dataset_storage_prefix: str
@@ -176,6 +183,10 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     web_url_template: str
 
     config_destination: str
+
+    # useful for mapping a member's email to their hail account
+    # (must be the same ID across environments)
+    member_to_hail_account: dict[str, str]
 
     gcp: GCP | None = None
     azure: Azure | None = None
@@ -241,6 +252,14 @@ class CPGDatasetComponents(Enum):
 
 
 @dataclasses.dataclass(frozen=True)
+class HailAccount(DeserializableDataclass):
+    """Represents a hail account on a specific cloud"""
+
+    username: str
+    cloud_id: str
+
+
+@dataclasses.dataclass(frozen=True)
 class CPGDatasetConfig(DeserializableDataclass):
     """
     Configuration that describes the minimum information
@@ -260,17 +279,17 @@ class CPGDatasetConfig(DeserializableDataclass):
         project: str
         region: str | None = None
 
-        hail_service_account_test: str = None
-        hail_service_account_standard: str = None
-        hail_service_account_full: str = None
+        hail_service_account_test: HailAccount = None
+        hail_service_account_standard: HailAccount = None
+        hail_service_account_full: HailAccount = None
 
     @dataclasses.dataclass(frozen=True)
     class Azure(DeserializableDataclass):
         region: str | None = None
 
-        hail_service_account_test: str = None
-        hail_service_account_standard: str = None
-        hail_service_account_full: str = None
+        hail_service_account_test: HailAccount = None
+        hail_service_account_standard: HailAccount = None
+        hail_service_account_full: HailAccount = None
 
     @dataclasses.dataclass(frozen=True)
     class Budget(DeserializableDataclass):
