@@ -12,7 +12,9 @@
     "all-datasets": [
         "cpg-infrastructure"
     ],
-    "bioheart": [],
+    "bioheart": [
+        "transfer-private"
+    ],
     "brain-malf": [
         "automated-interpretation-pipeline",
         "rare-disease"
