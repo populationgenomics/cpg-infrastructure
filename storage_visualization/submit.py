@@ -29,7 +29,7 @@ def main():
 
     run_analysis_runner(
         dataset=ALL_DATASETS,
-        access_level=os.getenv('ACCESS_LEVEL', 'standard'),
+        access_level=os.getenv('ACCESS_LEVEL', 'full'),
         config=['storage_visualization/slack.toml'],
         output_dir='storage_visualization/'
         + datetime.date.today().strftime('%y-%m-%d'),
