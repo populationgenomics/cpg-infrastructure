@@ -373,6 +373,8 @@ class CPGInfrastructure:
             'members_cache_location': reference_infra.infra.bucket_output_path(
                 self.gcp_members_cache_bucket
             ),
+            'git_credentials_secret_name': self.config.hail.gcp.git_credentials_secret_name,
+            'git_credentials_secret_project': self.config.hail.gcp.git_credentials_secret_project,
         }
 
     def output_infrastructure_config(self):
@@ -1455,6 +1457,7 @@ class CPGDatasetInfrastructure:
 
     def setup_hail(self):
         self.setup_hail_billing_project()
+        self.setup_git_checkout_token_permissions()
         self.setup_hail_bucket_permissions()
         self.setup_hail_wheels_bucket_permissions()
 
@@ -1485,6 +1488,20 @@ class CPGDatasetInfrastructure:
 
     def setup_hail_billing_project(self):
         _ = self.hail_batch_billing_project
+
+    def setup_git_checkout_token_permissions(self):
+        if (
+            isinstance(self.infra, GcpInfrastructure)
+            and self.config.hail.gcp.git_credentials_secret_name
+        ):
+            for name, access_group in self.access_level_groups.items():
+                self.infra.add_secret_member(
+                    f'git-checkout-token-{name}-accessor',
+                    secret=self.config.hail.gcp.git_credentials_secret_name,
+                    project=self.config.hail.gcp.git_credentials_secret_project,
+                    member=access_group,
+                    membership=SecretMembership.ACCESSOR,
+                )
 
     def setup_hail_bucket_permissions(self):
         for (
