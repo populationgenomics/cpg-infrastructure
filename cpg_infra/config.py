@@ -98,6 +98,8 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         class GCP(DeserializableDataclass):
             wheel_bucket_name: str
             hail_batch_url: str
+            git_credentials_secret_name: str
+            git_credentials_secret_project: str
 
         @dataclasses.dataclass(frozen=True)
         class Azure(DeserializableDataclass):

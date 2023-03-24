@@ -548,10 +548,21 @@ class GcpInfrastructure(CloudInfraBase):
         else:
             raise ValueError(f'Unrecognised secret membership type: {membership}')
 
+        if isinstance(secret, gcp.secretmanager.Secret):
+            secret_id = secret.id
+        elif isinstance(secret, str):
+            secret_id = secret
+            if not secret.count('/') == 3:
+                if isinstance(project, gcp.organizations.Project):
+                    project = project.id
+                secret_id = f'projects/{project or self.project_id}/secrets/{secret}'
+        else:
+            raise ValueError(f'Unexpected secret type: {secret} ({type(secret)})')
+
         gcp.secretmanager.SecretIamMember(
             self.get_pulumi_name(resource_key),
             project=project or self.project_id,
-            secret_id=secret.id,
+            secret_id=secret_id,
             role=role,
             member=self.get_member_key(member),
         )
