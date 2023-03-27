@@ -119,12 +119,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
             logger_machine_account: str
             container_registry_name: str
 
-        @dataclasses.dataclass(frozen=True)
-        class Azure(DeserializableDataclass):
-            server_machine_account: str
-
         gcp: GCP
-        azure: Azure | None = None
 
     @dataclasses.dataclass(frozen=True)
     class WebService(DeserializableDataclass):

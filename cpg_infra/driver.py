@@ -1519,19 +1519,13 @@ class CPGDatasetInfrastructure:
         if self.should_setup_analysis_runner:
             if isinstance(self.infra, GcpInfrastructure):
                 # The analysis-runner needs Hail bucket access for compiled code.
-                bucket = self.config.analysis_runner.gcp.server_machine_account
-            elif isinstance(self.infra, AzureInfra):
-                # TODO: this will be more complicated for Azure, because analysis-runner
-                #   needs access to Azure bucket to write wheels / jars
-                bucket = self.config.analysis_runner.azure.server_machine_account
-
-            # ANALYSIS_RUNNER_SERVICE_ACCOUNT
-            self.infra.add_member_to_bucket(
-                'analysis-runner-hail-bucket-admin',
-                bucket=self.hail_bucket,
-                member=bucket,
-                membership=BucketMembership.MUTATE,
-            )
+                # ANALYSIS_RUNNER_SERVICE_ACCOUNT
+                self.infra.add_member_to_bucket(
+                    'analysis-runner-hail-bucket-admin',
+                    bucket=self.hail_bucket,
+                    member=self.config.analysis_runner.gcp.server_machine_account,
+                    membership=BucketMembership.MUTATE,
+                )
 
     def setup_hail_wheels_bucket_permissions(self):
         keys = {'analysis-group': self.analysis_group, **self.access_level_groups}
