@@ -282,7 +282,6 @@ class CPGInfrastructure:
                     # the functional context below
 
                     def _add_member_to_billing_project(_analysis_members):
-                        # print(f'Got members to add to billing project: {_data_provider.dataset_config.dataset}: {_analysis_members}')
                         added_members = set()
                         for m in _analysis_members:
                             if not isinstance(m, str):
@@ -329,13 +328,13 @@ class CPGInfrastructure:
 
                 if _skip_members_without_id:
                     distinct_users = [
-                        _member_map.get(_member, _member) for _member in distinct_users
-                    ]
-                else:
-                    distinct_users = [
                         _member_map[_member]
                         for _member in distinct_users
                         if _member in _member_map
+                    ]
+                else:
+                    distinct_users = [
+                        _member_map.get(_member, _member) for _member in distinct_users
                     ]
                 return '\n'.join(distinct_users)
 
@@ -587,12 +586,6 @@ class CPGDatasetInfrastructure:
             self.setup_container_registry()
         if self.dataset_config.enable_shared_project:
             self.setup_shared_project()
-
-        if self.dataset_config.dataset in ('thousand-genomes', 'common'):
-            print(
-                f'{self.dataset_config.dataset} :: {self.infra.name()} :: {self.should_setup_analysis_runner}'
-            )
-            print(self.components)
 
         if self.should_setup_analysis_runner:
             self.setup_analysis_runner()
@@ -2080,10 +2073,6 @@ class CPGDatasetInfrastructure:
                     f'Bucket could not be determined for {self.infra.name()}'
                 )
 
-            print(
-                f'{self.dataset_config.dataset} :: {self.infra.name()} :: Adding member to config bucket: {bucket}'
-            )
-
             self.infra.add_member_to_bucket(
                 f'{key}-analysis-runner-config-viewer',
                 bucket=bucket,  # ANALYSIS_RUNNER_CONFIG_BUCKET_NAME,
@@ -2277,9 +2266,18 @@ def test():
             deploy_locations=['dry-run'],
             gcp=CPGDatasetConfig.Gcp(
                 project='test-project',
-                hail_service_account_test='fewgenomes-test@service-account',
-                hail_service_account_standard='fewgenomes-standard@service-account',
-                hail_service_account_full='fewgenomes-full@service-account',
+                hail_service_account_test=HailAccount(
+                    cloud_id='fewgenomes-test@service-account',
+                    username='fewgenomes-test',
+                ),
+                hail_service_account_standard=HailAccount(
+                    cloud_id='fewgenomes-standard@service-account',
+                    username='fewgenomes-standard',
+                ),
+                hail_service_account_full=HailAccount(
+                    cloud_id='fewgenomes-full@service-account',
+                    username='fewgenomes-full',
+                ),
             ),
             budgets={'dry-run': CPGDatasetConfig.Budget(monthly_budget=100)},
         )
