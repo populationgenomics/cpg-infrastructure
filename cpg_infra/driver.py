@@ -1516,16 +1516,20 @@ class CPGDatasetInfrastructure:
                 BucketMembership.MUTATE,
             )
 
-        if self.should_setup_analysis_runner and isinstance(
-            self.infra, GcpInfrastructure
-        ):
-            # TODO: this will be more complicated for Azure, because analysis-runner
-            #   needs access to Azure bucket to write wheels / jars
-            # The analysis-runner needs Hail bucket access for compiled code.
+        if self.should_setup_analysis_runner:
+            if isinstance(self.infra, GcpInfrastructure):
+                # The analysis-runner needs Hail bucket access for compiled code.
+                bucket = self.config.analysis_runner.gcp.server_machine_account
+            elif isinstance(self.infra, AzureInfra):
+                # TODO: this will be more complicated for Azure, because analysis-runner
+                #   needs access to Azure bucket to write wheels / jars
+                bucket = self.config.analysis_runner.azure.server_machine_account
+
+            # ANALYSIS_RUNNER_SERVICE_ACCOUNT
             self.infra.add_member_to_bucket(
                 'analysis-runner-hail-bucket-admin',
                 bucket=self.hail_bucket,
-                member=self.config.analysis_runner.gcp.server_machine_account,  # ANALYSIS_RUNNER_SERVICE_ACCOUNT,
+                member=bucket,
                 membership=BucketMembership.MUTATE,
             )
 
@@ -2027,9 +2031,14 @@ class CPGDatasetInfrastructure:
         keys = {'analysis-group': self.analysis_group, **self.access_level_groups}
 
         for key, group in keys.items():
+            if isinstance(self.infra, GcpInfrastructure):
+                bucket = self.config.gcp.config_bucket_name
+            elif isinstance(self.infra, AzureInfra):
+                bucket = self.config.azure.config_bucket_name
+
             self.infra.add_member_to_bucket(
                 f'{key}-analysis-runner-config-viewer',
-                bucket=self.config.gcp.config_bucket_name,  # ANALYSIS_RUNNER_CONFIG_BUCKET_NAME,
+                bucket=bucket,  # ANALYSIS_RUNNER_CONFIG_BUCKET_NAME,
                 member=group,
                 membership=BucketMembership.READ,
             )

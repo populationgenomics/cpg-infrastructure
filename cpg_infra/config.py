@@ -91,6 +91,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         region: str
         subscription: str
         tenant: str
+        config_bucket_name: str
 
     @dataclasses.dataclass(frozen=True)
     class Hail(DeserializableDataclass):
@@ -118,7 +119,12 @@ class CPGInfrastructureConfig(DeserializableDataclass):
             logger_machine_account: str
             container_registry_name: str
 
+        @dataclasses.dataclass(frozen=True)
+        class Azure(DeserializableDataclass):
+            server_machine_account: str
+
         gcp: GCP
+        azure: Azure | None = None
 
     @dataclasses.dataclass(frozen=True)
     class WebService(DeserializableDataclass):
@@ -248,6 +254,7 @@ class CPGDatasetComponents(Enum):
             'azure': [
                 CPGDatasetComponents.STORAGE,
                 CPGDatasetComponents.HAIL_ACCOUNTS,
+                CPGDatasetComponents.ANALYSIS_RUNNER,
                 # CPGDatasetComponents.SAMPLE_METADATA,
             ],
         }
