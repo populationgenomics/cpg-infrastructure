@@ -91,6 +91,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         region: str
         subscription: str
         tenant: str
+        config_bucket_name: str
 
     @dataclasses.dataclass(frozen=True)
     class Hail(DeserializableDataclass):
@@ -189,6 +190,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     # useful for mapping a member's email to their hail account
     # (must be the same ID across environments)
     member_to_hail_account: dict[str, str]
+    member_to_azure_account: dict[str, str]
 
     gcp: GCP | None = None
     azure: Azure | None = None
@@ -248,6 +250,7 @@ class CPGDatasetComponents(Enum):
             'azure': [
                 CPGDatasetComponents.STORAGE,
                 CPGDatasetComponents.HAIL_ACCOUNTS,
+                CPGDatasetComponents.ANALYSIS_RUNNER,
                 # CPGDatasetComponents.SAMPLE_METADATA,
             ],
         }

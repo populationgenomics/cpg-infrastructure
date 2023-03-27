@@ -35,7 +35,7 @@ def get_hail_batch_token(token_category) -> str:
     """Get Hail batch token from environment or ~/.hail/tokens.json"""
     key = f'HAIL_TOKEN_{token_category.upper()}'
     if hail_token := os.getenv(key):
-        return os.getenv(hail_token)
+        return hail_token
 
     tokens_path = os.path.expanduser('~/.hail/tokens.json')
     if os.path.exists(tokens_path):

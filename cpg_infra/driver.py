@@ -282,7 +282,6 @@ class CPGInfrastructure:
                     # the functional context below
 
                     def _add_member_to_billing_project(_analysis_members):
-                        # print(f'Got members to add to billing project: {_data_provider.dataset_config.dataset}: {_analysis_members}')
                         added_members = set()
                         for m in _analysis_members:
                             if not isinstance(m, str):
@@ -320,10 +319,26 @@ class CPGInfrastructure:
             s = m_.split('@')
             return s[1], s[0]
 
-        def _process_members(members):
-            return '\n'.join(
-                sorted(set(str(m).lower() for m in members), key=_email_key)
-            )
+        # capture these variables so they don't change during the resolution period
+        def _process_members_caller(_member_map, _skip_members_without_id):
+            def _process_members(members):
+                distinct_users = sorted(
+                    set(str(m).lower() for m in members), key=_email_key
+                )
+
+                if _skip_members_without_id:
+                    distinct_users = [
+                        _member_map[_member]
+                        for _member in distinct_users
+                        if _member in _member_map
+                    ]
+                else:
+                    distinct_users = [
+                        _member_map.get(_member, _member) for _member in distinct_users
+                    ]
+                return '\n'.join(distinct_users)
+
+            return _process_members
 
         # now resolve groups
         for cloud in self.group_provider.groups:
@@ -332,9 +347,24 @@ class CPGInfrastructure:
                 self.config.common_dataset
             ]
             infra = data_provider.infra
+            # always add all GCP members, require them to exist in the map for Azure
+            skip_members_without_id = True
+            if isinstance(infra, GcpInfrastructure):
+                member_map = {}
+                skip_members_without_id = False
+            elif isinstance(infra, AzureInfra):
+                member_map = self.config.member_to_azure_account
+            else:
+                raise ValueError(f'No member map for {infra.name()}')
 
             for group in self.group_provider.static_group_order(cloud=cloud):
                 for resource_key, member in group.members.items():
+                    if member in member_map:
+                        member = member_map[member]
+
+                    elif skip_members_without_id:
+                        continue
+
                     infra.add_group_member(
                         resource_key=resource_key,
                         group=group.group,
@@ -349,11 +379,20 @@ class CPGInfrastructure:
 
                     if len(member_ids) > 0:
                         if all(isinstance(m, str) for m in member_ids):
-                            members_contents = _process_members(member_ids) or '\n'
+                            members_contents = (
+                                _process_members_caller(
+                                    member_map, skip_members_without_id
+                                )(member_ids)
+                                or '\n'
+                            )
                         else:
                             members_contents = (
                                 pulumi.Output.all(*member_ids)
-                                .apply(_process_members)
+                                .apply(
+                                    _process_members_caller(
+                                        member_map, skip_members_without_id
+                                    )
+                                )
                                 .apply(lambda value: value or '\n')
                             )
 
@@ -1516,18 +1555,16 @@ class CPGDatasetInfrastructure:
                 BucketMembership.MUTATE,
             )
 
-        if self.should_setup_analysis_runner and isinstance(
-            self.infra, GcpInfrastructure
-        ):
-            # TODO: this will be more complicated for Azure, because analysis-runner
-            #   needs access to Azure bucket to write wheels / jars
-            # The analysis-runner needs Hail bucket access for compiled code.
-            self.infra.add_member_to_bucket(
-                'analysis-runner-hail-bucket-admin',
-                bucket=self.hail_bucket,
-                member=self.config.analysis_runner.gcp.server_machine_account,  # ANALYSIS_RUNNER_SERVICE_ACCOUNT,
-                membership=BucketMembership.MUTATE,
-            )
+        if self.should_setup_analysis_runner:
+            if isinstance(self.infra, GcpInfrastructure):
+                # The analysis-runner needs Hail bucket access for compiled code.
+                # ANALYSIS_RUNNER_SERVICE_ACCOUNT
+                self.infra.add_member_to_bucket(
+                    'analysis-runner-hail-bucket-admin',
+                    bucket=self.hail_bucket,
+                    member=self.config.analysis_runner.gcp.server_machine_account,
+                    membership=BucketMembership.MUTATE,
+                )
 
     def setup_hail_wheels_bucket_permissions(self):
         keys = {'analysis-group': self.analysis_group, **self.access_level_groups}
@@ -1560,7 +1597,7 @@ class CPGDatasetInfrastructure:
             }
         elif isinstance(self.infra, AzureInfra):
             assert (
-                self.dataset_config.azure
+                self.dataset_config.azure is not None
             ), 'dataset_config.azure is required to be set'
             accounts = {
                 'test': self.dataset_config.azure.hail_service_account_test,
@@ -2027,9 +2064,18 @@ class CPGDatasetInfrastructure:
         keys = {'analysis-group': self.analysis_group, **self.access_level_groups}
 
         for key, group in keys.items():
+            if isinstance(self.infra, GcpInfrastructure):
+                bucket = self.config.gcp.config_bucket_name
+            elif isinstance(self.infra, AzureInfra):
+                bucket = self.config.azure.config_bucket_name
+            else:
+                raise ValueError(
+                    f'Bucket could not be determined for {self.infra.name()}'
+                )
+
             self.infra.add_member_to_bucket(
                 f'{key}-analysis-runner-config-viewer',
-                bucket=self.config.gcp.config_bucket_name,  # ANALYSIS_RUNNER_CONFIG_BUCKET_NAME,
+                bucket=bucket,  # ANALYSIS_RUNNER_CONFIG_BUCKET_NAME,
                 member=group,
                 membership=BucketMembership.READ,
             )
@@ -2220,9 +2266,18 @@ def test():
             deploy_locations=['dry-run'],
             gcp=CPGDatasetConfig.Gcp(
                 project='test-project',
-                hail_service_account_test='fewgenomes-test@service-account',
-                hail_service_account_standard='fewgenomes-standard@service-account',
-                hail_service_account_full='fewgenomes-full@service-account',
+                hail_service_account_test=HailAccount(
+                    cloud_id='fewgenomes-test@service-account',
+                    username='fewgenomes-test',
+                ),
+                hail_service_account_standard=HailAccount(
+                    cloud_id='fewgenomes-standard@service-account',
+                    username='fewgenomes-standard',
+                ),
+                hail_service_account_full=HailAccount(
+                    cloud_id='fewgenomes-full@service-account',
+                    username='fewgenomes-full',
+                ),
             ),
             budgets={'dry-run': CPGDatasetConfig.Budget(monthly_budget=100)},
         )
