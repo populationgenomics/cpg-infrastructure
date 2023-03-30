@@ -4,7 +4,6 @@ Contains pulumi.dyanmic.ResourceProvider implementations
 for Hail Batch Billing Projects and Users.
 """
 import os
-import json
 
 import requests
 import pulumi
@@ -61,6 +60,10 @@ def get_hail_batch_billing_project(name: str, token_category: str, batch_uri: st
     )
     if resp.status_code == 404:
         return None
+    if resp.status_code == 403 and 'Unknown Hail Batch' in await resp.text():
+        # Ignore 403: Unknown Hail Batch billing project <project>
+        return None
+
     resp.raise_for_status()
 
     return resp.json()
