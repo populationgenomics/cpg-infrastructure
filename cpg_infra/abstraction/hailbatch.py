@@ -4,6 +4,7 @@ Contains pulumi.dyanmic.ResourceProvider implementations
 for Hail Batch Billing Projects and Users.
 """
 import os
+import json
 
 import requests
 import pulumi
