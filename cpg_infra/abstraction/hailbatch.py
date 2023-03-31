@@ -61,7 +61,7 @@ def get_hail_batch_billing_project(name: str, token_category: str, batch_uri: st
     )
     if resp.status_code == 404:
         return None
-    if resp.status_code == 403 and 'Unknown Hail Batch' in await resp.text():
+    if resp.status_code == 403 and 'Unknown Hail Batch' in resp.text():
         # Ignore 403: Unknown Hail Batch billing project <project>
         return None
 

@@ -87,6 +87,7 @@ class CPGInfrastructure:
                 to look it up when resolving, ie for Hail Batch
 
                 """
+
                 def __init__(self, cloud_id: str, username: str | None = None):
                     self.cloud_id = cloud_id
                     self.username = username
@@ -97,7 +98,7 @@ class CPGInfrastructure:
                 def __repr__(self):
                     members = [
                         f'cloud_id={self.cloud_id!r}',
-                        ]
+                    ]
                     if self.username:
                         members.append(f'username={self.username!r}')
 
@@ -110,7 +111,11 @@ class CPGInfrastructure:
                 self.name: str = name
                 self.group = group
                 self.cache_members: bool = cache_members
-                self.members: dict[str, CPGInfrastructure.GroupProvider.Group.GroupMember | CPGInfrastructure.GroupProvider.Group] = members
+                self.members: dict[
+                    str,
+                    CPGInfrastructure.GroupProvider.Group.GroupMember
+                    | CPGInfrastructure.GroupProvider.Group,
+                ] = members
 
             def add_member(self, resource_key, member, username: str | None = None):
                 if isinstance(member, type(self)):
@@ -177,11 +182,15 @@ class CPGInfrastructure:
 
             return [groups[n] for n in graphlib.TopologicalSorter(deps).static_order()]
 
-        def resolve_group_members(self, group: 'Group') -> list['CPGInfrastructure.GroupProvider.Group.GroupMember']:
+        def resolve_group_members(
+            self, group: 'Group'
+        ) -> list['CPGInfrastructure.GroupProvider.Group.GroupMember']:
             if group.name in self._cached_resolved_members:
                 return self._cached_resolved_members[group.name]
 
-            resolved_members: list[CPGInfrastructure.GroupProvider.Group.GroupMember] = []
+            resolved_members: list[
+                CPGInfrastructure.GroupProvider.Group.GroupMember
+            ] = []
             for member in group.members.values():
                 if isinstance(member, CPGInfrastructure.GroupProvider.Group):
                     resolved_members.extend(self.resolve_group_members(member))
@@ -264,8 +273,7 @@ class CPGInfrastructure:
                 self.dataset_infrastructure[deploy_location][dataset] = dataset_infra
 
     def deploy_datasets(self):
-        for cloud, cloud_datasets in self.dataset_infrastructure.items():
-
+        for cloud_datasets in self.dataset_infrastructure.values():
             for dataset_infra_provider in cloud_datasets.values():
                 dataset_infra_provider.main()
 
@@ -363,12 +371,15 @@ class CPGInfrastructure:
             infra = data_provider.infra
 
             for group in self.group_provider.static_group_order(cloud=cloud):
-
                 for resource_key, member in group.members.items():
                     infra.add_group_member(
                         resource_key=resource_key,
                         group=group.group,
-                        member=member.cloud_id if isinstance(member, CPGInfrastructure.GroupProvider.Group.GroupMember) else member.group,
+                        member=member.cloud_id
+                        if isinstance(
+                            member, CPGInfrastructure.GroupProvider.Group.GroupMember
+                        )
+                        else member.group,
                         unique_resource_key=True,
                     )
 
