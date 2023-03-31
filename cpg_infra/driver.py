@@ -81,6 +81,29 @@ class CPGInfrastructure:
         class Group:
             """Placeholder for a Group of members"""
 
+            class GroupMember:
+                """
+                Store both the username / cloud_id, as it's useful
+                to look it up when resolving, ie for Hail Batch
+
+                """
+
+                def __init__(self, cloud_id: str, username: str | None = None):
+                    self.cloud_id = cloud_id
+                    self.username = username
+
+                def __lt__(self, other):
+                    return self.cloud_id < other.cloud_id
+
+                def __repr__(self):
+                    members = [
+                        f'cloud_id={self.cloud_id!r}',
+                    ]
+                    if self.username:
+                        members.append(f'username={self.username!r}')
+
+                    return f'GroupMember({", ".join(members)})'
+
             # useful for checking isinstance without isinstance
             is_group = True
 
@@ -88,16 +111,24 @@ class CPGInfrastructure:
                 self.name: str = name
                 self.group = group
                 self.cache_members: bool = cache_members
-                self.members: dict[str, Any] = members
+                self.members: dict[
+                    str,
+                    CPGInfrastructure.GroupProvider.Group.GroupMember
+                    | CPGInfrastructure.GroupProvider.Group,
+                ] = members
 
-            def add_member(self, resource_key, member):
+            def add_member(self, resource_key, member, username: str | None = None):
                 if isinstance(member, type(self)):
                     if member.name == self.name:
                         raise ValueError(f'Cannot add self to group {self.name}')
-                self.members[resource_key] = member
+
+                if isinstance(member, CPGInfrastructure.GroupProvider.Group):
+                    self.members[resource_key] = member
+                else:
+                    self.members[resource_key] = self.GroupMember(member, username)
 
             def __repr__(self):
-                return f'GROUP("{self.name}")'
+                return f'Group({self.name!r})'
 
         def __init__(self, group_prefix: str | None = None):
             self.groups: dict[
@@ -151,11 +182,15 @@ class CPGInfrastructure:
 
             return [groups[n] for n in graphlib.TopologicalSorter(deps).static_order()]
 
-        def resolve_group_members(self, group: 'Group') -> list:
+        def resolve_group_members(
+            self, group: 'Group'
+        ) -> list['CPGInfrastructure.GroupProvider.Group.GroupMember']:
             if group.name in self._cached_resolved_members:
                 return self._cached_resolved_members[group.name]
 
-            resolved_members = []
+            resolved_members: list[
+                CPGInfrastructure.GroupProvider.Group.GroupMember
+            ] = []
             for member in group.members.values():
                 if isinstance(member, CPGInfrastructure.GroupProvider.Group):
                     resolved_members.extend(self.resolve_group_members(member))
@@ -204,6 +239,7 @@ class CPGInfrastructure:
         self.setup_gcp_sample_metadata_cloudrun_invoker()
 
         self.deploy_datasets()
+
         BillingAggregator(self.config).main()
         self.finalize_groups()
         self.setup_hail_batch_billing_project_members()
@@ -213,6 +249,7 @@ class CPGInfrastructure:
         infra_map: dict[str, Type[CloudInfraBase]] = {
             c.name(): c for c in CloudInfraBase.__subclasses__()
         }
+        self.dataset_infrastructure['azure'] = {}
 
         for dataset in self.resolve_dataset_order():
             dataset_config = self.datasets[dataset]
@@ -220,6 +257,7 @@ class CPGInfrastructure:
             for deploy_location in dataset_config.deploy_locations:
                 if deploy_location not in self.dataset_infrastructure:
                     self.dataset_infrastructure[deploy_location] = {}
+
                 location = infra_map[deploy_location]
                 infra_obj = location(
                     config=self.config,
@@ -236,16 +274,8 @@ class CPGInfrastructure:
 
     def deploy_datasets(self):
         for cloud_datasets in self.dataset_infrastructure.values():
-            for dataset in self.resolve_dataset_order():
-                if dataset not in cloud_datasets:
-                    continue
-
-                cloud_datasets[dataset].main()
-
-        for dataset in self.resolve_dataset_order():
-            if dataset == self.config.common_dataset:
-                # we set it up manually first
-                continue
+            for dataset_infra_provider in cloud_datasets.values():
+                dataset_infra_provider.main()
 
     def setup_hail_batch_billing_project_members(self):
         for datasets in self.dataset_infrastructure.values():
@@ -254,9 +284,12 @@ class CPGInfrastructure:
                     continue
 
                 infra = dataset.infra
-                members = self.group_provider.resolve_group_members(
+                _members = self.group_provider.resolve_group_members(
                     dataset.analysis_group
                 )
+                # we can only map "usernames" to hail accounts,
+                # so we can safely filter for that
+                _member_usernames = [m.username for m in _members if m.username]
                 if self.config.billing.hail_aggregator_username:
                     HailBatchBillingProjectMembership(
                         infra.get_pulumi_name(
@@ -270,7 +303,6 @@ class CPGInfrastructure:
                     name,
                     hail_account,
                 ) in dataset.hail_accounts_by_access_level.items():
-                    # not perfect, but it at least represents the cpg username format
                     HailBatchBillingProjectMembership(
                         infra.get_pulumi_name(f'batch-billing-member-hail-{name}'),
                         billing_project=dataset.hail_batch_billing_project,
@@ -283,7 +315,10 @@ class CPGInfrastructure:
 
                     def _add_member_to_billing_project(_analysis_members):
                         added_members = set()
-                        for m in _analysis_members:
+                        # sometimes two users have different emails, but the same hail
+                        # batch billing account, sort so it doesn't fluctuate between
+                        # the email addresses
+                        for m in sorted(_analysis_members):
                             if not isinstance(m, str):
                                 continue
                             h = _data_provider.compute_hash(
@@ -294,7 +329,7 @@ class CPGInfrastructure:
 
                             hail_id = self.config.member_to_hail_account[m]
                             if hail_id in added_members:
-                                # sometimes this happens if a user has multiple emails
+                                # Skips when a user has multiple emails
                                 continue
 
                             added_members.add(hail_id)
@@ -307,7 +342,7 @@ class CPGInfrastructure:
 
                     return _add_member_to_billing_project
 
-                pulumi.Output.all(*members).apply(
+                pulumi.Output.all(*_member_usernames).apply(
                     _make_add_member_function(dataset, infra)
                 )
 
@@ -320,25 +355,12 @@ class CPGInfrastructure:
             return s[1], s[0]
 
         # capture these variables so they don't change during the resolution period
-        def _process_members_caller(_member_map, _skip_members_without_id):
-            def _process_members(members):
-                distinct_users = sorted(
-                    set(str(m).lower() for m in members), key=_email_key
-                )
+        def _process_members(members):
+            distinct_users = sorted(
+                set(str(m).lower() for m in members), key=_email_key
+            )
 
-                if _skip_members_without_id:
-                    distinct_users = [
-                        _member_map[_member]
-                        for _member in distinct_users
-                        if _member in _member_map
-                    ]
-                else:
-                    distinct_users = [
-                        _member_map.get(_member, _member) for _member in distinct_users
-                    ]
-                return '\n'.join(distinct_users)
-
-            return _process_members
+            return '\n'.join(distinct_users)
 
         # now resolve groups
         for cloud in self.group_provider.groups:
@@ -347,52 +369,32 @@ class CPGInfrastructure:
                 self.config.common_dataset
             ]
             infra = data_provider.infra
-            # always add all GCP members, require them to exist in the map for Azure
-            skip_members_without_id = True
-            if isinstance(infra, GcpInfrastructure):
-                member_map = {}
-                skip_members_without_id = False
-            elif isinstance(infra, AzureInfra):
-                member_map = self.config.member_to_azure_account
-            else:
-                raise ValueError(f'No member map for {infra.name()}')
 
             for group in self.group_provider.static_group_order(cloud=cloud):
                 for resource_key, member in group.members.items():
-                    if member in member_map:
-                        member = member_map[member]
-
-                    elif skip_members_without_id:
-                        continue
-
                     infra.add_group_member(
                         resource_key=resource_key,
                         group=group.group,
-                        member=member,
+                        member=member.cloud_id
+                        if isinstance(
+                            member, CPGInfrastructure.GroupProvider.Group.GroupMember
+                        )
+                        else member.group,
                         unique_resource_key=True,
                     )
 
                 if group.cache_members and isinstance(infra, GcpInfrastructure):
                     _members = self.group_provider.resolve_group_members(group)
-                    member_ids = [infra.member_id(m) for m in _members]
+                    member_ids = [infra.member_id(m.cloud_id) for m in _members]
                     members_contents = '\n'
 
                     if len(member_ids) > 0:
                         if all(isinstance(m, str) for m in member_ids):
-                            members_contents = (
-                                _process_members_caller(
-                                    member_map, skip_members_without_id
-                                )(member_ids)
-                                or '\n'
-                            )
+                            members_contents = _process_members(member_ids) or '\n'
                         else:
                             members_contents = (
                                 pulumi.Output.all(*member_ids)
-                                .apply(
-                                    _process_members_caller(
-                                        member_map, skip_members_without_id
-                                    )
-                                )
+                                .apply(_process_members)
                                 .apply(lambda value: value or '\n')
                             )
 
@@ -661,10 +663,25 @@ class CPGDatasetInfrastructure:
             group_name = group.name.removeprefix(self.dataset_config.dataset + '-')
             for member in self.dataset_config.members.get(group_name, []):
                 h = self.compute_hash(self.dataset_config.dataset, member)
-                group.add_member(
-                    self.infra.get_pulumi_name(f'{group.name}-member-{h}'),
-                    member,
-                )
+
+                # always add all GCP members, require them to exist in the map for Azure
+                skip_members_without_id = True
+                if isinstance(self.infra, GcpInfrastructure):
+                    member_map = {}
+                    skip_members_without_id = False
+                elif isinstance(self.infra, AzureInfra):
+                    member_map = self.config.member_to_azure_account
+                else:
+                    raise ValueError(f'No member map for {self.infra.name()}')
+
+                if cloud_id := member_map.get(
+                    member, None if skip_members_without_id else member
+                ):
+                    group.add_member(
+                        self.infra.get_pulumi_name(f'{group.name}-member-{h}'),
+                        member=cloud_id,
+                        username=member,
+                    )
 
     @staticmethod
     def compute_hash(dataset, member):

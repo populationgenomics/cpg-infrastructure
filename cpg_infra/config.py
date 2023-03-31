@@ -70,6 +70,10 @@ class DeserializableDataclass:
             if e:
                 raise e
 
+    def __repr__(self):
+        args = ', '.join(f'{k}={v!r}' for k, v in vars(self).items())
+        return f'{self.__class__.__name__}( {args} )'
+
 
 @dataclasses.dataclass(frozen=True)
 class CPGInfrastructureConfig(DeserializableDataclass):
@@ -251,6 +255,7 @@ class CPGDatasetComponents(Enum):
                 CPGDatasetComponents.STORAGE,
                 CPGDatasetComponents.HAIL_ACCOUNTS,
                 CPGDatasetComponents.ANALYSIS_RUNNER,
+                CPGDatasetComponents.CONTAINER_REGISTRY,
                 # CPGDatasetComponents.SAMPLE_METADATA,
             ],
         }
