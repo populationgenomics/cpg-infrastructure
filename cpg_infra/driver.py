@@ -556,7 +556,7 @@ class CPGDatasetInfrastructure:
         )
 
         # outputs
-        self.storage_tomls = {}
+        self.storage_tomls: dict = {}
 
     def create_group(self, name: str, cache_members: bool = False):
         group_name = f'{self.dataset_config.dataset}-{name}'

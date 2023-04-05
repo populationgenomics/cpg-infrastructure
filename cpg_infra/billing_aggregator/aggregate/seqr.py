@@ -28,7 +28,7 @@ TO DO :
 - Getting latest cram for sample by sequence type (eg: exome / genome)
 """
 import shutil
-from typing import Literal
+from typing import Literal, Any
 
 import os
 import asyncio
@@ -49,7 +49,7 @@ from sample_metadata.model.analysis_query_model import AnalysisQueryModel
 try:
     from . import utils
 except ImportError:
-    import utils
+    import utils  # type: ignore
 
 
 # ie: [(datetime, {[dataset]: (fractional_breakdown, size_of_dataset (bytes))})}
@@ -83,7 +83,7 @@ aapi = AnalysisApi()
 
 def get_finalised_entries_for_batch(
     batch, proportion_map: ProportionateMapType
-) -> list[dict[str, any]]:
+) -> list[dict[str, Any]]:
     """
     Take a batch dictionary, and the full proportion map
     and return a list of entries for the Hail batch.
@@ -105,8 +105,8 @@ def get_finalised_entries_for_batch(
 
     currency_conversion_rate = utils.get_currency_conversion_rate_for_time(start_time)
 
-    jobs_with_no_dataset: list[dict[str, any]] = []
-    entries: list[dict[str, any]] = []
+    jobs_with_no_dataset: list[dict[str, Any]] = []
+    entries: list[dict[str, Any]] = []
 
     for job in batch['jobs']:
         dataset = job['attributes'].get('dataset', '').replace('-test', '')
@@ -196,8 +196,8 @@ def get_finalised_entries_for_batch(
                             **labels,
                             'dataset': dataset,
                             # awkward way to round to 2 decimal places in Python
-                            'fraction': round(100 * fraction) / 100,
-                            'dataset_size': dataset_size,
+                            'fraction': str(round(100 * fraction) / 100),
+                            'dataset_size': str(dataset_size),
                         },
                     )
                 )
@@ -217,7 +217,7 @@ def get_finalised_entries_for_dataset_batch_and_job(
     batch_name: str,
     batch_start_time: datetime,
     batch_end_time: datetime,
-    job: dict[str, any],
+    job: dict[str, Any],
     currency_conversion_rate: float,
 ):
     """
@@ -435,7 +435,7 @@ def migrate_entries_from_bq(
     return result
 
 
-def billing_obj_to_key(obj: dict[str, any]) -> str:
+def billing_obj_to_key(obj: dict[str, Any]) -> str:
     """Convert a billing row to a hash which will be the row key"""
     identifier = hashlib.md5()
     identifier.update(rapidjson.dumps(obj, sort_keys=True).encode())
@@ -509,7 +509,7 @@ async def get_analysis_objects_for_seqr_hosting_prop_map(
     """
     # from 2022-06-01, we use it based on es-index, otherwise joint-calling
     timeit_start = datetime.now()
-    relevant_analysis = []
+    relevant_analysis: list[dict] = []
 
     # unfortunately, the way ES-indices are progressive, basically
     # just have to request all es-indices
@@ -584,8 +584,7 @@ def get_seqr_hosting_prop_map_from(
 
     timeit_start = datetime.now()
 
-    missing_samples = set()
-    missing_sizes = {}
+    missing_samples: set[str] = set()
 
     proportioned_datasets: ProportionateMapType = []
 
@@ -598,7 +597,7 @@ def get_seqr_hosting_prop_map_from(
             relevant_analyses,
         )
     ) - timedelta(days=2)
-    date_sizes_by_sample: dict[str, list[tuple[datetime.date, int]]] = defaultdict(list)
+    date_sizes_by_sample: dict[str, list[tuple[date, int]]] = defaultdict(list)
     sample_to_project = {}
     # let's loop through, and basically get the potential differential
     # by day, this means we can just sum up all the values, rather than
@@ -609,7 +608,7 @@ def get_seqr_hosting_prop_map_from(
         for sample_obj in samples:
             sample_id = sample_obj['sample']
             sample_to_project[sample_id] = project
-            sizes_dates: list[tuple[datetime.date, int]] = []
+            sizes_dates: list[tuple[date, int]] = []
             for obj in sample_obj['dates']:
                 size = sum(obj['size'].values())
                 start_date = utils.parse_date_only_string(obj['start'])
@@ -623,7 +622,9 @@ def get_seqr_hosting_prop_map_from(
 
             date_sizes_by_sample[sample_id] = sizes_dates
 
-    sizes_by_date_then_sample = defaultdict(lambda: defaultdict(int))
+    sizes_by_date_then_sample: dict[date, dict[str, int]] = defaultdict(
+        lambda: defaultdict(int)
+    )
     # now we can sum up all samples to get the total shift per sample
     # for a given day.
     for sample_id, date_size in date_sizes_by_sample.items():
@@ -641,7 +642,7 @@ def get_seqr_hosting_prop_map_from(
         # now we just need to sum up all sizes_by_date starting from the start to now
         # only selecting the sampleIDs we want
 
-        size_per_project = defaultdict(int)
+        size_per_project: dict[str, int] = defaultdict(int)
         for sample_date, sample_map in ordered_sizes_by_day:
             if sample_date > analysis_day:
                 break
@@ -667,11 +668,6 @@ def get_seqr_hosting_prop_map_from(
 
     if missing_samples:
         print('Missing crams: ' + ', '.join(missing_samples))
-    if missing_sizes:
-        print(
-            'Missing sizes: '
-            + ', '.join(f'{k} ({v})' for k, v in missing_sizes.items())
-        )
 
     # We'll sort ASC, which makes it easy to find the relevant entry later
     return proportioned_datasets
@@ -698,7 +694,7 @@ def get_relevant_samples_for_day_from_jc_es(
         Though I think this is rare.
     """
 
-    day_project_delta_sample_map = defaultdict(set)
+    day_project_delta_sample_map: dict[date, set[str]] = defaultdict(set)
     for analysis in relevant_analyses:
         # Using timestamp_completed as the start time for the propmap
         # is a small problem because then this script won't charge the new samples
@@ -713,7 +709,7 @@ def get_relevant_samples_for_day_from_jc_es(
         # get the changes of samples for a specific day
         day_project_delta_sample_map[max(min_date, dt)] |= set(analysis['sample_ids'])
 
-    analysis_day_samples = []
+    analysis_day_samples: list[tuple[date, set[str]]] = []
 
     for analysis_day, aday_samples in sorted(
         day_project_delta_sample_map.items(), key=lambda r: r[0]
@@ -772,7 +768,7 @@ def get_shared_computation_prop_map(
     by_date_diff: dict[date, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for project_name, samples in sample_sizes_by_project.items():
         for sample_obj in samples:
-            sizes_dates: list[tuple[datetime.date, int]] = []
+            sizes_dates: list[tuple[date, int]] = []
             for obj in sample_obj['dates']:
                 size = sum(obj['size'].values())
                 start_date = utils.parse_date_only_string(obj['start'])
