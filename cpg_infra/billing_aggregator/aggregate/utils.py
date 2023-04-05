@@ -139,10 +139,10 @@ async def async_retry_transient_get_json_request(
     Retry a function with exponential backoff.
     """
 
-    async def inner_block(session):
+    async def inner_block(_session):
         for attempt in range(1, attempts + 1):
             try:
-                async with session.get(
+                async with _session.get(
                     url,
                     timeout=aiohttp.ClientTimeout(total=timeout_seconds),
                     *args,
@@ -183,7 +183,7 @@ def get_total_hail_cost(currency_conversion_rate, raw_cost):
     return (1 + HAIL_SERVICE_FEE) * currency_conversion_rate * raw_cost
 
 
-def get_schema_json(file: str) -> dict[str, any]:
+def get_schema_json(file: str) -> list[dict[str, Any]]:
     """Get a schema (in JSON) from the schema directory"""
     pwd = Path(__file__).parent.resolve()
     schema_path = pwd / file
@@ -194,12 +194,12 @@ def get_schema_json(file: str) -> dict[str, any]:
         raise exp
 
 
-def get_bq_schema_json() -> dict[str, any]:
+def get_bq_schema_json() -> list[dict[str, Any]]:
     """Get the bq schema (in JSON) for the aggregate table"""
     return get_schema_json('aggregate_schema.json')
 
 
-def _format_bq_schema_json(schema: dict[str, Any]):
+def _format_bq_schema_json(schema: list[dict[str, Any]]):
     """
     Take bq json schema, and convert it to bq.SchemaField objects"""
     formatted_schema = []
@@ -234,7 +234,7 @@ def parse_date_only_string(d: str | None) -> date | None:
         raise ValueError(f'Date could not be converted: {d}') from excep
 
 
-def parse_hail_time(time_str: str) -> datetime:
+def parse_hail_time(time_str: str | None) -> datetime | None:
     """
     Parse hail datetime object
 
@@ -244,7 +244,7 @@ def parse_hail_time(time_str: str) -> datetime:
     if isinstance(time_str, datetime):
         return time_str
 
-    if time_str is None:
+    if not time_str:
         return None
 
     for fmt in ('%Y-%m-%dT%H:%M:%S', '%Y-%m-%dT%H:%M:%SZ'):
@@ -297,7 +297,7 @@ def get_credits(
     entries: Iterable[dict[str, Any]],
     topic: str,
     project: dict,
-) -> list[dict[str, any]]:
+) -> list[dict[str, Any]]:
     """
     Get a hail / seqr credit for each entry.
 
@@ -332,7 +332,7 @@ async def get_completed_batches(
     token: str,
     last_completed_timestamp: Any | None = None,
     limit: int | None = None,
-) -> dict[str, any]:
+) -> dict[str, Any]:
     """
     Get list of completed batches for the calling user,
     no filtering on billing_projects is done
@@ -364,13 +364,13 @@ async def get_finished_batches_for_date(
     end: datetime,
     token: str,
     billing_project: str | None = None,
-) -> list[dict[str, any]]:
+) -> list[dict[str, Any]]:
     """
     Get all the batches that started on {date} and are complete.
     We assume that batches are ordered by start time, so we can stop
     when we find a batch that started before the date.
     """
-    batches = []
+    batches: list[dict] = []
     last_completed_timestamp = None
     n_requests = 0
     skipped = 0
@@ -421,7 +421,7 @@ async def get_finished_batches_for_date(
                 skipped += 1
 
 
-async def get_jobs_for_batch(batch_id, token: str) -> list[dict[str, any]]:
+async def get_jobs_for_batch(batch_id, token: str) -> list[dict[str, Any]]:
     """
     For a single batch, fill in the 'jobs' field.
     """
@@ -477,10 +477,10 @@ async def process_entries_from_hail_in_chunks(
     Break them down by dataset, and then proportion the rest of the costs.
     """
 
-    def insert_entries(entries):
+    def insert_entries(_entries):
         if mode in ('prod', 'dry-run'):
             return upsert_rows_into_bigquery(
-                table=GCP_AGGREGATE_DEST_TABLE, objs=entries, dry_run=mode == 'dry-run'
+                table=GCP_AGGREGATE_DEST_TABLE, objs=_entries, dry_run=mode == 'dry-run'
             )
 
         if mode == 'local':
@@ -490,9 +490,9 @@ async def process_entries_from_hail_in_chunks(
                 counter += 1
                 filename = os.path.join(output_path, f'processed-hail-{counter}.json')
             with open(filename, 'w+', encoding='utf-8') as file:
-                logger.info(f'Writing {len(entries)} to {filename}')
+                logger.info(f'Writing {len(_entries)} to {filename}')
                 # needs to be JSONL (line delimited JSON)
-                file.writelines(rapidjson.dumps(e) + '\n' for e in entries)
+                file.writelines(rapidjson.dumps(e) + '\n' for e in _entries)
 
             return len(entries)
 
@@ -515,7 +515,7 @@ async def process_entries_from_hail_in_chunks(
     # Process chunks of batches to avoid loading too many entries into memory
     for batch_group in chunk(batches, entry_chunk_size):
         jobs_in_batch = []
-        entries = []
+        entries: list[dict] = []
 
         # Get jobs for a fraction of each chunked batches
         # to avoid hitting hail batch too much
@@ -621,7 +621,7 @@ def upsert_rows_into_bigquery(
         logger.info(f'Will insert {len(objs)} rows in {n_chunks} chunks')
 
     inserts = 0
-    inserted_ids = set()
+    inserted_ids: set[int] = set()
 
     for chunk_idx, chunked_objs in enumerate(chunk(objs, chunk_size)):
         _query = f"""
@@ -848,7 +848,7 @@ def get_start_and_end_from_data(data) -> tuple[datetime | None, datetime | None]
             try:
                 data = dict(json.loads(data))
             except ValueError:
-                return (None, None)
+                return None, None
 
         # Extract date attributes from dict
         dates = {}
@@ -871,9 +871,9 @@ def get_start_and_end_from_data(data) -> tuple[datetime | None, datetime | None]
         start = datetime.fromisoformat(s_raw) if s_raw else None
         end = datetime.fromisoformat(e_raw) if e_raw else None
 
-        return (start, end)
+        return start, end
 
-    return (None, None)
+    return None, None
 
 
 def process_default_start_and_end(
@@ -922,7 +922,7 @@ def get_hail_entry(
     labels: dict[str, str] = None,
 ) -> dict[str, Any]:
     """
-    Get well formed entry dictionary from keys
+    Get well-formed entry dictionary from keys
     """
 
     assert labels is None or isinstance(labels, dict)

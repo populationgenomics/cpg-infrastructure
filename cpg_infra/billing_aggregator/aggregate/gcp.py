@@ -41,7 +41,7 @@ import google.cloud.bigquery as bq
 try:
     from . import utils
 except ImportError:
-    import utils
+    import utils  # type: ignore
 
 logger = utils.logger.getChild('gcp')
 logger.setLevel(logging.INFO)

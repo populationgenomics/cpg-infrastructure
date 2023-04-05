@@ -45,7 +45,7 @@ class AzureInfra(CloudInfraBase):
         self._storage_account_name = self.fix_azure_alphanum_names(
             f'{config.dataset_storage_prefix}{self.dataset}'
         )
-        self.storage_account_lifecycle_rules = []
+        self.storage_account_lifecycle_rules: list[Any] = []
         self.storage_account_undelete_rule = None
 
         self.subscription_id = '/subscriptions/' + self.config.azure.subscription
@@ -296,8 +296,7 @@ class AzureInfra(CloudInfraBase):
             rule.name = f'{name}-{rule.name}'
             return rule
 
-        lifecycle_rules = filter(lambda x: x, lifecycle_rules)
-        lifecycle_rules = list(map(apply_filter, lifecycle_rules))
+        lifecycle_rules = [apply_filter(x) for x in lifecycle_rules if x]
 
         self.storage_account_lifecycle_rules.extend(lifecycle_rules)
 

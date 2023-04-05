@@ -309,7 +309,13 @@ class DryRunInfra(CloudInfraBase):
         print(f'Creating project: {name}')
         return f'Project: {name}'
 
-    def create_monthly_budget(self, resource_key: str, *, project, budget):
+    def create_monthly_budget(
+        self,
+        resource_key: str,
+        *,
+        budget,
+        project=None,
+    ):
         print(
             f'{resource_key} :: Create monthly budget for {project}: ${budget} {self.config.budget_currency}'
         )

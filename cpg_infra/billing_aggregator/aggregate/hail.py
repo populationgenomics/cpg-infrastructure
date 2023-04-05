@@ -34,7 +34,7 @@ from cpg_utils.cloud import read_secret
 try:
     from . import utils
 except ImportError:
-    import utils
+    import utils  # type: ignore
 
 
 SERVICE_ID = 'hail'
