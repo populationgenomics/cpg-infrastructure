@@ -4,13 +4,11 @@
 
 import argparse
 import gzip
-import importlib
 import json
 import logging
 import re
 from collections import defaultdict
 import humanize
-import pip
 from cloudpathlib import AnyPath
 import pandas as pd
 import plotly.express as px
@@ -163,9 +161,6 @@ def main():
     logging.info(f'Writing results to {args.output_prefix}')
     with AnyPath(f'{args.output_prefix}.html').open('wt') as f:
         fig.write_html(f)
-    # Writing an image requires the kaleido package.
-    if not importlib.util.find_spec('kaleido'):
-        pip.main(['install', 'kaleido'])
     with AnyPath(f'{args.output_prefix}.png').open('wb') as f:
         fig.write_image(f, width=1920, height=1080)
 

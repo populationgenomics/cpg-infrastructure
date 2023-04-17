@@ -29,6 +29,15 @@ jobs:
           credentials_json: "${{ secrets.GCP_STORAGE_VISUALIZATION_CREDENTIALS }}"
           project_id: cpg-common
 
+      - name: "gcloud docker auth"
+        run: gcloud auth configure-docker australia-southeast1-docker.pkg.dev
+
+      - name: "build Docker image"
+        run: docker build -f storage_visualization/Dockerfile -t australia-southeast1-docker.pkg.dev/cpg-common/images/storage-visualization:latest
+
+      - name: "push Docker image"
+        run: docker push australia-southeast1-docker.pkg.dev/cpg-common/images/storage-visualization:latest
+
       - uses: actions/setup-python@v4
         with:
           python-version: "3.11"

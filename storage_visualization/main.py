@@ -22,10 +22,14 @@ from cpg_utils.hail_batch import (
 )
 from cpg_utils.slack import upload_file
 
+DOCKER_IMAGE = (
+    'australia-southeast1-docker.pkg.dev/cpg-common/images/storage-visualization:latest'
+)
+
 
 def prepare_job(job, clone_repo):
     """Sets up the given job to run scripts in the same repository."""
-    job.image(get_config()['workflow']['driver_image'])
+    job.image(DOCKER_IMAGE)
     copy_common_env(job)
     if clone_repo:
         prepare_git_job(
