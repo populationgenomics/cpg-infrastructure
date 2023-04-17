@@ -6,6 +6,7 @@ import sys
 
 # See requirements.txt for why we're disabling the linter warnings here.
 import hailtop.batch as hb  # pylint: disable=import-error
+from cloudpathlib import AnyPath
 
 from cpg_utils.config import get_config
 from cpg_utils.git import (
@@ -19,7 +20,7 @@ from cpg_utils.hail_batch import (
     remote_tmpdir,
     output_path,
 )
-from cpg_utils.slack import send_message
+from cpg_utils.slack import upload_file
 
 
 def prepare_job(job, clone_repo):
@@ -33,6 +34,20 @@ def prepare_job(job, clone_repo):
             repo_name=get_repo_name_from_current_directory(),
             commit=get_git_commit_ref_of_current_repository(),
         )
+
+
+def post_to_slack():
+    """Posts the URL of the generated treemap together with a preview image to Slack."""
+    with AnyPath(output_path('treemap.png', dataset='common', category='web')).open(
+        'rb'
+    ) as f:
+        content = f.read()
+
+    upload_file(
+        content=content,
+        comment='Storage visualization: '
+        + output_path('treemap.html', dataset='common', category='web_url'),
+    )
 
 
 def main():
@@ -69,20 +84,16 @@ def main():
     for job in job_output_paths:
         treemap_job.depends_on(job)
 
-    web_path = output_path('treemap.html', dataset='common', category='web')
+    web_path = output_path('treemap', dataset='common', category='web')
     treemap_job.command(
-        f'storage_visualization/treemap.py --output {web_path} --group-by-dataset {" ".join(f"--input {path}" for path in job_output_paths.values())}'
+        f'storage_visualization/treemap.py --output-prefix {web_path} --group-by-dataset {" ".join(f"--input {path}" for path in job_output_paths.values())}'
     )
 
     # Send a Slack message when the HTML page has been generated.
     slack_job = batch.new_python_job(name='slack')
     prepare_job(slack_job, clone_repo=False)
     slack_job.depends_on(treemap_job)
-    slack_job.call(
-        send_message,
-        'Storage visualization: '
-        + output_path('treemap.html', dataset='common', category='web_url'),
-    )
+    slack_job.call(post_to_slack)
 
     batch.run(wait=False)
 
