@@ -27,8 +27,8 @@ def main():
         action='append',
     )
     parser.add_argument(
-        '--output',
-        help='The path to the output HTML report; supports cloud paths',
+        '--output-prefix',
+        help='The path prefix for HTML report and image outputs; supports cloud paths',
         required=True,
     )
     parser.add_argument(
@@ -158,9 +158,11 @@ def main():
     )
     fig.update_traces(root_color='lightgrey')
 
-    logging.info(f'Writing result to {args.output}')
-    with AnyPath(args.output).open('wt') as f:
+    logging.info(f'Writing results to {args.output_prefix}')
+    with AnyPath(f'{args.output_prefix}.html').open('wt') as f:
         fig.write_html(f)
+    with AnyPath(f'{args.output_prefix}.png').open('wb') as f:
+        fig.write_image(f, width=1920, height=1080)
 
 
 if __name__ == '__main__':
