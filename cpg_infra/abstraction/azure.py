@@ -94,9 +94,18 @@ class AzureInfra(CloudInfraBase):
             sku=az.storage.SkuArgs(name='Standard_LRS'),
         )
 
+    @classmethod
+    def storage_url_regex(cls) -> str:
+        return r'^https:\/\/(?<accountName>\w+)\.blob\.core\.windows\.net\/(?<containerName>\w+)'
+
     def bucket_output_path(self, bucket):
         return pulumi.Output.concat(
-            'hail-az://', self.storage_account.name, '/', bucket.name
+            # https://<ACCOUNT_NAME>.blob.core.windows.net/<CONTAINER_NAME>/<PATH>
+            'https://',
+            self.storage_account.name,
+            '.blob.core.windows.net/',
+            bucket.name,
+            '/',
         )
 
     def _create_management_policy(self):

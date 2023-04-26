@@ -289,6 +289,10 @@ class GcpInfrastructure(CloudInfraBase):
             condition=gcp.storage.BucketLifecycleRuleConditionArgs(age=days),
         )
 
+    @classmethod
+    def storage_url_regex(cls):
+        return r'^gs:\/\/'
+
     def bucket_output_path(self, bucket: gcp.storage.Bucket):
         return pulumi.Output.concat('gs://', bucket.name)
 
