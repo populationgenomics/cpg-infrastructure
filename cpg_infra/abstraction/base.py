@@ -80,6 +80,12 @@ class CloudInfraBase(ABC):
         self.config = config
         self.dataset_config = dataset_config
 
+    @classmethod
+    @abstractmethod
+    def storage_url_regex(cls):
+        """Regex for matching storage urls"""
+        pass
+
     @property
     def dataset(self):
         return self.dataset_config.dataset
@@ -171,7 +177,7 @@ class CloudInfraBase(ABC):
         """
         Return fully formed path to bucket, eg:
             gs://cpg-{dataset}-main
-            hail-az//cpg-dataset/main/
+            https://cpg-dataset.blob.core.windows.net/main/
             s3://cpg-{dataset}-main
         """
         pass
@@ -411,6 +417,10 @@ class DryRunInfra(CloudInfraBase):
 
     def bucket_output_path(self, bucket):
         return f'Fake://{bucket}'
+
+    @classmethod
+    def storage_url_regex(cls):
+        return r'^Fake:\/\/'
 
     def add_blob_to_bucket(self, resource_name, bucket, output_name, contents):
         return f'Add blob to FAKE://{bucket}/{output_name} < {contents!r}'

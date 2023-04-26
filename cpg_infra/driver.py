@@ -1053,16 +1053,13 @@ class CPGDatasetInfrastructure:
             return
 
         _infra_to_call_function_on = None
-        infra_prefix_map = [
-            ('gs://', GcpInfrastructure),
-            ('hail-az://', AzureInfra),
-        ]
-        for prefix, I in infra_prefix_map:
-            if self.config.config_destination.startswith(prefix):
+        infra_prefix_map = [GcpInfrastructure, AzureInfra]
+        for Infra in infra_prefix_map:
+            if re.match(Infra.storage_url_regex(), self.config.config_destination):
                 _infra_to_call_function_on = (
                     self.infra
-                    if isinstance(self.infra, I)
-                    else I(self.config, self.dataset_config)
+                    if isinstance(self.infra, Infra)
+                    else Infra(self.config, self.dataset_config)
                 )
                 break
         else:
