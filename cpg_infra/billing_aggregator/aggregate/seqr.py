@@ -312,18 +312,20 @@ def migrate_entries_from_bq(
             service, sku, usage_start_time, usage_end_time, labels, system_labels,
             location, export_time, cost, currency, currency_conversion_rate, usage,
             credits, invoice, cost_type, adjustment_info
-        FROM `{GCP_BILLING_BQ_TABLE}`
+        FROM @billing_table
         WHERE export_time >= @start
             AND export_time <= @end
-            AND project.id = @project
+            AND project.id IN UNNEST(@projects)
         ORDER BY usage_start_time
     """
 
+    projects = [utils.SEQR_PROJECT_ID, utils.ES_INDEX_PROJECT_ID]
     job_config = bq.QueryJobConfig(
         query_parameters=[
+            bq.ScalarQueryParameter('billing_table', 'STRING', GCP_BILLING_BQ_TABLE),
             bq.ScalarQueryParameter('start', 'STRING', str(istart)),
             bq.ScalarQueryParameter('end', 'STRING', str(iend)),
-            bq.ScalarQueryParameter('project', 'STRING', utils.SEQR_PROJECT_ID),
+            bq.ScalarQueryParameter('projects', 'STRING', projects),
         ]
     )
 
