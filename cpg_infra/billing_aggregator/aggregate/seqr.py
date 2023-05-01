@@ -307,12 +307,12 @@ def migrate_entries_from_bq(
     istart, iend = utils.process_default_start_and_end(start, end)
     logger.info(f'Migrating seqr BQ data [{istart.isoformat()}, {iend.isoformat()}]')
     # pylint: disable=too-many-branches
-    _query = """
+    _query = f"""
         SELECT
             service, sku, usage_start_time, usage_end_time, labels, system_labels,
             location, export_time, cost, currency, currency_conversion_rate, usage,
             credits, invoice, cost_type, adjustment_info
-        FROM @billing_table
+        FROM `{GCP_BILLING_BQ_TABLE}`
         WHERE export_time >= @start
             AND export_time <= @end
             AND project.id IN UNNEST(@projects)
@@ -322,7 +322,6 @@ def migrate_entries_from_bq(
     projects = [utils.SEQR_PROJECT_ID, utils.ES_INDEX_PROJECT_ID]
     job_config = bq.QueryJobConfig(
         query_parameters=[
-            bq.ScalarQueryParameter('billing_table', 'STRING', GCP_BILLING_BQ_TABLE),
             bq.ScalarQueryParameter('start', 'STRING', str(istart)),
             bq.ScalarQueryParameter('end', 'STRING', str(iend)),
             bq.ArrayQueryParameter('projects', 'STRING', projects),
