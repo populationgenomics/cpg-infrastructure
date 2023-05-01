@@ -307,7 +307,7 @@ def migrate_entries_from_bq(
     istart, iend = utils.process_default_start_and_end(start, end)
     logger.info(f'Migrating seqr BQ data [{istart.isoformat()}, {iend.isoformat()}]')
     # pylint: disable=too-many-branches
-    _query = f"""
+    _query = """
         SELECT
             service, sku, usage_start_time, usage_end_time, labels, system_labels,
             location, export_time, cost, currency, currency_conversion_rate, usage,
@@ -325,7 +325,7 @@ def migrate_entries_from_bq(
             bq.ScalarQueryParameter('billing_table', 'STRING', GCP_BILLING_BQ_TABLE),
             bq.ScalarQueryParameter('start', 'STRING', str(istart)),
             bq.ScalarQueryParameter('end', 'STRING', str(iend)),
-            bq.ScalarQueryParameter('projects', 'STRING', projects),
+            bq.ArrayQueryParameter('projects', 'STRING', projects),
         ]
     )
 
