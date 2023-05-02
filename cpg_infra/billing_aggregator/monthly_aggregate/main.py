@@ -9,7 +9,7 @@ from functools import cache
 
 from datetime import datetime
 
-import google.auth
+from google.oauth2 import service_account
 import google.cloud.bigquery as bq
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -84,12 +84,17 @@ def append_values_to_google_sheet(spreadsheet_id, _values):
     for guides on implementing OAuth2 for the application.
     """
 
-    creds, _ = google.auth.default(
-        scopes=['https://www.googleapis.com/auth/spreadsheets']
+    scopes = [
+        'https://www.googleapis.com/auth/spreadsheets',
+    ]
+    creds = service_account.Credentials.from_service_account_file(
+        os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
     )
+    scoped_creds = creds.with_scopes(scopes)
+
     # pylint: disable=maybe-no-member
     try:
-        service = build('sheets', 'v4', credentials=creds)
+        service = build('sheets', 'v4', credentials=scoped_creds)
         body = {'values': _values}
         result = (
             service.spreadsheets()
@@ -145,4 +150,7 @@ if __name__ == '__main__':
     logging.getLogger('urllib3').setLevel(logging.WARNING)
     event_loop = asyncio.new_event_loop()
 
-    event_loop.run_until_complete(process_and_upload_monthly_billing_report())
+    test_invoice_month = None
+    event_loop.run_until_complete(
+        process_and_upload_monthly_billing_report(test_invoice_month)
+    )
