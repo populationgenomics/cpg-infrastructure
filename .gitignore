@@ -134,3 +134,4 @@ dmypy.json
 
 pulumi-*.json
 deploy.sh
+run.sh

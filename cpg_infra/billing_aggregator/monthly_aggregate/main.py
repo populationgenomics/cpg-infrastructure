@@ -105,9 +105,9 @@ async def process_and_upload_monthly_billing_report(invoice_month: str = None):
     data['cost'].fillna(0)
     data['key'] = data.topic + '-' + data.month + '-' + data.cost_category
     values: list = data.values.tolist()
-    append_values_to_google_sheet(OUTPUT_GOOGLE_SHEET, values)
+    updated = append_values_to_google_sheet(OUTPUT_GOOGLE_SHEET, values)
 
-    return 200
+    return f'{updated} cells appended for invoice month {invoice_month}', 200
 
 
 def abort_message(status: int, message: str):
@@ -143,8 +143,9 @@ def append_values_to_google_sheet(spreadsheet_id, _values):
             )
             .execute()
         )
-        print(f"{(result.get('updates').get('updatedCells'))} cells appended.")
-        return result
+        updated = result.get('updates').get('updatedCells')
+        print(f"{updated} cells appended.")
+        return updated
 
     except HttpError as error:
         print(f'An error occurred: {error}')
