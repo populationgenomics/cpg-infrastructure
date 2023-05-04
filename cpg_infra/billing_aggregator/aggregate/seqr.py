@@ -39,6 +39,8 @@ from collections import defaultdict
 from datetime import datetime, timedelta, date
 
 import rapidjson
+import functions_framework
+from flask import Request
 import google.cloud.bigquery as bq
 
 from sample_metadata.apis import SampleApi, ProjectApi, AnalysisApi
@@ -935,12 +937,16 @@ async def main(
         logger.info(f'Inserted {result} entries')
 
 
-def from_request(*args, **kwargs):
+@functions_framework.http
+def from_request(request: Request):
     """
     From request object, get start and end time if present
     """
-    print('args: ', args, kwargs)
-    start, end = utils.get_start_and_end_from_request(None)
+    try:
+        start, end = utils.get_start_and_end_from_request(request)
+    except ValueError:
+        start, end = None, None
+
     asyncio.new_event_loop().run_until_complete(main(start, end))
 
 
@@ -959,7 +965,7 @@ if __name__ == '__main__':
     logging.getLogger('asyncio').setLevel(logging.ERROR)
     logging.getLogger('urllib3').setLevel(logging.WARNING)
 
-    test_start, test_end = None, None
+    test_start, test_end = datetime(2023, 1, 1), None
     asyncio.new_event_loop().run_until_complete(
         main(
             start=test_start,

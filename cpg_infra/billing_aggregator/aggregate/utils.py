@@ -19,6 +19,7 @@ import aiohttp
 import pandas as pd
 import google.cloud.logging
 import google.cloud.bigquery as bq
+from flask import Request
 import rapidjson
 
 from cpg_utils.cloud import read_secret
@@ -797,15 +798,33 @@ def get_unit_for_batch_resource_type(batch_resource_type: str) -> str:
 
 
 def get_start_and_end_from_request(
-    request,
+    request: Request,
 ) -> tuple[datetime | None, datetime | None]:
     """
     Get the start and end times from the cloud function request.
     """
-    if request:
-        print(request)
-        # return request.params['start'], request.params['end']
-    return None, None
+    if not request:
+        return None, None
+
+    content_type = request.headers['content-type']
+    if request.method == 'GET':
+        request_data = request.args
+    elif content_type == 'application/json':
+        request_data = request.get_json(silent=True)
+    elif content_type in ('application/octet-stream', 'text/plain'):
+        request_data = json.loads(request.data)
+    elif content_type == 'application/x-www-form-urlencoded':
+        request_data = request.form
+    else:
+        raise ValueError(f'Unknown content type: {content_type}')
+
+    if request_data and ('start' in request_data or 'end' in request_data):
+        start = request_data.get('start')
+        end = request_data.get('end')
+    else:
+        raise ValueError("JSON is invalid, or missing a 'start' or 'end' property")
+
+    return start, end
 
 
 def date_range_iterator(

@@ -29,6 +29,8 @@ import shutil
 from datetime import datetime
 from typing import Dict, List
 
+import functions_framework
+from flask import Request
 from cpg_utils.cloud import read_secret
 
 try:
@@ -148,12 +150,16 @@ def get_finalised_entries_for_batch(batch: dict) -> List[Dict]:
     return entries
 
 
-def from_request(*args, **kwargs):
+@functions_framework.http
+def from_request(request: Request):
     """
     From request object, get start and end time if present
     """
-    print('args: ', args, kwargs)
-    start, end = utils.get_start_and_end_from_request(None)
+    try:
+        start, end = utils.get_start_and_end_from_request(request)
+    except ValueError:
+        start, end = None, None
+
     asyncio.new_event_loop().run_until_complete(main(start, end))
 
 

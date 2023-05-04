@@ -9,12 +9,13 @@ from functools import cache
 
 from datetime import datetime
 
-from google.oauth2 import service_account
+import functions_framework
+import google.auth
 import google.cloud.bigquery as bq
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from flask import abort, Response
+from flask import abort, Response, Request
 from pandas import DataFrame
 
 
@@ -32,10 +33,46 @@ def get_bigquery_client() -> bq.Client:
     return bq.Client()
 
 
-def from_request(*args, **kwargs):
+def get_invoice_month_from_request(
+    request: Request,
+) -> tuple[datetime | None, datetime | None]:
+    """
+    Get the invoice month from the cloud function request.
+    """
+    if not request:
+        return None, None
+
+    content_type = request.content_type
+    if request.method == 'GET':
+        request_data = request.args
+    elif content_type == 'application/json':
+        request_data = request.get_json(silent=True)
+    elif content_type in ('application/octet-stream', 'text/plain'):
+        request_data = json.loads(request.data)
+    elif content_type == 'application/x-www-form-urlencoded':
+        request_data = request.form
+    else:
+        raise ValueError(f'Unknown content type: {content_type}')
+
+    if request_data and 'invoice_month' in request_data:
+        invoice_month = request_data.get('invoice_month')
+    else:
+        raise ValueError("JSON is invalid, or missing a 'invoice_month'")
+
+    return invoice_month
+
+
+@functions_framework.http
+def from_request(request: Request):
     """Entrypoint for cloud functions, run always as default (previous month)"""
-    asyncio.new_event_loop().run_until_complete(
-        process_and_upload_monthly_billing_report(None)
+
+    try:
+        invoice_month = get_invoice_month_from_request(request)
+    except ValueError:
+        invoice_month = None
+
+    return asyncio.new_event_loop().run_until_complete(
+        process_and_upload_monthly_billing_report(invoice_month)
     )
 
 
@@ -70,6 +107,8 @@ async def process_and_upload_monthly_billing_report(invoice_month: str = None):
     values: list = data.values.tolist()
     append_values_to_google_sheet(OUTPUT_GOOGLE_SHEET, values)
 
+    return 200
+
 
 def abort_message(status: int, message: str):
     """Custom abort wrapper that allows for error messages to be passed through"""
@@ -87,14 +126,11 @@ def append_values_to_google_sheet(spreadsheet_id, _values):
     scopes = [
         'https://www.googleapis.com/auth/spreadsheets',
     ]
-    creds = service_account.Credentials.from_service_account_file(
-        os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
-    )
-    scoped_creds = creds.with_scopes(scopes)
+    creds, _ = google.auth.default(scopes=scopes)
 
     # pylint: disable=maybe-no-member
     try:
-        service = build('sheets', 'v4', credentials=scoped_creds)
+        service = build('sheets', 'v4', credentials=creds)
         body = {'values': _values}
         result = (
             service.spreadsheets()
@@ -150,7 +186,7 @@ if __name__ == '__main__':
     logging.getLogger('urllib3').setLevel(logging.WARNING)
     event_loop = asyncio.new_event_loop()
 
-    test_invoice_month = None
+    test_invoice_month = '202301'
     event_loop.run_until_complete(
         process_and_upload_monthly_billing_report(test_invoice_month)
     )
