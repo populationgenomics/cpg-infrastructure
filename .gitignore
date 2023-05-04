@@ -133,3 +133,4 @@ dmypy.json
 .vscode/
 
 pulumi-*.json
+deploy.sh

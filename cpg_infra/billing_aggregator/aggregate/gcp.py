@@ -128,15 +128,14 @@ def get_billing_data(start: datetime, end: datetime):
         FROM `{utils.GCP_BILLING_BQ_TABLE}`
         WHERE export_time >= @start
             AND export_time <= @end
-            AND project.id <> @seqr_project_id
+            AND project.id NOT IN UNNEST(@projects)
     """
+    exclude_projects = [utils.SEQR_PROJECT_ID, utils.ES_INDEX_PROJECT_ID]
     job_config = bq.QueryJobConfig(
         query_parameters=[
             bq.ScalarQueryParameter('start', 'STRING', str(start)),
             bq.ScalarQueryParameter('end', 'STRING', str(end)),
-            bq.ScalarQueryParameter(
-                'seqr_project_id', 'STRING', str(utils.SEQR_PROJECT_ID)
-            ),
+            bq.ArrayQueryParameter('seqr_project_id', 'STRING', exclude_projects),
         ]
     )
 
