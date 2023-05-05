@@ -317,15 +317,16 @@ def migrate_entries_from_bq(
         FROM `{GCP_BILLING_BQ_TABLE}`
         WHERE export_time >= @start
             AND export_time <= @end
-            AND project.id = @project
+            AND project.id IN UNNEST(@projects)
         ORDER BY usage_start_time
     """
 
+    projects = [utils.SEQR_PROJECT_ID, utils.ES_INDEX_PROJECT_ID]
     job_config = bq.QueryJobConfig(
         query_parameters=[
             bq.ScalarQueryParameter('start', 'STRING', str(istart)),
             bq.ScalarQueryParameter('end', 'STRING', str(iend)),
-            bq.ScalarQueryParameter('project', 'STRING', utils.SEQR_PROJECT_ID),
+            bq.ArrayQueryParameter('projects', 'STRING', projects),
         ]
     )
 
@@ -965,7 +966,7 @@ if __name__ == '__main__':
     logging.getLogger('asyncio').setLevel(logging.ERROR)
     logging.getLogger('urllib3').setLevel(logging.WARNING)
 
-    test_start, test_end = datetime(2023, 1, 1), None
+    test_start, test_end = datetime(2023, 5, 1), None
     asyncio.new_event_loop().run_until_complete(
         main(
             start=test_start,

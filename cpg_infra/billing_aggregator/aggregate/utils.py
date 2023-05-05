@@ -76,6 +76,7 @@ ANALYSIS_RUNNER_PROJECT_ID = 'analysis-runner'
 DEFAULT_RANGE_INTERVAL = timedelta(hours=int(os.getenv('DEFAULT_INTERVAL_HOURS', '4')))
 
 SEQR_PROJECT_ID = 'seqr-308602'
+ES_INDEX_PROJECT_ID = 'pr418c6531826c4cae'
 HAIL_PROJECT_ID = 'hail-295901'
 
 HAIL_BASE = 'https://batch.hail.populationgenomics.org.au'
