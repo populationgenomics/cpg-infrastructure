@@ -6,6 +6,7 @@ import asyncio
 import logging
 import os
 from functools import cache
+from base64 import b64decode
 
 from datetime import datetime
 
@@ -40,19 +41,34 @@ def get_invoice_month_from_request(
     Get the invoice month from the cloud function request.
     """
     if not request:
+        print('No request found')
         return None
 
     content_type = request.content_type
     if request.method == 'GET':
+        print('GET request, using args')
         request_data = request.args
     elif content_type == 'application/json':
+        print('JSON found in request')
         request_data = request.get_json(silent=True)
     elif content_type in ('application/octet-stream', 'text/plain'):
+        print('Text data found')
         request_data = json.loads(request.data)
     elif content_type == 'application/x-www-form-urlencoded':
+        print('Encoded Form')
         request_data = request.form
     else:
         raise ValueError(f'Unknown content type: {content_type}')
+
+    if 'attributes' in request_data and 'invoice_month' in request.get('attributes'):
+        request_data = request_data['attributes']
+    elif 'message' in request_data and 'data' in request_data.get('message'):
+        try:
+            request_data = json.loads(b64decode(request_data['message']['data']))
+        except Exception as exp:
+            raise exp
+
+    print(request_data)
 
     if request_data and 'invoice_month' in request_data:
         invoice_month = request_data.get('invoice_month')
@@ -187,4 +203,4 @@ if __name__ == '__main__':
     logging.getLogger('urllib3').setLevel(logging.WARNING)
     event_loop = asyncio.new_event_loop()
 
-    event_loop.run_until_complete(process_and_upload_monthly_billing_report(None))
+    # event_loop.run_until_complete(process_and_upload_monthly_billing_report(None))

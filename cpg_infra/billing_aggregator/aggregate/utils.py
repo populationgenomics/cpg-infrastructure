@@ -12,6 +12,7 @@ import logging
 
 from io import StringIO
 from pathlib import Path
+from base64 import b64decode
 from datetime import date, datetime, timedelta
 from typing import Any, Iterator, Sequence, TypeVar, Iterable, Type
 
@@ -807,17 +808,33 @@ def get_start_and_end_from_request(
     if not request:
         return None, None
 
-    content_type = request.headers['content-type']
+    content_type = request.content_type
     if request.method == 'GET':
+        print('GET request, using args')
         request_data = request.args
     elif content_type == 'application/json':
+        print('JSON found in request')
         request_data = request.get_json(silent=True)
     elif content_type in ('application/octet-stream', 'text/plain'):
+        print('Text data found')
         request_data = json.loads(request.data)
     elif content_type == 'application/x-www-form-urlencoded':
+        print('Encoded Form')
         request_data = request.form
     else:
         raise ValueError(f'Unknown content type: {content_type}')
+
+    if 'attributes' in request_data and (
+        'start' in request.get('attributes') or 'end' in request.get('attributes')
+    ):
+        request_data = request_data['attributes']
+    elif 'message' in request_data and 'data' in request_data.get('message'):
+        try:
+            request_data = json.loads(b64decode(request_data['message']['data']))
+        except Exception as exp:
+            raise exp
+
+    print(request_data)
 
     if request_data and ('start' in request_data or 'end' in request_data):
         start = request_data.get('start')
