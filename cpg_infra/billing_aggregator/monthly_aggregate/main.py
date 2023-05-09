@@ -144,7 +144,7 @@ def append_values_to_google_sheet(spreadsheet_id, _values):
             .execute()
         )
         updated = result.get('updates').get('updatedCells')
-        print(f"{updated} cells appended.")
+        print(f"{updated} cells appended to sheet {spreadsheet_id}")
         return updated
 
     except HttpError as error:
