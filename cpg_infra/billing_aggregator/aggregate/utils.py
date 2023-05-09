@@ -825,7 +825,8 @@ def get_start_and_end_from_request(
         raise ValueError(f'Unknown content type: {content_type}')
 
     if 'attributes' in request_data and (
-        'start' in request.get('attributes') or 'end' in request.get('attributes')
+        'start' in request_data.get('attributes')
+        or 'end' in request_data.get('attributes')
     ):
         request_data = request_data['attributes']
     elif 'message' in request_data and 'data' in request_data.get('message'):

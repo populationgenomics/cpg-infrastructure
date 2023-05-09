@@ -60,7 +60,9 @@ def get_invoice_month_from_request(
     else:
         raise ValueError(f'Unknown content type: {content_type}')
 
-    if 'attributes' in request_data and 'invoice_month' in request.get('attributes'):
+    if 'attributes' in request_data and 'invoice_month' in request_data.get(
+        'attributes'
+    ):
         request_data = request_data['attributes']
     elif 'message' in request_data and 'data' in request_data.get('message'):
         try:
@@ -121,7 +123,7 @@ async def process_and_upload_monthly_billing_report(invoice_month: str = None):
     data['cost'].fillna(0)
     data['key'] = data.topic + '-' + data.month + '-' + data.cost_category
     values: list = data.values.tolist()
-    updated = append_values_to_google_sheet(OUTPUT_GOOGLE_SHEET, values)
+    updated = append_values_to_google_sheet(OUTPUT_GOOGLE_SHEET, values, invoice_month)
 
     return f'{updated} cells appended for invoice month {invoice_month}', 200
 
@@ -131,13 +133,15 @@ def abort_message(status: int, message: str):
     return abort(Response(json.dumps({'message': message}), status))
 
 
-def append_values_to_google_sheet(spreadsheet_id, _values):
+def append_values_to_google_sheet(spreadsheet_id, _values, invoice_month):
     """
     Creates the batch_update the user has access to.
     Load pre-authorized user credentials from the environment.
     TODO(developer) - See https://developers.google.com/identity
     for guides on implementing OAuth2 for the application.
     """
+
+    year = invoice_month[:4]
 
     scopes = [
         'https://www.googleapis.com/auth/spreadsheets',
@@ -153,7 +157,7 @@ def append_values_to_google_sheet(spreadsheet_id, _values):
             .values()
             .append(
                 spreadsheetId=spreadsheet_id,
-                range=f'{datetime.now().year}-data',
+                range=f'{year}-data',
                 valueInputOption='RAW',
                 body=body,
             )
