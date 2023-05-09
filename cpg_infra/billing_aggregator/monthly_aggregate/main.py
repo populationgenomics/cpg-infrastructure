@@ -187,7 +187,7 @@ if __name__ == '__main__':
     logging.getLogger('urllib3').setLevel(logging.WARNING)
     event_loop = asyncio.new_event_loop()
 
-    test_invoice_month = '202301'
+    test_invoice_month = None
     event_loop.run_until_complete(
         process_and_upload_monthly_billing_report(test_invoice_month)
     )
