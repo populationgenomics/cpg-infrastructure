@@ -35,12 +35,12 @@ def get_bigquery_client() -> bq.Client:
 
 def get_invoice_month_from_request(
     request: Request,
-) -> tuple[datetime | None, datetime | None]:
+) -> str | None:
     """
     Get the invoice month from the cloud function request.
     """
     if not request:
-        return None, None
+        return None
 
     content_type = request.content_type
     if request.method == 'GET':
@@ -144,7 +144,7 @@ def append_values_to_google_sheet(spreadsheet_id, _values):
             .execute()
         )
         updated = result.get('updates').get('updatedCells')
-        print(f"{updated} cells appended to sheet {spreadsheet_id}")
+        print(f'{updated} cells appended to sheet {spreadsheet_id}')
         return updated
 
     except HttpError as error:
@@ -187,7 +187,4 @@ if __name__ == '__main__':
     logging.getLogger('urllib3').setLevel(logging.WARNING)
     event_loop = asyncio.new_event_loop()
 
-    test_invoice_month = None
-    event_loop.run_until_complete(
-        process_and_upload_monthly_billing_report(test_invoice_month)
-    )
+    event_loop.run_until_complete(process_and_upload_monthly_billing_report(None))
