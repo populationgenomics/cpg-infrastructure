@@ -837,14 +837,11 @@ def get_start_and_end_from_request(
 
     logger.info(request_data)
 
-    if request_data and ('start' in request_data or 'end' in request_data):
-        start = request_data.get('start')
-        end = request_data.get('end')
-    else:
+    if not request_data or ('start' not in request_data and 'end' not in request_data):
         logger.warning(f'Could not find start or end. Defaulting to None.')
         raise ValueError("JSON is invalid, or missing a 'start' or 'end' property")
 
-    return start, end
+    return request_data.get('start'), request_data.get('end')
 
 
 def date_range_iterator(
