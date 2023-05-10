@@ -801,7 +801,7 @@ def get_unit_for_batch_resource_type(batch_resource_type: str) -> str:
 
 def get_start_and_end_from_request(
     request: Request,
-) -> tuple[str | None, str | None]:
+) -> tuple[datetime | None, datetime | None]:
     """
     Get the start and end times from the cloud function request.
     """
@@ -841,7 +841,17 @@ def get_start_and_end_from_request(
         logger.warning(f'Could not find start or end. Defaulting to None.')
         raise ValueError("JSON is invalid, or missing a 'start' or 'end' property")
 
-    return request_data.get('start'), request_data.get('end')
+    try:
+        start = request_data.get('start')
+        end = request_data.get('end')
+        start = datetime.fromisoformat(start) if start else start
+        end = datetime.fromisoformat(end) if end else end
+    except ValueError as err:
+        logger.error(err)
+        logger.error(f'Could not convert {start} or {end} to datetime')
+        return None, None
+
+    return start, end
 
 
 def date_range_iterator(
