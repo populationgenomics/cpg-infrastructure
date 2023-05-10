@@ -6,15 +6,17 @@ import asyncio
 import logging
 import os
 from functools import cache
+from base64 import b64decode
 
 from datetime import datetime
 
+import functions_framework
 import google.auth
 import google.cloud.bigquery as bq
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from flask import abort, Response
+from flask import abort, Response, Request
 from pandas import DataFrame
 
 
@@ -32,10 +34,65 @@ def get_bigquery_client() -> bq.Client:
     return bq.Client()
 
 
-def from_request(*args, **kwargs):
+def get_invoice_month_from_request(
+    request: Request,
+) -> str | None:
+    """
+    Get the invoice month from the cloud function request.
+    """
+    if not request:
+        logger.info('No request found')
+        return None
+
+    content_type = request.content_type
+    if request.method == 'GET':
+        logger.info(f'GET request, using args: {request.args}')
+        request_data = request.args
+    elif content_type == 'application/json':
+        logger.info('JSON found in request')
+        request_data = request.get_json(silent=True)
+    elif content_type in ('application/octet-stream', 'text/plain'):
+        logger.info('Text data found')
+        request_data = json.loads(request.data)
+    elif content_type == 'application/x-www-form-urlencoded':
+        logger.info('Encoded Form')
+        request_data = request.form
+    else:
+        logger.warning(f'Unknown content type: {content_type}. Defaulting to None.')
+        raise ValueError(f'Unknown content type: {content_type}')
+
+    if 'attributes' in request_data and 'invoice_month' in request_data.get(
+        'attributes'
+    ):
+        request_data = request_data['attributes']
+    elif 'message' in request_data and 'data' in request_data.get('message'):
+        try:
+            request_data = json.loads(b64decode(request_data['message']['data']))
+        except Exception as exp:
+            raise exp
+
+    logger.info(request_data)
+
+    if not request_data or 'invoice_month' not in request_data:
+        logger.warning('Could not find invoice_month. Default to None.')
+        raise ValueError("JSON is invalid, or missing a 'invoice_month'")
+
+    return request_data.get('invoice_month')
+
+
+@functions_framework.http
+def from_request(request: Request):
     """Entrypoint for cloud functions, run always as default (previous month)"""
-    asyncio.new_event_loop().run_until_complete(
-        process_and_upload_monthly_billing_report(None)
+
+    try:
+        invoice_month = get_invoice_month_from_request(request)
+    except ValueError as err:
+        logger.warning(err)
+        logger.warning('Defaulting to None')
+        invoice_month = None
+
+    return asyncio.new_event_loop().run_until_complete(
+        process_and_upload_monthly_billing_report(invoice_month)
     )
 
 
@@ -68,7 +125,9 @@ async def process_and_upload_monthly_billing_report(invoice_month: str = None):
     data['cost'].fillna(0)
     data['key'] = data.topic + '-' + data.month + '-' + data.cost_category
     values: list = data.values.tolist()
-    append_values_to_google_sheet(OUTPUT_GOOGLE_SHEET, values)
+    updated = append_values_to_google_sheet(OUTPUT_GOOGLE_SHEET, values, invoice_month)
+
+    return f'{updated} cells appended for invoice month {invoice_month}', 200
 
 
 def abort_message(status: int, message: str):
@@ -76,7 +135,7 @@ def abort_message(status: int, message: str):
     return abort(Response(json.dumps({'message': message}), status))
 
 
-def append_values_to_google_sheet(spreadsheet_id, _values):
+def append_values_to_google_sheet(spreadsheet_id, _values, invoice_month):
     """
     Creates the batch_update the user has access to.
     Load pre-authorized user credentials from the environment.
@@ -84,9 +143,14 @@ def append_values_to_google_sheet(spreadsheet_id, _values):
     for guides on implementing OAuth2 for the application.
     """
 
-    creds, _ = google.auth.default(
-        scopes=['https://www.googleapis.com/auth/spreadsheets']
-    )
+    assert len(invoice_month) == 6
+    year = invoice_month[:4]
+
+    scopes = [
+        'https://www.googleapis.com/auth/spreadsheets',
+    ]
+    creds, _ = google.auth.default(scopes=scopes)
+
     # pylint: disable=maybe-no-member
     try:
         service = build('sheets', 'v4', credentials=creds)
@@ -96,17 +160,18 @@ def append_values_to_google_sheet(spreadsheet_id, _values):
             .values()
             .append(
                 spreadsheetId=spreadsheet_id,
-                range=f'{datetime.now().year}-data',
+                range=f'{year}-data',
                 valueInputOption='RAW',
                 body=body,
             )
             .execute()
         )
-        print(f"{(result.get('updates').get('updatedCells'))} cells appended.")
-        return result
+        updated = result.get('updates').get('updatedCells')
+        logger.info(f'{updated} cells appended to sheet {spreadsheet_id}')
+        return updated
 
     except HttpError as error:
-        print(f'An error occurred: {error}')
+        logger.error(f'An error occurred: {error}')
         return error
 
 
@@ -145,4 +210,4 @@ if __name__ == '__main__':
     logging.getLogger('urllib3').setLevel(logging.WARNING)
     event_loop = asyncio.new_event_loop()
 
-    event_loop.run_until_complete(process_and_upload_monthly_billing_report())
+    event_loop.run_until_complete(process_and_upload_monthly_billing_report(None))

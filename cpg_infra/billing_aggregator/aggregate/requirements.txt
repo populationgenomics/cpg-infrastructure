@@ -1,5 +1,6 @@
 aiohttp
 cpg-utils
+functions-framework
 sample-metadata
 pyyaml
 python-rapidjson

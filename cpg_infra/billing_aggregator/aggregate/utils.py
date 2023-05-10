@@ -12,6 +12,7 @@ import logging
 
 from io import StringIO
 from pathlib import Path
+from base64 import b64decode
 from datetime import date, datetime, timedelta
 from typing import Any, Iterator, Sequence, TypeVar, Iterable, Type
 
@@ -19,6 +20,7 @@ import aiohttp
 import pandas as pd
 import google.cloud.logging
 import google.cloud.bigquery as bq
+from flask import Request
 import rapidjson
 
 from cpg_utils.cloud import read_secret
@@ -75,6 +77,7 @@ ANALYSIS_RUNNER_PROJECT_ID = 'analysis-runner'
 DEFAULT_RANGE_INTERVAL = timedelta(hours=int(os.getenv('DEFAULT_INTERVAL_HOURS', '4')))
 
 SEQR_PROJECT_ID = 'seqr-308602'
+ES_INDEX_PROJECT_ID = 'pr418c6531826c4cae'
 HAIL_PROJECT_ID = 'hail-295901'
 
 HAIL_BASE = 'https://batch.hail.populationgenomics.org.au'
@@ -393,7 +396,7 @@ async def get_finished_batches_for_date(
             )
         if n_requests > 0 and n_requests % 100 == 0:
             min_time_completed = min(b['time_completed'] for b in batches)
-            print(
+            logger.info(
                 f'At {n_requests} requests ({min_time_completed}) for getting completed batches'
             )
         last_completed_timestamp = jresponse.get('last_completed_timestamp')
@@ -797,15 +800,58 @@ def get_unit_for_batch_resource_type(batch_resource_type: str) -> str:
 
 
 def get_start_and_end_from_request(
-    request,
+    request: Request,
 ) -> tuple[datetime | None, datetime | None]:
     """
     Get the start and end times from the cloud function request.
     """
-    if request:
-        print(request)
-        # return request.params['start'], request.params['end']
-    return None, None
+    if not request:
+        return None, None
+
+    content_type = request.content_type
+    if request.method == 'GET':
+        logger.info(f'GET request, using args: {request.args}')
+        request_data = request.args
+    elif content_type == 'application/json':
+        logger.info('JSON found in request')
+        request_data = request.get_json(silent=True)
+    elif content_type in ('application/octet-stream', 'text/plain'):
+        logger.info('Text data found')
+        request_data = json.loads(request.data)
+    elif content_type == 'application/x-www-form-urlencoded':
+        logger.info('Encoded Form')
+        request_data = request.form
+    else:
+        logger.warning(f'Unknown content type: {content_type}. Defaulting to None.')
+        raise ValueError(f'Unknown content type: {content_type}')
+
+    if 'start' in request_data.get('attributes') or 'end' in request_data.get(
+        'attributes'
+    ):
+        request_data = request_data['attributes']
+    elif 'data' in request_data.get('message'):
+        try:
+            request_data = json.loads(b64decode(request_data['message']['data']))
+        except Exception as exp:
+            raise exp
+
+    logger.info(request_data)
+
+    if not request_data or ('start' not in request_data and 'end' not in request_data):
+        logger.warning(f'Could not find start or end. Defaulting to None.')
+        raise ValueError("JSON is invalid, or missing a 'start' or 'end' property")
+
+    try:
+        start = request_data.get('start')
+        end = request_data.get('end')
+        start = datetime.fromisoformat(start) if start else start
+        end = datetime.fromisoformat(end) if end else end
+    except ValueError as err:
+        logger.error(err)
+        logger.error(f'Could not convert {start} or {end} to datetime')
+        return None, None
+
+    return start, end
 
 
 def date_range_iterator(

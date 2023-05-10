@@ -33,8 +33,9 @@ import logging
 from typing import Dict
 from datetime import datetime
 
-# from pandas import DataFrame
 import rapidjson
+import functions_framework
+from flask import Request
 from cpg_utils.cloud import read_secret
 import google.cloud.bigquery as bq
 
@@ -53,12 +54,18 @@ logger.setLevel(logging.INFO)
 ##########################
 
 
-def from_request(*args, **kwargs):
+@functions_framework.http
+def from_request(request: Request):
     """
     From request object, get start and end time if present
     """
-    print('args: ', args, kwargs)
-    start, end = utils.get_start_and_end_from_request(None)
+    try:
+        start, end = utils.get_start_and_end_from_request(request)
+    except ValueError as err:
+        logger.warning(err)
+        logger.warning('Defaulting to None')
+        start, end = None, None
+
     asyncio.new_event_loop().run_until_complete(main(start, end))
 
 
@@ -128,15 +135,14 @@ def get_billing_data(start: datetime, end: datetime):
         FROM `{utils.GCP_BILLING_BQ_TABLE}`
         WHERE export_time >= @start
             AND export_time <= @end
-            AND project.id <> @seqr_project_id
+            AND project.id NOT IN UNNEST(@exclude)
     """
+    exclude_projects = [utils.SEQR_PROJECT_ID, utils.ES_INDEX_PROJECT_ID]
     job_config = bq.QueryJobConfig(
         query_parameters=[
             bq.ScalarQueryParameter('start', 'STRING', str(start)),
             bq.ScalarQueryParameter('end', 'STRING', str(end)),
-            bq.ScalarQueryParameter(
-                'seqr_project_id', 'STRING', str(utils.SEQR_PROJECT_ID)
-            ),
+            bq.ArrayQueryParameter('exclude', 'STRING', exclude_projects),
         ]
     )
 

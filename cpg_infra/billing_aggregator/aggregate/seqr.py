@@ -39,6 +39,8 @@ from collections import defaultdict
 from datetime import datetime, timedelta, date
 
 import rapidjson
+import functions_framework
+from flask import Request
 import google.cloud.bigquery as bq
 
 from sample_metadata.apis import SampleApi, ProjectApi, AnalysisApi
@@ -315,15 +317,16 @@ def migrate_entries_from_bq(
         FROM `{GCP_BILLING_BQ_TABLE}`
         WHERE export_time >= @start
             AND export_time <= @end
-            AND project.id = @project
+            AND project.id IN UNNEST(@projects)
         ORDER BY usage_start_time
     """
 
+    projects = [utils.SEQR_PROJECT_ID, utils.ES_INDEX_PROJECT_ID]
     job_config = bq.QueryJobConfig(
         query_parameters=[
             bq.ScalarQueryParameter('start', 'STRING', str(istart)),
             bq.ScalarQueryParameter('end', 'STRING', str(iend)),
-            bq.ScalarQueryParameter('project', 'STRING', utils.SEQR_PROJECT_ID),
+            bq.ArrayQueryParameter('projects', 'STRING', projects),
         ]
     )
 
@@ -935,12 +938,18 @@ async def main(
         logger.info(f'Inserted {result} entries')
 
 
-def from_request(*args, **kwargs):
+@functions_framework.http
+def from_request(request: Request):
     """
     From request object, get start and end time if present
     """
-    print('args: ', args, kwargs)
-    start, end = utils.get_start_and_end_from_request(None)
+    try:
+        start, end = utils.get_start_and_end_from_request(request)
+    except ValueError as err:
+        logger.warning(err)
+        logger.warning('Defaulting to None')
+        start, end = None, None
+
     asyncio.new_event_loop().run_until_complete(main(start, end))
 
 
