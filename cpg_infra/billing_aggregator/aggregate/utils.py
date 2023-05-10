@@ -810,7 +810,7 @@ def get_start_and_end_from_request(
 
     content_type = request.content_type
     if request.method == 'GET':
-        logger.info('GET request, using args')
+        logger.info(f'GET request, using args: {request.args}')
         request_data = request.args
     elif content_type == 'application/json':
         logger.info('JSON found in request')
