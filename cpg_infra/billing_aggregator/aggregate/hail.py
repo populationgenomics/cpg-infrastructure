@@ -157,7 +157,9 @@ def from_request(request: Request):
     """
     try:
         start, end = utils.get_start_and_end_from_request(request)
-    except ValueError:
+    except ValueError as err:
+        logger.warning(err)
+        logger.warning('Defaulting to None')
         start, end = None, None
 
     asyncio.new_event_loop().run_until_complete(main(start, end))

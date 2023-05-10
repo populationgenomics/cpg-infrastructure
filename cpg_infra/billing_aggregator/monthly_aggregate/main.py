@@ -86,7 +86,9 @@ def from_request(request: Request):
 
     try:
         invoice_month = get_invoice_month_from_request(request)
-    except ValueError:
+    except ValueError as err:
+        logger.warning(err)
+        logger.warning('Defaulting to None')
         invoice_month = None
 
     return asyncio.new_event_loop().run_until_complete(
