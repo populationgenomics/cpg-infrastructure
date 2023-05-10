@@ -41,23 +41,24 @@ def get_invoice_month_from_request(
     Get the invoice month from the cloud function request.
     """
     if not request:
-        print('No request found')
+        logger.info('No request found')
         return None
 
     content_type = request.content_type
     if request.method == 'GET':
-        print('GET request, using args')
+        logger.info('GET request, using args')
         request_data = request.args
     elif content_type == 'application/json':
-        print('JSON found in request')
+        logger.info('JSON found in request')
         request_data = request.get_json(silent=True)
     elif content_type in ('application/octet-stream', 'text/plain'):
-        print('Text data found')
+        logger.info('Text data found')
         request_data = json.loads(request.data)
     elif content_type == 'application/x-www-form-urlencoded':
-        print('Encoded Form')
+        logger.info('Encoded Form')
         request_data = request.form
     else:
+        logger.warning(f'Unknown content type: {content_type}. Defaulting to None.')
         raise ValueError(f'Unknown content type: {content_type}')
 
     if 'attributes' in request_data and 'invoice_month' in request_data.get(
@@ -70,14 +71,13 @@ def get_invoice_month_from_request(
         except Exception as exp:
             raise exp
 
-    print(request_data)
+    logger.info(request_data)
 
-    if request_data and 'invoice_month' in request_data:
-        invoice_month = request_data.get('invoice_month')
-    else:
+    if not request_data or 'invoice_month' not in request_data:
+        logger.warning('Could not find invoice_month. Default to None.')
         raise ValueError("JSON is invalid, or missing a 'invoice_month'")
 
-    return invoice_month
+    return request_data.get('invoice_month')
 
 
 @functions_framework.http
@@ -141,6 +141,7 @@ def append_values_to_google_sheet(spreadsheet_id, _values, invoice_month):
     for guides on implementing OAuth2 for the application.
     """
 
+    assert len(invoice_month) == 6
     year = invoice_month[:4]
 
     scopes = [
@@ -164,11 +165,11 @@ def append_values_to_google_sheet(spreadsheet_id, _values, invoice_month):
             .execute()
         )
         updated = result.get('updates').get('updatedCells')
-        print(f'{updated} cells appended to sheet {spreadsheet_id}')
+        logger.info(f'{updated} cells appended to sheet {spreadsheet_id}')
         return updated
 
     except HttpError as error:
-        print(f'An error occurred: {error}')
+        logger.error(f'An error occurred: {error}')
         return error
 
 
@@ -207,4 +208,4 @@ if __name__ == '__main__':
     logging.getLogger('urllib3').setLevel(logging.WARNING)
     event_loop = asyncio.new_event_loop()
 
-    # event_loop.run_until_complete(process_and_upload_monthly_billing_report(None))
+    event_loop.run_until_complete(process_and_upload_monthly_billing_report(None))

@@ -396,7 +396,7 @@ async def get_finished_batches_for_date(
             )
         if n_requests > 0 and n_requests % 100 == 0:
             min_time_completed = min(b['time_completed'] for b in batches)
-            print(
+            logger.info(
                 f'At {n_requests} requests ({min_time_completed}) for getting completed batches'
             )
         last_completed_timestamp = jresponse.get('last_completed_timestamp')
@@ -801,7 +801,7 @@ def get_unit_for_batch_resource_type(batch_resource_type: str) -> str:
 
 def get_start_and_end_from_request(
     request: Request,
-) -> tuple[datetime | None, datetime | None]:
+) -> tuple[str | None, str | None]:
     """
     Get the start and end times from the cloud function request.
     """
@@ -810,37 +810,38 @@ def get_start_and_end_from_request(
 
     content_type = request.content_type
     if request.method == 'GET':
-        print('GET request, using args')
+        logger.info('GET request, using args')
         request_data = request.args
     elif content_type == 'application/json':
-        print('JSON found in request')
+        logger.info('JSON found in request')
         request_data = request.get_json(silent=True)
     elif content_type in ('application/octet-stream', 'text/plain'):
-        print('Text data found')
+        logger.info('Text data found')
         request_data = json.loads(request.data)
     elif content_type == 'application/x-www-form-urlencoded':
-        print('Encoded Form')
+        logger.info('Encoded Form')
         request_data = request.form
     else:
+        logger.warning(f'Unknown content type: {content_type}. Defaulting to None.')
         raise ValueError(f'Unknown content type: {content_type}')
 
-    if 'attributes' in request_data and (
-        'start' in request_data.get('attributes')
-        or 'end' in request_data.get('attributes')
+    if 'start' in request_data.get('attributes') or 'end' in request_data.get(
+        'attributes'
     ):
         request_data = request_data['attributes']
-    elif 'message' in request_data and 'data' in request_data.get('message'):
+    elif 'data' in request_data.get('message'):
         try:
             request_data = json.loads(b64decode(request_data['message']['data']))
         except Exception as exp:
             raise exp
 
-    print(request_data)
+    logger.info(request_data)
 
     if request_data and ('start' in request_data or 'end' in request_data):
         start = request_data.get('start')
         end = request_data.get('end')
     else:
+        logger.warning(f'Could not find start or end. Defaulting to None.')
         raise ValueError("JSON is invalid, or missing a 'start' or 'end' property")
 
     return start, end
