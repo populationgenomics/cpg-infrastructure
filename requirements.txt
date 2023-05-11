@@ -1,7 +1,7 @@
 pulumi==3.55.0
 pulumi-gcp==6.49.0
-pulumi-azure-native==1.80.0
-pulumi-azuread==5.28.0
+pulumi-azure-native==1.102.0
+pulumi-azuread==5.37.0
 toml==0.10.2
 xxhash==3.2.0
 cpg-utils>=4.12.2
