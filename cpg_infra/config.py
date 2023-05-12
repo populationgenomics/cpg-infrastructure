@@ -159,6 +159,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
             machine_account: str
 
         gcp: GCP
+        etl_accessors: list[str] = dataclasses.field(default_factory=list)
 
     @dataclasses.dataclass(frozen=True)
     class Billing(DeserializableDataclass):
