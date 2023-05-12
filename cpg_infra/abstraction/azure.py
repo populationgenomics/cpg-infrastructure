@@ -40,10 +40,11 @@ class AzureInfra(CloudInfraBase):
 
         assert config.azure, 'config.azure is required to deploy to Azure'
 
+        self.dataset_storage_prefix = config.azure.dataset_storage_prefix
         self.region = config.azure.region
-        self._resource_group_name = f'{config.dataset_storage_prefix}{self.dataset}'
+        self._resource_group_name = f'{self.dataset_storage_prefix}{self.dataset}'
         self._storage_account_name = self.fix_azure_alphanum_names(
-            f'{config.dataset_storage_prefix}{self.dataset}'
+            f'{self.dataset_storage_prefix}{self.dataset}'
         )
         self.storage_account_lifecycle_rules: list[Any] = []
         self.storage_account_undelete_rule = None
