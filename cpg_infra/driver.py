@@ -449,7 +449,7 @@ class CPGInfrastructure:
     def gcp_members_cache_bucket(self):
         reference_infra = self.dataset_infrastructure['gcp'][self.config.common_dataset]
         return reference_infra.infra.create_bucket(
-            f'{self.config.dataset_storage_prefix}members-group-cache',
+            f'{self.config.gcp.dataset_storage_prefix}members-group-cache',
             unique=True,
             versioning=True,
             autoclass=False,  # Always accessed frequently.
