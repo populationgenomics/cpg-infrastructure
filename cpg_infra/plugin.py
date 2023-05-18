@@ -18,10 +18,12 @@ class CpgInfrastructurePlugin:
 
 def get_plugins():
     """
-    You can't just import from the submodules because they don't have an __init__ file.
+    You can't just import from the submodules because it would cause a circular
+    import error. So we manually load the file and then find the class that
+    inherits from CpgInfrastructurePlugin.
     """
     modules = [
-        BillingAggregator
+        BillingAggregator,
     ]
 
     root = Path(__file__).parent.parent
