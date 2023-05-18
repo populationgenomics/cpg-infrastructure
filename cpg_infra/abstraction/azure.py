@@ -549,7 +549,7 @@ class AzureInfra(CloudInfraBase):
             admin_user_enabled=True,
             location=self.region,
             registry_name=self.fix_azure_alphanum_names(
-                self.config.dataset_storage_prefix + self.dataset + name
+                self.config.azure.dataset_storage_prefix + self.dataset + name
             ),
             resource_group_name=self.resource_group.name,
             sku=az.containerregistry.SkuArgs(
