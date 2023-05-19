@@ -43,6 +43,8 @@ class GroupSettingsProvider(pulumi.dynamic.ResourceProvider):
         group_email = props['group_email']
         settings = props['settings']
         updated_settings = update_group_settings(group_email, settings)
+        # The response contains *all* settings, so subset to relevant keys.
+        updated_settings = {k: updated_settings[k] for k in settings}
         outputs = {
             'group_email': group_email,
             'settings': updated_settings,
@@ -54,7 +56,10 @@ class GroupSettingsProvider(pulumi.dynamic.ResourceProvider):
     def read(self, id_, props):
         """Reads a Google Groups settings resource."""
         group_email = props['group_email']
+        settings = props['settings']
         current_settings = get_group_settings(group_email)
+        # The response contains *all* settings, so subset to relevant keys.
+        current_settings = {k: current_settings[k] for k in settings}
         outputs = {
             'group_email': group_email,
             'settings': current_settings,
@@ -67,10 +72,14 @@ class GroupSettingsProvider(pulumi.dynamic.ResourceProvider):
 
     def diff(self, unused_id, old_inputs, new_inputs):
         """Checks if the Google Groups settings resource needs to be updated."""
-        if old_inputs != new_inputs:
-            return pulumi.dynamic.DiffResult(
-                changes=True, replaces=['group_email', 'settings']
-            )
+        replaces = [
+            key
+            for key in ('group_email', 'settings')
+            if old_inputs[key] != new_inputs[key]
+        ]
+
+        if replaces:
+            return pulumi.dynamic.DiffResult(changes=True, replaces=replaces)
         return pulumi.dynamic.DiffResult(changes=False)
 
 
