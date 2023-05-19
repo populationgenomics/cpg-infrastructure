@@ -310,7 +310,7 @@ class GcpInfrastructure(CloudInfraBase):
         unique_bucket_name = name
         if not unique:
             unique_bucket_name = (
-                f'{self.config.dataset_storage_prefix}{self.dataset}-{name}'
+                f'{self.config.gcp.dataset_storage_prefix}{self.dataset}-{name}'
             )
 
         def autoclass_args():

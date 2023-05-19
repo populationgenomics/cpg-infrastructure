@@ -100,7 +100,7 @@ class BillingAggregator:
         """
         return gcp.storage.Bucket(
             f'billing-aggregator-source-bucket',
-            name=f'{self.config.dataset_storage_prefix}aggregator-source-bucket',
+            name=f'{self.config.gcp.dataset_storage_prefix}aggregator-source-bucket',
             location=self.config.gcp.region,
             project=self.config.billing.gcp.project_id,
             uniform_bucket_level_access=True,
