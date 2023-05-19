@@ -93,7 +93,7 @@ def get_groups_credentials():
     return credentials
 
 
-@cache
+# The service client can't be cached, as it's not multi-thread safe.
 def get_groups_settings_service():
     """Returns the Google Groups settings service."""
     return googleapiclient.discovery.build(
