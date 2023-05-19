@@ -1,8 +1,10 @@
-pulumi==3.55.0
-pulumi-gcp==6.49.0
+cpg-utils>=4.12.2
+google-api-python-client==2.*
+google-auth==2.*
 pulumi-azure-native==1.102.0
 pulumi-azuread==5.37.0
+pulumi-gcp==6.49.0
+pulumi==3.55.0
+toml-sort
 toml==0.10.2
 xxhash==3.2.0
-cpg-utils>=4.12.2
-toml-sort
