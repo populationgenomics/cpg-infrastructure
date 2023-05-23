@@ -5,6 +5,7 @@ from pathlib import Path
 # import importlib.util
 
 cpg_infra_path = str(Path(__file__).parent.parent.parent.absolute())
+PLUGIN_ENTRYPOINT_NAME = 'cpginfra.plugins'
 
 class CpgInfrastructurePlugin:
     """Billing aggregator Infrastructure (as code) for Pulumi"""
@@ -16,13 +17,22 @@ class CpgInfrastructurePlugin:
         pass
 
 
-def get_plugins():
+def get_plugins() -> dict:
     """
     You can't just import from the submodules because it would cause a circular
     import error. So we manually load the file and then find the class that
     inherits from CpgInfrastructurePlugin.
     """
-    import sys
+    import pkg_resources
+
+    plugins = {}
+
+    for entry_point in pkg_resources.iter_entry_points(PLUGIN_ENTRYPOINT_NAME):
+        plugins[entry_point.name] = entry_point.load()
+
+    return plugins
+
+
     # expand path to include root of cpg-infrastructure directory so we can
     sys.path.append(cpg_infra_path)
 

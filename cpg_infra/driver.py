@@ -238,7 +238,7 @@ class CPGInfrastructure:
 
         self.deploy_datasets()
 
-        for plugin in get_plugins():
+        for plugin in get_plugins().values():
             plugin(self.config).main()
 
         self.finalize_groups()
