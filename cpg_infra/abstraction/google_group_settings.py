@@ -1,6 +1,5 @@
 """
-Contains pulumi.dynamic.ResourceProvider implementations
-for Google Groups settings.
+Contains pulumi.dynamic.ResourceProvider implementations for Google Groups settings.
 """
 
 from functools import cache
@@ -16,7 +15,7 @@ class GoogleGroupSettings(pulumi.dynamic.Resource):
 
     group_email: pulumi.Output[str]
     # See https://developers.google.com/admin-sdk/groups-settings/v1/reference/groups
-    # for the possible keys.
+    # for the possible settings.
     settings: pulumi.Output[dict]
 
     def __init__(
