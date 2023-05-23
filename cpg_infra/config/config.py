@@ -8,8 +8,6 @@ specific dataset.
 import dataclasses
 from enum import Enum
 
-# from types import UnionType
-# from typing import get_origin, get_args
 import toml
 
 from cpg_infra.config.deserializabledataclass import (
