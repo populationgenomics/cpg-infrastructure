@@ -502,7 +502,7 @@ class GcpInfrastructure(CloudInfraBase):
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
         )
         # Allow domain-external members in the group.
-        GroupSettings(
+        GoogleGroupSettings(
             f'{name}-group-settings',
             group_email=mail,
             settings={'allowExternalMembers': 'true'},

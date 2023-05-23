@@ -11,7 +11,7 @@ import googleapiclient.discovery
 from google.auth.transport.requests import Request
 
 
-class GroupSettings(pulumi.dynamic.Resource):
+class GoogleGroupSettings(pulumi.dynamic.Resource):
     """A Pulumi dynamic resource for Google Groups settings."""
 
     group_email: pulumi.Output[str]
@@ -35,7 +35,7 @@ class GroupSettings(pulumi.dynamic.Resource):
         )
 
 
-class GroupSettingsProvider(pulumi.dynamic.ResourceProvider):
+class GoogleGroupSettingsProvider(pulumi.dynamic.ResourceProvider):
     """A Pulumi dynamic resource provider for Google Groups settings."""
 
     def create(self, props):
