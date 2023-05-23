@@ -54,9 +54,6 @@ jobs:
 
       - run: |
           pip install .
-          # https://tenor.com/en-GB/view/magic-gif-26166638
-          # TODO: remove the @add-infrastructure just before merging
-          pip install 'git+https://github.com/populationgenomics/sample-metadata.git@add-infrastructure#subdirectory=metamist_infrastructure'
 
       - uses: pulumi/actions@v4
         with:
