@@ -89,12 +89,14 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         groups_domain: str
         budget_notification_pubsub: str | None
         config_bucket_name: str
+        dataset_storage_prefix: str
 
     @dataclasses.dataclass(frozen=True)
     class Azure(DeserializableDataclass):
         region: str
         subscription: str
         tenant: str
+        dataset_storage_prefix: str
         config_bucket_name: str
 
     @dataclasses.dataclass(frozen=True)
@@ -185,7 +187,6 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         hail_aggregator_username: str | None = None
 
     domain: str
-    dataset_storage_prefix: str
     budget_currency: str
     common_dataset: str
     web_url_template: str
