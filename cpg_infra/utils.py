@@ -7,7 +7,7 @@ DEFAULT_ALLOWED_EXTENSIONS = frozenset({'.py', '.txt', '.json'})
 
 
 def archive_folder(
-    path: str, allowed_extensions: set[str] = DEFAULT_ALLOWED_EXTENSIONS
+    path: str, allowed_extensions: frozenset[str] = DEFAULT_ALLOWED_EXTENSIONS
 ) -> pulumi.AssetArchive:
     assets = {}
 
