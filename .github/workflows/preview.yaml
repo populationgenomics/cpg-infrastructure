@@ -52,8 +52,7 @@ jobs:
         name: "Set up Cloud SDK"
         uses: google-github-actions/setup-gcloud@v1
 
-      - run: |
-          pip install .
+      - run: pip install .
 
       - uses: pulumi/actions@v4
         with:
