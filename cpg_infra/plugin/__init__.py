@@ -1,3 +1,4 @@
+import pkg_resources
 from cpg_infra.config import CPGInfrastructureConfig
 
 PLUGIN_ENTRYPOINT_NAME = 'cpginfra.plugins'
@@ -19,7 +20,6 @@ def get_plugins() -> dict:
     import error. So we manually load the file and then find the class that
     inherits from CpgInfrastructurePlugin.
     """
-    import pkg_resources
 
     plugins = {}
 

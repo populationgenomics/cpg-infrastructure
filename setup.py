@@ -43,5 +43,5 @@ setuptools.setup(
         'cpginfra.plugins': [
             'billing_aggregator = cpg_infra.billing_aggregator.driver:BillingAggregator',
         ],
-    }
+    },
 )

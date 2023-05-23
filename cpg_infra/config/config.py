@@ -21,8 +21,12 @@ from cpg_infra.config.deserializabledataclass import (
 @dataclasses.dataclass(frozen=True)
 class CPGInfrastructureConfig(DeserializableDataclass):
     """
-    Configuration that describes all variables
-    required to instantiate the CPG infrastructure
+    Configuration that describes all variables required to instantiate the
+    CPG infrastructure.
+
+    If we serialize the pulumi configurations + any other TOMLs, we can tell quickly
+    if the configuration is correct and complete and make it simpler for tasks to use
+    the correct keys.
     """
 
     @dataclasses.dataclass(frozen=True)

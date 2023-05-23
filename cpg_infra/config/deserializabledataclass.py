@@ -7,13 +7,16 @@ from types import UnionType
 from typing import get_args, get_origin
 
 
-# If we serialize the pulumi configurations + any other TOMLs
-# we can tell quickly if the configuration is correct and complete
-# and make it simpler for tasks to use the correct keys.
-# We have a __post_init__ here to ensure that subdictionaries are
-# parsed into the structure we want, and because the python.dataclasses
-# won't do that automatically for us :(
+
 class DeserializableDataclass:
+    """
+    DeserializableDataclass is a dataclass that can be deserialized from a dictionary,
+    with some extra functionality for parsing types.
+
+    We have a __post_init__ here to ensure that subdictionaries are
+    parsed into the structure we want, and because the python.dataclasses
+    won't do that automatically for us :(
+    """
     @classmethod
     def instantiate(cls, **kwargs):
         return cls(**kwargs)

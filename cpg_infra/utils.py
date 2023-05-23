@@ -9,6 +9,7 @@ DEFAULT_ALLOWED_EXTENSIONS = frozenset({'.py', '.txt', '.json'})
 def archive_folder(
     path: str, allowed_extensions: frozenset[str] = DEFAULT_ALLOWED_EXTENSIONS
 ) -> pulumi.AssetArchive:
+    """Archive a folder into a pulumi asset archive"""
     assets = {}
 
     # python 3.11 thing, but allows you to temporarily change directory
