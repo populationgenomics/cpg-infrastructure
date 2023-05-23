@@ -21,6 +21,7 @@ from cpg_infra.abstraction.base import (
     BUCKET_DELETE_INCOMPLETE_UPLOAD_PERIOD_IN_DAYS,
     MachineAccountRole,
 )
+from cpg_infra.abstraction.google_group_settings import GoogleGroupSettings
 from cpg_infra.config import CPGDatasetConfig, CPGInfrastructureConfig
 
 
@@ -492,7 +493,7 @@ class GcpInfrastructure(CloudInfraBase):
 
     def create_group(self, name: str) -> Any:
         mail = f'{name}@{self.config.gcp.groups_domain}'
-        return gcp.cloudidentity.Group(
+        group = gcp.cloudidentity.Group(
             self.get_pulumi_name(name + '-group'),
             display_name=name,
             group_key=gcp.cloudidentity.GroupGroupKeyArgs(id=mail),
@@ -500,6 +501,14 @@ class GcpInfrastructure(CloudInfraBase):
             parent=f'customers/{self.config.gcp.customer_id}',
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
         )
+        # Allow domain-external members in the group.
+        GoogleGroupSettings(
+            self.get_pulumi_name(name + '-group-settings'),
+            group_email=mail,
+            settings={'allowExternalMembers': 'true'},
+            opts=pulumi.resource.ResourceOptions(depends_on=[group]),
+        )
+        return group
 
     def add_group_member(
         self, resource_key: str, group, member, unique_resource_key: bool = False
