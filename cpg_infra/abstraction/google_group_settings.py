@@ -15,6 +15,8 @@ class GoogleGroupSettings(pulumi.dynamic.Resource):
     """A Pulumi dynamic resource for Google Groups settings."""
 
     group_email: pulumi.Output[str]
+    # See https://developers.google.com/admin-sdk/groups-settings/v1/reference/groups
+    # for the possible keys.
     settings: pulumi.Output[dict]
 
     def __init__(
@@ -25,11 +27,11 @@ class GoogleGroupSettings(pulumi.dynamic.Resource):
         opts: pulumi.ResourceOptions | None = None,
     ):
         super().__init__(
-            GroupSettingsProvider(),
+            GoogleGroupSettingsProvider(),
             name,
             {
-                'group_email': pulumi.Output.from_input(group_email),
-                'settings': pulumi.Output.from_input(settings),
+                'group_email': group_email,
+                'settings': settings,
             },
             opts,
         )
@@ -59,7 +61,7 @@ class GoogleGroupSettingsProvider(pulumi.dynamic.ResourceProvider):
         settings = props['settings']
         current_settings = get_group_settings(group_email)
         # The response contains *all* settings, so subset to relevant keys.
-        current_settings = {k: current_settings[k] for k in settings}
+        current_settings = {k: current_settings.get(k) for k in settings}
         outputs = {
             'group_email': group_email,
             'settings': current_settings,

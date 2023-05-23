@@ -21,7 +21,7 @@ from cpg_infra.abstraction.base import (
     BUCKET_DELETE_INCOMPLETE_UPLOAD_PERIOD_IN_DAYS,
     MachineAccountRole,
 )
-from cpg_infra.abstraction.group_settings import GroupSettings
+from cpg_infra.abstraction.google_group_settings import GoogleGroupSettings
 from cpg_infra.config import CPGDatasetConfig, CPGInfrastructureConfig
 
 
@@ -503,7 +503,7 @@ class GcpInfrastructure(CloudInfraBase):
         )
         # Allow domain-external members in the group.
         GoogleGroupSettings(
-            f'{name}-group-settings',
+            self.get_pulumi_name(name + '-group-settings'),
             group_email=mail,
             settings={'allowExternalMembers': 'true'},
             opts=pulumi.resource.ResourceOptions(depends_on=[group]),
