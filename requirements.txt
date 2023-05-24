@@ -10,4 +10,4 @@ toml==0.10.2
 xxhash==3.2.0
 # https://tenor.com/en-GB/view/magic-gif-26166638
 # TODO: remove the @add-infrastructure just before merging
-git+https://github.com/populationgenomics/sample-metadata.git@add-infrastructure#subdirectory=metamist_infrastructure
+metamist-infrastructure @ git+https://github.com/populationgenomics/sample-metadata.git@fbd0afed5d1eb73a48de9995aef4edb176d15093#subdirectory=metamist_infrastructure
