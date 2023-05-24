@@ -1,3 +1,4 @@
+"""Utility methods that may be useful for multiple projects"""
 import os
 import contextlib
 
