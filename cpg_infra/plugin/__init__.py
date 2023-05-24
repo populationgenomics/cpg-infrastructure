@@ -1,3 +1,4 @@
+"""Ability to extend CPG infrastructure with plugins"""
 import pkg_resources
 from cpg_infra.config import CPGInfrastructureConfig
 
@@ -11,7 +12,7 @@ class CpgInfrastructurePlugin:
         self.config = config
 
     def main(self):
-        pass
+        """Driver for the billing aggregator infrastructure as code plugin"""
 
 
 def get_plugins() -> dict:

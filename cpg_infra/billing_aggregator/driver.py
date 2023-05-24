@@ -286,6 +286,8 @@ class BillingAggregator(CpgInfrastructurePlugin):
         Create a single Cloud Function. Include the pubsub trigger and event alerts
         """
 
+        from pulumi_gcp.cloudfunctionsv2 import FunctionIamMember
+
         # Trigger for the function, subscribe to the pubusub topic
         trigger = gcp.cloudfunctionsv2.FunctionEventTriggerArgs(
             event_type='google.cloud.pubsub.topic.v1.messagePublished',

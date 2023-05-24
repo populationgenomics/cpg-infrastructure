@@ -1,3 +1,4 @@
+# pylint: disable=too-many-return-statements,missing-function-docstring
 """
 DeserializableDataclass is a dataclass that can be deserialized from a dictionary,
 with some extra functionality for parsing types.
@@ -5,7 +6,6 @@ with some extra functionality for parsing types.
 import dataclasses
 from types import UnionType
 from typing import get_args, get_origin
-
 
 
 class DeserializableDataclass:
@@ -17,6 +17,7 @@ class DeserializableDataclass:
     parsed into the structure we want, and because the python.dataclasses
     won't do that automatically for us :(
     """
+
     @classmethod
     def instantiate(cls, **kwargs):
         return cls(**kwargs)

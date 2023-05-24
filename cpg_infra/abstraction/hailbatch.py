@@ -1,4 +1,4 @@
-# pylint: disable=missing-function-docstring,unused-argument
+# pylint: disable=missing-function-docstring,unused-argument,import-error
 """
 Contains pulumi.dyanmic.ResourceProvider implementations
 for Hail Batch Billing Projects and Users.
