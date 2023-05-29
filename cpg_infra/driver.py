@@ -35,9 +35,7 @@ from cpg_infra.config import (
     CPGInfrastructureConfig,
     HailAccount,
 )
-
-from cpg_infra.billing_aggregator.driver import BillingAggregator
-
+from cpg_infra.plugin import get_plugins
 
 SampleMetadataAccessorMembership = namedtuple(
     'SampleMetadataAccessorMembership',
@@ -240,7 +238,9 @@ class CPGInfrastructure:
 
         self.deploy_datasets()
 
-        BillingAggregator(self.config).main()
+        for plugin in get_plugins().values():
+            plugin(self.config).main()
+
         self.finalize_groups()
         self.setup_hail_batch_billing_project_members()
         self.output_infrastructure_config()

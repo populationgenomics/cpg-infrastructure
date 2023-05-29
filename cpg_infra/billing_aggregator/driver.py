@@ -21,7 +21,6 @@ TODO:
 
     - action monthly billing function
 """
-import contextlib
 import os
 from base64 import b64encode
 from functools import cached_property
@@ -30,7 +29,8 @@ import pulumi
 import pulumi_gcp as gcp
 from cpg_utils.cloud import read_secret
 
-from cpg_infra.config import CPGInfrastructureConfig
+from cpg_infra.plugin import CpgInfrastructurePlugin
+from cpg_infra.utils import archive_folder
 
 PATH_TO_AGGREGATE_SOURCE_CODE = os.path.join(os.path.dirname(__file__), 'aggregate')
 PATH_TO_MONTHLY_AGGREGATE_SOURCE_CODE = os.path.join(
@@ -38,11 +38,8 @@ PATH_TO_MONTHLY_AGGREGATE_SOURCE_CODE = os.path.join(
 )
 
 
-class BillingAggregator:
+class BillingAggregator(CpgInfrastructurePlugin):
     """Billing aggregator Infrastructure (as code) for Pulumi"""
-
-    def __init__(self, config: CPGInfrastructureConfig):
-        self.config = config
 
     def main(self):
         """
@@ -288,7 +285,6 @@ class BillingAggregator:
         """
         Create a single Cloud Function. Include the pubsub trigger and event alerts
         """
-
         # Trigger for the function, subscribe to the pubusub topic
         trigger = gcp.cloudfunctionsv2.FunctionEventTriggerArgs(
             event_type='google.cloud.pubsub.topic.v1.messagePublished',
@@ -374,22 +370,3 @@ class BillingAggregator:
 
 def b64encode_str(s: str) -> str:
     return b64encode(s.encode('utf-8')).decode('utf-8')
-
-
-def archive_folder(path: str) -> pulumi.AssetArchive:
-    assets = {}
-    allowed_extensions = {'.py', '.txt', '.json'}
-
-    # python 3.11 thing, but allows you to temporarily change directory
-    # into the path we're archiving, so we're not archiving the directory,
-    # but just the code files. Otherwise the deploy fails.
-    with contextlib.chdir(path):
-        for filename in os.listdir('.'):
-            if not any(filename.endswith(ext) for ext in allowed_extensions):
-                # print(f'Skipping {filename} for invalid extension')
-                continue
-
-            with open(filename, encoding='utf-8') as file:
-                # do it this way to stop any issues with changing paths
-                assets[filename] = pulumi.StringAsset(file.read())
-        return pulumi.AssetArchive(assets)

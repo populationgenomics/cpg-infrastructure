@@ -39,4 +39,9 @@ setuptools.setup(
         'Topic :: Scientific/Engineering',
         'Topic :: Scientific/Engineering :: Bio-Informatics',
     ],
+    entry_points={
+        'cpginfra.plugins': [
+            'billing_aggregator = cpg_infra.billing_aggregator.driver:BillingAggregator',
+        ],
+    },
 )

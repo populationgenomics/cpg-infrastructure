@@ -1,4 +1,4 @@
-# pylint: disable=logging-format-interpolation
+# pylint: disable=logging-format-interpolation,import-error
 """
 A cloud function that synchronises HAIL billing data to BigQuery
 
