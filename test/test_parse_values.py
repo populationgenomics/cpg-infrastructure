@@ -116,11 +116,13 @@ class TestParseValues(TestCase):
         _ = try_parse_value_as_type(billing_config, dtype)
 
     def test_optional_none(self):
+        """Check that we can ignore parsing when optional is None"""
         dtype = CPGInfrastructureConfig.Billing | None
         billing_config = None
         _ = try_parse_value_as_type(billing_config, dtype)
 
     def test_dataset_config_example(self):
+        """Check that we can parse a minimal dataset config"""
         dataset_config = {
             'dataset': 'DATASET',
             'budgets': {},
