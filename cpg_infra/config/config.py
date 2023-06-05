@@ -12,7 +12,7 @@ import toml
 
 from cpg_infra.config.deserializabledataclass import (
     DeserializableDataclass,
-    parse_value_from_type,
+    try_parse_value_as_type,
 )
 
 
@@ -114,7 +114,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         @dataclasses.dataclass(frozen=True)
         class GCP(DeserializableDataclass):
             project_id: str
-            account_id: int
+            account_id: str
 
         @dataclasses.dataclass(frozen=True)
         class GCPAggregator(DeserializableDataclass):
@@ -319,7 +319,7 @@ class CPGDatasetConfig(DeserializableDataclass):
         fields = {field.name: field.type for field in dataclasses.fields(cls)}
         d = {**kwargs}
         for fieldname, ftype in fields.items():
-            value = parse_value_from_type(config, fieldname, ftype)
+            value = try_parse_value_as_type(config, ftype)
             if value:
                 d[fieldname] = value
 

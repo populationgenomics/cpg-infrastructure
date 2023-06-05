@@ -30,94 +30,110 @@ class DeserializableDataclass:
 
         for fieldname, ftype in fields.items():
             value = self.__dict__.get(fieldname)
-
-            if not value:
-                continue
-            dtypes = []
-            # determine which type we should try to parse the value as
-            # handle unions (eg: None | DType)
-            if isinstance(ftype, UnionType):
-                is_already_correct_type = False
-                for dtype in get_args(ftype):
-                    if dtype and issubclass(dtype, DeserializableDataclass):
-                        # It's a DeserializableDataclass :)
-                        dtypes.append(dtype)
-                    elif dtype and isinstance(value, dtype):
-                        is_already_correct_type = True
-                if is_already_correct_type:
-                    continue
-
-            elif issubclass(ftype, DeserializableDataclass):
-                if isinstance(value, ftype):
-                    continue
-                dtypes.append(ftype)
-
-            e = None
-            # try to see if the value will parse as one of the detected DTypes
-            for dtype in dtypes:
-                if not isinstance(value, dict):
-                    raise ValueError(
-                        f'Expected {value} to be a dictionary to parse, got {type(value)}.'
-                    )
-                try:
-                    self.__dict__[fieldname] = dtype(**value)
-                    e = None
-                    break
-                except TypeError as exc:
-                    e = exc
-
-            if e:
-                raise e
+            try:
+                self.__dict__[fieldname] = try_parse_value_as_type(value, ftype)
+            except ValueError as e:
+                raise ValueError(
+                    f'Error parsing {self.__class__.__name__}.{fieldname} :: {value!r}'
+                ) from e
 
     def __repr__(self):
         args = ', '.join(f'{k}={v!r}' for k, v in vars(self).items())
         return f'{self.__class__.__name__}( {args} )'
 
 
-def parse_value_from_type(config, fieldname, ftype):
-    if ftype is None:
-        return None
+def try_parse_value_as_type(value, dtype):
+    """
+    Try to parse a value as a specific type, if it fails
+    return None
+    """
+    if dtype is None or isinstance(dtype, type(None)):
+        if value is None:
+            return None
+        raise ValueError(f'Expected None, got {type(value)} for {value!r}')
 
-    if ftype in (list, dict) or get_origin(ftype) in (list, dict):
-        ftype_type = ftype if ftype in (list, dict) else get_origin(ftype)
-        value = config.get_object(fieldname)
+    if isinstance(dtype, UnionType):
+        dtype = get_args(dtype)
 
-        if value and isinstance(value, ftype_type):
+    if isinstance(dtype, tuple):
+        # union type
+        if len(dtype) == 0:
+            # any
             return value
-        if value:
-            print(
-                f'{fieldname} :: {value} ({type(value)}) was parsed, but was not of type {ftype}'
+
+        # union type
+        if value is None:
+            if any(isinstance(t, type(None)) for t in dtype):
+                return None
+            raise ValueError(f'Expected (non-optional) {dtype}, got None')
+
+        union_parse_errors = []
+        for t in dtype:
+            try:
+                return try_parse_value_as_type(value, t)
+            except ValueError as e:
+                # debugging
+                if not (t is None or isinstance(t, type(None))):
+                    # skip optional errors
+                    union_parse_errors.append(e)
+                continue
+        if len(union_parse_errors) == 1:
+            message = f'Could not coerce value of type ({type(value)!r}) as any of the types in the union: {dtype}, value :: {value!r}'
+            raise ValueError(message) from union_parse_errors[0]
+        error_message = ''.join([f'\n\t{e}' for e in union_parse_errors])
+        message = (
+            f'Could not coerce value of type ({type(value)!r}) as any of the types '
+            f'in the union: {dtype}, value :: {value!r}, from errors: {error_message}'
+        )
+        raise ValueError(message)
+
+    if isinstance(dtype, tuple) and len(dtype) == 1:
+        return try_parse_value_as_type(value, dtype[0])
+
+    if dtype is list or get_origin(dtype) is list:
+        if not isinstance(value, list):
+            raise ValueError(f'Expected list, got {type(value)} for {value!r}')
+        list_types = get_args(dtype)
+        if len(list_types) != 1:
+            return value
+        return [try_parse_value_as_type(v, list_types[0]) for v in value]
+    if dtype is dict or get_origin(dtype) is dict:
+        if not isinstance(value, dict):
+            raise ValueError(f'Expected dict, got {type(value)} for {value!r}')
+        dict_types = get_args(dtype)
+        if len(dict_types) != 2:
+            # no need for casting
+            return value
+        return {k: try_parse_value_as_type(v, dict_types[1]) for k, v in value.items()}
+    if dtype is set or get_origin(dtype) is set:
+        if not isinstance(value, (set, list)):
+            raise ValueError(f'Expected set, got {type(value)} for {value!r}')
+        set_types = get_args(dtype)
+        if len(set_types) != 1:
+            # set[any]
+            return set(value)
+        return set(try_parse_value_as_type(v, set_types[0]) for v in value)
+    if dtype is tuple or get_origin(dtype) is tuple:
+        if not isinstance(value, (tuple, list)):
+            raise ValueError(f'Expected tuple, got {type(value)} for {value!r}')
+        tuple_types = get_args(dtype)
+        if len(tuple_types) == 0:
+            return tuple(value)
+        if len(tuple_types) != len(value):
+            raise ValueError(
+                f'Expected tuple of length {len(tuple_types)}, got {len(value)} for {value!r}'
             )
+        return tuple(try_parse_value_as_type(v, t) for v, t in zip(value, tuple_types))
 
-        return None
-
-    if isinstance(ftype, UnionType) == UnionType:
-        for inner_type in get_args(ftype):
-            value = parse_value_from_type(config, fieldname, inner_type)
-            if value:
-                return value
-
-        return None
-
-    if ftype == bool:
-        return config.get_bool(fieldname)
-
-    value = config.get(fieldname)
-    if value is None:
+    if isinstance(value, dtype):
         return value
 
-    inner_types = get_args(ftype)
-    if inner_types:
-        for inner_type in inner_types:
-            value = parse_value_from_type(config, fieldname, inner_type)
-            if value:
-                return value
-    else:
-        try:
-            value = ftype(value)
-            if value:
-                return value
-        except (ValueError, TypeError):
-            pass
+    if dtype is not None and issubclass(dtype, DeserializableDataclass):
+        if not isinstance(value, dict):
+            raise ValueError(f'Expected dict, got {type(value)} for {value!r}')
+        return dtype.instantiate(**value)
 
-    return None
+    if any(dtype is prim for prim in (str, int, bool, float, bytes)):
+        return dtype(value)
+
+    raise ValueError(f'Unknown type {dtype}')
