@@ -28,6 +28,7 @@ from cpg_infra.abstraction.base import (
 from cpg_infra.abstraction.hailbatch import (
     HailBatchBillingProject,
     HailBatchBillingProjectMembership,
+    HailBatchUser,
 )
 from cpg_infra.config import (
     CPGDatasetConfig,
@@ -1515,15 +1516,15 @@ class CPGDatasetInfrastructure:
         self.setup_hail_wheels_bucket_permissions()
 
     @cached_property
-    def hail_batch_billing_project(self):
+    def hail_batch_url(self):
         if isinstance(self.infra, GcpInfrastructure):
             if not self.config.hail.gcp:
                 raise ValueError('config.hail.gcp was not set to find hail_batch_url')
-            hail_batch_url = self.config.hail.gcp.hail_batch_url
+            return self.config.hail.gcp.hail_batch_url
         elif isinstance(self.infra, AzureInfra):
             if not self.config.hail.azure:
                 raise ValueError('config.hail.azure was not set to find hail_batch_url')
-            hail_batch_url = self.config.hail.azure.hail_batch_url
+            return self.config.hail.azure.hail_batch_url
         elif isinstance(self.infra, DryRunInfra):
             return None
         else:
@@ -1532,10 +1533,12 @@ class CPGDatasetInfrastructure:
                 'building hail_batch_billing_project'
             )
 
+    @cached_property
+    def hail_batch_billing_project(self):
         return HailBatchBillingProject(
             self.infra.get_pulumi_name('batch-billing-project'),
             billing_project_name=self.dataset_config.dataset,
-            batch_uri=hail_batch_url,
+            batch_uri=self.hail_batch_url,
             token_category=self.infra.name(),
         )
 
@@ -1611,7 +1614,7 @@ class CPGDatasetInfrastructure:
             }
         elif isinstance(self.infra, AzureInfra):
             assert (
-                self.dataset_config.azure is not None
+                    self.dataset_config.azure is not None
             ), 'dataset_config.azure is required to be set'
             accounts = {
                 'test': self.dataset_config.azure.hail_service_account_test,
@@ -1622,6 +1625,22 @@ class CPGDatasetInfrastructure:
             return {}
 
         accounts = {cat: ac for cat, ac in accounts.items() if ac}
+
+        # fill in any missing hail accounts
+        for access_level in ACCESS_LEVELS:
+            if access_level in accounts:
+                continue
+            username = f'{self.dataset_config.dataset}-{access_level}'
+            accounts[access_level] = HailAccount(
+                username=username,
+                cloud_id=HailBatchUser(
+                    self.infra.get_pulumi_name(f'hail-batch-user-{al}'),
+                    username=username,
+                    batch_uri=self.hail_batch_url,
+                    token_category=self.infra.name(),
+                ).cloud_id,
+            )
+
         return accounts
 
     @cached_property

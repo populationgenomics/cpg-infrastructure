@@ -8,6 +8,7 @@ specific dataset.
 import dataclasses
 from enum import Enum
 
+import pulumi
 import toml
 
 from cpg_infra.config.deserializabledataclass import (
@@ -214,7 +215,7 @@ class HailAccount(DeserializableDataclass):
     """Represents a hail account on a specific cloud"""
 
     username: str
-    cloud_id: str
+    cloud_id: str | pulumi.Output[str]
 
 
 @dataclasses.dataclass(frozen=True)

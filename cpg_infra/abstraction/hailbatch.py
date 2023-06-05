@@ -5,10 +5,12 @@ for Hail Batch Billing Projects and Users.
 """
 import os
 import json
+from time import sleep
 
 import requests
 import pulumi
 import pulumi.dynamic
+from functools import lru_cache
 
 HAIL_GET_BILLING_PROJECT_PATH = (
     '{hail_batch_url}/api/v1alpha/billing_projects/{billing_project}'
@@ -30,7 +32,12 @@ HAIL_ADD_USER_TO_BILLING_PROJECT_PATH = (
     '{hail_batch_url}/api/v1alpha/billing_projects/{billing_project}/users/{user}/add'
 )
 
+HAIL_GET_USER = '{hail_batch_url}/api/v1alpha/users/{user}'
+HAIL_CREATE_USER_PATH = '{hail_batch_url}/api/v1alpha/users/{user}/create'
+HAIL_DELETE_USER_PATH = '{hail_batch_url}/api/v1alpha/users/{user}'  # METHOD: DELETE
 
+
+@lru_cache(maxsize=4)
 def get_hail_batch_token(token_category) -> str:
     """Get Hail batch token from environment or ~/.hail/tokens.json"""
     key = f'HAIL_TOKEN_{token_category.upper()}'
@@ -48,6 +55,28 @@ def get_hail_batch_token(token_category) -> str:
         f'environment variable {key}, or you can set the {token_category} token '
         f'in {tokens_path!r}'
     )
+
+
+def get_hail_batch_user(
+    username: str, token_category: str, batch_uri: str
+) -> dict | None:
+    """
+    Get a Hail Batch User
+    :return: hail user dictionary if it exists
+    """
+    url = HAIL_GET_USER.format(username=username, hail_batch_url=batch_uri)
+    hail_auth_token = get_hail_batch_token(token_category)
+
+    resp = requests.get(
+        url, headers={'Authorization': f'Bearer {hail_auth_token}'}, timeout=60
+    )
+
+    if resp.status_code == 404:
+        return None
+
+    resp.raise_for_status()
+
+    return resp.json()
 
 
 def get_hail_batch_billing_project(name: str, token_category: str, batch_uri: str):
@@ -68,6 +97,97 @@ def get_hail_batch_billing_project(name: str, token_category: str, batch_uri: st
     resp.raise_for_status()
 
     return resp.json()
+
+class HailBatchUserProvider(pulumi.dynamic.ResourceProvider):
+    def create(self, props) -> pulumi.dynamic.CreateResult:
+        batch_uri = props['batch_uri']
+        username = props['username']
+        token_category = props['token_category']
+
+        # check if it exists
+        user_obj = get_hail_batch_user(
+            username, token_category=token_category, batch_uri=batch_uri
+        )
+        if user_obj:
+            return pulumi.dynamic.CreateResult(
+                id_=f'{token_category}::{batch_uri}::{username}',
+                outs={
+                    'cloud_id': user_obj.get('hail_identity'),
+                    'username': username,
+                    'batch_uri': batch_uri,
+                    'token_category': token_category,
+                },
+            )
+
+        url = HAIL_CREATE_USER_PATH.format(
+            hail_batch_url=batch_uri,
+            user=username,
+        )
+        hail_auth_token = get_hail_batch_token(token_category)
+        resp = requests.post(
+            url, headers={'Authorization': f'Bearer {hail_auth_token}'}, timeout=60
+        )
+        resp.raise_for_status()
+
+        cloud_id = None
+        # now we have to wait for the user to be created
+        attempts = 5
+        while not cloud_id and attempts > 0:
+            user_obj = get_hail_batch_user(
+                username, token_category=token_category, batch_uri=batch_uri
+            )
+            if user_obj and user_obj.get('hail_identity'):
+                cloud_id = user_obj.get('hail_identity')
+            else:
+                attempts -= 1
+                sleep(5)
+
+        return pulumi.dynamic.CreateResult(
+            id_=f'{token_category}::{batch_uri}::{username}',
+            outs={
+                'cloud_id': cloud_id,
+                'username': username,
+                'batch_uri': batch_uri,
+                'token_category': token_category,
+            },
+        )
+
+    def read(self, id_: str, props) -> pulumi.dynamic.ReadResult:
+        username = props['username']
+        token_category = props['token_category']
+        batch_uri = props['batch_uri']
+
+        user_obj = get_hail_batch_user(
+            username, token_category=token_category, batch_uri=batch_uri
+        )
+        if not user_obj:
+            return pulumi.dynamic.ReadResult(None, {})
+
+        return pulumi.dynamic.ReadResult(
+            id_=id_,
+            outs={
+                'cloud_id': user_obj.get('hail_identity'),
+                'username': username,
+                'batch_uri': batch_uri,
+                'token_category': token_category,
+            },
+        )
+
+    def delete(self, _id, props):
+        """Don't delete users, it's very painful to bring them back"""
+        pass
+
+    def diff(self, _id, old_inputs, new_inputs):
+        replaces = []
+        if old_inputs['name'] != new_inputs['name']:
+            replaces.append('name')
+
+        if old_inputs['batch_uri'] != new_inputs['batch_uri']:
+            replaces.append('batch_uri')
+
+        return pulumi.dynamic.DiffResult(
+            len(replaces) > 0, replaces, stables=[], delete_before_replace=False
+        )
 
 
 class HailBatchBillingProjectProvider(pulumi.dynamic.ResourceProvider):
@@ -229,6 +349,29 @@ class HailBatchBillingProjectMembershipProvider(pulumi.dynamic.ResourceProvider)
         return pulumi.dynamic.ReadResult(None, {})
 
 
+
+class HailBatchUser(pulumi.dynamic.Resource):
+    """Create a Hail Batch User"""
+
+    cloud_id: pulumi.Output[str]
+    username: pulumi.Output[str]
+
+    def __init__(
+        self,
+        name: str,
+        username: pulumi.Input[str],
+        batch_uri: pulumi.Input[str],
+        token_category: pulumi.Input[str],
+        opts: pulumi.ResourceOptions | None = None,
+    ):
+        args = {
+            'username': username,
+            'batch_uri': batch_uri,
+            'token_category': token_category,
+        }
+        super().__init__(HailBatchUserProvider(), name, args, opts)
+
+
 class HailBatchBillingProject(pulumi.dynamic.Resource):
     """Create a Hail Batch Billing Project"""
 
@@ -263,3 +406,4 @@ class HailBatchBillingProjectMembership(pulumi.dynamic.Resource):
             'user': user,
         }
         super().__init__(HailBatchBillingProjectMembershipProvider(), name, args, opts)
+
