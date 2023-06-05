@@ -121,16 +121,15 @@ class TestParseValues(TestCase):
         _ = try_parse_value_as_type(billing_config, dtype)
 
     def test_dataset_config_example(self):
-
         dataset_config = {
             'dataset': 'DATASET',
             'budgets': {},
-            "gcp": {
-                "hail_service_account_full": {
-                    "cloud_id": "dataset-full-@project.iam.gserviceaccount.com",
-                    "username": "dataset-full",
+            'gcp': {
+                'hail_service_account_full': {
+                    'cloud_id': 'dataset-full-@project.iam.gserviceaccount.com',
+                    'username': 'dataset-full',
                 },
-                "project": "dataset-1234",
+                'project': 'dataset-1234',
             },
         }
         _ = try_parse_value_as_type(dataset_config, CPGDatasetConfig)
