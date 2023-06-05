@@ -1,9 +1,8 @@
 """
 Test module for checking the parsing of values in the config
 """
-
 from unittest import TestCase
-from cpg_infra.config import CPGInfrastructureConfig
+from cpg_infra.config import CPGInfrastructureConfig, CPGDatasetConfig
 from cpg_infra.config.deserializabledataclass import try_parse_value_as_type
 
 
@@ -115,3 +114,23 @@ class TestParseValues(TestCase):
             },
         }
         _ = try_parse_value_as_type(billing_config, dtype)
+
+    def test_optional_none(self):
+        dtype = CPGInfrastructureConfig.Billing | None
+        billing_config = None
+        _ = try_parse_value_as_type(billing_config, dtype)
+
+    def test_dataset_config_example(self):
+
+        dataset_config = {
+            'dataset': 'DATASET',
+            'budgets': {},
+            "gcp": {
+                "hail_service_account_full": {
+                    "cloud_id": "dataset-full-@project.iam.gserviceaccount.com",
+                    "username": "dataset-full",
+                },
+                "project": "dataset-1234",
+            },
+        }
+        _ = try_parse_value_as_type(dataset_config, CPGDatasetConfig)

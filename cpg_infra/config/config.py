@@ -237,17 +237,17 @@ class CPGDatasetConfig(DeserializableDataclass):
         project: str
         region: str | None = None
 
-        hail_service_account_test: HailAccount = None
-        hail_service_account_standard: HailAccount = None
-        hail_service_account_full: HailAccount = None
+        hail_service_account_test: HailAccount | None = None
+        hail_service_account_standard: HailAccount | None = None
+        hail_service_account_full: HailAccount | None = None
 
     @dataclasses.dataclass(frozen=True)
     class Azure(DeserializableDataclass):
         region: str | None = None
 
-        hail_service_account_test: HailAccount = None
-        hail_service_account_standard: HailAccount = None
-        hail_service_account_full: HailAccount = None
+        hail_service_account_test: HailAccount | None = None
+        hail_service_account_standard: HailAccount | None = None
+        hail_service_account_full: HailAccount | None = None
 
     @dataclasses.dataclass(frozen=True)
     class Budget(DeserializableDataclass):
@@ -263,7 +263,7 @@ class CPGDatasetConfig(DeserializableDataclass):
     budgets: dict[str, Budget]
 
     gcp: Gcp
-    azure: Azure = None
+    azure: Azure | None = None
 
     deployment_service_account_test: str | None = None
     deployment_service_account_standard: str | None = None
