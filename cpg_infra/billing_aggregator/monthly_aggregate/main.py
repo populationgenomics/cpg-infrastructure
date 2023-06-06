@@ -61,6 +61,10 @@ def get_invoice_month_from_request(
         logger.warning(f'Unknown content type: {content_type}. Defaulting to None.')
         raise ValueError(f'Unknown content type: {content_type}')
 
+    if not request_data:
+        logger.warning(f'Attributes could not be found in request: {request_data}')
+        return None, None
+
     if 'attributes' in request_data and 'invoice_month' in request_data.get(
         'attributes'
     ):
