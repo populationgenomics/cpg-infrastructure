@@ -42,6 +42,15 @@ class TestParseValues(TestCase):
         with self.assertRaises(ValueError):
             try_parse_value_as_type(['hello'], dtype)
 
+    def test_parse_list_union(self):
+        dtype = list[int | str]
+        self.assertListEqual([1, 'hello'], try_parse_value_as_type([1, 'hello'], dtype))
+
+    def test_parse_list_union_failure(self):
+        dtype = list[int | float]
+        with self.assertRaises(ValueError):
+            try_parse_value_as_type(['hello', 'world'], dtype)
+
     def test_parse_dict_no_type(self):
         """Check we allow a dict without a type"""
         dtype = dict
