@@ -1,6 +1,7 @@
 """
 Test module for checking the parsing of values in the config
 """
+from typing import Any
 from unittest import TestCase
 from cpg_infra.config import CPGInfrastructureConfig, CPGDatasetConfig
 from cpg_infra.config.deserializabledataclass import try_parse_value_as_type
@@ -8,6 +9,15 @@ from cpg_infra.config.deserializabledataclass import try_parse_value_as_type
 
 class TestParseValues(TestCase):
     """Test the try_parse_value_as_type function"""
+
+    def test_parse_any(self):
+        """Check we allow any type"""
+        dtype = Any
+        self.assertEqual(1, try_parse_value_as_type(1, dtype))
+        self.assertEqual('hello', try_parse_value_as_type('hello', dtype))
+        self.assertEqual(None, try_parse_value_as_type(None, dtype))
+        self.assertEqual([1, 2, 3], try_parse_value_as_type([1, 2, 3], dtype))
+        self.assertEqual({'hello': 'world'}, try_parse_value_as_type({'hello': 'world'}, dtype))
 
     def test_parse_string(self):
         """Basic string type checking"""

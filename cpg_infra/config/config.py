@@ -7,6 +7,7 @@ specific dataset.
 
 import dataclasses
 from enum import Enum
+from typing import Any
 
 import pulumi
 import toml
@@ -215,7 +216,8 @@ class HailAccount(DeserializableDataclass):
     """Represents a hail account on a specific cloud"""
 
     username: str
-    cloud_id: str | pulumi.Output[str]
+    # give this type: any, because DeserializableDataclass doesn't support checking this type
+    cloud_id: Any  # type: str | pulumi.Output[str]
 
 
 @dataclasses.dataclass(frozen=True)

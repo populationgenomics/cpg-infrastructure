@@ -6,7 +6,7 @@ with some extra functionality for parsing types.
 import dataclasses
 from inspect import isclass
 from types import UnionType
-from typing import get_args, get_origin
+from typing import get_args, get_origin, Any
 
 
 class DeserializableDataclass:
@@ -74,6 +74,9 @@ def try_parse_value_as_type(value, dtype):
         if value is None:
             return None
         raise ValueError(f'Expected None, got {type(value)} for {value!r}')
+
+    if dtype is Any:
+        return value
 
     if isinstance(dtype, UnionType):
         dtype = get_args(dtype)
