@@ -1634,7 +1634,7 @@ class CPGDatasetInfrastructure:
             accounts[access_level] = HailAccount(
                 username=username,
                 cloud_id=HailBatchUser(
-                    self.infra.get_pulumi_name(f'hail-batch-user-{al}'),
+                    self.infra.get_pulumi_name(f'hail-batch-user-{access_level}'),
                     username=username,
                     batch_uri=self.hail_batch_url,
                     token_category=self.infra.name(),

@@ -368,6 +368,7 @@ class HailBatchUser(pulumi.dynamic.Resource):
             'username': username,
             'batch_uri': batch_uri,
             'token_category': token_category,
+            'cloud_id': None,
         }
         super().__init__(HailBatchUserProvider(), name, args, opts)
 
