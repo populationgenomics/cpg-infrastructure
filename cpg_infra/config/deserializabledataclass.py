@@ -67,8 +67,8 @@ def get_display_type(t):
 
 def try_parse_value_as_type(value, dtype):
     """
-    Try to parse a value as a specific type, if it fails
-    return None
+    Try to parse a value as a specific type.
+    Raise a ValueError if it can't be parsed.
     """
     if dtype is None or isinstance(dtype, type(None)):
         if value is None:
@@ -95,7 +95,7 @@ def try_parse_value_as_type(value, dtype):
                 f'Expected (non-optional) {get_display_type(dtype)}, got None'
             )
 
-        union_parse_errors = []
+        union_parse_errors: list[ValueError] = []
         for t in dtype:
             try:
                 return try_parse_value_as_type(value, t)
@@ -112,7 +112,9 @@ def try_parse_value_as_type(value, dtype):
                 f'value :: {value!r}'
             )
             raise ValueError(message) from union_parse_errors[0]
-        error_message = ''.join([f'\n\t{e}' for e in union_parse_errors])
+        error_message = ''.join(
+            [f'\n\t{", ".join(e.args)}' for e in union_parse_errors]
+        )
         message = (
             f'Could not coerce value of type ({get_display_type_from_value(value)!r}) '
             f'as any of the types in the union: {get_display_type(dtype)}, value :: {value!r}, '
