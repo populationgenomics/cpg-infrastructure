@@ -13,7 +13,7 @@ import toml
 
 from cpg_infra.config.deserializabledataclass import (
     DeserializableDataclass,
-    parse_value_from_type,
+    try_parse_value_as_type,
 )
 
 
@@ -115,7 +115,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         @dataclasses.dataclass(frozen=True)
         class GCP(DeserializableDataclass):
             project_id: str
-            account_id: int
+            account_id: str
 
         @dataclasses.dataclass(frozen=True)
         class GCPAggregator(DeserializableDataclass):
@@ -238,17 +238,17 @@ class CPGDatasetConfig(DeserializableDataclass):
         project: str
         region: str | None = None
 
-        hail_service_account_test: HailAccount = None
-        hail_service_account_standard: HailAccount = None
-        hail_service_account_full: HailAccount = None
+        hail_service_account_test: HailAccount | None = None
+        hail_service_account_standard: HailAccount | None = None
+        hail_service_account_full: HailAccount | None = None
 
     @dataclasses.dataclass(frozen=True)
     class Azure(DeserializableDataclass):
         region: str | None = None
 
-        hail_service_account_test: HailAccount = None
-        hail_service_account_standard: HailAccount = None
-        hail_service_account_full: HailAccount = None
+        hail_service_account_test: HailAccount | None = None
+        hail_service_account_standard: HailAccount | None = None
+        hail_service_account_full: HailAccount | None = None
 
     @dataclasses.dataclass(frozen=True)
     class Budget(DeserializableDataclass):
@@ -264,7 +264,7 @@ class CPGDatasetConfig(DeserializableDataclass):
     budgets: dict[str, Budget]
 
     gcp: Gcp
-    azure: Azure = None
+    azure: Azure | None = None
 
     deployment_service_account_test: str | None = None
     deployment_service_account_standard: str | None = None
@@ -320,7 +320,7 @@ class CPGDatasetConfig(DeserializableDataclass):
         fields = {field.name: field.type for field in dataclasses.fields(cls)}
         d = {**kwargs}
         for fieldname, ftype in fields.items():
-            value = parse_value_from_type(config, fieldname, ftype)
+            value = try_parse_value_as_type(config, ftype)
             if value:
                 d[fieldname] = value
 
