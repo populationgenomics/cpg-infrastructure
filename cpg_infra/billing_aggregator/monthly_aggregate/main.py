@@ -63,7 +63,7 @@ def get_invoice_month_from_request(
 
     if not request_data:
         logger.warning(f'Attributes could not be found in request: {request_data}')
-        return None, None
+        return None
 
     if 'attributes' in request_data and 'invoice_month' in request_data.get(
         'attributes'
