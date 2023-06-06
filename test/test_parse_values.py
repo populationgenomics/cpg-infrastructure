@@ -43,10 +43,12 @@ class TestParseValues(TestCase):
             try_parse_value_as_type(['hello'], dtype)
 
     def test_parse_list_union(self):
+        """Check we allow a list with a union type"""
         dtype = list[int | str]
         self.assertListEqual([1, 'hello'], try_parse_value_as_type([1, 'hello'], dtype))
 
     def test_parse_list_union_failure(self):
+        """Check we fail if we specify a list with a union type that doesn't match"""
         dtype = list[int | float]
         with self.assertRaises(ValueError):
             try_parse_value_as_type(['hello', 'world'], dtype)
