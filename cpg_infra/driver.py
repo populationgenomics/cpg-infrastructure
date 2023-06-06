@@ -321,7 +321,7 @@ class CPGInfrastructure:
                     # the functional context below
 
                     def _add_member_to_billing_project(_analysis_members):
-                        for hail_id in sorted(_analysis_members):
+                        for hail_id in sorted(set(_analysis_members)):
                             if not isinstance(hail_id, str):
                                 continue
                             h = _data_provider.compute_hash(

@@ -154,11 +154,6 @@ class CPGInfrastructureConfig(DeserializableDataclass):
 
     config_destination: str
 
-    # useful for mapping a member's email to their hail account
-    # (must be the same ID across environments)
-    member_to_hail_account: dict[str, str]
-    member_to_azure_account: dict[str, str]
-
     users: dict[MemberKey, CPGInfrastructureUser]
 
     gcp: GCP | None = None
