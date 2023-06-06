@@ -413,12 +413,12 @@ class AzureInfra(CloudInfraBase):
 
     @staticmethod
     def _get_object_id(obj):  # pylint: disable=too-many-return-statements
+        if isinstance(obj, pulumi.Output):
+            return pulumi.Output.apply(obj, AzureInfra._get_object_id)
+
         if hasattr(obj, 'is_group') and hasattr(obj, 'group'):
             # cheeky catch for internal group
             return AzureInfra._get_object_id(obj.group)
-
-        if isinstance(obj, pulumi.Output):
-            return obj
 
         if isinstance(obj, str):
             return obj
