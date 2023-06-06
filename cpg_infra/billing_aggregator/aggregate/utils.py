@@ -825,6 +825,10 @@ def get_start_and_end_from_request(
         logger.warning(f'Unknown content type: {content_type}. Defaulting to None.')
         raise ValueError(f'Unknown content type: {content_type}')
 
+    if not request_data:
+        logger.warning(f'Attributes could not be found in request: {request_data}')
+        return None, None
+
     if 'start' in request_data.get('attributes') or 'end' in request_data.get(
         'attributes'
     ):
