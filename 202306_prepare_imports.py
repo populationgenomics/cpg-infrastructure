@@ -1,7 +1,21 @@
+"""
+If Pulumi suddenly loses a bunch of resources but they still exist in the cloud,
+this script can be used to generate statements to import them back into state.
+
+It operated on the output of:
+
+    pulumi preview --diff -p 20 --non-interactive --json
+
+It will generate a bunch of statements like:
+
+    pulumi import --generate-code=false --non-interactive --skip-preview --yes \
+        $IMPORT_TYPE $NAME $ID $FLAGS
+
+"""
 import dataclasses
 import functools
 import json
-from collections import defaultdict
+from datetime import date
 
 import google.auth
 import googleapiclient.discovery
@@ -13,50 +27,53 @@ class PulumiImport:
     """
     Hold import command with format: # pulumi import [type] [name] [id] [flags]
     """
+
     type: str
     name: str
     id: str
     flags: dict[str, str] | None = None
 
 
-def prepare_id(step):
-    type_ = step['type']
+def prepare_id(step_state: dict) -> str | None:
+    """Prepare ID from step for import command"""
+    type_ = step_state['type']
+    inputs = step_state['inputs']
 
     if type_ == 'gcp:cloudidentity/groupMembership:GroupMembership':
-        # specific ignore
-        return None
-    elif type_ == 'gcp:projects/iAMMember:IAMMember':
-        # example cpg-common/roles/serviceusage.serviceUsageConsumer/group:common-test@populationgenomics.org.au
-        project = step['inputs']['project']
-        role = step['inputs']['role']
-        member = step['inputs']['member']
+        # specific ignore, we'll process it later
+        group = inputs['group']
+        email = inputs['preferredMemberKey']['id']
+        # if the email doesn't exist in the group, it's a new membership
+        # rely heavily on the caching mechanism to avoid us making too many calls
+        return get_email_to_membership_id_for_group(group).get(email)
+
+    if type_ == 'gcp:projects/iAMMember:IAMMember':
+        project = inputs['project']
+        role = inputs['role']
+        member = inputs['member']
         return f'{project} {role} {member}'
 
-    elif type_ == 'gcp:secretmanager/secretIamMember:SecretIamMember':
-        # projects/analysis-runner/secrets/acute-care-cromwell-test-key/roles/secretmanager.secretAccessor/serviceAccount:acute-care-test-952@hail-295901.iam.gserviceaccount.com
-        # example projects/cpg-common/secrets/hail-git-checkout-token/roles/secretmanager.secretAccessor/group:common-test@populationgenomics.org.au
-        secret_id = step['inputs']['secretId']
-        member = step['inputs']['member']
-        role = step['inputs']['role']
+    if type_ == 'gcp:secretmanager/secretIamMember:SecretIamMember':
+        secret_id = inputs['secretId']
+        member = inputs['member']
+        role = inputs['role']
 
         return f'{secret_id} {role} {member}'
 
-    elif type_ == 'gcp:serviceAccount/iAMMember:IAMMember':
-        # example projects/cpg-common/serviceAccounts/main-upload@cpg-common.iam.gserviceaccount.com/roles/iam.serviceAccountKeyAdmin/group:common-data-manager@populationgenomics.org.au
-        service_account_id = step['inputs']['serviceAccountId']
-        member = step['inputs']['member']
-        role = step['inputs']['role']
+    if type_ == 'gcp:serviceAccount/iAMMember:IAMMember':
+        service_account_id = inputs['serviceAccountId']
+        member = inputs['member']
+        role = inputs['role']
         return f'{service_account_id} {role} {member}'
 
-
-    elif type_ == 'gcp:storage/bucketIAMMember:BucketIAMMember':
-        # example b/cpg-common-main-analysis/organizations/648561325637/roles/StorageObjectAndBucketViewer/group:common-analysis@populationgenomics.org.au
-        bucket = step['inputs']['bucket']
-        member = step['inputs']['member']
-        role = step['inputs']['role']
+    if type_ == 'gcp:storage/bucketIAMMember:BucketIAMMember':
+        bucket = inputs['bucket']
+        member = inputs['member']
+        role = inputs['role']
         return f'{bucket} {role} {member}'
 
     return None
+
 
 @functools.cache
 def get_groups_credentials():
@@ -67,6 +84,7 @@ def get_groups_credentials():
     credentials.refresh(Request())
     return credentials
 
+
 def get_groups_members_service():
     """Returns the Google Groups settings service."""
     resource = googleapiclient.discovery.build(
@@ -74,73 +92,68 @@ def get_groups_members_service():
     )
     return resource.groups().memberships()
 
+
+@functools.cache
+def get_email_to_membership_id_for_group(group_key: str) -> dict[str, str]:
+    """
+    Get email to membership ID map for a group
+    """
+    group_memberships = lookup_google_group_members(group_key)
+    return {m['preferredMemberKey']['id']: m['name'] for m in group_memberships}
+
+
 @functools.cache
 def lookup_google_group_members(group_key: str):
     """
     Lookup google group members
     """
-    groups_svc = get_groups_members_service()
     if not group_key.startswith('groups/'):
         group_key = f'groups/{group_key}'
+
+    print(f'Getting members for {group_key}')
+
+    groups_svc = get_groups_members_service()
     members = groups_svc.list(parent=group_key).execute()
     return members['memberships']
 
-def main():
-    with open('/Users/mfranklin/Desktop/tmp/2023-06-07_pulumi-plan.json') as f:
+
+def main(pulumi_plan_filename: str, output_filename=f'{date.today()}_imports.sh'):
+    """
+    Driver function for generating import commands
+    :return:
+    """
+    with open(pulumi_plan_filename, encoding='utf-8') as f:
         plan = json.load(f)
 
     imports = []
-    group_memberships = []
 
     for step in plan['steps']:
         if step['op'] != 'create':
             continue
-
         state = step.get('newState')
         if not state:
-            print(f'no new state: {step}')
             continue
 
         if new_id := prepare_id(state):
-            imports.append(PulumiImport(
-                type=state['type'],
-                name=step['urn'].split('::')[-1],
-                id=new_id,
-                flags={},
-            ))
-
-        if state['type'] == 'gcp:cloudidentity/groupMembership:GroupMembership':
-            group_memberships.append(step)
-
-    # now we want to look up the group from the groups API
-    # map the membership ID from each group, then we can assemble the ID
-    group_memberships_by_group = defaultdict(list)
-    for step in group_memberships:
-        group = step['newState']['inputs']['group']
-        group_memberships_by_group[group].append(step)
-
-    for group, memberships in group_memberships_by_group.items():
-        print(f'Getting members for {group}')
-        members_of_group = lookup_google_group_members(group)
-        email_to_id = {m['preferredMemberKey']['id']: m['name'] for m in members_of_group}
-        for membership in memberships:
-            state = membership['newState']
-            email = state['inputs']['preferredMemberKey']['id']
-            membership_id = email_to_id[email]
-            imports.append(PulumiImport(
-                type=state['type'],
-                name=membership['urn'].split('::')[-1],
-                id=membership_id,
-                flags={},
-            ))
-
-    with open('2023-06-07_imports.sh', 'w+') as f:
-        for i in imports:
-            f.write(
-                f'pulumi import --generate-code=false --non-interactive --skip-preview '
-                f'--yes {i.type!r} {i.name!r} {i.id!r}\n'
+            imports.append(
+                PulumiImport(
+                    type=state['type'],
+                    name=step['urn'].split('::')[-1],
+                    id=new_id,
+                    flags={},
+                )
             )
+
+    output_lines = [
+        f'pulumi import --generate-code=false --non-interactive --skip-preview '
+        f'--yes {i.type!r} {i.name!r} {i.id!r}'
+        for i in imports
+    ]
+    with open(output_filename, 'w+', encoding='utf-8') as outfile:
+        outfile.writelines(output_lines)
 
 
 if __name__ == '__main__':
-    main()
+    main(
+        pulumi_plan_filename='/Users/mfranklin/Desktop/tmp/2023-06-07_pulumi-plan.json'
+    )
