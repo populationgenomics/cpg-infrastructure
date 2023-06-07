@@ -829,10 +829,9 @@ def get_start_and_end_from_request(
         logger.warning(f'Attributes could not be found in request: {request_data}')
         return None, None
 
-    if 'start' in request_data.get('attributes', {}) or 'end' in request_data.get(
-        'attributes', {}
-    ):
-        request_data = request_data['attributes']
+    if attributes := request_data.get('attributes'):
+        if 'start' in attributes or 'end' in attributes:
+            request_data = attributes
     elif 'data' in request_data.get('message', {}):
         try:
             request_data = json.loads(b64decode(request_data['message']['data']))
