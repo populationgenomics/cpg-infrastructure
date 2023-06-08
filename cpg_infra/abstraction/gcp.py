@@ -171,15 +171,11 @@ class GcpInfrastructure(CloudInfraBase):
 
     def create_project(self, name):
         return gcp.organizations.Project(
-            # manually construct this one, because it might not be the current dataset
             f'{self.name()}-{name}-project',
             org_id=self.organization.org_id,
             project_id=name,
             name=name,
             billing_account=self.config.billing.gcp.account_id,
-            opts=pulumi.resource.ResourceOptions(
-                depends_on=[self._svc_cloudbilling], protect=True
-            ),
         )
 
     def create_budget(self, resource_key: str, *, project, budget: int, budget_filter):
