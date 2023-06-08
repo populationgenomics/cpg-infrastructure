@@ -42,16 +42,11 @@ class GcpInfrastructure(CloudInfraBase):
     def organization(self):
         return gcp.organizations.get_organization(domain=self.config.domain)
 
-    @cached_property
-    def project_id(self):
-        return self.dataset_config.gcp.project
+    def get_project(self):
+        return self.create_project(self.dataset_config.gcp.project or self.dataset)
 
-    @cached_property
-    def project(self):
-        return gcp.organizations.get_project(self.project_id)
-
-    def get_dataset_project_id(self):
-        return self.project_id
+    def get_project_id(self):
+        return self.project.id
 
     def finalise(self):
         # Make sure this API is initialised somewhere

@@ -18,6 +18,7 @@ Some challenges I forsee with this abstraction:
 from abc import ABC, abstractmethod
 from datetime import date
 from enum import Enum
+from functools import cached_property
 from typing import Any, Callable
 
 from cpg_infra.config import (
@@ -80,6 +81,22 @@ class CloudInfraBase(ABC):
         self.config = config
         self.dataset_config = dataset_config
 
+    @cached_property
+    def project(self):
+        return self.get_project()
+
+    @cached_property
+    def project_id(self):
+        return self.get_project_id()
+
+    @abstractmethod
+    def get_project(self):
+        pass
+
+    @abstractmethod
+    def get_project_id(self):
+        pass
+
     @classmethod
     @abstractmethod
     def storage_url_regex(cls):
@@ -111,9 +128,6 @@ class CloudInfraBase(ABC):
         pass
 
     # region PROJECT
-    @abstractmethod
-    def get_dataset_project_id(self):
-        pass
 
     @abstractmethod
     def create_project(self, name):

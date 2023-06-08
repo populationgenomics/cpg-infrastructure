@@ -597,6 +597,10 @@ class CPGDatasetInfrastructure:
     # region MACHINE ACCOUNTS
 
     @cached_property
+    def project(self):
+        return self.infra.project
+
+    @cached_property
     def main_upload_account(self):
         return self.infra.create_machine_account('main-upload')
 
@@ -2120,7 +2124,7 @@ class CPGDatasetInfrastructure:
 
         shared_buckets = {'release': self.release_bucket}
 
-        project_name = f'{self.infra.get_dataset_project_id()}-shared'
+        project_name = pulumi.Output.concat(self.infra.project_id, '-shared')
 
         shared_project = self.infra.create_project(project_name)
         self.infra.create_fixed_budget(

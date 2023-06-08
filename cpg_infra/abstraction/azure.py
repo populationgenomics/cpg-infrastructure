@@ -65,8 +65,11 @@ class AzureInfra(CloudInfraBase):
     def name():
         return 'azure'
 
-    def get_dataset_project_id(self):
-        return self.dataset
+    def get_project(self):
+        return self.resource_group
+
+    def get_project_id(self):
+        return self.project.name
 
     @staticmethod
     def fix_azure_alphanum_names(name):
