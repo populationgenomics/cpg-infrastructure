@@ -833,9 +833,9 @@ def get_start_and_end_from_request(
         if attributes := message.get('attributes'):
             if 'start' in attributes or 'end' in attributes:
                 request_data = attributes
-        elif 'data' in request_data.get('message', {}):
+        elif 'data' in message:
             try:
-                request_data = json.loads(b64decode(request_data['message']['data']))
+                request_data = json.loads(b64decode(message['data']))
             except Exception as exp:
                 raise exp
 

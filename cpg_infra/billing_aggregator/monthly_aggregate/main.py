@@ -65,15 +65,14 @@ def get_invoice_month_from_request(
         logger.warning(f'Attributes could not be found in request: {request_data}')
         return None
 
-    if 'attributes' in request_data and 'invoice_month' in request_data.get(
-        'attributes'
-    ):
-        request_data = request_data['attributes']
-    elif 'message' in request_data and 'data' in request_data.get('message'):
-        try:
-            request_data = json.loads(b64decode(request_data['message']['data']))
-        except Exception as exp:
-            raise exp
+    if message := request_data.get('message'):
+        if 'attributes' in message and 'invoice_month' in message.get('attributes'):
+            request_data = request_data['attributes']
+        elif 'data' in message:
+            try:
+                request_data = json.loads(b64decode(message['data']))
+            except Exception as exp:
+                raise exp
 
     logger.info(request_data)
 
