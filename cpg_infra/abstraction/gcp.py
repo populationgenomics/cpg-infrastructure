@@ -43,7 +43,10 @@ class GcpInfrastructure(CloudInfraBase):
         return gcp.organizations.get_organization(domain=self.config.domain)
 
     def get_project(self):
-        return self.create_project(self.dataset_config.gcp.project or self.dataset)
+        return self.create_project(
+            resource_key='base-project',
+            name=self.dataset_config.gcp.project or self.dataset,
+        )
 
     def get_project_id(self):
         return self.project.id
@@ -169,13 +172,25 @@ class GcpInfrastructure(CloudInfraBase):
 
     # endregion SERVICES
 
-    def create_project(self, name):
+    def create_project(self, resource_key, name):
+        opts = None
+        if 'shared' in resource_key:
+            # temporary manual rename for shared projects
+            opts = pulumi.ResourceOptions(
+                aliases=[
+                    pulumi.Alias(
+                        name=f'gcp-{self.dataset_config.gcp.project}-shared-project'
+                    )
+                ]
+            )
+
         return gcp.organizations.Project(
-            f'{self.name()}-{name}-project',
+            self.get_pulumi_name(resource_key),
             org_id=self.organization.org_id,
             project_id=name,
             name=name,
             billing_account=self.config.billing.gcp.account_id,
+            opts=opts,
         )
 
     def create_budget(self, resource_key: str, *, project, budget: int, budget_filter):
@@ -322,7 +337,7 @@ class GcpInfrastructure(CloudInfraBase):
                 self.bucket_rule_abort_incomplete_multipart_upload(),
             ],
             requester_pays=requester_pays,
-            project=project or self.project.project_id,
+            project=project or self.project_id,
         )
 
     def get_member_key(self, member):  # pylint: disable=too-many-return-statements
@@ -559,7 +574,9 @@ class GcpInfrastructure(CloudInfraBase):
             if not secret.count('/') == 3:
                 if isinstance(project, gcp.organizations.Project):
                     project = project.id
-                secret_id = f'projects/{project or self.project_id}/secrets/{secret}'
+                secret_id = pulumi.Output.concat(
+                    'projects/', project or self.project_id, '/secrets/', secret
+                )
         else:
             raise ValueError(f'Unexpected secret type: {secret} ({type(secret)})')
 

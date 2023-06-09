@@ -2126,9 +2126,11 @@ class CPGDatasetInfrastructure:
 
         project_name = pulumi.Output.concat(self.infra.project_id, '-shared')
 
-        shared_project = self.infra.create_project(project_name)
+        shared_project = self.infra.create_project(
+            'shared-project', name=project_name
+        )
         self.infra.create_fixed_budget(
-            f'shared-budget',
+            'shared-budget',
             project=shared_project,
             budget=budget.shared_total_budget,
         )

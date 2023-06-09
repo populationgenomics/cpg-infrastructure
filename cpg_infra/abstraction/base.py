@@ -130,7 +130,7 @@ class CloudInfraBase(ABC):
     # region PROJECT
 
     @abstractmethod
-    def create_project(self, name):
+    def create_project(self, resource_key: str, name):
         pass
 
     @abstractmethod
