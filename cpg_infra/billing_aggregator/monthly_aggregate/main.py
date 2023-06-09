@@ -66,8 +66,9 @@ def get_invoice_month_from_request(
         return None
 
     if message := request_data.get('message'):
-        if 'attributes' in message and 'invoice_month' in message.get('attributes'):
-            request_data = request_data['attributes']
+        if attributes := message.get('attributes'):
+            if 'invoice_month' in attributes:
+                request_data = attributes
         elif 'data' in message:
             try:
                 request_data = json.loads(b64decode(message['data']))
