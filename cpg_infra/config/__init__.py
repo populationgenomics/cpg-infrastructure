@@ -4,4 +4,5 @@ from cpg_infra.config.config import (
     CPGDatasetConfig,
     CPGDatasetComponents,
     HailAccount,
+    CPGInfrastructureUser,
 )
