@@ -17,6 +17,7 @@ import functools
 import json
 from datetime import date
 
+import click
 import google.auth
 import googleapiclient.discovery
 from google.auth.transport.requests import Request
@@ -33,6 +34,14 @@ class PulumiImport:
     id: str
     flags: dict[str, str] | None = None
 
+    def to_command_line(self):
+        """Convert to command line"""
+        kwargs_str = ' '.join(f'--{k} {v!r}' for k, v in (self.flags or {}).items())
+        return (
+            f'pulumi import --generate-code=false --non-interactive --skip-preview '
+            f'--yes {self.type!r} {self.name!r} {self.id!r} {kwargs_str}'
+        ).strip()
+
 
 def prepare_id(step_state: dict) -> str | None:
     """Prepare ID from step for import command"""
@@ -40,7 +49,6 @@ def prepare_id(step_state: dict) -> str | None:
     inputs = step_state['inputs']
 
     if type_ == 'gcp:cloudidentity/groupMembership:GroupMembership':
-        # specific ignore, we'll process it later
         group = inputs['group']
         email = inputs['preferredMemberKey']['id']
         # if the email doesn't exist in the group, it's a new membership
@@ -144,16 +152,27 @@ def main(pulumi_plan_filename: str, output_filename=f'{date.today()}_imports.sh'
                 )
             )
 
-    output_lines = [
-        f'pulumi import --generate-code=false --non-interactive --skip-preview '
-        f'--yes {i.type!r} {i.name!r} {i.id!r}'
-        for i in imports
-    ]
-    with open(output_filename, 'w+', encoding='utf-8') as outfile:
-        outfile.writelines(output_lines)
+    with open(output_filename, 'w', encoding='utf-8') as outfile:
+        outfile.writelines(i.to_command_line() for i in imports)
+
+
+@click.command()
+@click.option(
+    '--pulumi-plan-filename',
+    help='Path to the Pulumi plan file',
+    required=True,
+)
+@click.option(
+    '--output-filename',
+    help='Path to the output file',
+    default=f'{date.today()}_imports.sh',
+)
+def from_cli(pulumi_plan_filename: str, output_filename: str):
+    """
+    Entrypoint for CLI
+    """
+    main(pulumi_plan_filename=pulumi_plan_filename, output_filename=output_filename)
 
 
 if __name__ == '__main__':
-    main(
-        pulumi_plan_filename='/Users/mfranklin/Desktop/tmp/2023-06-07_pulumi-plan.json'
-    )
+    from_cli()  # pylint: disable=no-value-for-parameter
