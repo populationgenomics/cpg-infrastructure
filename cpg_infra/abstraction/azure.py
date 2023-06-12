@@ -65,8 +65,11 @@ class AzureInfra(CloudInfraBase):
     def name():
         return 'azure'
 
-    def get_dataset_project_id(self):
-        return self.dataset
+    def get_project(self):
+        return self.resource_group
+
+    def get_project_id(self):
+        return self.project.name
 
     @staticmethod
     def fix_azure_alphanum_names(name):
@@ -123,8 +126,13 @@ class AzureInfra(CloudInfraBase):
             management_policy_name='default',
         )
 
-    def create_project(self, name):
-        return az.resources.ResourceGroup(name)
+    def create_project(self, resource_key: str, name):
+        return az.resources.ResourceGroup(
+            self.get_pulumi_name(name),
+            name,
+            # use alias to catch rename
+            opts=pulumi.ResourceOptions(aliases=[pulumi.Alias(name=name)]),
+        )
 
     def create_budget(
         self,
