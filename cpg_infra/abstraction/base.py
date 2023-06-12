@@ -325,8 +325,8 @@ class DryRunInfra(CloudInfraBase):
     def member_id(member):
         return member
 
-    def create_project(self, name):
-        print(f'Creating project: {name}')
+    def create_project(self, resource_key: str, name):
+        print(f'{resource_key} :: Creating project: {name}')
         return f'Project: {name}'
 
     def create_monthly_budget(

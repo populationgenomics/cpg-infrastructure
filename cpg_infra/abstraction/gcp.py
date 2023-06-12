@@ -44,12 +44,12 @@ class GcpInfrastructure(CloudInfraBase):
 
     def get_project(self):
         return self.create_project(
-            resource_key='base-project',
+            resource_key='project',
             name=self.dataset_config.gcp.project or self.dataset,
         )
 
     def get_project_id(self):
-        return self.project.id
+        return self.project.project_id
 
     def finalise(self):
         # Make sure this API is initialised somewhere
