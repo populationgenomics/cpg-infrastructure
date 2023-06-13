@@ -288,6 +288,7 @@ class CPGDatasetConfig(DeserializableDataclass):
     # creates a release requester-pays bucket
     enable_release: bool = False
     enable_shared_project: bool = False
+    setup_metamist_project: bool = True
     # give access for this dataset to access any other it depends on
     depends_on: list[str] = dataclasses.field(default_factory=list)
     depends_on_readonly: list[str] = dataclasses.field(default_factory=list)
