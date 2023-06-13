@@ -135,8 +135,16 @@ class CPGInfrastructure:
 
                 if isinstance(member, CPGInfrastructure.GroupProvider.Group):
                     self.members[resource_key] = member
-                else:
+                elif isinstance(user, CPGInfrastructureUser.Cloud):
                     self.members[resource_key] = self.GroupMember(member, user)
+                else:
+                    if user:
+                        raise ValueError(
+                            f'Invalid user type {type(user)} ({user}) for member '
+                            f'{member} for {resource_key}'
+                        )
+                    self.members[resource_key] = self.GroupMember(member, None)
+
 
             def __repr__(self):
                 return f'Group({self.name!r})'
@@ -290,7 +298,7 @@ class CPGInfrastructure:
             cloud_dataset.main()
 
     def setup_hail_batch_billing_project_members(self):
-        for dataset, dataset_infra in self.dataset_infrastructures.items():
+        for dataset_infra in self.dataset_infrastructures.values():
             for dataset_cloud_infra in dataset_infra.clouds.values():
                 if not dataset_cloud_infra.should_setup_hail:
                     continue
@@ -325,7 +333,7 @@ class CPGInfrastructure:
                     if m.user and m.user.hail_batch_username
                 ]
 
-                def _make_add_member_function(_data_provider, _infra):
+                def _make_add_member_function(_data_provider: CPGDatasetCloudInfrastructure, _infra: CloudInfraBase):
                     # bind loop variables so they're available in
                     # the functional context below
 
@@ -333,11 +341,15 @@ class CPGInfrastructure:
                         for hail_id in sorted(set(_analysis_members)):
                             if not isinstance(hail_id, str):
                                 continue
-                            h = _data_provider.compute_hash(
-                                dataset=_data_provider.dataset_config.dataset,
-                                member=hail_id,
-                                cloud=_infra.name(),
-                            )
+                            try:
+                                h = _data_provider.compute_hash(
+                                    dataset=_data_provider.dataset_config.dataset,
+                                    member=hail_id,
+                                    cloud=_infra.name(),
+                                )
+                            except Exception as e:
+                                print(f'Exception during hash calculation: {e}')
+                                raise e
 
                             HailBatchBillingProjectMembership(
                                 _infra.get_pulumi_name(f'batch-billing-member-{h}'),
@@ -348,7 +360,7 @@ class CPGInfrastructure:
                     return _add_member_to_billing_project
 
                 pulumi.Output.all(*hail_batch_username).apply(
-                    _make_add_member_function(dataset, infra)
+                    _make_add_member_function(dataset_cloud_infra, infra)
                 )
 
     def finalize_groups(self):
@@ -550,7 +562,7 @@ class CPGDatasetInfrastructure:
             infra.main()
 
     def setup_metamist(self):
-        if self.dataset_config.setup_metamist_project:
+        if self.dataset_config.enable_metamist_project:
             # setup metamist project by accessing the property
             _ = self.metamist_project
 
