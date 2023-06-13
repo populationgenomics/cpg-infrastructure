@@ -145,7 +145,6 @@ class CPGInfrastructure:
                         )
                     self.members[resource_key] = self.GroupMember(member, None)
 
-
             def __repr__(self):
                 return f'Group({self.name!r})'
 
@@ -231,7 +230,9 @@ class CPGInfrastructure:
             group_prefix=self.config.group_prefix
         )
 
-        self.dataset_infrastructures: dict[str, CPGDatasetInfrastructure] = defaultdict()
+        self.dataset_infrastructures: dict[
+            str, CPGDatasetInfrastructure
+        ] = defaultdict()
 
     @cached_property
     def common_dataset(self) -> 'CPGDatasetInfrastructure':
@@ -333,7 +334,10 @@ class CPGInfrastructure:
                     if m.user and m.user.hail_batch_username
                 ]
 
-                def _make_add_member_function(_data_provider: CPGDatasetCloudInfrastructure, _infra: CloudInfraBase):
+                def _make_add_member_function(
+                    _data_provider: 'CPGDatasetCloudInfrastructure',
+                    _infra: CloudInfraBase,
+                ):
                     # bind loop variables so they're available in
                     # the functional context below
 
@@ -1050,7 +1054,9 @@ class CPGDatasetCloudInfrastructure:
         for namespace, al_buckets in buckets.items():
             configs_to_merge = []
             for dependent_dataset in sorted(dependent_datasets):
-                if cloud_infra := stacks_to_reference[dependent_dataset].clouds.get(self.infra.name()):
+                if cloud_infra := stacks_to_reference[dependent_dataset].clouds.get(
+                    self.infra.name()
+                ):
                     if config := cloud_infra.storage_tomls.get(namespace):
                         configs_to_merge.append(config)
 
