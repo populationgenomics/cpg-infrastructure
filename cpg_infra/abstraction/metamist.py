@@ -6,7 +6,7 @@ import pulumi
 from metamist.apis import ProjectApi
 
 
-@functools.lru_cache()
+@functools.cache
 def get_projects() -> dict[str, dict]:
     """
     Get all projects from metamist, useful to avoid repeated calls to the API
