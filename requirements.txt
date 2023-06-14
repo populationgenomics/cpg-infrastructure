@@ -8,6 +8,7 @@ pulumi==3.69.0
 toml-sort
 toml==0.10.2
 xxhash==3.2.0
+metamist
 # https://tenor.com/en-GB/view/magic-gif-26166638
 # TODO: remove the @add-infrastructure just before merging
 metamist-infrastructure @ git+https://github.com/populationgenomics/sample-metadata.git@b5f53778de372af47c36120cd1e3662f17db8fa3#subdirectory=metamist_infrastructure
