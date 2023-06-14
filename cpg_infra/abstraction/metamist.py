@@ -40,14 +40,14 @@ class MetamistProjectProvider(pulumi.dynamic.ResourceProvider):
                 create_test_project=create_test_project,
             )
         if not project:
-            raise Exception(f'Failed to create project {name}')
+            raise RuntimeError(f'Failed to create project {name}')
 
         project_id = project['id']
         return pulumi.dynamic.CreateResult(
             id_=f'metamist-project::{name}::{project_id}',
             outs={
                 'id': project_id,
-                'name': name,
+                'project_name': name,
             },
         )
 
@@ -55,7 +55,7 @@ class MetamistProjectProvider(pulumi.dynamic.ResourceProvider):
         replaces = []
 
         if _olds['project_name'] != _news['project_name']:
-            replaces.append('name')
+            replaces.append('project_name')
 
         return pulumi.dynamic.DiffResult(
             changes=len(replaces) > 0,
