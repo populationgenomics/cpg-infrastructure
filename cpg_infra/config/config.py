@@ -17,6 +17,21 @@ from cpg_infra.config.deserializabledataclass import (
     try_parse_value_as_type,
 )
 
+MemberKey = str
+GroupType = str
+
+
+@dataclasses.dataclass(frozen=True)
+class CPGInfrastructureUser(DeserializableDataclass):
+    @dataclasses.dataclass(frozen=True)
+    class Cloud(DeserializableDataclass):
+        id: str
+        hail_batch_username: str | None = None
+
+    id: MemberKey
+    clouds: dict[str, Cloud]
+    projects: list[str]
+
 
 @dataclasses.dataclass(frozen=True)
 class CPGInfrastructureConfig(DeserializableDataclass):
@@ -141,10 +156,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
 
     config_destination: str
 
-    # useful for mapping a member's email to their hail account
-    # (must be the same ID across environments)
-    member_to_hail_account: dict[str, str]
-    member_to_azure_account: dict[str, str]
+    users: dict[MemberKey, CPGInfrastructureUser]
 
     gcp: GCP | None = None
     azure: Azure | None = None
@@ -279,6 +291,7 @@ class CPGDatasetConfig(DeserializableDataclass):
     # creates a release requester-pays bucket
     enable_release: bool = False
     enable_shared_project: bool = False
+    enable_metamist_project: bool = True
     # give access for this dataset to access any other it depends on
     depends_on: list[str] = dataclasses.field(default_factory=list)
     depends_on_readonly: list[str] = dataclasses.field(default_factory=list)

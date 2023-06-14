@@ -30,11 +30,13 @@ from cpg_infra.abstraction.hailbatch import (
     HailBatchBillingProjectMembership,
     HailBatchUser,
 )
+from cpg_infra.abstraction.metamist import MetamistProject
 from cpg_infra.config import (
     CPGDatasetConfig,
     CPGDatasetComponents,
     CPGInfrastructureConfig,
     HailAccount,
+    CPGInfrastructureUser,
 )
 from cpg_infra.plugin import get_plugins
 
@@ -59,6 +61,10 @@ AccessLevel = str
 ACCESS_LEVELS: Iterable[AccessLevel] = ('test', 'standard', 'full')
 NON_NAME_REGEX = re.compile(r'[^A-Za-z\d_-]')
 TOML_CONFIG_JOINER = '\n||||'
+
+NAME_TO_INFRA_CLASS: dict[str, Type[CloudInfraBase]] = {
+    c.name(): c for c in CloudInfraBase.__subclasses__()  # type: ignore
+}
 
 
 def dict_to_toml(d):
@@ -87,9 +93,11 @@ class CPGInfrastructure:
 
                 """
 
-                def __init__(self, cloud_id: str, username: str | None = None):
+                def __init__(
+                    self, cloud_id: str, user: CPGInfrastructureUser.Cloud | None
+                ):
                     self.cloud_id = cloud_id
-                    self.username = username
+                    self.user = user
 
                 def __lt__(self, other):
                     return self.cloud_id < other.cloud_id
@@ -98,8 +106,8 @@ class CPGInfrastructure:
                     members = [
                         f'cloud_id={self.cloud_id!r}',
                     ]
-                    if self.username:
-                        members.append(f'username={self.username!r}')
+                    if self.user:
+                        members.append(f'username={self.user.id!r}')
 
                     return f'GroupMember({", ".join(members)})'
 
@@ -116,15 +124,27 @@ class CPGInfrastructure:
                     | CPGInfrastructure.GroupProvider.Group,
                 ] = members
 
-            def add_member(self, resource_key, member, username: str | None = None):
+            def add_member(
+                self,
+                resource_key,
+                member,
+                user: CPGInfrastructureUser.Cloud | None = None,
+            ):
                 if isinstance(member, type(self)):
                     if member.name == self.name:
                         raise ValueError(f'Cannot add self to group {self.name}')
 
                 if isinstance(member, CPGInfrastructure.GroupProvider.Group):
                     self.members[resource_key] = member
+                elif isinstance(user, CPGInfrastructureUser.Cloud):
+                    self.members[resource_key] = self.GroupMember(member, user)
                 else:
-                    self.members[resource_key] = self.GroupMember(member, username)
+                    if user:
+                        raise ValueError(
+                            f'Invalid user type {type(user)} ({user}) for member '
+                            f'{member} for {resource_key}'
+                        )
+                    self.members[resource_key] = self.GroupMember(member, None)
 
             def __repr__(self):
                 return f'Group({self.name!r})'
@@ -203,16 +223,33 @@ class CPGInfrastructure:
         self, config: CPGInfrastructureConfig, dataset_configs: list[CPGDatasetConfig]
     ):
         self.config = config
-        self.datasets = {d.dataset: d for d in dataset_configs}
+        self.dataset_configs: dict[str, CPGDatasetConfig] = {
+            d.dataset: d for d in dataset_configs
+        }
 
         self.group_provider = CPGInfrastructure.GroupProvider(
             group_prefix=self.config.group_prefix
         )
 
-        # { cloud: { name: DatasetInfrastructure } }
-        self.dataset_infrastructure: dict[
-            str, dict[str, CPGDatasetInfrastructure]
+        self.dataset_infrastructures: dict[
+            str, CPGDatasetInfrastructure
         ] = defaultdict()
+
+    @cached_property
+    def common_dataset(self) -> 'CPGDatasetInfrastructure':
+        # ensure it's setup
+        self.setup_datasets()
+        return self.dataset_infrastructures[self.config.common_dataset]
+
+    @cached_property
+    def common_gcp_infra(self) -> GcpInfrastructure:
+        return self.common_dataset.clouds[
+            GcpInfrastructure.name()
+        ].infra  # type: ignore
+
+    @cached_property
+    def common_azure_infra(self) -> AzureInfra:
+        return self.common_dataset.clouds[AzureInfra.name()].infra  # type: ignore
 
     def resolve_dataset_order(self):
         """
@@ -225,7 +262,7 @@ class CPGInfrastructure:
         )
         deps = {
             k: v.depends_on + v.depends_on_readonly + reference_dataset
-            for k, v in self.datasets.items()
+            for k, v in self.dataset_configs.items()
         }
         if self.config.common_dataset:
             deps[self.config.common_dataset] = []
@@ -247,93 +284,77 @@ class CPGInfrastructure:
         self.output_infrastructure_config()
 
     def setup_datasets(self):
-        infra_map: dict[str, Type[CloudInfraBase]] = {
-            c.name(): c for c in CloudInfraBase.__subclasses__()
-        }
-        self.dataset_infrastructure['azure'] = {}
-
+        if self.dataset_infrastructures:
+            # don't do this repeatedly
+            return
         for dataset in self.resolve_dataset_order():
-            dataset_config = self.datasets[dataset]
-
-            for deploy_location in dataset_config.deploy_locations:
-                if deploy_location not in self.dataset_infrastructure:
-                    self.dataset_infrastructure[deploy_location] = {}
-
-                location = infra_map[deploy_location]
-                infra_obj = location(
-                    config=self.config,
-                    dataset_config=dataset_config,
-                )
-                dataset_infra = CPGDatasetInfrastructure(
-                    root=self,
-                    config=self.config,
-                    infra=infra_obj,
-                    dataset_config=dataset_config,
-                    group_provider=self.group_provider,
-                )
-                self.dataset_infrastructure[deploy_location][dataset] = dataset_infra
+            self.dataset_infrastructures[dataset] = CPGDatasetInfrastructure(
+                root=self,
+                config=self.config,
+                dataset_config=self.dataset_configs[dataset],
+                group_provider=self.group_provider,
+            )
 
     def deploy_datasets(self):
-        for cloud_datasets in self.dataset_infrastructure.values():
-            for dataset_infra_provider in cloud_datasets.values():
-                dataset_infra_provider.main()
+        for cloud_dataset in self.dataset_infrastructures.values():
+            cloud_dataset.main()
 
     def setup_hail_batch_billing_project_members(self):
-        for datasets in self.dataset_infrastructure.values():
-            for dataset in datasets.values():
-                if not dataset.should_setup_hail:
+        for dataset_infra in self.dataset_infrastructures.values():
+            for dataset_cloud_infra in dataset_infra.clouds.values():
+                if not dataset_cloud_infra.should_setup_hail:
                     continue
 
-                infra = dataset.infra
-                _members = self.group_provider.resolve_group_members(
-                    dataset.analysis_group
-                )
-                # we can only map "usernames" to hail accounts,
-                # so we can safely filter for that
-                _member_usernames = [m.username for m in _members if m.username]
+                infra = dataset_cloud_infra.infra
+
                 if self.config.billing.hail_aggregator_username:
                     HailBatchBillingProjectMembership(
                         infra.get_pulumi_name(
                             f'batch-billing-member-billing-aggregator'
                         ),
-                        billing_project=dataset.hail_batch_billing_project,
+                        billing_project=dataset_cloud_infra.hail_batch_billing_project,
                         user=self.config.billing.hail_aggregator_username,
                     )
 
                 for (
                     name,
                     hail_account,
-                ) in dataset.hail_accounts_by_access_level.items():
+                ) in dataset_cloud_infra.hail_accounts_by_access_level.items():
                     HailBatchBillingProjectMembership(
                         infra.get_pulumi_name(f'batch-billing-member-hail-{name}'),
-                        billing_project=dataset.hail_batch_billing_project,
+                        billing_project=dataset_cloud_infra.hail_batch_billing_project,
                         user=hail_account.username,
                     )
 
-                def _make_add_member_function(_data_provider, _infra):
+                _group_members = self.group_provider.resolve_group_members(
+                    dataset_cloud_infra.analysis_group
+                )
+                hail_batch_username = [
+                    m.user.hail_batch_username
+                    for m in _group_members
+                    if m.user and m.user.hail_batch_username
+                ]
+
+                def _make_add_member_function(
+                    _data_provider: 'CPGDatasetCloudInfrastructure',
+                    _infra: CloudInfraBase,
+                ):
                     # bind loop variables so they're available in
                     # the functional context below
 
                     def _add_member_to_billing_project(_analysis_members):
-                        added_members = set()
-                        # sometimes two users have different emails, but the same hail
-                        # batch billing account, sort so it doesn't fluctuate between
-                        # the email addresses
-                        for m in sorted(_analysis_members):
-                            if not isinstance(m, str):
+                        for hail_id in sorted(set(_analysis_members)):
+                            if not isinstance(hail_id, str):
                                 continue
-                            h = _data_provider.compute_hash(
-                                _data_provider.dataset_config.dataset, m
-                            )
-                            if m not in self.config.member_to_hail_account:
-                                continue
-
-                            hail_id = self.config.member_to_hail_account[m]
-                            if hail_id in added_members:
-                                # Skips when a user has multiple emails
-                                continue
-
-                            added_members.add(hail_id)
+                            try:
+                                h = _data_provider.compute_hash(
+                                    dataset=_data_provider.dataset_config.dataset,
+                                    member=hail_id,
+                                    cloud=_infra.name(),
+                                )
+                            except Exception as e:
+                                print(f'Exception during hash calculation: {e}')
+                                raise e
 
                             HailBatchBillingProjectMembership(
                                 _infra.get_pulumi_name(f'batch-billing-member-{h}'),
@@ -343,8 +364,8 @@ class CPGInfrastructure:
 
                     return _add_member_to_billing_project
 
-                pulumi.Output.all(*_member_usernames).apply(
-                    _make_add_member_function(dataset, infra)
+                pulumi.Output.all(*hail_batch_username).apply(
+                    _make_add_member_function(dataset_cloud_infra, infra)
                 )
 
     def finalize_groups(self):
@@ -366,10 +387,7 @@ class CPGInfrastructure:
         # now resolve groups
         for cloud in self.group_provider.groups:
             # We're adding groups, but it does rely on some service being created
-            data_provider = self.dataset_infrastructure[cloud][
-                self.config.common_dataset
-            ]
-            infra = data_provider.infra
+            infra = self.common_dataset.clouds[cloud].infra
 
             for group in self.group_provider.static_group_order(cloud=cloud):
                 for resource_key, member in group.members.items():
@@ -410,9 +428,8 @@ class CPGInfrastructure:
     # dataset agnostic infrastructure
 
     def build_infrastructure_config_output(self) -> dict:
-        reference_infra = self.dataset_infrastructure['gcp'][self.config.common_dataset]
         return {
-            'members_cache_location': reference_infra.infra.bucket_output_path(
+            'members_cache_location': self.common_gcp_infra.bucket_output_path(
                 self.gcp_members_cache_bucket
             ),
             'git_credentials_secret_name': self.config.hail.gcp.git_credentials_secret_name,
@@ -421,7 +438,6 @@ class CPGInfrastructure:
 
     def output_infrastructure_config(self):
         # we'll only do it on GCP for now
-        reference_infra = self.dataset_infrastructure['gcp'][self.config.common_dataset]
 
         items = self.build_infrastructure_config_output().items()
 
@@ -437,7 +453,7 @@ class CPGInfrastructure:
         bucket_name, suffix = self.config.config_destination.removeprefix(
             'gs://'
         ).split('/', maxsplit=1)
-        reference_infra.infra.add_blob_to_bucket(
+        self.common_gcp_infra.add_blob_to_bucket(
             'infrastructure-config',
             bucket=bucket_name,
             contents=infra_config,
@@ -448,8 +464,7 @@ class CPGInfrastructure:
 
     @cached_property
     def gcp_members_cache_bucket(self):
-        reference_infra = self.dataset_infrastructure['gcp'][self.config.common_dataset]
-        return reference_infra.infra.create_bucket(
+        return self.common_gcp_infra.create_bucket(
             f'{self.config.gcp.dataset_storage_prefix}members-group-cache',
             unique=True,
             versioning=True,
@@ -458,8 +473,6 @@ class CPGInfrastructure:
         )
 
     def setup_gcp_access_cache_bucket(self):
-        reference_infra = self.dataset_infrastructure['gcp'][self.config.common_dataset]
-
         group_cache_accessors = []
 
         if self.config.analysis_runner:
@@ -481,7 +494,7 @@ class CPGInfrastructure:
             )
 
         for key, account in group_cache_accessors:
-            reference_infra.infra.add_member_to_bucket(
+            self.common_gcp_infra.add_member_to_bucket(
                 f'{key}-members-group-cache-accessor',
                 bucket=self.gcp_members_cache_bucket,
                 member=account,
@@ -490,15 +503,13 @@ class CPGInfrastructure:
 
     @cached_property
     def gcp_sample_metadata_invoker_group(self):
-        infra = self.dataset_infrastructure['gcp'][self.config.common_dataset].infra
-
         return self.group_provider.create_group(
-            infra, cache_members=False, name='sample-metadata-invokers'
+            self.common_gcp_infra, cache_members=False, name='sample-metadata-invokers'
         )
 
     def setup_gcp_sample_metadata_cloudrun_invoker(self):
         # pylint: disable
-        infra = self.dataset_infrastructure['gcp'][self.config.common_dataset].infra
+        infra = self.common_gcp_infra
 
         if not isinstance(infra, GcpInfrastructure):
             raise ValueError(
@@ -508,13 +519,67 @@ class CPGInfrastructure:
 
         infra.add_cloudrun_invoker(
             f'sample-metadata-cloudrun-invokers',
-            service=self.config.sample_metadata.gcp.service_name,  # SAMPLE_METADATA_SERVICE_NAME,
-            project=self.config.sample_metadata.gcp.project,  # SAMPLE_METADATA_PROJECT,
+            service=self.config.sample_metadata.gcp.service_name,
+            project=self.config.sample_metadata.gcp.project,
             member=self.gcp_sample_metadata_invoker_group,
         )
 
 
 class CPGDatasetInfrastructure:
+    """
+    Logic for building infrastructure for a single dataset
+    for one infrastructure object.
+    """
+
+    def __init__(
+        self,
+        config: CPGInfrastructureConfig,
+        root: CPGInfrastructure,
+        group_provider: CPGInfrastructure.GroupProvider,
+        dataset_config: CPGDatasetConfig,
+    ):
+        self.config = config
+        self.root = root
+        self.group_provider = group_provider
+
+        self.dataset: str = dataset_config.dataset
+        self.dataset_config: CPGDatasetConfig = dataset_config
+        self.deploy_locations = dataset_config.deploy_locations
+
+        self.clouds: dict[str, CPGDatasetCloudInfrastructure] = {
+            deploy_location: CPGDatasetCloudInfrastructure(
+                config=self.config,
+                root=self.root,
+                group_provider=self.group_provider,
+                infra=NAME_TO_INFRA_CLASS[deploy_location](
+                    config=self.config,
+                    dataset_config=self.dataset_config,
+                ),
+                dataset_config=self.dataset_config,
+            )
+            for deploy_location in self.deploy_locations
+        }
+
+    def main(self):
+        self.setup_metamist()
+
+        for infra in self.clouds.values():
+            infra.main()
+
+    def setup_metamist(self):
+        if self.dataset_config.enable_metamist_project:
+            # setup metamist project by accessing the property
+            _ = self.metamist_project
+
+    @cached_property
+    def metamist_project(self):
+        return MetamistProject(
+            f'metamist-project-{self.dataset}',
+            project_name=self.dataset,
+        )
+
+
+class CPGDatasetCloudInfrastructure:
     """
     Logic for building infrastructure for a single dataset
     for one infrastructure object.
@@ -598,6 +663,10 @@ class CPGDatasetInfrastructure:
     # region MACHINE ACCOUNTS
 
     @cached_property
+    def project(self):
+        return self.infra.project
+
+    @cached_property
     def main_upload_account(self):
         return self.infra.create_machine_account('main-upload')
 
@@ -662,38 +731,33 @@ class CPGDatasetInfrastructure:
 
         for group in groups:
             group_name = group.name.removeprefix(self.dataset_config.dataset + '-')
-            for member in self.dataset_config.members.get(group_name, []):
-                h = self.compute_hash(self.dataset_config.dataset, member)
+            for member_id in self.dataset_config.members.get(group_name, []):
+                member = self.config.users.get(member_id)
+                if not member:
+                    raise ValueError(f'Member {member_id} not found in config')
 
-                # always add all GCP members, require them to exist in the map for Azure
-                skip_members_without_id = True
-                if isinstance(self.infra, GcpInfrastructure):
-                    member_map = {}
-                    skip_members_without_id = False
-                elif isinstance(self.infra, AzureInfra):
-                    member_map = self.config.member_to_azure_account
-                else:
-                    raise ValueError(f'No member map for {self.infra.name()}')
-
-                if cloud_id := member_map.get(
-                    member, None if skip_members_without_id else member
-                ):
+                h = self.compute_hash(
+                    dataset=self.dataset_config.dataset,
+                    member=member.id,
+                    cloud=self.infra.name(),
+                )
+                if cloud_user := member.clouds[self.infra.name()]:
                     group.add_member(
                         self.infra.get_pulumi_name(f'{group.name}-member-{h}'),
-                        member=cloud_id,
-                        username=member,
+                        member=cloud_user.id,
+                        user=cloud_user,
                     )
 
     @staticmethod
-    def compute_hash(dataset, member):
+    def compute_hash(dataset, member, cloud: str):
         """
-        >>> CPGDatasetInfrastructure.compute_hash('dataset', 'hello.world@email.com')
+        >>> CPGDatasetCloudInfrastructure.compute_hash('dataset', 'hello.world@email.com', '')
         'HW-d51b65ee'
         """
         initials = ''.join(n[0] for n in member.split('@')[0].split('.')).upper()
         # I was going to say "add a salt", but we're displaying the initials,
         # so let's call it something like salt, monosodium glutamate ;)
-        msg = dataset + member
+        msg = dataset + member + cloud
         computed_hash = xxhash.xxh32(msg.encode()).hexdigest()
         return initials + '-' + computed_hash
 
@@ -865,6 +929,7 @@ class CPGDatasetInfrastructure:
         self.web_access_group.add_member(
             self.infra.get_pulumi_name('analysis-in-web-access'),
             member=self.analysis_group,
+            user=None,
         )
 
     def setup_access_level_group_memberships(self):
@@ -986,16 +1051,15 @@ class CPGDatasetInfrastructure:
         if self.dataset_config.dataset != self.config.common_dataset:
             dependent_datasets.add(self.config.common_dataset)
 
-        stacks_to_reference = self.root.dataset_infrastructure.get(
-            self.infra.name(), {}
-        )
+        stacks_to_reference = self.root.dataset_infrastructures
         for namespace, al_buckets in buckets.items():
             configs_to_merge = []
             for dependent_dataset in sorted(dependent_datasets):
-                if config := stacks_to_reference[dependent_dataset].storage_tomls.get(
-                    namespace
+                if cloud_infra := stacks_to_reference[dependent_dataset].clouds.get(
+                    self.infra.name()
                 ):
-                    configs_to_merge.append(config)
+                    if config := cloud_infra.storage_tomls.get(namespace):
+                        configs_to_merge.append(config)
 
             prepare_config_kwargs = {}
             if configs_to_merge:
@@ -1069,9 +1133,9 @@ class CPGDatasetInfrastructure:
                 f'{self.config.config_destination}'
             )
 
-        bucket_name, suffix = self.config.config_destination[len('gs://') :].split(
-            '/', maxsplit=1
-        )
+        bucket_name, suffix = self.config.config_destination.removeprefix(
+            'gs://'
+        ).split('/', maxsplit=1)
 
         name = f'{self.infra.name()}-{self.dataset_config.dataset}-{namespace}'
         output_name = os.path.join(
@@ -2139,11 +2203,11 @@ class CPGDatasetInfrastructure:
 
         shared_buckets = {'release': self.release_bucket}
 
-        project_name = f'{self.infra.get_dataset_project_id()}-shared'
+        project_name = pulumi.Output.concat(self.infra.project_id, '-shared')
 
-        shared_project = self.infra.create_project(project_name)
+        shared_project = self.infra.create_project('shared-project', name=project_name)
         self.infra.create_fixed_budget(
-            f'shared-budget',
+            'shared-budget',
             project=shared_project,
             budget=budget.shared_total_budget,
         )
@@ -2269,13 +2333,13 @@ class CPGDatasetInfrastructure:
         """
         Convert service account email to name + some filtering.
 
-        >>> CPGDatasetInfrastructure._get_name_from_external_sa('my-service-account@project.iam.gserviceaccount.com')
+        >>> CPGDatasetCloudInfrastructure._get_name_from_external_sa('my-service-account@project.iam.gserviceaccount.com')
         'my-service-account-project'
 
-        >>> CPGDatasetInfrastructure._get_name_from_external_sa('yourname@populationgenomics.org.au')
+        >>> CPGDatasetCloudInfrastructure._get_name_from_external_sa('yourname@populationgenomics.org.au')
         'yourname'
 
-        >>> CPGDatasetInfrastructure._get_name_from_external_sa('my.service-account+extra@domain.com')
+        >>> CPGDatasetCloudInfrastructure._get_name_from_external_sa('my.service-account+extra@domain.com')
         'my-service-account-extra'
         """
         if email.endswith(suffix):
