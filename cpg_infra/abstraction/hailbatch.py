@@ -179,8 +179,8 @@ class HailBatchUserProvider(pulumi.dynamic.ResourceProvider):
 
     def diff(self, _id, old_inputs, new_inputs):
         replaces = []
-        if old_inputs['name'] != new_inputs['name']:
-            replaces.append('name')
+        if old_inputs['username'] != new_inputs['username']:
+            replaces.append('username')
 
         if old_inputs['batch_uri'] != new_inputs['batch_uri']:
             replaces.append('batch_uri')
