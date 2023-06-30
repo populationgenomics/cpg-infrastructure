@@ -1,4 +1,4 @@
-cpg-utils>=4.12.2
+cpg-utils>=4.15.1
 google-api-python-client==2.*
 google-auth==2.*
 pulumi-azure-native==1.102.0
