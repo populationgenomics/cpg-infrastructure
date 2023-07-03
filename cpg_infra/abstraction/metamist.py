@@ -32,17 +32,18 @@ class MetamistProjectProvider(pulumi.dynamic.ResourceProvider):
         name = props['project_name']
         create_test_project = props['create_test_project']
 
-        project = get_project_by_name(name)
-        if not project:
-            project = ProjectApi().create_project(
+        if project := get_project_by_name(name):
+            project_id = project['id']
+        else:
+            project_id = ProjectApi().create_project(
                 name=name,
                 dataset=name,
                 create_test_project=create_test_project,
             )
-        if not project:
+
+        if not project_id:
             raise RuntimeError(f'Failed to create project {name}')
 
-        project_id = project['id']
         return pulumi.dynamic.CreateResult(
             id_=f'metamist-project::{name}::{project_id}',
             outs={
