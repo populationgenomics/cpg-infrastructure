@@ -31,6 +31,13 @@ jobs:
           python-version: "3.11"
           cache: "pip" # caching pip dependencies
 
+      - name: "Authenticate to GitHub"
+        env:
+          TOKEN: ${{ secrets.SAMPLE_METADATA_REPO_TOKEN }}
+        run: |
+          git config --global credential.helper store
+          echo "$TOKEN" | git credential approve
+
       - id: "auth-azure"
         name: "Authenticate to Azure Cloud"
         uses: azure/login@v1

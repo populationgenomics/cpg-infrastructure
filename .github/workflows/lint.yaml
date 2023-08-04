@@ -16,6 +16,13 @@ jobs:
           python-version: "3.11"
           cache: "pip"
 
+      - name: Authenticate to GitHub
+        env:
+          TOKEN: ${{ secrets.SAMPLE_METADATA_REPO_TOKEN }}
+        run: |
+          git config --global credential.helper store
+          echo "$TOKEN" | git credential approve
+
       - name: Install packages
         run: |
           pip install \
