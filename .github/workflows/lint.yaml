@@ -9,12 +9,19 @@ jobs:
         shell: bash -l {0}
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v4
         with:
           python-version: "3.11"
           cache: "pip"
+
+      - name: Authenticate to GitHub
+        env:
+          TOKEN: ${{ secrets.SAMPLE_METADATA_REPO_TOKEN }}
+        run: |
+          git config --global credential.helper store
+          echo "$TOKEN" | git credential approve
 
       - name: Install packages
         run: |
@@ -29,7 +36,7 @@ jobs:
           rc=$?
           coverage xml
 
-          echo "::set-output name=rc::$rc"
+          echo "rc=$rc" >> $GITHUB_OUTPUT
 
 # configure this later
 #      - name: "Upload coverage report"
