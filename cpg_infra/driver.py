@@ -2,6 +2,7 @@
 """
 CPG Dataset infrastructure
 """
+import graphlib
 import os.path
 import re
 from collections import defaultdict, namedtuple
@@ -9,7 +10,6 @@ from functools import cached_property
 from typing import Any, Iterable, Iterator, Type
 
 import cpg_utils.config
-import graphlib
 import pulumi
 import toml
 import xxhash
@@ -1694,7 +1694,7 @@ class CPGDatasetCloudInfrastructure:
                 'full': self.dataset_config.gcp.hail_service_account_full,
             }
             if self.dataset_config.setup_test:
-                accounts['test'] = (self.dataset_config.gcp.hail_service_account_test,)
+                accounts['test'] = self.dataset_config.gcp.hail_service_account_test
         elif isinstance(self.infra, AzureInfra):
             assert (
                 self.dataset_config.azure is not None
@@ -1804,7 +1804,9 @@ class CPGDatasetCloudInfrastructure:
 
         accounts = {
             access_level: self.infra.create_machine_account(f'cromwell-{access_level}')
-            for access_level in access_levels(include_test=self.config.setup_test)
+            for access_level in access_levels(
+                include_test=self.dataset_config.setup_test
+            )
         }
         return accounts
 
@@ -1888,7 +1890,9 @@ class CPGDatasetCloudInfrastructure:
 
         accounts = {
             access_level: self.infra.create_machine_account(f'dataproc-{access_level}')
-            for access_level in access_levels(include_test=self.config.setup_test)
+            for access_level in access_levels(
+                include_test=self.dataset_config.setup_test
+            )
         }
         return accounts
 

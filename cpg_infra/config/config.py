@@ -10,8 +10,10 @@ from enum import Enum
 
 import toml
 
-from cpg_infra.config.deserializabledataclass import (DeserializableDataclass,
-                                                      try_parse_value_as_type)
+from cpg_infra.config.deserializabledataclass import (
+    DeserializableDataclass,
+    try_parse_value_as_type,
+)
 
 MemberKey = str
 GroupType = str
