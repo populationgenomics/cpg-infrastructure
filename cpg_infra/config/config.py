@@ -10,10 +10,8 @@ from enum import Enum
 
 import toml
 
-from cpg_infra.config.deserializabledataclass import (
-    DeserializableDataclass,
-    try_parse_value_as_type,
-)
+from cpg_infra.config.deserializabledataclass import (DeserializableDataclass,
+                                                      try_parse_value_as_type)
 
 MemberKey = str
 GroupType = str
@@ -276,6 +274,8 @@ class CPGDatasetConfig(DeserializableDataclass):
 
     gcp: Gcp
     azure: Azure | None = None
+
+    setup_test: bool = True
 
     deployment_service_account_test: str | None = None
     deployment_service_account_standard: str | None = None

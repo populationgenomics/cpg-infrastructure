@@ -2,40 +2,40 @@
 """
 CPG Dataset infrastructure
 """
-import re
 import os.path
-import graphlib
-from typing import Type, Any, Iterator, Iterable
+import re
 from collections import defaultdict, namedtuple
 from functools import cached_property
-from toml_sort import TomlSort
+from typing import Any, Iterable, Iterator, Type
 
+import cpg_utils.config
+import graphlib
+import pulumi
 import toml
 import xxhash
-import pulumi
-import cpg_utils.config
+from toml_sort import TomlSort
 
 from cpg_infra.abstraction.azure import AzureInfra
-from cpg_infra.abstraction.gcp import GcpInfrastructure
 from cpg_infra.abstraction.base import (
-    CloudInfraBase,
-    DryRunInfra,
-    SecretMembership,
     BucketMembership,
+    CloudInfraBase,
     ContainerRegistryMembership,
+    DryRunInfra,
     MachineAccountRole,
+    SecretMembership,
 )
+from cpg_infra.abstraction.gcp import GcpInfrastructure
 from cpg_infra.abstraction.hailbatch import (
     HailBatchBillingProject,
     HailBatchBillingProjectMembership,
 )
 from cpg_infra.abstraction.metamist import MetamistProject
 from cpg_infra.config import (
-    CPGDatasetConfig,
     CPGDatasetComponents,
+    CPGDatasetConfig,
     CPGInfrastructureConfig,
-    HailAccount,
     CPGInfrastructureUser,
+    HailAccount,
 )
 from cpg_infra.plugin import get_plugins
 
@@ -57,7 +57,14 @@ SAMPLE_METADATA_PERMISSIONS = [
 
 
 AccessLevel = str
-ACCESS_LEVELS: Iterable[AccessLevel] = ('test', 'standard', 'full')
+
+
+def access_levels(*, include_test: bool) -> Iterable[AccessLevel]:
+    if include_test:
+        return ('test', 'standard', 'full')
+    return ('standard', 'full')
+
+
 NON_NAME_REGEX = re.compile(r'[^A-Za-z\d_-]')
 TOML_CONFIG_JOINER = '\n||||'
 
@@ -309,7 +316,7 @@ class CPGInfrastructure:
                 if self.config.billing.hail_aggregator_username:
                     HailBatchBillingProjectMembership(
                         infra.get_pulumi_name(
-                            f'batch-billing-member-billing-aggregator'
+                            'batch-billing-member-billing-aggregator'
                         ),
                         billing_project=dataset_cloud_infra.hail_batch_billing_project,
                         user=self.config.billing.hail_aggregator_username,
@@ -517,7 +524,7 @@ class CPGInfrastructure:
             )
 
         infra.add_cloudrun_invoker(
-            f'sample-metadata-cloudrun-invokers',
+            'sample-metadata-cloudrun-invokers',
             service=self.config.sample_metadata.gcp.service_name,
             project=self.config.sample_metadata.gcp.project,
             member=self.gcp_sample_metadata_invoker_group,
@@ -710,10 +717,11 @@ class CPGDatasetCloudInfrastructure:
     @cached_property
     def deployment_accounts_by_access_level(self):
         accounts = {
-            'test': self.dataset_config.deployment_service_account_test,
             'standard': self.dataset_config.deployment_service_account_standard,
             'full': self.dataset_config.deployment_service_account_full,
         }
+        if self.dataset_config.setup_test:
+            accounts['test'] = self.dataset_config.deployment_service_account_test
         return {k: v for k, v in accounts.items() if v}
 
     # endregion MACHINE ACCOUNTS
@@ -804,19 +812,21 @@ class CPGDatasetCloudInfrastructure:
         )
 
         # transitive storage groups
-        self.test_read_group.add_member(
-            self.infra.get_pulumi_name('test-full-in-test-read'), self.test_full_group
-        )
-        self.test_full_group.add_member(
-            self.infra.get_pulumi_name('analysis-group-in-test-full'),
-            self.analysis_group,
-        )
-        self.test_full_group.add_member(
-            self.infra.get_pulumi_name('full-in-test-full'), self.full_group
-        )
-        self.test_full_group.add_member(
-            self.infra.get_pulumi_name('test-in-test-full'), self.test_group
-        )
+        if self.dataset_config.setup_test:
+            self.test_read_group.add_member(
+                self.infra.get_pulumi_name('test-full-in-test-read'),
+                self.test_full_group,
+            )
+            self.test_full_group.add_member(
+                self.infra.get_pulumi_name('analysis-group-in-test-full'),
+                self.analysis_group,
+            )
+            self.test_full_group.add_member(
+                self.infra.get_pulumi_name('full-in-test-full'), self.full_group
+            )
+            self.test_full_group.add_member(
+                self.infra.get_pulumi_name('test-in-test-full'), self.test_group
+            )
 
         self.main_list_group.add_member(
             self.infra.get_pulumi_name('analysis-group-in-main-list'),
@@ -914,11 +924,13 @@ class CPGDatasetCloudInfrastructure:
 
     @cached_property
     def access_level_groups(self) -> dict[AccessLevel, Any]:
-        return {
-            'test': self.test_group,
+        accounts = {
             'standard': self.standard_group,
             'full': self.full_group,
         }
+        if self.dataset_config.setup_test:
+            accounts['test'] = self.test_group
+        return accounts
 
     @staticmethod
     def get_pulumi_output_group_name(*, infra_name: str, dataset: str, kind: str):
@@ -937,13 +949,17 @@ class CPGDatasetCloudInfrastructure:
             access_level,
             machine_account,
         ) in self.working_machine_accounts_kind_al_account_gen():
-            group = self.access_level_groups[access_level]
-            group.add_member(
-                self.infra.get_pulumi_name(
-                    f'{kind}-{access_level}-access-level-group-membership'
-                ),
-                member=machine_account,
-            )
+            if group := self.access_level_groups.get(access_level):
+                group.add_member(
+                    self.infra.get_pulumi_name(
+                        f'{kind}-{access_level}-access-level-group-membership'
+                    ),
+                    member=machine_account,
+                )
+            else:
+                print(
+                    f'No access level group for {access_level} in {self.dataset_config.dataset}'
+                )
 
     def setup_gcp_monitoring_access(self):
         assert isinstance(self.infra, GcpInfrastructure)
@@ -975,7 +991,6 @@ class CPGDatasetCloudInfrastructure:
         if not self.should_setup_storage:
             return
 
-        self.setup_storage_common_test_access()
         self.infra.give_member_ability_to_list_buckets(
             'project-buckets-lister', self.main_list_group
         )
@@ -985,7 +1000,10 @@ class CPGDatasetCloudInfrastructure:
         self.setup_storage_main_analysis_bucket()
         self.setup_storage_main_web_bucket_permissions()
         self.setup_storage_main_upload_buckets_permissions()
-        self.setup_storage_test_buckets_permissions()
+
+        if self.dataset_config.setup_test:
+            self.setup_storage_common_test_access()  # extra access for common dataset
+            self.setup_storage_test_buckets_permissions()
 
         if self.dataset_config.enable_release:
             self.setup_storage_release_bucket_permissions()
@@ -1032,7 +1050,10 @@ class CPGDatasetCloudInfrastructure:
                     namespace='main', dataset=self.dataset_config.dataset
                 ),
             },
-            'test': {
+        }
+
+        if self.dataset_config.setup_test:
+            buckets['test'] = {
                 'default': self.infra.bucket_output_path(self.test_bucket),
                 'web': self.infra.bucket_output_path(self.test_web_bucket),
                 'analysis': self.infra.bucket_output_path(self.test_analysis_bucket),
@@ -1041,8 +1062,8 @@ class CPGDatasetCloudInfrastructure:
                 'web_url': self.config.web_url_template.format(
                     namespace='test', dataset=self.dataset_config.dataset
                 ),
-            },
-        }
+            }
+
         dependent_datasets = {
             *(self.dataset_config.depends_on or []),
             *(self.dataset_config.depends_on_readonly or []),
@@ -1669,10 +1690,11 @@ class CPGDatasetCloudInfrastructure:
 
         if isinstance(self.infra, GcpInfrastructure):
             accounts = {
-                'test': self.dataset_config.gcp.hail_service_account_test,
                 'standard': self.dataset_config.gcp.hail_service_account_standard,
                 'full': self.dataset_config.gcp.hail_service_account_full,
             }
+            if self.dataset_config.setup_test:
+                accounts['test'] = (self.dataset_config.gcp.hail_service_account_test,)
         elif isinstance(self.infra, AzureInfra):
             assert (
                 self.dataset_config.azure is not None
@@ -1680,8 +1702,9 @@ class CPGDatasetCloudInfrastructure:
             accounts = {
                 'test': self.dataset_config.azure.hail_service_account_test,
                 'standard': self.dataset_config.azure.hail_service_account_standard,
-                'full': self.dataset_config.azure.hail_service_account_full,
             }
+            if self.dataset_config.setup_test:
+                accounts['test'] = self.dataset_config.azure.hail_service_account_test
         else:
             return {}
 
@@ -1781,7 +1804,7 @@ class CPGDatasetCloudInfrastructure:
 
         accounts = {
             access_level: self.infra.create_machine_account(f'cromwell-{access_level}')
-            for access_level in ACCESS_LEVELS
+            for access_level in access_levels(include_test=self.config.setup_test)
         }
         return accounts
 
@@ -1865,7 +1888,7 @@ class CPGDatasetCloudInfrastructure:
 
         accounts = {
             access_level: self.infra.create_machine_account(f'dataproc-{access_level}')
-            for access_level in ACCESS_LEVELS
+            for access_level in access_levels(include_test=self.config.setup_test)
         }
         return accounts
 
@@ -1904,7 +1927,7 @@ class CPGDatasetCloudInfrastructure:
         assert isinstance(self.infra, GcpInfrastructure)
 
         self.root.gcp_sample_metadata_invoker_group.add_member(
-            self.infra.get_pulumi_name(f'sample-metadata-analysis-invoker'),
+            self.infra.get_pulumi_name('sample-metadata-analysis-invoker'),
             self.analysis_group,
         )
         for sm_type, group in self.sample_metadata_groups.items():
@@ -2025,7 +2048,7 @@ class CPGDatasetCloudInfrastructure:
             return
 
         self.infra.add_member_to_container_registry(
-            f'images-reader-in-analysis-runner',
+            'images-reader-in-analysis-runner',
             registry=self.config.analysis_runner.gcp.container_registry_name,
             project=self.config.analysis_runner.gcp.project,
             member=self.images_reader_group,
@@ -2038,11 +2061,11 @@ class CPGDatasetCloudInfrastructure:
         :return:
         """
         self.images_writer_group.add_member(
-            self.infra.get_pulumi_name(f'standard-in-images-writer-group-member'),
+            self.infra.get_pulumi_name('standard-in-images-writer-group-member'),
             self.standard_group,
         )
         self.images_writer_group.add_member(
-            self.infra.get_pulumi_name(f'full-in-images-writer-group-member'),
+            self.infra.get_pulumi_name('full-in-images-writer-group-member'),
             self.full_group,
         )
 
@@ -2065,13 +2088,13 @@ class CPGDatasetCloudInfrastructure:
         custom_container_registry = self.infra.create_container_registry('images')
 
         self.infra.add_member_to_container_registry(
-            f'images-reader-in-container-registry',
+            'images-reader-in-container-registry',
             registry=custom_container_registry,
             member=self.images_reader_group,
             membership=ContainerRegistryMembership.READER,
         )
         self.infra.add_member_to_container_registry(
-            f'images-writer-in-container-registry',
+            'images-writer-in-container-registry',
             registry=custom_container_registry,
             member=self.images_writer_group,
             membership=ContainerRegistryMembership.WRITER,
@@ -2132,7 +2155,7 @@ class CPGDatasetCloudInfrastructure:
     def setup_analysis_runner_access(self):
         assert isinstance(self.infra, GcpInfrastructure)
         self.infra.add_cloudrun_invoker(
-            f'analysis-runner-analysis-invoker',
+            'analysis-runner-analysis-invoker',
             project=self.config.analysis_runner.gcp.project,  # ANALYSIS_RUNNER_PROJECT,
             service=self.config.analysis_runner.gcp.cloud_run_instance_name,  # ANALYSIS_RUNNER_CLOUD_RUN_INSTANCE_NAME,
             member=self.analysis_group,
@@ -2256,9 +2279,6 @@ class CPGDatasetCloudInfrastructure:
                 self.web_access_group,
                 self.metadata_access_group,
                 self.upload_group,
-                self.test_read_group,
-                self.test_read_group,
-                self.test_full_group,
                 self.main_list_group,
                 self.main_read_group,
                 self.main_create_group,
@@ -2266,6 +2286,15 @@ class CPGDatasetCloudInfrastructure:
                 self.images_reader_group,
                 self.images_writer_group,
             ]
+
+            if self.dataset_config.setup_test:
+                transitive_groups.extend(
+                    (
+                        self.test_read_group,
+                        self.test_read_group,
+                        self.test_full_group,
+                    )
+                )
 
             for group in transitive_groups:
                 group_name = group.name.removeprefix(self.dataset_config.dataset + '-')
@@ -2281,10 +2310,6 @@ class CPGDatasetCloudInfrastructure:
 
         for dependency in self.dataset_config.depends_on_readonly:
             group_map = {
-                'test-read': [
-                    self.test_read_group,
-                    self.test_full_group,
-                ],
                 'main-read': [
                     self.main_read_group,
                     self.main_create_group,
@@ -2293,6 +2318,11 @@ class CPGDatasetCloudInfrastructure:
                 'main-list': [self.main_list_group],
                 'images-reader': [self.images_reader_group],
             }
+            if self.dataset_config.setup_test:
+                group_map['test-read'] = [
+                    self.test_read_group,
+                    self.test_full_group,
+                ]
             for target_group, groups in group_map.items():
                 transitive_group = self.group_provider.get_group(
                     self.infra.name(), f'{dependency}-{target_group}'
