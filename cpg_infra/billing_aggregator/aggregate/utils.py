@@ -2,28 +2,26 @@
 """
 Class of helper functions for billing aggregate functions
 """
+import asyncio
+import json
+import logging
+import math
 import os
 import re
 import sys
-import math
-import json
-import asyncio
-import logging
-
-from io import StringIO
-from pathlib import Path
 from base64 import b64decode
 from datetime import date, datetime, timedelta
-from typing import Any, Iterator, Sequence, TypeVar, Iterable, Type
+from io import StringIO
+from pathlib import Path
+from typing import Any, Iterable, Iterator, Sequence, Type, TypeVar
 
 import aiohttp
-import pandas as pd
-import google.cloud.logging
 import google.cloud.bigquery as bq
-from flask import Request
+import google.cloud.logging
+import pandas as pd
 import rapidjson
-
 from cpg_utils.cloud import read_secret
+from flask import Request
 from google.api_core.exceptions import ClientError
 from pandas import Timestamp
 
@@ -60,7 +58,7 @@ GCP_PROJECT = os.getenv('BILLING_PROJECT_ID')
 GCP_BILLING_BQ_TABLE = os.getenv('GCP_BILLING_SOURCE_TABLE')
 GCP_AGGREGATE_DEST_TABLE = os.getenv('GCP_AGGREGATE_DEST_TABLE')
 
-assert GCP_AGGREGATE_DEST_TABLE
+# assert GCP_AGGREGATE_DEST_TABLE
 logger.info(f'GCP_AGGREGATE_DEST_TABLE: {GCP_AGGREGATE_DEST_TABLE}')
 
 IS_PRODUCTION = os.getenv('PRODUCTION') in ('1', 'true', 'yes')
@@ -707,7 +705,7 @@ def upsert_aggregated_dataframe_into_bigquery(
     """
 
     if len(df['id']) == 0:
-        logger.info(f'No rows to insert')
+        logger.info('No rows to insert')
         return 0
 
     # Cannot use query parameters for table names
@@ -842,7 +840,7 @@ def get_start_and_end_from_request(
     logger.info(request_data)
 
     if not request_data or ('start' not in request_data and 'end' not in request_data):
-        logger.warning(f'Could not find start or end. Defaulting to None.')
+        logger.warning('Could not find start or end. Defaulting to None.')
         raise ValueError("JSON is invalid, or missing a 'start' or 'end' property")
 
     try:

@@ -1,7 +1,7 @@
 # pylint: disable=logging-format-interpolation,too-many-locals,too-many-branches,too-many-lines,c-extension-no-member   # noqa: E501
 """
 This cloud function runs DAILY, and distributes the cost of
-SEQR on the sample size within SEQR.
+SEQR on the sequencing_group size within SEQR.
 
 - It first pulls the cost of the seqr project (relevant components within it):
     - Elasticsearch, instance cost
@@ -25,28 +25,25 @@ TO DO :
 - Add cram size to SM
 - Ensure getting latest joint call is split by sequence type,
     or some other metric (exome vs genome)
-- Getting latest cram for sample by sequence type (eg: exome / genome)
+- Getting latest cram for sequencing_group by sequence type (eg: exome / genome)
 """
-import shutil
-from typing import Literal, Any
-
-import os
 import asyncio
 import hashlib
 import logging
-
+import os
+import shutil
 from collections import defaultdict
-from datetime import datetime, timedelta, date
+from datetime import date, datetime, timedelta
+from typing import Any, Literal
 
-import rapidjson
 import functions_framework
-from flask import Request
 import google.cloud.bigquery as bq
-
-from sample_metadata.apis import SampleApi, ProjectApi, AnalysisApi
-from sample_metadata.model.analysis_type import AnalysisType
-from sample_metadata.model.analysis_status import AnalysisStatus
-from sample_metadata.model.analysis_query_model import AnalysisQueryModel
+import rapidjson
+from flask import Request
+from metamist.apis import AnalysisApi, ProjectApi, SampleApi
+from metamist.model.analysis_query_model import AnalysisQueryModel
+from metamist.model.analysis_status import AnalysisStatus
+from metamist.model.analysis_type import AnalysisType
 
 try:
     from . import utils
@@ -73,7 +70,7 @@ BASE = 'https://batch.hail.populationgenomics.org.au'
 BATCHES_API = BASE + '/api/v1alpha/batches'
 JOBS_API = BASE + '/api/v1alpha/batches/{batch_id}/jobs/resources'
 
-JOB_ATTRIBUTES_IGNORE = {'name', 'dataset', 'samples'}
+JOB_ATTRIBUTES_IGNORE = {'name', 'dataset', 'sequencing_groups'}
 RunMode = Literal['prod', 'local', 'dry-run']
 
 logger = utils.logger.getChild('seqr')
@@ -454,7 +451,7 @@ async def generate_proportionate_maps_of_datasets(
     seqr_project_map: dict[str, int],
 ) -> tuple[ProportionateMapType, ProportionateMapType]:
     """
-    Generate a proportionate map of datasets from list of samples
+    Generate a proportionate map of datasets from list of sequencing_groups
     in the relevant joint-calls (< 2022-06-01) or es-index (>= 2022-06-01)
     """
 
@@ -462,7 +459,7 @@ async def generate_proportionate_maps_of_datasets(
 
     # pylint: disable=too-many-locals
     sm_projects = await papi.get_all_projects_async()
-    sm_pid_to_dataset = {p['id']: p['dataset'] for p in sm_projects}
+    sm_pid_to_dataset = {p['id']: p['name'] for p in sm_projects}
 
     filtered_projects = list(set(sm_pid_to_dataset.values()).intersection(projects))
     missing_projects = set(projects) - set(sm_pid_to_dataset.values())
@@ -473,17 +470,22 @@ async def generate_proportionate_maps_of_datasets(
 
     logger.info(f'Getting proportionate map for projects: {filtered_projects}')
 
-    # Let's get the file size for each sample in all project, then we can determine
-    # by-use-case how much each sample / project should be responsible for the cost
-    sample_file_sizes_by_project = await aapi.get_sample_file_sizes_async(
-        project_names=projects, start_date=str(start.date()), end_date=str(end.date())
+    # Let's get the file size for each sequencing_group in all project, then we can determine
+    # by-use-case how much each sequencing_group / project should be responsible for the cost
+    sequencing_group_file_sizes_by_project = (
+        await aapi.get_sequencing_group_file_sizes_async(
+            project_names=projects,
+            start_date=str(start.date()),
+            end_date=str(end.date()),
+        )
     )
-    # this looks like {'dataset': [{'sample_id': 'CPG123', 'dates': [...]}, ...]}
+    # this looks like {'dataset': [{'sequencing_group_id': 'CPG123', 'dates': [...]}, ...]}
     file_sizes_by_project: dict[str, list[dict]] = {
-        p['project']: p['samples'] for p in sample_file_sizes_by_project
+        p['project']: p['sequencing_groups']
+        for p in sequencing_group_file_sizes_by_project
     }
 
-    # these are used to determine if a sample is _in_ seqr.
+    # these are used to determine if a sequencing_group is _in_ seqr.
     joint_call_analyses = await get_analysis_objects_for_seqr_hosting_prop_map(
         start,
         end,
@@ -492,7 +494,7 @@ async def generate_proportionate_maps_of_datasets(
 
     seqr_hosting_map = get_seqr_hosting_prop_map_from(
         relevant_analyses=joint_call_analyses,
-        sample_sizes_by_project=file_sizes_by_project,
+        sequencing_group_sizes_by_project=file_sizes_by_project,
     )
     shared_computation_map = get_shared_computation_prop_map(
         file_sizes_by_project,
@@ -507,7 +509,7 @@ async def get_analysis_objects_for_seqr_hosting_prop_map(
     start: datetime, end: datetime, projects: list[str]
 ) -> list[dict]:
     """
-    Fetch the relevant analysis objects + crams from sample-metadata
+    Fetch the relevant analysis objects + crams from sequencing_group-metadata
     to put together the proportionate_map.
     """
     # from 2022-06-01, we use it based on es-index, otherwise joint-calling
@@ -575,19 +577,19 @@ async def get_analysis_objects_for_seqr_hosting_prop_map(
 
 def get_seqr_hosting_prop_map_from(
     relevant_analyses: list[dict],
-    sample_sizes_by_project: dict[str, list[dict]],
+    sequencing_group_sizes_by_project: dict[str, list[dict]],
 ) -> ProportionateMapType:
     """
-    From prefetched analysis and lists of sample-sizes.
+    From prefetched analysis and lists of sequencing_group-sizes.
     Samples can have a start / end, so how do we get the relevant value efficiently.
 
-    One method, we can cycle thorugh sample_sizes_by_project, and calculate a delta,
+    One method, we can cycle thorugh sequencing_group_sizes_by_project, and calculate a delta,
     so we can iterate from start of time, and then just add up all relevant values.
     """
 
     timeit_start = datetime.now()
 
-    missing_samples: set[str] = set()
+    missing_sequencing_groups: set[str] = set()
 
     proportioned_datasets: ProportionateMapType = []
 
@@ -600,19 +602,21 @@ def get_seqr_hosting_prop_map_from(
             relevant_analyses,
         )
     ) - timedelta(days=2)
-    date_sizes_by_sample: dict[str, list[tuple[date, int]]] = defaultdict(list)
-    sample_to_project = {}
+    date_sizes_by_sequencing_group: dict[str, list[tuple[date, int]]] = defaultdict(
+        list
+    )
+    sequencing_group_to_project = {}
     # let's loop through, and basically get the potential differential
     # by day, this means we can just sum up all the values, rather than
     # only selecting the _most relevant_ for some time - because that sounds
-    # like a potentially expensive op to do for each sample, but this is a fixed
+    # like a potentially expensive op to do for each sequencing_group, but this is a fixed
     # sum over the max range of the interval we're checking.
-    for project, samples in sample_sizes_by_project.items():
-        for sample_obj in samples:
-            sample_id = sample_obj['sample']
-            sample_to_project[sample_id] = project
+    for project, sequencing_groups in sequencing_group_sizes_by_project.items():
+        for sequencing_group_obj in sequencing_groups:
+            sequencing_group_id = sequencing_group_obj['sequencing_group']
+            sequencing_group_to_project[sequencing_group_id] = project
             sizes_dates: list[tuple[date, int]] = []
-            for obj in sample_obj['dates']:
+            for obj in sequencing_group_obj['dates']:
                 size = sum(obj['size'].values())
                 start_date = utils.parse_date_only_string(obj['start'])
                 if len(sizes_dates) > 0:
@@ -623,35 +627,39 @@ def get_seqr_hosting_prop_map_from(
                 adjusted_start_date = max(min_date, start_date)
                 sizes_dates.append((adjusted_start_date, size))
 
-            date_sizes_by_sample[sample_id] = sizes_dates
+            date_sizes_by_sequencing_group[sequencing_group_id] = sizes_dates
 
-    sizes_by_date_then_sample: dict[date, dict[str, int]] = defaultdict(
+    sizes_by_date_then_sequencing_group: dict[date, dict[str, int]] = defaultdict(
         lambda: defaultdict(int)
     )
-    # now we can sum up all samples to get the total shift per sample
+    # now we can sum up all sequencing_groups to get the total shift per sequencing_group
     # for a given day.
-    for sample_id, date_size in date_sizes_by_sample.items():
+    for sequencing_group_id, date_size in date_sizes_by_sequencing_group.items():
         for sdate, size in date_size:
             # these are ordered
-            sizes_by_date_then_sample[sdate][sample_id] += size
+            sizes_by_date_then_sequencing_group[sdate][sequencing_group_id] += size
 
     ordered_sizes_by_day = list(
-        sorted(sizes_by_date_then_sample.items(), key=lambda el: el[0])
+        sorted(sizes_by_date_then_sequencing_group.items(), key=lambda el: el[0])
     )
-    day_samples = get_relevant_samples_for_day_from_jc_es(
+    day_sequencing_groups = get_relevant_sequencing_groups_for_day_from_jc_es(
         relevant_analyses, min_date=min_date
     )
-    for analysis_day, samples in day_samples:
+    for analysis_day, sequencing_groups in day_sequencing_groups:
         # now we just need to sum up all sizes_by_date starting from the start to now
-        # only selecting the sampleIDs we want
+        # only selecting the sequencing_groupIDs we want
 
         size_per_project: dict[str, int] = defaultdict(int)
-        for sample_date, sample_map in ordered_sizes_by_day:
-            if sample_date > analysis_day:
+        for sequencing_group_date, sequencing_group_map in ordered_sizes_by_day:
+            if sequencing_group_date > analysis_day:
                 break
-            relevant_samples_in_day = set(sample_map.keys()).intersection(samples)
-            for sample in relevant_samples_in_day:
-                size_per_project[sample_to_project[sample]] += sample_map[sample]
+            relevant_sequencing_groups_in_day = set(
+                sequencing_group_map.keys()
+            ).intersection(sequencing_groups)
+            for sequencing_group in relevant_sequencing_groups_in_day:
+                size_per_project[
+                    sequencing_group_to_project[sequencing_group]
+                ] += sequencing_group_map[sequencing_group]
 
         # Size is in bytes, and plain Python int type is unbound
         total_size = sum(size_per_project.values())
@@ -669,14 +677,14 @@ def get_seqr_hosting_prop_map_from(
         f'Took {(datetime.now() - timeit_start).total_seconds()} to prepare prop map'
     )
 
-    if missing_samples:
-        print('Missing crams: ' + ', '.join(missing_samples))
+    if missing_sequencing_groups:
+        print('Missing crams: ' + ', '.join(missing_sequencing_groups))
 
     # We'll sort ASC, which makes it easy to find the relevant entry later
     return proportioned_datasets
 
 
-def get_relevant_samples_for_day_from_jc_es(
+def get_relevant_sequencing_groups_for_day_from_jc_es(
     relevant_analyses: list[dict], min_date: date
 ):
     """
@@ -685,22 +693,22 @@ def get_relevant_samples_for_day_from_jc_es(
 
     ORIGINAL ATTEMPT:
         Keep track of which dataset an es-index belongs to, and then on
-        a second pass evaluate the total samples for all DAY changes.
+        a second pass evaluate the total sequencing_groups for all DAY changes.
         We add a *SPECIAL CASE* if the project-name is seqr, then that
-        sets the samples for the whole day to cover the joint-calls.
-        This unfortunately fails because the samples reported in some
+        sets the sequencing_groups for the whole day to cover the joint-calls.
+        This unfortunately fails because the sequencing_groups reported in some
         es-indices are very small, and blows out any numbers
 
     CURRENT IMPLEMENTATION
-        We just take a cumulative samples seen over all time. So we
-        CANNOT tell if a sample is removed once it's in an ES index.
+        We just take a cumulative sequencing_groups seen over all time. So we
+        CANNOT tell if a sequencing_group is removed once it's in an ES index.
         Though I think this is rare.
     """
 
-    day_project_delta_sample_map: dict[date, set[str]] = defaultdict(set)
+    day_project_delta_sequencing_group_map: dict[date, set[str]] = defaultdict(set)
     for analysis in relevant_analyses:
         # Using timestamp_completed as the start time for the propmap
-        # is a small problem because then this script won't charge the new samples
+        # is a small problem because then this script won't charge the new sequencing_groups
         # for the current joint-call as:
         #   joint_call.completed_timestamp > hail_joint_call.started_timestamp
         # We might be able to roughly accept this by subtracting a day from the
@@ -709,46 +717,52 @@ def get_relevant_samples_for_day_from_jc_es(
         dt = datetime.fromisoformat(analysis['timestamp_completed']).date() - timedelta(
             days=2
         )
-        # get the changes of samples for a specific day
-        day_project_delta_sample_map[max(min_date, dt)] |= set(analysis['sample_ids'])
+        # get the changes of sequencing_groups for a specific day
+        day_project_delta_sequencing_group_map[max(min_date, dt)] |= set(
+            analysis['sequencing_group_ids']
+        )
 
-    analysis_day_samples: list[tuple[date, set[str]]] = []
+    analysis_day_sequencing_groups: list[tuple[date, set[str]]] = []
 
-    for analysis_day, aday_samples in sorted(
-        day_project_delta_sample_map.items(), key=lambda r: r[0]
+    for analysis_day, aday_sequencing_groups in sorted(
+        day_project_delta_sequencing_group_map.items(), key=lambda r: r[0]
     ):
-        if len(analysis_day_samples) == 0:
-            analysis_day_samples.append((analysis_day, aday_samples))
+        if len(analysis_day_sequencing_groups) == 0:
+            analysis_day_sequencing_groups.append(
+                (analysis_day, aday_sequencing_groups)
+            )
             continue
 
-        new_samples = aday_samples | analysis_day_samples[-1][1]
-        analysis_day_samples.append((analysis_day, new_samples))
+        new_sequencing_groups = (
+            aday_sequencing_groups | analysis_day_sequencing_groups[-1][1]
+        )
+        analysis_day_sequencing_groups.append((analysis_day, new_sequencing_groups))
 
     # ORIGINAL ATTEMPT for being faithful to ES-indices
     #
-    # relevant_samples_by_dataset = {}
+    # relevant_sequencing_groups_by_dataset = {}
     # for analysis_day, aday_projects in sorted(
-    #     day_project_delta_sample_map.items(), key=lambda r: r[0]
+    #     day_project_delta_sequencing_group_map.items(), key=lambda r: r[0]
     # ):
-    #     # update the relevant_samples_by_dataset
-    #     relevant_samples_by_dataset.update(
+    #     # update the relevant_sequencing_groups_by_dataset
+    #     relevant_sequencing_groups_by_dataset.update(
     #         {k: s for k, s in aday_projects.items() if k != 'seqr' and len(s) > 0}
     #     )
     #     if 'seqr' in aday_projects:
-    #         analysis_day_samples.append((analysis_day, aday_projects['seqr']))
+    #         analysis_day_sequencing_groups.append((analysis_day, aday_projects['seqr']))
     #         continue
     #
-    #     day_samples = set(
-    #         s for samples in relevant_samples_by_dataset.values() for s in samples
+    #     day_sequencing_groups = set(
+    #         s for sequencing_groups in relevant_sequencing_groups_by_dataset.values() for s in sequencing_groups
     #     )
 
-    #     analysis_day_samples.append((analysis_day, list(day_samples)))
+    #     analysis_day_sequencing_groups.append((analysis_day, list(day_sequencing_groups)))
 
-    return analysis_day_samples
+    return analysis_day_sequencing_groups
 
 
 def get_shared_computation_prop_map(
-    sample_sizes_by_project: dict[str, list[dict]],
+    sequencing_group_sizes_by_project: dict[str, list[dict]],
     min_datetime: datetime,
     max_datetime: datetime,
 ) -> ProportionateMapType:
@@ -769,10 +783,10 @@ def get_shared_computation_prop_map(
 
     # 1.
     by_date_diff: dict[date, dict[str, int]] = defaultdict(lambda: defaultdict(int))
-    for project_name, samples in sample_sizes_by_project.items():
-        for sample_obj in samples:
+    for project_name, sequencing_groups in sequencing_group_sizes_by_project.items():
+        for sequencing_group_obj in sequencing_groups:
             sizes_dates: list[tuple[date, int]] = []
-            for obj in sample_obj['dates']:
+            for obj in sequencing_group_obj['dates']:
                 size = sum(obj['size'].values())
                 start_date = utils.parse_date_only_string(obj['start'])
                 if start_date > max_datetime.date():
