@@ -126,6 +126,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         # Metamist environment (DEVELOPMENT / PRODUCTION) for ETL cloud functions
         etl_environment: str | None = None
         # Default ETL parser configuration, if not specified in ETL payload
+        # e.g.: {'project': 'greek-myth', 'default_sequencing_type': 'genome'}
         etl_parser_default_config: dict[str, str] | None = None
         # Collection of private packages for ETL functions appended to requirements.txt
         etl_private_repo_packages: list[str] | None = None
