@@ -123,6 +123,10 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         gcp: GCP
         slack_channel: str | None = None
         etl_accessors: list[str] = dataclasses.field(default_factory=list)
+        etl_environment: str | None = None
+        etl_default_config: dict[str, str] | None = None
+        etl_private_repo_url: str | None = None
+        etl_private_repo_packages: str | None = None
 
     @dataclasses.dataclass(frozen=True)
     class Billing(DeserializableDataclass):
