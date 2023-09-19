@@ -2,41 +2,40 @@
 """
 CPG Dataset infrastructure
 """
-import graphlib
-import os.path
 import re
+import os.path
+import graphlib
+from typing import Type, Any, Iterator, Iterable
 from collections import defaultdict, namedtuple
 from functools import cached_property
-from typing import Any, Iterable, Iterator, Type
-
-import cpg_utils.config
-import pulumi
-import pulumi_gcp as gcp
-import toml
-import xxhash
 from toml_sort import TomlSort
 
+import toml
+import xxhash
+import pulumi
+import cpg_utils.config
+
 from cpg_infra.abstraction.azure import AzureInfra
-from cpg_infra.abstraction.base import (
-    BucketMembership,
-    CloudInfraBase,
-    ContainerRegistryMembership,
-    DryRunInfra,
-    MachineAccountRole,
-    SecretMembership,
-)
 from cpg_infra.abstraction.gcp import GcpInfrastructure
+from cpg_infra.abstraction.base import (
+    CloudInfraBase,
+    DryRunInfra,
+    SecretMembership,
+    BucketMembership,
+    ContainerRegistryMembership,
+    MachineAccountRole,
+)
 from cpg_infra.abstraction.hailbatch import (
     HailBatchBillingProject,
     HailBatchBillingProjectMembership,
 )
 from cpg_infra.abstraction.metamist import MetamistProject
 from cpg_infra.config import (
-    CPGDatasetComponents,
     CPGDatasetConfig,
+    CPGDatasetComponents,
     CPGInfrastructureConfig,
-    CPGInfrastructureUser,
     HailAccount,
+    CPGInfrastructureUser,
 )
 from cpg_infra.plugin import get_plugins
 
@@ -273,7 +272,6 @@ class CPGInfrastructure:
         self.setup_datasets()
         self.setup_gcp_access_cache_bucket()
         self.setup_gcp_sample_metadata_cloudrun_invoker()
-        self.setup_python_registry()
 
         self.deploy_datasets()
 
@@ -311,7 +309,7 @@ class CPGInfrastructure:
                 if self.config.billing.hail_aggregator_username:
                     HailBatchBillingProjectMembership(
                         infra.get_pulumi_name(
-                            'batch-billing-member-billing-aggregator'
+                            f'batch-billing-member-billing-aggregator'
                         ),
                         billing_project=dataset_cloud_infra.hail_batch_billing_project,
                         user=self.config.billing.hail_aggregator_username,
@@ -502,8 +500,6 @@ class CPGInfrastructure:
                 membership=BucketMembership.READ,
             )
 
-    # endregion ACCESS_CACHE
-
     @cached_property
     def gcp_sample_metadata_invoker_group(self):
         return self.group_provider.create_group(
@@ -517,34 +513,15 @@ class CPGInfrastructure:
         if not isinstance(infra, GcpInfrastructure):
             raise ValueError(
                 f'Dataset_infrastructure for {self.config.common_dataset!r} was not of '
-                'type GCPInfrastructure, this is probably a bug'
+                f'type GCPInfrastructure, this is probably a bug'
             )
 
         infra.add_cloudrun_invoker(
-            'sample-metadata-cloudrun-invokers',
+            f'sample-metadata-cloudrun-invokers',
             service=self.config.sample_metadata.gcp.service_name,
             project=self.config.sample_metadata.gcp.project,
             member=self.gcp_sample_metadata_invoker_group,
         )
-
-    @cached_property
-    def gcp_python_registry(self):
-        """
-        Create a registry for private python packages, we only need one for our org,
-        andt there's no equivalent for Azure.
-
-        """
-        return gcp.artifactregistry.Repository(
-            'python-artifact-registry',
-            repository_id='python-registry',
-            project=self.common_gcp_infra.project,
-            format='PYTHON',
-            location=self.config.gcp.region,
-        )
-
-    def setup_python_registry(self):
-        # force the creation
-        _ = self.gcp_python_registry
 
 
 class CPGDatasetInfrastructure:
@@ -1146,7 +1123,7 @@ class CPGDatasetCloudInfrastructure:
                 _infra_to_call_function_on = (
                     self.infra
                     if isinstance(self.infra, Infra)
-                    else Infra(self.config, self.dataset_config)  # type: ignore
+                    else Infra(self.config, self.dataset_config)
                 )
                 break
         else:
@@ -1927,7 +1904,7 @@ class CPGDatasetCloudInfrastructure:
         assert isinstance(self.infra, GcpInfrastructure)
 
         self.root.gcp_sample_metadata_invoker_group.add_member(
-            self.infra.get_pulumi_name('sample-metadata-analysis-invoker'),
+            self.infra.get_pulumi_name(f'sample-metadata-analysis-invoker'),
             self.analysis_group,
         )
         for sm_type, group in self.sample_metadata_groups.items():
@@ -2048,7 +2025,7 @@ class CPGDatasetCloudInfrastructure:
             return
 
         self.infra.add_member_to_container_registry(
-            'images-reader-in-analysis-runner',
+            f'images-reader-in-analysis-runner',
             registry=self.config.analysis_runner.gcp.container_registry_name,
             project=self.config.analysis_runner.gcp.project,
             member=self.images_reader_group,
@@ -2061,11 +2038,11 @@ class CPGDatasetCloudInfrastructure:
         :return:
         """
         self.images_writer_group.add_member(
-            self.infra.get_pulumi_name('standard-in-images-writer-group-member'),
+            self.infra.get_pulumi_name(f'standard-in-images-writer-group-member'),
             self.standard_group,
         )
         self.images_writer_group.add_member(
-            self.infra.get_pulumi_name('full-in-images-writer-group-member'),
+            self.infra.get_pulumi_name(f'full-in-images-writer-group-member'),
             self.full_group,
         )
 
@@ -2088,13 +2065,13 @@ class CPGDatasetCloudInfrastructure:
         custom_container_registry = self.infra.create_container_registry('images')
 
         self.infra.add_member_to_container_registry(
-            'images-reader-in-container-registry',
+            f'images-reader-in-container-registry',
             registry=custom_container_registry,
             member=self.images_reader_group,
             membership=ContainerRegistryMembership.READER,
         )
         self.infra.add_member_to_container_registry(
-            'images-writer-in-container-registry',
+            f'images-writer-in-container-registry',
             registry=custom_container_registry,
             member=self.images_writer_group,
             membership=ContainerRegistryMembership.WRITER,
@@ -2155,7 +2132,7 @@ class CPGDatasetCloudInfrastructure:
     def setup_analysis_runner_access(self):
         assert isinstance(self.infra, GcpInfrastructure)
         self.infra.add_cloudrun_invoker(
-            'analysis-runner-analysis-invoker',
+            f'analysis-runner-analysis-invoker',
             project=self.config.analysis_runner.gcp.project,  # ANALYSIS_RUNNER_PROJECT,
             service=self.config.analysis_runner.gcp.cloud_run_instance_name,  # ANALYSIS_RUNNER_CLOUD_RUN_INSTANCE_NAME,
             member=self.analysis_group,
