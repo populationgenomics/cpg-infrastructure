@@ -17,17 +17,27 @@ import xxhash
 from toml_sort import TomlSort
 
 from cpg_infra.abstraction.azure import AzureInfra
-from cpg_infra.abstraction.base import (BucketMembership, CloudInfraBase,
-                                        ContainerRegistryMembership,
-                                        DryRunInfra, MachineAccountRole,
-                                        SecretMembership)
+from cpg_infra.abstraction.base import (
+    BucketMembership,
+    CloudInfraBase,
+    ContainerRegistryMembership,
+    DryRunInfra,
+    MachineAccountRole,
+    SecretMembership,
+)
 from cpg_infra.abstraction.gcp import GcpInfrastructure
-from cpg_infra.abstraction.hailbatch import (HailBatchBillingProject,
-                                             HailBatchBillingProjectMembership)
+from cpg_infra.abstraction.hailbatch import (
+    HailBatchBillingProject,
+    HailBatchBillingProjectMembership,
+)
 from cpg_infra.abstraction.metamist import MetamistProject
-from cpg_infra.config import (CPGDatasetComponents, CPGDatasetConfig,
-                              CPGInfrastructureConfig, CPGInfrastructureUser,
-                              HailAccount)
+from cpg_infra.config import (
+    CPGDatasetComponents,
+    CPGDatasetConfig,
+    CPGInfrastructureConfig,
+    CPGInfrastructureUser,
+    HailAccount,
+)
 from cpg_infra.plugin import get_plugins
 
 SampleMetadataAccessorMembership = namedtuple(
