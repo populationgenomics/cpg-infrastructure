@@ -3,7 +3,7 @@ google-api-python-client==2.*
 google-auth==2.*
 pulumi-azure-native==1.104.0
 pulumi-azuread==5.40.0
-pulumi-gcp==6.64.0
+pulumi-gcp==6.66.0
 pulumi==3.79.0
 toml-sort
 toml==0.10.2
