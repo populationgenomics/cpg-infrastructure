@@ -41,7 +41,7 @@ def archive_folder(
                 # do it this way to stop any issues with changing paths
                 assets[filename] = pulumi.StringAsset(file.read())
 
-    for fn, asset in extra_assets.items():
-        assets[fn] = asset
+    if extra_assets:
+        assets.update(extra_assets)
 
     return pulumi.AssetArchive(assets)
