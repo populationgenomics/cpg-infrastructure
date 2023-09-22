@@ -2,7 +2,6 @@
 """
 CPG Dataset infrastructure
 """
-import graphlib
 import os.path
 import re
 from collections import defaultdict, namedtuple
@@ -10,6 +9,7 @@ from functools import cached_property
 from typing import Any, Iterable, Iterator, Type
 
 import cpg_utils.config
+import graphlib
 import pulumi
 import pulumi_gcp as gcp
 import toml
@@ -278,7 +278,7 @@ class CPGInfrastructure:
         self.deploy_datasets()
 
         for plugin in get_plugins().values():
-            plugin(self.config).main()
+            plugin(self, self.config).main()
 
         self.finalize_groups()
         self.setup_hail_batch_billing_project_members()
