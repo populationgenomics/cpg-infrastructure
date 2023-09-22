@@ -9,8 +9,7 @@ DEFAULT_ALLOWED_EXTENSIONS = frozenset({'.py', '.txt', '.json'})
 
 
 def archive_folder(
-    path: str,
-    allowed_extensions: frozenset[str] = DEFAULT_ALLOWED_EXTENSIONS,
+    path: str, allowed_extensions: frozenset[str] = DEFAULT_ALLOWED_EXTENSIONS,
     apply_fun_map: dict[str, tuple[Callable, Any]] | None = None,
 ) -> pulumi.AssetArchive:
     """Archive a folder into a pulumi asset archive
