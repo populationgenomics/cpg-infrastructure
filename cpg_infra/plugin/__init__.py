@@ -1,5 +1,6 @@
 """Ability to extend CPG infrastructure with plugins"""
 import pkg_resources
+
 from cpg_infra.config import CPGInfrastructureConfig
 
 PLUGIN_ENTRYPOINT_NAME = 'cpginfra.plugins'
@@ -8,8 +9,9 @@ PLUGIN_ENTRYPOINT_NAME = 'cpginfra.plugins'
 class CpgInfrastructurePlugin:
     """Billing aggregator Infrastructure (as code) for Pulumi"""
 
-    def __init__(self, config: CPGInfrastructureConfig):
+    def __init__(self, infrastructure, config: CPGInfrastructureConfig):
         self.config = config
+        self.infrastructure = infrastructure
 
     def main(self):
         """Driver for the billing aggregator infrastructure as code plugin"""
