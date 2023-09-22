@@ -9,7 +9,8 @@ DEFAULT_ALLOWED_EXTENSIONS = frozenset({'.py', '.txt', '.json'})
 
 
 def archive_folder(
-    path: str, allowed_extensions: frozenset[str] = DEFAULT_ALLOWED_EXTENSIONS,
+    path: str,
+    allowed_extensions: frozenset[str] = DEFAULT_ALLOWED_EXTENSIONS,
     apply_fun_map: dict[str, tuple[Callable, Any]] | None = None,
 ) -> pulumi.AssetArchive:
     """Archive a folder into a pulumi asset archive
@@ -18,7 +19,7 @@ def archive_folder(
 
     e.g. apply_fun_map = {
         'metamist-6.2.0.tar.gz': (add_binary_file, None),
-        'requirements.tx't: (update_requirements, {
+        'requirements.txt': (update_requirements, {
             'private_repo_url': 'https://...',
             'private_repos': ['repo1','repo2'],
         }),
