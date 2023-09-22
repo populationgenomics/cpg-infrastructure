@@ -16,6 +16,11 @@ def archive_folder(
 
     extra_assets: map of file name and extra assets to add to the archive
 
+    e.g:
+    {
+        "requirements.txt": StringAsset / FileAsset(...)
+    }
+
     """
     assets = {}
 
@@ -26,6 +31,10 @@ def archive_folder(
         for filename in os.listdir('.'):
             if not any(filename.endswith(ext) for ext in allowed_extensions):
                 # print(f'Skipping {filename} for invalid extension')
+                continue
+
+            if extra_assets and filename in extra_assets:
+                # Skipping filename as it is in extra_assets
                 continue
 
             with open(filename, encoding='utf-8') as file:
