@@ -123,6 +123,13 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         gcp: GCP
         slack_channel: str | None = None
         etl_accessors: list[str] = dataclasses.field(default_factory=list)
+        # Metamist environment (DEVELOPMENT / PRODUCTION) for ETL cloud functions
+        etl_environment: str | None = 'PRODUCTION'
+        # Default ETL parser configuration, if not specified in ETL payload
+        # e.g.: {'project': 'greek-myth', 'default_sequencing_type': 'genome'}
+        etl_parser_default_config: dict[str, str] | None = None
+        # Collection of private packages for ETL functions appended to requirements.txt
+        etl_private_repo_packages: list[str] | None = None
 
     @dataclasses.dataclass(frozen=True)
     class Billing(DeserializableDataclass):
