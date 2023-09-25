@@ -124,7 +124,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         slack_channel: str | None = None
         etl_accessors: list[str] = dataclasses.field(default_factory=list)
         # Metamist environment (DEVELOPMENT / PRODUCTION) for ETL cloud functions
-        etl_environment: str | None = None
+        etl_environment: str | None = 'PRODUCTION'
         # Default ETL parser configuration, if not specified in ETL payload
         # e.g.: {'project': 'greek-myth', 'default_sequencing_type': 'genome'}
         etl_parser_default_config: dict[str, str] | None = None
