@@ -161,7 +161,7 @@ class CloudInfraBase(ABC):
     @abstractmethod
     def bucket_rule_temporary(self, days=TMP_BUCKET_PERIOD_IN_DAYS) -> Any:
         """
-        Return a lifecycle_rule that stores data for n days after delete"""
+        Return a lifecycle_rule that deletes data n days after its creation"""
         pass
 
     @abstractmethod
