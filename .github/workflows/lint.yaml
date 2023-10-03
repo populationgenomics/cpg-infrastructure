@@ -43,7 +43,7 @@ jobs:
 
       - name: Fail if tests are not passing
         if: ${{ steps.runtests.outputs.rc != 0 }}
-        uses: actions/github-script@v3
+        uses: actions/github-script@v6
         with:
           script: |
             core.setFailed('Unit tests failed with rc = ${{ steps.runtests.outputs.rc }}')
