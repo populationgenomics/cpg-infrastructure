@@ -2108,13 +2108,13 @@ class CPGDatasetCloudInfrastructure:
             'test-full-reader-in-dev-container-registry',
             registry=dev_container_registry,
             member=self.test_full_group,
-            membership=ContainerRegistryMembership.READER
+            membership=ContainerRegistryMembership.READER,
         )
         self.infra.add_member_to_container_registry(
             'analysis-writer-in-dev-container-registry',
             registry=dev_container_registry,
             member=self.analysis_group,
-            membership=ContainerRegistryMembership.WRITER
+            membership=ContainerRegistryMembership.WRITER,
         )
 
     # endregion CONTAINER REGISTRY
