@@ -96,7 +96,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
         in a Google Cloud Storage bucket.
         """
         return gcp.storage.Bucket(
-            f'billing-aggregator-source-bucket',
+            'billing-aggregator-source-bucket',
             name=f'{self.config.gcp.dataset_storage_prefix}aggregator-source-bucket',
             location=self.config.gcp.region,
             project=self.config.billing.gcp.project_id,
@@ -111,8 +111,8 @@ class BillingAggregator(CpgInfrastructurePlugin):
         $ gcloud beta monitoring channel-descriptors describe slack
         """
         return gcp.monitoring.NotificationChannel(
-            f'billing-aggregator-slack-notification-channel',
-            display_name=f'Billing Aggregator Slack Notification Channel',
+            'billing-aggregator-slack-notification-channel',
+            display_name='Billing Aggregator Slack Notification Channel',
             type='slack',
             labels={'channel_name': self.config.billing.aggregator.slack_channel},
             sensitive_labels=gcp.monitoring.NotificationChannelSensitiveLabelsArgs(
@@ -152,20 +152,20 @@ class BillingAggregator(CpgInfrastructurePlugin):
         )
 
         pubsub = gcp.pubsub.Topic(
-            f'billing-monthly-aggregator-topic',
+            'billing-monthly-aggregator-topic',
             project=self.config.billing.gcp.project_id,
             opts=pulumi.ResourceOptions(depends_on=[self.pubsub_service]),
         )
 
         # Create a cron job to run the aggregator function on some interval
         _ = gcp.cloudscheduler.Job(
-            f'billing-monthly-aggregator-scheduler-job',
+            'billing-monthly-aggregator-scheduler-job',
             pubsub_target=gcp.cloudscheduler.JobPubsubTargetArgs(
                 topic_name=pubsub.id,
                 data=b64encode_str('Run the functions'),
             ),
             # 3rd day of the month
-            schedule=f'0 0 3 * *',
+            schedule='0 0 3 * *',
             project=self.config.billing.gcp.project_id,
             region=self.config.gcp.region,
             time_zone='Australia/Sydney',
@@ -173,7 +173,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
         )
 
         _ = self.create_cloud_function(
-            resource_name=f'billing-monthly-aggregator-function',
+            resource_name='billing-monthly-aggregator-function',
             name='monthly-aggregator',
             service_account=self.config.billing.coordinator_machine_account,
             pubsub_topic=pubsub,
@@ -219,14 +219,14 @@ class BillingAggregator(CpgInfrastructurePlugin):
 
         # Create one pubsub to be triggered by the cloud scheduler
         pubsub = gcp.pubsub.Topic(
-            f'billing-aggregator-topic',
+            'billing-aggregator-topic',
             project=self.config.billing.gcp.project_id,
             opts=pulumi.ResourceOptions(depends_on=[self.pubsub_service]),
         )
 
         # Create a cron job to run the aggregator function on some interval
         _ = gcp.cloudscheduler.Job(
-            f'billing-aggregator-scheduler-job',
+            'billing-aggregator-scheduler-job',
             pubsub_target=gcp.cloudscheduler.JobPubsubTargetArgs(
                 topic_name=pubsub.id,
                 data=b64encode_str('Run the functions'),
