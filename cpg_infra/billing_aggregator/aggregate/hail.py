@@ -20,18 +20,18 @@ Tasks:
     - Only sync 'settled' jobs within datetimes
         (ie: finished between START + END of previous time period)
 """
-import json
 import asyncio
+import json
 import logging
 import os
 import shutil
-
 from datetime import datetime
 from typing import Dict, List
 
 import functions_framework
-from flask import Request
 from cpg_utils.cloud import read_secret
+from cpg_utils.config import AR_GUID_NAME
+from flask import Request
 
 try:
     from . import utils
@@ -80,6 +80,9 @@ def get_finalised_entries_for_batch(batch: dict) -> List[Dict]:
     currency_conversion_rate = utils.get_currency_conversion_rate_for_time(start_time)
     attributes = batch.get('attributes', {})
     batch_url = utils.HAIL_UI_URL.replace('{batch_id}', str(batch_id))
+    if 'ar_guid' in attributes:
+        # sneaky rename
+        attributes[AR_GUID_NAME] = attributes.pop('ar_guid')
 
     for job in batch['jobs']:
         for batch_resource, raw_cost in job['cost'].items():
