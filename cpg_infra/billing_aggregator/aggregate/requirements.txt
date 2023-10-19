@@ -1,7 +1,7 @@
 aiohttp
 cpg-utils
 functions-framework
-sample-metadata
+metamist
 pyyaml
 python-rapidjson
 google-api-python-client==2.79.0
