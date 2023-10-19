@@ -7,7 +7,7 @@ import os.path
 import re
 from collections import defaultdict, namedtuple
 from functools import cached_property
-from typing import Any, Iterable, Iterator, Type
+from typing import Any, Callable, Iterable, Iterator, Type
 
 import cpg_utils.config
 import pulumi
@@ -30,7 +30,7 @@ from cpg_infra.abstraction.hailbatch import (
     HailBatchBillingProject,
     HailBatchBillingProjectMembership,
 )
-from cpg_infra.abstraction.metamist import MetamistProject
+from cpg_infra.abstraction.metamist import MetamistProject, MetamistProjectMembers
 from cpg_infra.config import (
     CPGDatasetComponents,
     CPGDatasetConfig,
@@ -282,6 +282,7 @@ class CPGInfrastructure:
 
         self.finalize_groups()
         self.setup_hail_batch_billing_project_members()
+        self.update_metamist_members()
         self.output_infrastructure_config()
 
     def setup_datasets(self):
@@ -425,6 +426,59 @@ class CPGInfrastructure:
                         contents=members_contents,
                         output_name=f'{group.name}-members.txt',
                     )
+
+    def update_metamist_members(self):
+        """Send a request to metamist to update group members"""
+
+        def prepare_group_members(dataset_infra: CPGDatasetInfrastructure, group_name):
+            # only add GCP accounts for now
+            clouds = [GcpInfrastructure.name()]
+            members = []
+            for cloud_name in clouds:
+                if cloud_name not in dataset_infra.clouds:
+                    continue
+                cloud_infra = dataset_infra.clouds[cloud_name]
+
+                resolver: Callable | None = None
+                if isinstance(cloud_infra.infra, AzureInfra):
+                    resolver = cloud_infra.infra._get_object_id
+                elif isinstance(cloud_infra.infra, GcpInfrastructure):
+                    resolver = cloud_infra.infra.get_preferred_group_membership_key
+
+                sm_groups = cloud_infra.sample_metadata_groups
+                if group_name not in sm_groups:
+                    pulumi.warn(
+                        f'{dataset_infra.dataset} :: metamist-group {group_name!r} '
+                        'not in sm-groups'
+                    )
+                    continue
+                for member in self.group_provider.resolve_group_members(
+                    sm_groups[group_name]
+                ):
+                    if resolver:
+                        members.append(resolver(member.cloud_id))
+                    else:
+                        members.append(member.cloud_id)
+
+            return pulumi.Output.all(*members).apply(lambda v: sorted(set(v)))
+
+        for dataset, infra in self.dataset_infrastructures.items():
+            if not infra.setup_metamist:
+                continue
+
+            MetamistProjectMembers(
+                f'{dataset}-metamist-members',
+                metamist_project_name=infra.metamist_project.project_name,
+                read_members=prepare_group_members(infra, SM_MAIN_READ),
+                write_members=prepare_group_members(infra, SM_MAIN_WRITE),
+            )
+
+            MetamistProjectMembers(
+                f'{dataset}-metamist-test-members',
+                metamist_project_name=infra.metamist_test_project.project_name,
+                read_members=prepare_group_members(infra, SM_TEST_READ),
+                write_members=prepare_group_members(infra, SM_TEST_WRITE),
+            )
 
     # dataset agnostic infrastructure
 
@@ -602,6 +656,13 @@ class CPGDatasetInfrastructure:
         return MetamistProject(
             f'metamist-project-{self.dataset}',
             project_name=self.dataset,
+        )
+
+    @cached_property
+    def metamist_test_project(self):
+        return MetamistProject(
+            f'metamist-project-{self.dataset}-test',
+            project_name=self.dataset + '-test',
         )
 
 

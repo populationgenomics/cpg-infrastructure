@@ -48,7 +48,7 @@ class MetamistProjectProvider(pulumi.dynamic.ResourceProvider):
         return pulumi.dynamic.CreateResult(
             id_=f'metamist-project::{name}::{project_id}',
             outs={
-                'id': project_id,
+                'project_id': project_id,
                 'project_name': name,
             },
         )
@@ -81,17 +81,16 @@ class MetamistProject(pulumi.dynamic.Resource):
     """Create a membership to a Hail Batch Billing Project"""
 
     project_id: pulumi.Output[int]
+    project_name: pulumi.Output[str]
 
     def __init__(
         self,
         name: str,
         project_name: str,
-        create_test_project: bool = True,
         opts: pulumi.ResourceOptions | None = None,
     ):
         args = {
             'project_name': project_name,
-            'create_test_project': create_test_project,
         }
         super().__init__(MetamistProjectProvider(), name, args, opts)
 
@@ -119,10 +118,7 @@ class MetamistProjectMembersProvider(pulumi.dynamic.ResourceProvider):
 
         return pulumi.dynamic.CreateResult(
             id_=f'metamist-project-members::{project_name}',
-            outs={
-                # 'read_memebrs': read_members,
-                # 'write_members': write_members,
-            },
+            outs={},
         )
 
     def diff(self, _id: str, _olds, _news) -> pulumi.dynamic.DiffResult:
