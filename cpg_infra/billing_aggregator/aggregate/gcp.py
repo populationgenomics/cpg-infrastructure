@@ -24,20 +24,19 @@ IMPORTANT:
 
 """
 
-import time
-import json
 import asyncio
 import hashlib
+import json
 import logging
-
-from typing import Dict
+import time
 from datetime import datetime
+from typing import Dict
 
-import rapidjson
 import functions_framework
-from flask import Request
-from cpg_utils.cloud import read_secret
 import google.cloud.bigquery as bq
+import rapidjson
+from cpg_utils.cloud import read_secret
+from flask import Request
 
 try:
     from . import utils
@@ -66,7 +65,7 @@ def from_request(request: Request):
         logger.warning('Defaulting to None')
         start, end = None, None
 
-    asyncio.new_event_loop().run_until_complete(main(start, end))
+    return asyncio.new_event_loop().run_until_complete(main(start, end))
 
 
 def from_pubsub(data, *args):
@@ -74,7 +73,7 @@ def from_pubsub(data, *args):
     From pubsub message, get start and end time if present
     """
     start, end = utils.get_start_and_end_from_data(data)
-    asyncio.new_event_loop().run_until_complete(main(start, end))
+    return asyncio.new_event_loop().run_until_complete(main(start, end))
 
 
 #################
@@ -179,7 +178,7 @@ def get_dataset_to_topic_map() -> Dict[str, str]:
 ##############
 
 
-async def main(start: datetime = None, end: datetime = None) -> int:
+async def main(start: datetime = None, end: datetime = None) -> dict:
     """Main body function"""
     s, e = utils.process_default_start_and_end(start, end)
     logger.info(f'Running GCP Billing Aggregation for [{start}, {end}]')
@@ -198,7 +197,7 @@ async def main(start: datetime = None, end: datetime = None) -> int:
 
     logger.info(f'Migrated a total of {result} rows')
 
-    return result
+    return {'entriesInserted': result}
 
 
 if __name__ == '__main__':
