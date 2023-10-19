@@ -7,7 +7,7 @@ import os.path
 import re
 from collections import defaultdict, namedtuple
 from functools import cached_property
-from typing import Any, Callable, Iterable, Iterator, Type
+from typing import Any, Iterable, Iterator, Type
 
 import cpg_utils.config
 import pulumi
@@ -370,20 +370,23 @@ class CPGInfrastructure:
                     _make_add_member_function(dataset_cloud_infra, infra)
                 )
 
-    def finalize_groups(self):
-        def _email_key(m_):
-            """
-            Sort on domain, then on name
-            """
-            s = m_.split('@')
-            return s[1], s[0]
+    @staticmethod
+    def _email_key(m_):
+        """Sort on domain, then on name"""
+        s = m_.split('@')
+        return s[1], s[0]
 
+    @staticmethod
+    def sort_members(members: list[str]):
+        """Sort members on domain, then on name"""
+        return sorted(
+            set(str(m).lower() for m in members), key=CPGInfrastructure._email_key
+        )
+
+    def finalize_groups(self):
         # capture these variables so they don't change during the resolution period
         def _process_members(members):
-            distinct_users = sorted(
-                set(str(m).lower() for m in members), key=_email_key
-            )
-
+            distinct_users = CPGInfrastructure.sort_members(members)
             return '\n'.join(distinct_users)
 
         # now resolve groups
@@ -439,12 +442,6 @@ class CPGInfrastructure:
                     continue
                 cloud_infra = dataset_infra.clouds[cloud_name]
 
-                resolver: Callable | None = None
-                if isinstance(cloud_infra.infra, AzureInfra):
-                    resolver = cloud_infra.infra._get_object_id
-                elif isinstance(cloud_infra.infra, GcpInfrastructure):
-                    resolver = cloud_infra.infra.get_preferred_group_membership_key
-
                 sm_groups = cloud_infra.sample_metadata_groups
                 if group_name not in sm_groups:
                     pulumi.warn(
@@ -452,18 +449,18 @@ class CPGInfrastructure:
                         'not in sm-groups'
                     )
                     continue
-                for member in self.group_provider.resolve_group_members(
+                cloud_members = self.group_provider.resolve_group_members(
                     sm_groups[group_name]
-                ):
-                    if resolver:
-                        members.append(resolver(member.cloud_id))
-                    else:
-                        members.append(member.cloud_id)
+                )
+                members.extend(
+                    cloud_infra.infra.member_id(member.cloud_id)
+                    for member in cloud_members
+                )
 
-            return pulumi.Output.all(*members).apply(lambda v: sorted(set(v)))
+            return pulumi.Output.all(*members).apply(CPGInfrastructure.sort_members)
 
         for dataset, infra in self.dataset_infrastructures.items():
-            if not infra.setup_metamist:
+            if not infra.dataset_config.enable_metamist_project:
                 continue
 
             MetamistProjectMembers(
@@ -650,6 +647,7 @@ class CPGDatasetInfrastructure:
         if self.dataset_config.enable_metamist_project:
             # setup metamist project by accessing the property
             _ = self.metamist_project
+            _ = self.metamist_test_project
 
     @cached_property
     def metamist_project(self):
