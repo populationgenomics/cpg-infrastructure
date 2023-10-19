@@ -75,7 +75,7 @@ class GcpInfrastructure(CloudInfraBase):
     @cached_property
     def _svc_cloudresourcemanager(self):
         return gcp.projects.Service(
-            self.get_pulumi_name(f'cloudresourcemanager-service'),
+            self.get_pulumi_name('cloudresourcemanager-service'),
             service='cloudresourcemanager.googleapis.com',
             disable_on_destroy=False,
             project=self.project_id,
