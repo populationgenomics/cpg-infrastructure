@@ -707,7 +707,7 @@ def upsert_aggregated_dataframe_into_bigquery(
     """
 
     if len(df['id']) == 0:
-        logger.info(f'No rows to insert')
+        logger.info('No rows to insert')
         return 0
 
     # Cannot use query parameters for table names
@@ -842,7 +842,7 @@ def get_start_and_end_from_request(
     logger.info(request_data)
 
     if not request_data or ('start' not in request_data and 'end' not in request_data):
-        logger.warning(f'Could not find start or end. Defaulting to None.')
+        logger.warning('Could not find start or end. Defaulting to None.')
         raise ValueError("JSON is invalid, or missing a 'start' or 'end' property")
 
     try:
