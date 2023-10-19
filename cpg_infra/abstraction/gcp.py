@@ -11,15 +11,15 @@ import pulumi
 import pulumi_gcp as gcp
 
 from cpg_infra.abstraction.base import (
-    CloudInfraBase,
-    UNDELETE_PERIOD_IN_DAYS,
     ARCHIVE_PERIOD_IN_DAYS,
-    TMP_BUCKET_PERIOD_IN_DAYS,
-    BucketMembership,
-    SecretMembership,
-    ContainerRegistryMembership,
     BUCKET_DELETE_INCOMPLETE_UPLOAD_PERIOD_IN_DAYS,
+    TMP_BUCKET_PERIOD_IN_DAYS,
+    UNDELETE_PERIOD_IN_DAYS,
+    BucketMembership,
+    CloudInfraBase,
+    ContainerRegistryMembership,
     MachineAccountRole,
+    SecretMembership,
 )
 from cpg_infra.abstraction.google_group_settings import GoogleGroupSettings
 from cpg_infra.config import CPGDatasetConfig, CPGInfrastructureConfig
@@ -56,7 +56,7 @@ class GcpInfrastructure(CloudInfraBase):
         _ = self._svc_serviceusage
 
     @staticmethod
-    def member_id(member):
+    def member_id(member) -> str | pulumi.Output[str]:
         if isinstance(member, gcp.serviceaccount.Account):
             return member.email
 

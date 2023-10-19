@@ -436,7 +436,7 @@ class CPGInfrastructure:
         def prepare_group_members(dataset_infra: CPGDatasetInfrastructure, group_name):
             # only add GCP accounts for now
             clouds = [GcpInfrastructure.name()]
-            members = []
+            members: list[str | pulumi.Output[str]] = []
             for cloud_name in clouds:
                 if cloud_name not in dataset_infra.clouds:
                     continue
