@@ -633,6 +633,8 @@ async def main(
     else:
         logger.info(f'Inserted {result} entries')
 
+    return {'entriesInserted': result}
+
 
 @functions_framework.http
 def from_request(request: Request):
@@ -646,7 +648,7 @@ def from_request(request: Request):
         logger.warning('Defaulting to None')
         start, end = None, None
 
-    asyncio.new_event_loop().run_until_complete(main(start, end))
+    return asyncio.new_event_loop().run_until_complete(main(start, end))
 
 
 def from_pubsub(data=None, _=None):
@@ -654,7 +656,7 @@ def from_pubsub(data=None, _=None):
     From pubsub message, get start and end time if present
     """
     start, end = utils.get_start_and_end_from_data(data)
-    asyncio.new_event_loop().run_until_complete(main(start, end))
+    return asyncio.new_event_loop().run_until_complete(main(start, end))
 
 
 if __name__ == '__main__':
