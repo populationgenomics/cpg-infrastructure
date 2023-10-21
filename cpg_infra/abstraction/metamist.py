@@ -31,7 +31,6 @@ class MetamistProjectProvider(pulumi.dynamic.ResourceProvider):
 
     def create(self, props) -> pulumi.dynamic.CreateResult:
         name = props['project_name']
-        create_test_project = props['create_test_project']
 
         if project := get_project_by_name(name):
             project_id = project['id']
@@ -39,7 +38,7 @@ class MetamistProjectProvider(pulumi.dynamic.ResourceProvider):
             project_id = ProjectApi().create_project(
                 name=name,
                 dataset=name,
-                create_test_project=create_test_project,
+                create_test_project=False,
             )
 
         if not project_id:
@@ -106,13 +105,13 @@ class MetamistProjectMembersProvider(pulumi.dynamic.ResourceProvider):
         papi = ProjectApi()
         papi.update_project_members(
             project=project_name,
-            members=read_members,
+            request_body=read_members,
             readonly=True,
         )
 
         papi.update_project_members(
             project=project_name,
-            members=write_members,
+            request_body=write_members,
             readonly=False,
         )
 
@@ -125,12 +124,12 @@ class MetamistProjectMembersProvider(pulumi.dynamic.ResourceProvider):
         replaces = []
 
         for k in 'read_members', 'write_members':
-            if _olds[k] != _news[k]:
+            if _olds.get(k) != _news.get(k):
                 replaces.append(k)
 
         return pulumi.dynamic.DiffResult(
             changes=len(replaces) > 0,
-            replaces=False,
+            replaces=replaces,
             delete_before_replace=False,
         )
 
