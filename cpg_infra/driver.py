@@ -30,7 +30,7 @@ from cpg_infra.abstraction.hailbatch import (
     HailBatchBillingProject,
     HailBatchBillingProjectMembership,
 )
-from cpg_infra.abstraction.metamist import MetamistProject
+from cpg_infra.abstraction.metamist import MetamistProject, MetamistProjectMembers
 from cpg_infra.config import (
     CPGDatasetComponents,
     CPGDatasetConfig,
@@ -282,6 +282,7 @@ class CPGInfrastructure:
 
         self.finalize_groups()
         self.setup_hail_batch_billing_project_members()
+        self.update_metamist_members()
         self.output_infrastructure_config()
 
     def setup_datasets(self):
@@ -369,20 +370,23 @@ class CPGInfrastructure:
                     _make_add_member_function(dataset_cloud_infra, infra)
                 )
 
-    def finalize_groups(self):
-        def _email_key(m_):
-            """
-            Sort on domain, then on name
-            """
-            s = m_.split('@')
-            return s[1], s[0]
+    @staticmethod
+    def _email_key(m_):
+        """Sort on domain, then on name"""
+        s = m_.split('@')
+        return s[1], s[0]
 
+    @staticmethod
+    def sort_members(members: list[str]):
+        """Sort members on domain, then on name"""
+        return sorted(
+            set(str(m).lower() for m in members), key=CPGInfrastructure._email_key
+        )
+
+    def finalize_groups(self):
         # capture these variables so they don't change during the resolution period
         def _process_members(members):
-            distinct_users = sorted(
-                set(str(m).lower() for m in members), key=_email_key
-            )
-
+            distinct_users = CPGInfrastructure.sort_members(members)
             return '\n'.join(distinct_users)
 
         # now resolve groups
@@ -425,6 +429,53 @@ class CPGInfrastructure:
                         contents=members_contents,
                         output_name=f'{group.name}-members.txt',
                     )
+
+    def update_metamist_members(self):
+        """Send a request to metamist to update group members"""
+
+        def prepare_group_members(dataset_infra: CPGDatasetInfrastructure, group_name):
+            # only add GCP accounts for now
+            clouds = [GcpInfrastructure.name()]
+            members: list[str | pulumi.Output[str]] = []
+            for cloud_name in clouds:
+                if cloud_name not in dataset_infra.clouds:
+                    continue
+                cloud_infra = dataset_infra.clouds[cloud_name]
+
+                sm_groups = cloud_infra.sample_metadata_groups
+                if group_name not in sm_groups:
+                    pulumi.warn(
+                        f'{dataset_infra.dataset} :: metamist-group {group_name!r} '
+                        'not in sm-groups'
+                    )
+                    continue
+                cloud_members = self.group_provider.resolve_group_members(
+                    sm_groups[group_name]
+                )
+                members.extend(
+                    cloud_infra.infra.member_id(member.cloud_id)
+                    for member in cloud_members
+                )
+
+            return pulumi.Output.all(*members).apply(CPGInfrastructure.sort_members)
+
+        for dataset, infra in self.dataset_infrastructures.items():
+            if not infra.dataset_config.enable_metamist_project:
+                continue
+
+            MetamistProjectMembers(
+                f'{dataset}-metamist-members',
+                metamist_project_name=infra.metamist_project.project_name,
+                read_members=prepare_group_members(infra, SM_MAIN_READ),
+                write_members=prepare_group_members(infra, SM_MAIN_WRITE),
+            )
+
+            MetamistProjectMembers(
+                f'{dataset}-metamist-test-members',
+                metamist_project_name=infra.metamist_test_project.project_name,
+                read_members=prepare_group_members(infra, SM_TEST_READ),
+                write_members=prepare_group_members(infra, SM_TEST_WRITE),
+            )
 
     # dataset agnostic infrastructure
 
@@ -596,12 +647,20 @@ class CPGDatasetInfrastructure:
         if self.dataset_config.enable_metamist_project:
             # setup metamist project by accessing the property
             _ = self.metamist_project
+            _ = self.metamist_test_project
 
     @cached_property
     def metamist_project(self):
         return MetamistProject(
             f'metamist-project-{self.dataset}',
             project_name=self.dataset,
+        )
+
+    @cached_property
+    def metamist_test_project(self):
+        return MetamistProject(
+            f'metamist-project-{self.dataset}-test',
+            project_name=self.dataset + '-test',
         )
 
 

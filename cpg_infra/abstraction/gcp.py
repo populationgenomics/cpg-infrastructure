@@ -56,7 +56,7 @@ class GcpInfrastructure(CloudInfraBase):
         _ = self._svc_serviceusage
 
     @staticmethod
-    def member_id(member):
+    def member_id(member) -> str | pulumi.Output[str]:
         if isinstance(member, gcp.serviceaccount.Account):
             return member.email
 

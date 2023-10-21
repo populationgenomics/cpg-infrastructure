@@ -21,10 +21,9 @@ from enum import Enum
 from functools import cached_property
 from typing import Any, Callable
 
-from cpg_infra.config import (
-    CPGDatasetConfig,
-    CPGInfrastructureConfig,
-)
+import pulumi
+
+from cpg_infra.config import CPGDatasetConfig, CPGInfrastructureConfig
 
 UNDELETE_PERIOD_IN_DAYS = 30
 TMP_BUCKET_PERIOD_IN_DAYS = 8  # tmp content gets deleted afterwards.
@@ -123,7 +122,7 @@ class CloudInfraBase(ABC):
 
     @staticmethod
     @abstractmethod
-    def member_id(member):
+    def member_id(member) -> str | pulumi.Output[str]:
         """Get the identifier for the user, that can be used in the group-cache"""
         pass
 
@@ -149,7 +148,7 @@ class CloudInfraBase(ABC):
     ):
         pass
 
-    # region PROJECT
+    # endregion PROJECT
 
     # region BUCKET
     @abstractmethod
@@ -322,7 +321,7 @@ class DryRunInfra(CloudInfraBase):
         return self.dataset
 
     @staticmethod
-    def member_id(member):
+    def member_id(member) -> str | pulumi.Output[str]:
         return member
 
     def create_project(self, resource_key: str, name):
