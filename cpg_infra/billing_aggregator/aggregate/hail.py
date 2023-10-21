@@ -20,18 +20,18 @@ Tasks:
     - Only sync 'settled' jobs within datetimes
         (ie: finished between START + END of previous time period)
 """
-import json
 import asyncio
+import json
 import logging
 import os
 import shutil
-
 from datetime import datetime
 from typing import Dict, List
 
 import functions_framework
-from flask import Request
 from cpg_utils.cloud import read_secret
+from cpg_utils.config import AR_GUID_NAME
+from flask import Request
 
 try:
     from . import utils
@@ -80,6 +80,9 @@ def get_finalised_entries_for_batch(batch: dict) -> List[Dict]:
     currency_conversion_rate = utils.get_currency_conversion_rate_for_time(start_time)
     attributes = batch.get('attributes', {})
     batch_url = utils.HAIL_UI_URL.replace('{batch_id}', str(batch_id))
+    if 'ar_guid' in attributes:
+        # sneaky rename
+        attributes[AR_GUID_NAME] = attributes.pop('ar_guid')
 
     for job in batch['jobs']:
         for batch_resource, raw_cost in job['cost'].items():
@@ -162,7 +165,7 @@ def from_request(request: Request):
         logger.warning('Defaulting to None')
         start, end = None, None
 
-    asyncio.new_event_loop().run_until_complete(main(start, end))
+    return asyncio.new_event_loop().run_until_complete(main(start, end))
 
 
 def from_pubsub(data=None, _=None):
@@ -170,7 +173,7 @@ def from_pubsub(data=None, _=None):
     From pubsub message, get start and end time if present
     """
     start, end = utils.get_start_and_end_from_data(data)
-    asyncio.new_event_loop().run_until_complete(main(start, end))
+    return asyncio.new_event_loop().run_until_complete(main(start, end))
 
 
 async def main(
@@ -178,7 +181,7 @@ async def main(
     end: datetime = None,
     mode: str = 'prod',
     output_path: str = None,
-) -> int:
+) -> dict:
     """Main body function"""
     logger.info(f'Running Hail Billing Aggregation for [{start}, {end}]')
     start, end = utils.process_default_start_and_end(start, end)
@@ -198,7 +201,7 @@ async def main(
 
     logger.info(f'Migrated a total of {result} rows')
 
-    return result
+    return {'entriesInserted': result}
 
 
 if __name__ == '__main__':
