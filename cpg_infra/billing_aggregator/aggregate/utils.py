@@ -648,8 +648,8 @@ def upsert_rows_into_bigquery(
         job_config = bq.QueryJobConfig(
             query_parameters=[
                 bq.ArrayQueryParameter('ids', 'STRING', list(ids)),
-                bq.ScalarQueryParameter('window_start', 'DATE', date(window_start)),
-                bq.ScalarQueryParameter('window_end', 'DATE', date(window_end)),
+                bq.ScalarQueryParameter('window_start', 'DATE', window_start),
+                bq.ScalarQueryParameter('window_end', 'DATE', window_end),
             ]
         )
 
@@ -733,8 +733,8 @@ def upsert_aggregated_dataframe_into_bigquery(
     job_config = bq.QueryJobConfig(
         query_parameters=[
             bq.ArrayQueryParameter('ids', 'STRING', list(set(df['id']))),
-            bq.ScalarQueryParameter('window_start', 'DATE', date(window_start)),
-            bq.ScalarQueryParameter('window_end', 'DATE', date(window_end)),
+            bq.ScalarQueryParameter('window_start', 'DATE', window_start),
+            bq.ScalarQueryParameter('window_end', 'DATE', window_end),
         ]
     )
 
@@ -789,8 +789,8 @@ def get_currency_conversion_rate_for_time(time: datetime):
         job_config = bq.QueryJobConfig(
             query_parameters=[
                 bq.ScalarQueryParameter('invoice_month', 'STRING', key),
-                bq.ScalarQueryParameter('window_start', 'DATE', date(window_start)),
-                bq.ScalarQueryParameter('window_end', 'DATE', date(window_end)),
+                bq.ScalarQueryParameter('window_start', 'DATE', window_start),
+                bq.ScalarQueryParameter('window_end', 'DATE', window_end),
             ]
         )
         query_result = (
@@ -1060,10 +1060,6 @@ def get_invoice_month_range(convert_month: date) -> tuple[date, date]:
         next_month = first_day.replace(month=convert_month.month + 1)
 
     # Grab the last day of invoice month then add INVOICE_DAY_DIFF days
-    last_day = (
-        next_month
-        + timedelta(days=-1)
-        + timedelta(days=INVOICE_DAY_DIFF)
-    )
+    last_day = next_month + timedelta(days=-1) + timedelta(days=INVOICE_DAY_DIFF)
 
     return start_day, last_day

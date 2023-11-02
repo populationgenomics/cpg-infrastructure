@@ -425,7 +425,11 @@ def migrate_entries_from_bq(
             result += len(entries)
         elif mode == 'prod':
             result += utils.upsert_rows_into_bigquery(
-                table=utils.GCP_AGGREGATE_DEST_TABLE, objs=entries, dry_run=False
+                table=utils.GCP_AGGREGATE_DEST_TABLE,
+                objs=entries,
+                dry_run=False,
+                window_start=istart,
+                window_end=iend,
             )
         elif mode == 'local':
             if not os.path.exists(output_path):

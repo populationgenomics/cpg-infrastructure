@@ -193,13 +193,10 @@ def get_invoice_month_range(convert_month: date) -> tuple[date, date]:
         next_month = first_day.replace(month=convert_month.month + 1)
 
     # Grab the last day of invoice month then add INVOICE_DAY_DIFF days
-    last_day = (
-        next_month
-        + timedelta(days=-1)
-        + timedelta(days=INVOICE_DAY_DIFF)
-    )
+    last_day = next_month + timedelta(days=-1) + timedelta(days=INVOICE_DAY_DIFF)
 
     return start_day, last_day
+
 
 def get_billing_data(invoice_month: str) -> DataFrame:
     """
@@ -207,7 +204,8 @@ def get_billing_data(invoice_month: str) -> DataFrame:
     Return results as a dataframe
     """
 
-    window_start, window_end = get_invoice_month_range(invoice_month)
+    invoice_month_date = datetime.strptime(invoice_month, '%Y%m').date()
+    window_start, window_end = get_invoice_month_range(invoice_month_date)
     _query = f"""
         SELECT * FROM `{GCP_MONTHLY_BILLING_BQ_TABLE}`
         WHERE month = @invoice_month
