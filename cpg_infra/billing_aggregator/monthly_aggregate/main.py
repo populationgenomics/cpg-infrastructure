@@ -199,13 +199,6 @@ def get_invoice_month_range(convert_month: date) -> tuple[date, date]:
         + timedelta(days=INVOICE_DAY_DIFF)
     )
 
-    # Grab the last day of invoice month then add INVOICE_DAY_DIFF days
-    last_day = (
-        first_day.replace(month=(convert_month.month % 12) + 1)
-        + timedelta(days=-1)
-        + timedelta(days=INVOICE_DAY_DIFF)
-    )
-
     return start_day, last_day
 
 def get_billing_data(invoice_month: str) -> DataFrame:

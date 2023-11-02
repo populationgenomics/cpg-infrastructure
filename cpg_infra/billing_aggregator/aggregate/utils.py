@@ -711,8 +711,8 @@ def upsert_rows_into_bigquery(
 def upsert_aggregated_dataframe_into_bigquery(
     df: pd.DataFrame,
     table: str = GCP_AGGREGATE_DEST_TABLE,
-    window_start: datetime=None,
-    window_end: datetime=None
+    window_start: datetime = None,
+    window_end: datetime = None,
 ):
     """
     Upsert rows from a dataframe into the BQ.aggregate table.
@@ -793,7 +793,9 @@ def get_currency_conversion_rate_for_time(time: datetime):
                 bq.ScalarQueryParameter('window_end', 'DATE', date(window_end)),
             ]
         )
-        query_result = get_bigquery_client().query(query, job_config=job_config).result()
+        query_result = (
+            get_bigquery_client().query(query, job_config=job_config).result()
+        )
 
         if query_result.total_rows == 0:
             raise ValueError(
@@ -1044,6 +1046,7 @@ def get_hail_entry(
         'adjustment_info': None,
     }
 
+
 def get_invoice_month_range(convert_month: date) -> tuple[date, date]:
     """Get the start and end date of the invoice month for a given date"""
     first_day = convert_month.replace(day=1)
@@ -1051,9 +1054,14 @@ def get_invoice_month_range(convert_month: date) -> tuple[date, date]:
     # Grab the first day of invoice month then subtract INVOICE_DAY_DIFF days
     start_day = first_day + timedelta(days=-INVOICE_DAY_DIFF)
 
+    if convert_month.month == 12:
+        next_month = first_day.replace(month=1, year=convert_month.year + 1)
+    else:
+        next_month = first_day.replace(month=convert_month.month + 1)
+
     # Grab the last day of invoice month then add INVOICE_DAY_DIFF days
     last_day = (
-        first_day.replace(month=(convert_month.month % 12) + 1)
+        next_month
         + timedelta(days=-1)
         + timedelta(days=INVOICE_DAY_DIFF)
     )
