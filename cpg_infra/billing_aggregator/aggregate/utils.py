@@ -637,7 +637,7 @@ def upsert_rows_into_bigquery(
         _query = f"""
             SELECT id FROM `{table}`
             WHERE id IN UNNEST(@ids)
-            AND DAY_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end;
+            AND DATE_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end;
         """
 
         # NOTE: it's possible to have valid duplicate rows
@@ -728,7 +728,7 @@ def upsert_aggregated_dataframe_into_bigquery(
     _query = f"""
         SELECT id FROM {table}
         WHERE id IN UNNEST(@ids);
-        AND DAY_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end;
+        AND DATE_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end;
     """
     job_config = bq.QueryJobConfig(
         query_parameters=[
@@ -783,7 +783,7 @@ def get_currency_conversion_rate_for_time(time: datetime):
             SELECT currency_conversion_rate
             FROM {GCP_BILLING_BQ_TABLE}
             WHERE invoice.month = @invoice_month
-            AND DAY_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end;
+            AND DATE_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end;
             LIMIT 1
         """
         job_config = bq.QueryJobConfig(

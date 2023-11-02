@@ -132,7 +132,7 @@ def get_billing_data(start: datetime, end: datetime):
             currency, currency_conversion_rate, usage, credits,
             invoice, cost_type, adjustment_info
         FROM `{utils.GCP_BILLING_BQ_TABLE}`
-        WHERE DAY_TRUNC(usage_end_time, DAY) BETWEEN @start AND @end
+        WHERE DATE_TRUNC(usage_end_time, DAY) BETWEEN @start AND @end
             AND project.id NOT IN UNNEST(@exclude)
     """
     exclude_projects = [utils.SEQR_PROJECT_ID, utils.ES_INDEX_PROJECT_ID]

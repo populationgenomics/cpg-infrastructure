@@ -209,7 +209,7 @@ def get_billing_data(invoice_month: str) -> DataFrame:
     _query = f"""
         SELECT * FROM `{GCP_MONTHLY_BILLING_BQ_TABLE}`
         WHERE month = @invoice_month
-        AND DAY_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end
+        AND DATE_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end
         ORDER BY topic
     """
     job_config = bq.QueryJobConfig(
