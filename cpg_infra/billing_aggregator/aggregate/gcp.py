@@ -132,15 +132,14 @@ def get_billing_data(start: datetime, end: datetime):
             currency, currency_conversion_rate, usage, credits,
             invoice, cost_type, adjustment_info
         FROM `{utils.GCP_BILLING_BQ_TABLE}`
-        WHERE export_time >= @start
-            AND export_time <= @end
+        WHERE _PARTITIONDATE BETWEEN @start AND @end
             AND project.id NOT IN UNNEST(@exclude)
     """
     exclude_projects = [utils.SEQR_PROJECT_ID, utils.ES_INDEX_PROJECT_ID]
     job_config = bq.QueryJobConfig(
         query_parameters=[
-            bq.ScalarQueryParameter('start', 'STRING', str(start)),
-            bq.ScalarQueryParameter('end', 'STRING', str(end)),
+            bq.ScalarQueryParameter('start', 'DATE', start),
+            bq.ScalarQueryParameter('end', 'DATE', end),
             bq.ArrayQueryParameter('exclude', 'STRING', exclude_projects),
         ]
     )
