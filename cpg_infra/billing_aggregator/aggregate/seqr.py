@@ -326,7 +326,7 @@ def migrate_entries_from_bq(
             location, export_time, cost, currency, currency_conversion_rate, usage,
             credits, invoice, cost_type, adjustment_info
         FROM `{GCP_BILLING_BQ_TABLE}`
-        WHERE _PARTITIONDATE BETWEEN @start AND @end
+        WHERE DAY_TRUNC(usage_end_time, DAY) BETWEEN @start AND @end
             AND project.id IN UNNEST(@projects)
         ORDER BY usage_start_time
     """
