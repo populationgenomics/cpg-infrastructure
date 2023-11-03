@@ -92,7 +92,7 @@ def get_finalised_entries_for_batch(
     batch_id = batch['id']
     batch_attributes = batch.get('attributes', {})
     batch_name = batch_attributes.get('name')
-    ar_guid = batch.attributes.get(AR_GUID_NAME, batch.attributes.get('ar_guid'))
+    ar_guid = batch_attributes.get(AR_GUID_NAME, batch_attributes.get('ar_guid'))
 
     start_time = utils.parse_hail_time(batch['time_created'])
     end_time = utils.parse_hail_time(batch['time_completed'])
