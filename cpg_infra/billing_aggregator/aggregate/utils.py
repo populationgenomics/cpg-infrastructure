@@ -648,8 +648,8 @@ def upsert_rows_into_bigquery(
         job_config = bq.QueryJobConfig(
             query_parameters=[
                 bq.ArrayQueryParameter('ids', 'STRING', list(ids)),
-                bq.ScalarQueryParameter('window_start', 'DATE', window_start),
-                bq.ScalarQueryParameter('window_end', 'DATE', window_end),
+                bq.ScalarQueryParameter('window_start', 'TIMESTAMP', window_start.date()),
+                bq.ScalarQueryParameter('window_end', 'TIMESTAMP', window_end.date()),
             ]
         )
 
@@ -733,8 +733,8 @@ def upsert_aggregated_dataframe_into_bigquery(
     job_config = bq.QueryJobConfig(
         query_parameters=[
             bq.ArrayQueryParameter('ids', 'STRING', list(set(df['id']))),
-            bq.ScalarQueryParameter('window_start', 'DATE', window_start),
-            bq.ScalarQueryParameter('window_end', 'DATE', window_end),
+            bq.ScalarQueryParameter('window_start', 'TIMESTAMP', window_start.date()),
+            bq.ScalarQueryParameter('window_end', 'TIMESTAMP', window_end.date()),
         ]
     )
 
@@ -789,8 +789,8 @@ def get_currency_conversion_rate_for_time(time: datetime):
         job_config = bq.QueryJobConfig(
             query_parameters=[
                 bq.ScalarQueryParameter('invoice_month', 'STRING', key),
-                bq.ScalarQueryParameter('window_start', 'DATE', window_start),
-                bq.ScalarQueryParameter('window_end', 'DATE', window_end),
+                bq.ScalarQueryParameter('window_start', 'TIMESTAMP', window_start.date()),
+                bq.ScalarQueryParameter('window_end', 'TIMESTAMP', window_end.date()),
             ]
         )
         query_result = (
