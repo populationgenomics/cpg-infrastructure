@@ -334,8 +334,8 @@ def migrate_entries_from_bq(
     projects = [utils.SEQR_PROJECT_ID, utils.ES_INDEX_PROJECT_ID]
     job_config = bq.QueryJobConfig(
         query_parameters=[
-            bq.ScalarQueryParameter('start', 'DATE', istart),
-            bq.ScalarQueryParameter('end', 'DATE', iend),
+            bq.ScalarQueryParameter('start', 'TIMESTAMP', istart.date()),
+            bq.ScalarQueryParameter('end', 'TIMESTAMP', iend.date()),
             bq.ArrayQueryParameter('projects', 'STRING', projects),
         ]
     )

@@ -215,8 +215,8 @@ def get_billing_data(invoice_month: str) -> DataFrame:
     job_config = bq.QueryJobConfig(
         query_parameters=[
             bq.ScalarQueryParameter('invoice_month', 'STRING', str(invoice_month)),
-            bq.ScalarQueryParameter('window_start', 'DATE', window_start),
-            bq.ScalarQueryParameter('window_end', 'DATE', window_end),
+            bq.ScalarQueryParameter('window_start', 'TIMESTAMP', window_start.date()),
+            bq.ScalarQueryParameter('window_end', 'TIMESTAMP', window_end.date()),
         ]
     )
 
