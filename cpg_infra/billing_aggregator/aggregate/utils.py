@@ -54,6 +54,8 @@ T = TypeVar('T')
 
 DEFAULT_TOPIC = 'admin'
 
+INVOICE_DAY_DIFF = 3
+
 GCP_PROJECT = os.getenv('BILLING_PROJECT_ID')
 GCP_BILLING_BQ_TABLE = os.getenv('GCP_BILLING_SOURCE_TABLE')
 GCP_AGGREGATE_DEST_TABLE = os.getenv('GCP_AGGREGATE_DEST_TABLE')
@@ -582,6 +584,8 @@ def billing_row_to_topic(row, dataset_to_gcp_map: dict) -> str | None:
 
 
 def upsert_rows_into_bigquery(
+    window_start: datetime,
+    window_end: datetime,
     objs: list[dict[str, Any]],
     dry_run: bool,
     table: str = GCP_AGGREGATE_DEST_TABLE,
@@ -599,6 +603,11 @@ def upsert_rows_into_bigquery(
     It has some optimisations about max insert size, so this should be
     able to take an arbitrary amount of rows.
     """
+
+    if not window_start or not window_end:
+        raise ValueError('window_start and window_end must be defined')
+    elif window_start > window_end:
+        raise ValueError('window_start must be before window_end')
 
     if not objs:
         logger.info('Not inserting any rows')
@@ -627,7 +636,8 @@ def upsert_rows_into_bigquery(
     for chunk_idx, chunked_objs in enumerate(chunk(objs, chunk_size)):
         _query = f"""
             SELECT id FROM `{table}`
-            WHERE id IN UNNEST(@ids);
+            WHERE id IN UNNEST(@ids)
+            AND DATE_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end;
         """
 
         # NOTE: it's possible to have valid duplicate rows
@@ -638,6 +648,8 @@ def upsert_rows_into_bigquery(
         job_config = bq.QueryJobConfig(
             query_parameters=[
                 bq.ArrayQueryParameter('ids', 'STRING', list(ids)),
+                bq.ScalarQueryParameter('window_start', 'DATE', window_start),
+                bq.ScalarQueryParameter('window_end', 'DATE', window_end),
             ]
         )
 
@@ -697,7 +709,10 @@ def upsert_rows_into_bigquery(
 
 
 def upsert_aggregated_dataframe_into_bigquery(
-    df: pd.DataFrame, table: str = GCP_AGGREGATE_DEST_TABLE
+    df: pd.DataFrame,
+    table: str = GCP_AGGREGATE_DEST_TABLE,
+    window_start: datetime = None,
+    window_end: datetime = None,
 ):
     """
     Upsert rows from a dataframe into the BQ.aggregate table.
@@ -713,10 +728,13 @@ def upsert_aggregated_dataframe_into_bigquery(
     _query = f"""
         SELECT id FROM {table}
         WHERE id IN UNNEST(@ids);
+        AND DATE_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end;
     """
     job_config = bq.QueryJobConfig(
         query_parameters=[
             bq.ArrayQueryParameter('ids', 'STRING', list(set(df['id']))),
+            bq.ScalarQueryParameter('window_start', 'DATE', window_start),
+            bq.ScalarQueryParameter('window_end', 'DATE', window_end),
         ]
     )
 
@@ -756,16 +774,28 @@ def get_currency_conversion_rate_for_time(time: datetime):
     the job finishes.
     """
 
+    window_start, window_end = get_invoice_month_range(time)
+
     key = f'{time.year}{str(time.month).zfill(2)}'
     if key not in CACHED_CURRENCY_CONVERSION:
         logger.info(f'Looking up currency conversion rate for {key}')
         query = f"""
             SELECT currency_conversion_rate
             FROM {GCP_BILLING_BQ_TABLE}
-            WHERE invoice.month = "{key}"
+            WHERE invoice.month = @invoice_month
+            AND DATE_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end;
             LIMIT 1
         """
-        query_result = get_bigquery_client().query(query).result()
+        job_config = bq.QueryJobConfig(
+            query_parameters=[
+                bq.ScalarQueryParameter('invoice_month', 'STRING', key),
+                bq.ScalarQueryParameter('window_start', 'DATE', window_start),
+                bq.ScalarQueryParameter('window_end', 'DATE', window_end),
+            ]
+        )
+        query_result = (
+            get_bigquery_client().query(query, job_config=job_config).result()
+        )
 
         if query_result.total_rows == 0:
             raise ValueError(
@@ -1015,3 +1045,21 @@ def get_hail_entry(
         'cost_type': 'regular',
         'adjustment_info': None,
     }
+
+
+def get_invoice_month_range(convert_month: date) -> tuple[date, date]:
+    """Get the start and end date of the invoice month for a given date"""
+    first_day = convert_month.replace(day=1)
+
+    # Grab the first day of invoice month then subtract INVOICE_DAY_DIFF days
+    start_day = first_day + timedelta(days=-INVOICE_DAY_DIFF)
+
+    if convert_month.month == 12:
+        next_month = first_day.replace(month=1, year=convert_month.year + 1)
+    else:
+        next_month = first_day.replace(month=convert_month.month + 1)
+
+    # Grab the last day of invoice month then add INVOICE_DAY_DIFF days
+    last_day = next_month + timedelta(days=-1) + timedelta(days=INVOICE_DAY_DIFF)
+
+    return start_day, last_day
