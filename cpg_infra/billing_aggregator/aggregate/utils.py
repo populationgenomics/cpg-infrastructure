@@ -649,9 +649,11 @@ def upsert_rows_into_bigquery(
             query_parameters=[
                 bq.ArrayQueryParameter('ids', 'STRING', list(ids)),
                 bq.ScalarQueryParameter(
-                    'window_start', 'TIMESTAMP', window_start.date()
+                    'window_start', 'STRING', window_start.strftime('%Y-%m-%d')
                 ),
-                bq.ScalarQueryParameter('window_end', 'TIMESTAMP', window_end.date()),
+                bq.ScalarQueryParameter(
+                    'window_end', 'STRING', window_end.strftime('%Y-%m-%d')
+                ),
             ]
         )
 
@@ -735,8 +737,12 @@ def upsert_aggregated_dataframe_into_bigquery(
     job_config = bq.QueryJobConfig(
         query_parameters=[
             bq.ArrayQueryParameter('ids', 'STRING', list(set(df['id']))),
-            bq.ScalarQueryParameter('window_start', 'TIMESTAMP', window_start.date()),
-            bq.ScalarQueryParameter('window_end', 'TIMESTAMP', window_end.date()),
+            bq.ScalarQueryParameter(
+                'window_start', 'STRING', window_start.strftime('%Y-%m-%d')
+            ),
+            bq.ScalarQueryParameter(
+                'window_end', 'STRING', window_end.strftime('%Y-%m-%d')
+            ),
         ]
     )
 
@@ -791,8 +797,12 @@ def get_currency_conversion_rate_for_time(time: datetime):
         job_config = bq.QueryJobConfig(
             query_parameters=[
                 bq.ScalarQueryParameter('invoice_month', 'STRING', key),
-                bq.ScalarQueryParameter('window_start', 'TIMESTAMP', window_start),
-                bq.ScalarQueryParameter('window_end', 'TIMESTAMP', window_end),
+                bq.ScalarQueryParameter(
+                    'window_start', 'STRING', window_start.strftime('%Y-%m-%d')
+                ),
+                bq.ScalarQueryParameter(
+                    'window_end', 'STRING', window_end.strftime('%Y-%m-%d')
+                ),
             ]
         )
         query_result = (
@@ -800,9 +810,7 @@ def get_currency_conversion_rate_for_time(time: datetime):
         )
 
         if query_result.total_rows == 0:
-            raise ValueError(
-                f'Could not find billing data for {key!r}, for {time.date()}'
-            )
+            raise ValueError(f'Could not find billing data for {key!r}, for {time}')
 
         for r in query_result:
             CACHED_CURRENCY_CONVERSION[key] = r['currency_conversion_rate']

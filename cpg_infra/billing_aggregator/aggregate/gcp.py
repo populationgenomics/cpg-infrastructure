@@ -138,8 +138,8 @@ def get_billing_data(start: datetime, end: datetime):
     exclude_projects = [utils.SEQR_PROJECT_ID, utils.ES_INDEX_PROJECT_ID]
     job_config = bq.QueryJobConfig(
         query_parameters=[
-            bq.ScalarQueryParameter('start', 'TIMESTAMP', start.date()),
-            bq.ScalarQueryParameter('end', 'TIMESTAMP', end.date()),
+            bq.ScalarQueryParameter('start', 'STRING', start.strftime('%Y-%m-%d')),
+            bq.ScalarQueryParameter('end', 'STRING', end.strftime('%Y-%m-%d')),
             bq.ArrayQueryParameter('exclude', 'STRING', exclude_projects),
         ]
     )

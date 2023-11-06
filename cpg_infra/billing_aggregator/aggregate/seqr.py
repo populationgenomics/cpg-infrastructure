@@ -334,8 +334,8 @@ def migrate_entries_from_bq(
     projects = [utils.SEQR_PROJECT_ID, utils.ES_INDEX_PROJECT_ID]
     job_config = bq.QueryJobConfig(
         query_parameters=[
-            bq.ScalarQueryParameter('start', 'TIMESTAMP', istart.date()),
-            bq.ScalarQueryParameter('end', 'TIMESTAMP', iend.date()),
+            bq.ScalarQueryParameter('start', 'STRING', istart.strftime('%Y-%m-%d')),
+            bq.ScalarQueryParameter('end', 'STRING', iend.strftime('%Y-%m-%d')),
             bq.ArrayQueryParameter('projects', 'STRING', projects),
         ]
     )
@@ -347,6 +347,8 @@ def migrate_entries_from_bq(
         with open(temp_file, encoding='utf-8') as f:
             json_objs_iter = [rapidjson.load(f)]
     else:
+        logger.info('Querying BQ for seqr data')
+        logger.info(_query)
         df_bq_result = (
             utils.get_bigquery_client().query(_query, job_config=job_config).result()
         )
