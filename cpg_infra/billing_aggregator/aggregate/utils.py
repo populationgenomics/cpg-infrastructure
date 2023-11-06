@@ -483,7 +483,11 @@ async def process_entries_from_hail_in_chunks(
     def insert_entries(_entries):
         if mode in ('prod', 'dry-run'):
             return upsert_rows_into_bigquery(
-                table=GCP_AGGREGATE_DEST_TABLE, objs=_entries, dry_run=mode == 'dry-run'
+                window_start=start.date(),
+                window_end=end.date(),
+                table=GCP_AGGREGATE_DEST_TABLE,
+                objs=_entries,
+                dry_run=mode == 'dry-run',
             )
 
         if mode == 'local':
@@ -584,8 +588,8 @@ def billing_row_to_topic(row, dataset_to_gcp_map: dict) -> str | None:
 
 
 def upsert_rows_into_bigquery(
-    window_start: datetime,
-    window_end: datetime,
+    window_start: datetime | date,
+    window_end: datetime | date,
     objs: list[dict[str, Any]],
     dry_run: bool,
     table: str = GCP_AGGREGATE_DEST_TABLE,
@@ -714,9 +718,9 @@ def upsert_rows_into_bigquery(
 
 def upsert_aggregated_dataframe_into_bigquery(
     df: pd.DataFrame,
+    window_start: datetime,
+    window_end: datetime,
     table: str = GCP_AGGREGATE_DEST_TABLE,
-    window_start: datetime = None,
-    window_end: datetime = None,
 ):
     """
     Upsert rows from a dataframe into the BQ.aggregate table.
@@ -731,7 +735,7 @@ def upsert_aggregated_dataframe_into_bigquery(
     # https://cloud.google.com/bigquery/docs/parameterized-queries
     _query = f"""
         SELECT id FROM {table}
-        WHERE id IN UNNEST(@ids);
+        WHERE id IN UNNEST(@ids)
         AND DATE_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end;
     """
     job_config = bq.QueryJobConfig(
