@@ -348,7 +348,6 @@ def migrate_entries_from_bq(
             json_objs_iter = [rapidjson.load(f)]
     else:
         logger.info('Querying BQ for seqr data')
-        logger.info(_query)
         df_bq_result = (
             utils.get_bigquery_client().query(_query, job_config=job_config).result()
         )
