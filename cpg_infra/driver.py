@@ -785,7 +785,7 @@ class CPGDatasetCloudInfrastructure:
             for access_level, machine_account in values:
                 yield kind, access_level, machine_account
 
-    def working_machine_accounts_by_access_level(self):
+    def working_machine_accounts_by_access_level(self) -> dict[AccessLevel, list[Any]]:
         machine_accounts: dict[AccessLevel, list[Any]] = defaultdict(list)
         for _, values in self.working_machine_accounts_by_type.items():
             for access_level, machine_account in values:
