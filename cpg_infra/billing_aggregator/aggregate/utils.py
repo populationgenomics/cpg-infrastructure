@@ -791,7 +791,7 @@ def get_currency_conversion_rate_for_time(time: datetime):
             SELECT currency_conversion_rate
             FROM {GCP_BILLING_BQ_TABLE}
             WHERE invoice.month = @invoice_month
-            AND DATE_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end;
+            AND DATE_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end
             LIMIT 1
         """
         job_config = bq.QueryJobConfig(
