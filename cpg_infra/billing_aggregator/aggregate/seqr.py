@@ -375,9 +375,6 @@ def migrate_entries_from_bq(
             usage_start_time = utils.get_date_time_from_value(
                 'usage_start_time', obj['usage_start_time']
             )
-            usage_end_time = utils.get_date_time_from_value(
-                'usage_end_time', obj['usage_end_time']
-            )
             dates = ['usage_start_time', 'usage_end_time', 'export_time']
             for k in dates:
                 obj[k] = utils.to_bq_time(utils.get_date_time_from_value(k, obj[k]))
@@ -388,7 +385,7 @@ def migrate_entries_from_bq(
                 param_map = {'seqr': (1.0, 1)}
             elif current_date is None or usage_start_time.date() > current_date:
                 current_date, param_map = get_ratios_from_date(
-                    dt=usage_end_time.date(), prop_map=prop_map
+                    dt=usage_start_time.date(), prop_map=prop_map
                 )
 
             # Data transforms and key changes
@@ -487,7 +484,9 @@ async def generate_proportionate_maps_of_datasets(
         )
 
     result = await aapi.get_proportionate_map_async(
-        start=start.strftime('%Y-%m-%d'),
+        # 7 days in the past, in case batches run long outside the time
+        start=(start - datetime.timedelta(days=7)).strftime('%Y-%m-%d'),
+        end=(end + datetime.timedelta(days=1)).strftime('%Y-%m-%d') if end else None,
         body_get_proportionate_map=BodyGetProportionateMap(
             temporal_methods=[
                 ProportionalDateTemporalMethod('SAMPLE_CREATE_DATE'),
@@ -496,7 +495,6 @@ async def generate_proportionate_maps_of_datasets(
             projects=filtered_projects,
             sequencing_types=[],
         ),
-        end=end.strftime('%Y-%m-%d') if end else None,
     )
 
     def fix_types_in_result(res):
