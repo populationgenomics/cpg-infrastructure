@@ -375,6 +375,9 @@ def migrate_entries_from_bq(
             usage_start_time = utils.get_date_time_from_value(
                 'usage_start_time', obj['usage_start_time']
             )
+            usage_end_time = utils.get_date_time_from_value(
+                'usage_end_time', obj['usage_end_time']
+            )
             dates = ['usage_start_time', 'usage_end_time', 'export_time']
             for k in dates:
                 obj[k] = utils.to_bq_time(utils.get_date_time_from_value(k, obj[k]))
@@ -385,7 +388,7 @@ def migrate_entries_from_bq(
                 param_map = {'seqr': (1.0, 1)}
             elif current_date is None or usage_start_time.date() > current_date:
                 current_date, param_map = get_ratios_from_date(
-                    dt=usage_start_time.date(), prop_map=prop_map
+                    dt=usage_end_time.date(), prop_map=prop_map
                 )
 
             # Data transforms and key changes

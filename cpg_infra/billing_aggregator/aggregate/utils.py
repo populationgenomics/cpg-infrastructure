@@ -342,24 +342,28 @@ async def get_completed_batches(
     (optional): last_completed_timestamp (found in body of previous request)
     """
 
-    params = []
+    params = {}
 
     if last_completed_timestamp:
-        params.append(f'last_completed_timestamp={last_completed_timestamp}')
+        params['last_completed_timestamp'] = last_completed_timestamp
 
-    if limit:
-        params.append(f'limit={limit}')
+    for lim in (limit, 30, 15, 5):
+        try:
+            if lim:
+                logger.info(f'Using limit {lim} to get batches')
+                params['limit'] = lim
+            q = '?' + '&'.join(f'{k}={v}' for k, v in params.items())
+            url = HAIL_BATCHES_API + q
+            logger.info(f'Getting batches: {url}')
+            return await async_retry_transient_get_json_request(
+                url,
+                aiohttp.ClientError,
+                headers={'Authorization': 'Bearer ' + token},
+            )
+        except asyncio.TimeoutError as ex:
+            e = ex
 
-    q = '?' + '&'.join(params)
-    url = HAIL_BATCHES_API + q
-
-    logger.debug(f'Getting batches: {url}')
-
-    return await async_retry_transient_get_json_request(
-        url,
-        aiohttp.ClientError,
-        headers={'Authorization': 'Bearer ' + token},
-    )
+    raise e
 
 
 async def get_finished_batches_for_date(
@@ -374,7 +378,7 @@ async def get_finished_batches_for_date(
     when we find a batch that started before the date.
     """
     batches: list[dict] = []
-    last_completed_timestamp = None
+    last_completed_timestamp = math.ceil(end.timestamp() * 1000)
     n_requests = 0
     skipped = 0
 
