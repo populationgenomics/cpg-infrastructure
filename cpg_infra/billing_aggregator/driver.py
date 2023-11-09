@@ -36,6 +36,9 @@ PATH_TO_AGGREGATE_SOURCE_CODE = os.path.join(os.path.dirname(__file__), 'aggrega
 PATH_TO_MONTHLY_AGGREGATE_SOURCE_CODE = os.path.join(
     os.path.dirname(__file__), 'monthly_aggregate'
 )
+PATH_TO_UPDATE_BUDGET_SOURCE_CODE = os.path.join(
+    os.path.dirname(__file__), 'update_budget'
+)
 
 
 class BillingAggregator(CpgInfrastructurePlugin):
@@ -52,6 +55,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
 
         self.setup_aggregator_functions()
         self.setup_monthly_export()
+        self.setup_update_budget()
 
     @cached_property
     def functions_service(self):
@@ -366,6 +370,57 @@ class BillingAggregator(CpgInfrastructurePlugin):
         )
 
         return fxn, trigger, alert_policy
+
+    def setup_update_budget(self):
+        # The Cloud Function source code itself needs to be zipped up into an
+        # archive, which we create using the pulumi.AssetArchive primitive.
+        archive = archive_folder(PATH_TO_UPDATE_BUDGET_SOURCE_CODE)
+        # Create the single Cloud Storage object, which contains the source code
+        source_archive_object = gcp.storage.BucketObject(
+            'billing-update-budget-source-code',
+            # updating the source archive object does not trigger the cloud function
+            # to actually updating the source because it's based on the name,
+            # allow Pulumi to create a new name each time it gets updated
+            bucket=self.source_bucket.name,
+            source=archive,
+            opts=pulumi.ResourceOptions(replace_on_changes=['*']),
+        )
+
+        pubsub = gcp.pubsub.Topic(
+            'billing-update-budget-topic',
+            project=self.config.billing.gcp.project_id,
+            opts=pulumi.ResourceOptions(depends_on=[self.pubsub_service]),
+        )
+
+        # Create a cron job to run the budget update function on some interval
+        _ = gcp.cloudscheduler.Job(
+            'billing-update-budget-scheduler-job',
+            pubsub_target=gcp.cloudscheduler.JobPubsubTargetArgs(
+                topic_name=pubsub.id,
+                data=b64encode_str('Run the functions'),
+            ),
+            # Run daily at 3am
+            schedule='0 3 * * *',
+            project=self.config.billing.gcp.project_id,
+            region=self.config.gcp.region,
+            time_zone='Australia/Sydney',
+            opts=pulumi.ResourceOptions(depends_on=[self.scheduler_service]),
+        )
+
+        _ = self.create_cloud_function(
+            resource_name='billing-update-budget-function',
+            name='update-budget',
+            service_account=self.config.billing.coordinator_machine_account,
+            pubsub_topic=pubsub,
+            source_archive_object=source_archive_object,
+            env={
+                'BILLING_ACCOUNT_ID': self.config.billing.gcp.account_id,
+                # TODO create new config property for this
+                'BQ_BILLING_MONTHLY_BUDGET_TABLE': (
+                    f'{self.config.billing.gcp.project_id}.billing.budget_by_project_monthly'
+                ),
+            },
+        )
 
 
 def b64encode_str(s: str) -> str:
