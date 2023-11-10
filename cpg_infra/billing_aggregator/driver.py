@@ -413,6 +413,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
             service_account=self.config.billing.coordinator_machine_account,
             pubsub_topic=pubsub,
             source_archive_object=source_archive_object,
+            notification_channel=self.slack_channel,
             env={
                 'BILLING_ACCOUNT_ID': self.config.billing.gcp.account_id,
                 # TODO create new config property for this
