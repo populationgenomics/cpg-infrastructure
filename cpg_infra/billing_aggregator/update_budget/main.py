@@ -14,7 +14,7 @@ import google.cloud.bigquery as bq
 
 
 BILLING_ACCOUNT_ID = os.getenv('BILLING_ACCOUNT_ID')
-BILLING_MONTHLY_BUDGET_TABLE = os.getenv('BQ_BILLING_MONTHLY_BUDGET_TABLE') 
+BILLING_MONTHLY_BUDGET_TABLE = os.getenv('BQ_BILLING_MONTHLY_BUDGET_TABLE')
 
 assert BILLING_ACCOUNT_ID, BILLING_MONTHLY_BUDGET_TABLE
 
@@ -48,14 +48,12 @@ def insert_new_budget(bg_table, bq_client, gcp_projet, budget, currency):
         'currency': currency,
     }
 
-    errors = bq_client.insert_rows_json(
-        bg_table, [new_budget_obj]
-    )
+    errors = bq_client.insert_rows_json(bg_table, [new_budget_obj])
     if errors:
         # log errors
         logger.error(f'Error: {errors} when inserting {new_budget_obj}')
         return errors
-    
+
     return None
 
 
@@ -103,7 +101,7 @@ def from_request(request: Request):
     """
     stored_budgets = {b.gcp_project: b for b in list(bq_client.query(query).result())}
     res = []
-    
+
     for b in budgets:
         errors = compare_and_update_stored_budget(
             BILLING_MONTHLY_BUDGET_TABLE, bq_client, b, stored_budgets
@@ -113,5 +111,7 @@ def from_request(request: Request):
 
     if len(res) > 0:
         return {'success': False, 'errors': json.dumps(res)}, 500
-    
-    return {'success': True,}, 200
+
+    return {
+        'success': True,
+    }, 200
