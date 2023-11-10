@@ -7,6 +7,7 @@ specific dataset.
 
 import dataclasses
 from enum import Enum
+from typing import Any
 
 import toml
 
@@ -113,23 +114,38 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         gcp: GCP
 
     @dataclasses.dataclass(frozen=True)
-    class SampleMetadata(DeserializableDataclass):
+    class Metamist(DeserializableDataclass):
         @dataclasses.dataclass(frozen=True)
         class GCP(DeserializableDataclass):
             project: str
             service_name: str
             machine_account: str
 
+        @dataclasses.dataclass(frozen=True)
+        class ETLConfiguration(DeserializableDataclass):
+            @dataclasses.dataclass(frozen=True)
+            class ETLAccessorConfiguration(DeserializableDataclass):
+                @dataclasses.dataclass(frozen=True)
+                class ETLParserConfiguration(DeserializableDataclass):
+                    # the type/version of the parser
+                    name: str
+                    # effectively, turn the
+                    type_override: str | None
+                    # Default ETL parser configuration, if not specified in ETL payload
+                    # e.g.: {'project': 'greek-myth', 'default_sequencing_type': 'genome'}
+                    default_parameters: dict[str, Any] | None = None
+
+                parsers: list[ETLParserConfiguration]
+
+            # Metamist environment (DEVELOPMENT / PRODUCTION) for ETL cloud functions
+            accessors: dict[str, ETLAccessorConfiguration] | None
+            environment: str | None = 'PRODUCTION'
+            # Collection of private packages to be appended to requirements.txt
+            private_repo_packages: list[str] | None = None
+
         gcp: GCP
+        etl: ETLConfiguration | None = None
         slack_channel: str | None = None
-        etl_accessors: list[str] = dataclasses.field(default_factory=list)
-        # Metamist environment (DEVELOPMENT / PRODUCTION) for ETL cloud functions
-        etl_environment: str | None = 'PRODUCTION'
-        # Default ETL parser configuration, if not specified in ETL payload
-        # e.g.: {'project': 'greek-myth', 'default_sequencing_type': 'genome'}
-        etl_parser_default_config: dict[str, str] | None = None
-        # Collection of private packages for ETL functions appended to requirements.txt
-        etl_private_repo_packages: list[str] | None = None
 
     @dataclasses.dataclass(frozen=True)
     class Billing(DeserializableDataclass):
@@ -170,7 +186,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     web_service: WebService | None = None
     notebooks: Notebooks | None = None
     cromwell: Cromwell | None = None
-    sample_metadata: SampleMetadata | None = None
+    metamist: Metamist | None = None
     billing: Billing | None = None
 
     # When resources are renamed, it can be useful to explicitly apply changes in two
