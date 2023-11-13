@@ -2,16 +2,16 @@
 
 Grabs the data from the montly invoice aggregate table and sends it to a spreadsheet
 
-
 ## Running on the VM
+
 It is recommended that if you are loading/reloading data into the spreadsheets that you
 refresh the materialized view in bigquery first using the following command:
 
 ```sql
 CALL BQ.REFRESH_MATERIALIZED_VIEW('billing-admin-290403.billing_aggregate.aggregate_monthly_cost')
 ```
-Set the location for running the query to the correct one under More > Query settings
 
+Set the location for running the query to the correct one under More > Query settings
 
 If running on the VM use the following configuration:
 

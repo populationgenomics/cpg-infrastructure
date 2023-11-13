@@ -9,7 +9,7 @@ import logging
 from functools import cache
 from base64 import b64decode
 
-from datetime import datetime, timedelta, date
+from datetime import datetime
 
 import functions_framework
 import google.auth
@@ -221,9 +221,9 @@ if __name__ == '__main__':
 
     years = [2023]
     months = list(range(4, 11))
-    runs = []
     for year, month in product(years, months):
         invoice_month = f'{year}{month:0>2}'
         print(f'Processing {invoice_month}')
-        event_loop.run_until_complete(process_and_upload_monthly_billing_report(invoice_month))
-
+        event_loop.run_until_complete(
+            process_and_upload_monthly_billing_report(invoice_month)
+        )
