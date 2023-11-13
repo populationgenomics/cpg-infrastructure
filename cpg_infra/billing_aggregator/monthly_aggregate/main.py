@@ -180,47 +180,20 @@ def append_values_to_google_sheet(spreadsheet_id, _values, invoice_month):
         return error
 
 
-def get_invoice_month_range(convert_month: date) -> tuple[date, date]:
-    """Get the start and end date of the invoice month for a given date"""
-    first_day = convert_month.replace(day=1)
-
-    # Grab the first day of invoice month then subtract INVOICE_DAY_DIFF days
-    start_day = first_day + timedelta(days=-INVOICE_DAY_DIFF)
-
-    if convert_month.month == 12:
-        next_month = first_day.replace(month=1, year=convert_month.year + 1)
-    else:
-        next_month = first_day.replace(month=convert_month.month + 1)
-
-    # Grab the last day of invoice month then add INVOICE_DAY_DIFF days
-    last_day = next_month + timedelta(days=-1) + timedelta(days=INVOICE_DAY_DIFF)
-
-    return start_day, last_day
-
-
 def get_billing_data(invoice_month: str) -> DataFrame:
     """
     Retrieve the billing data for a particular billing month from the aggregation table
     Return results as a dataframe
     """
 
-    invoice_month_date = datetime.strptime(invoice_month, '%Y%m').date()
-    window_start, window_end = get_invoice_month_range(invoice_month_date)
     _query = f"""
         SELECT * FROM `{GCP_MONTHLY_BILLING_BQ_TABLE}`
         WHERE month = @invoice_month
-        AND DATE_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end
         ORDER BY topic
     """
     job_config = bq.QueryJobConfig(
         query_parameters=[
             bq.ScalarQueryParameter('invoice_month', 'STRING', str(invoice_month)),
-            bq.ScalarQueryParameter(
-                'window_start', 'STRING', window_start.strftime('%Y-%m-%d')
-            ),
-            bq.ScalarQueryParameter(
-                'window_end', 'STRING', window_end.strftime('%Y-%m-%d')
-            ),
         ]
     )
 
@@ -240,6 +213,17 @@ if __name__ == '__main__':
     logging.getLogger('google').setLevel(logging.WARNING)
     logging.getLogger('asyncio').setLevel(logging.ERROR)
     logging.getLogger('urllib3').setLevel(logging.WARNING)
-    event_loop = asyncio.new_event_loop()
+    event_loop = asyncio.get_event_loop()
 
-    event_loop.run_until_complete(process_and_upload_monthly_billing_report(None))
+    invoice_month = '202304'
+
+    from itertools import product
+
+    years = [2023]
+    months = list(range(4, 11))
+    runs = []
+    for year, month in product(years, months):
+        invoice_month = f'{year}{month:0>2}'
+        print(f'Processing {invoice_month}')
+        event_loop.run_until_complete(process_and_upload_monthly_billing_report(invoice_month))
+

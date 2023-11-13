@@ -32,7 +32,7 @@ import hashlib
 import logging
 import os
 import shutil
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Literal
 
 import functions_framework
@@ -485,8 +485,8 @@ async def generate_proportionate_maps_of_datasets(
 
     result = await aapi.get_proportionate_map_async(
         # 7 days in the past, in case batches run long outside the time
-        start=(start - datetime.timedelta(days=7)).strftime('%Y-%m-%d'),
-        end=(end + datetime.timedelta(days=1)).strftime('%Y-%m-%d') if end else None,
+        start=(start - timedelta(days=7)).strftime('%Y-%m-%d'),
+        end=(end + timedelta(days=1)).strftime('%Y-%m-%d') if end else None,
         body_get_proportionate_map=BodyGetProportionateMap(
             temporal_methods=[
                 ProportionalDateTemporalMethod('SAMPLE_CREATE_DATE'),
@@ -671,10 +671,9 @@ if __name__ == '__main__':
     logging.getLogger('asyncio').setLevel(logging.ERROR)
     logging.getLogger('urllib3').setLevel(logging.WARNING)
 
-    test_start, test_end = None, None
-
     test_start = datetime.now() - utils.timedelta(days=1)
     test_end = datetime.now()
+
     asyncio.new_event_loop().run_until_complete(
         main(
             start=test_start,
