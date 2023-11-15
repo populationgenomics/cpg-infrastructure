@@ -215,8 +215,6 @@ if __name__ == '__main__':
     logging.getLogger('urllib3').setLevel(logging.WARNING)
     event_loop = asyncio.get_event_loop()
 
-    invoice_month = '202304'
-
     from itertools import product
 
     years = [2023]
