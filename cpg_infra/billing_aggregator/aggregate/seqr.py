@@ -28,6 +28,7 @@ TO DO :
 - Getting latest cram for sample by sequence type (eg: exome / genome)
 """
 import asyncio
+import dataclasses
 import hashlib
 import logging
 import os
@@ -62,10 +63,6 @@ ES_ANALYSIS_OBJ_INTRO_DATE = date(2022, 6, 21)
 
 SEQR_FIRST_LOAD = date(2021, 9, 1)
 SEQR_ROUND = 6
-
-GCP_BILLING_BQ_TABLE = (
-    'billing-admin-290403.billing.gcp_billing_export_v1_01D012_20A6A2_CBD343'
-)
 
 BASE = 'https://batch.hail.populationgenomics.org.au'
 BATCHES_API = BASE + '/api/v1alpha/batches'
@@ -325,7 +322,7 @@ def migrate_entries_from_bq(
             service, sku, usage_start_time, usage_end_time, labels, system_labels,
             location, export_time, cost, currency, currency_conversion_rate, usage,
             credits, invoice, cost_type, adjustment_info
-        FROM `{GCP_BILLING_BQ_TABLE}`
+        FROM `{utils.GCP_BILLING_BQ_TABLE}`
         WHERE DATE_TRUNC(usage_end_time, DAY) BETWEEN @start AND @end
             AND project.id IN UNNEST(@projects)
         ORDER BY usage_start_time
@@ -434,8 +431,6 @@ def migrate_entries_from_bq(
             result += len(entries)
         elif mode == 'prod':
             result += utils.upsert_rows_into_bigquery(
-                window_start=istart.date(),
-                window_end=iend.date(),
                 table=utils.GCP_AGGREGATE_DEST_TABLE,
                 objs=entries,
                 dry_run=False,
@@ -601,12 +596,13 @@ async def main(
 
     seqr_project_map = get_seqr_dataset_id_map()
 
-    (
-        seqr_hosting_prop_map,
-        shared_computation_prop_map,
-    ) = await generate_proportionate_maps_of_datasets(
-        start, end, seqr_project_map=seqr_project_map
-    )
+    @dataclasses.dataclass
+    class PropMaps:
+        """Class to hold proportionate maps so we don't need to think about references"""
+
+        seqr_hosting_prop_map: ProportionateMapType | None = None
+        shared_computation_prop_map: ProportionateMapType | None = None
+
     result = 0
     bq_output_path = None
     hail_output_path = None
@@ -618,24 +614,51 @@ async def main(
         for suffix in 'gcp', 'hail':
             os.makedirs(os.path.join(output_path, suffix), exist_ok=True)
 
-    result += migrate_entries_from_bq(
-        start,
-        end,
-        seqr_hosting_prop_map,
-        mode=mode,
-        output_path=bq_output_path,
-    )
+    prop_maps = PropMaps()
+
+    async def func_process_batches_to_fetch_prop_map(batches: list[dict]):
+        """Just catch the batches loaded event to fetch the prop map"""
+        global seqr_hosting_prop_map, shared_computation_prop_map
+        min_time = min(
+            start, *[utils.parse_hail_time(b['time_created']) for b in batches]
+        )
+        max_time = max(
+            end, *[utils.parse_hail_time(b['time_completed']) for b in batches]
+        )
+
+        (
+            seqr_hosting_prop_map,
+            shared_computation_prop_map,
+        ) = await generate_proportionate_maps_of_datasets(
+            min_time, max_time, seqr_project_map=seqr_project_map
+        )
+
+        prop_maps.seqr_hosting_prop_map = seqr_hosting_prop_map
+        prop_maps.shared_computation_prop_map = shared_computation_prop_map
+
+        return batches
 
     def func_get_finalised_entries(batch):
-        return get_finalised_entries_for_batch(batch, shared_computation_prop_map)
+        return get_finalised_entries_for_batch(
+            batch, prop_maps.shared_computation_prop_map
+        )
 
     result += await utils.process_entries_from_hail_in_chunks(
         start=start,
         end=end,
         billing_project=SEQR_HAIL_BILLING_PROJECT,
         func_get_finalised_entries_for_batch=func_get_finalised_entries,
+        func_batches_preprocessor=func_process_batches_to_fetch_prop_map,
         mode=mode,
         output_path=hail_output_path,
+    )
+
+    result += migrate_entries_from_bq(
+        start,
+        end,
+        prop_maps.seqr_hosting_prop_map,
+        mode=mode,
+        output_path=bq_output_path,
     )
 
     if mode == 'dry-run':
