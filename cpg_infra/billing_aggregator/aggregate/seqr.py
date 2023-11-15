@@ -618,7 +618,6 @@ async def main(
 
     async def func_process_batches_to_fetch_prop_map(batches: list[dict]):
         """Just catch the batches loaded event to fetch the prop map"""
-        global seqr_hosting_prop_map, shared_computation_prop_map
         min_time = min(
             start, *[utils.parse_hail_time(b['time_created']) for b in batches]
         )
