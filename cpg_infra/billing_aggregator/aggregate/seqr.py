@@ -368,12 +368,15 @@ def migrate_entries_from_bq(
 
     for json_objs in json_objs_iter:
         entries = []
-        param_map, current_date = None, None
+        seqr_wide_param_map, current_date = None, None
         for obj in json_objs:
             labels = obj['labels']
 
             usage_start_time = utils.get_date_time_from_value(
                 'usage_start_time', obj['usage_start_time']
+            )
+            usage_end_time = utils.get_date_time_from_value(
+                'usage_end_time', obj['usage_end_time']
             )
             dates = ['usage_start_time', 'usage_end_time', 'export_time']
             for k in dates:
@@ -382,11 +385,16 @@ def migrate_entries_from_bq(
             # Assign all seqr cost to seqr topic before first ever load
             # Otherwise, determine proportion cost across topics
             if usage_start_time.date() < SEQR_FIRST_LOAD:
-                param_map = {'seqr': (1.0, 1)}
+                seqr_wide_param_map = {'seqr': (1.0, 1)}
             elif current_date is None or usage_start_time.date() > current_date:
-                current_date, param_map = get_ratios_from_date(
-                    dt=usage_start_time.date(), prop_map=prop_map
+                current_date, seqr_wide_param_map = get_ratios_from_date(
+                    dt=usage_end_time.date(), prop_map=prop_map
                 )
+
+            _obj_param_map = seqr_wide_param_map
+            if 'dataset' in labels:
+                # specific override where 'dataset' is specified in GCP resource
+                _obj_param_map = {labels['dataset']: (1.0, 1)}
 
             # Data transforms and key changes
             obj['topic'] = 'seqr'
@@ -406,7 +414,7 @@ def migrate_entries_from_bq(
                 )
             )
 
-            for dataset, (ratio, dataset_size) in param_map.items():
+            for dataset, (ratio, dataset_size) in _obj_param_map.items():
                 new_entry = obj.copy()
 
                 new_entry['topic'] = dataset
