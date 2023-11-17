@@ -408,7 +408,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
         )
 
         # Give machine account billing viewer role to be able to interrogate projects budget
-        self.infrastructure.add_member_to_billing_api(
+        self.infrastructure.common_gcp_infra.add_member_to_billing_api(
             resource_key='billing-update-budget-user-role',
             project=self.config.billing.gcp.project_id,
             account=self.config.billing.coordinator_machine_account,
