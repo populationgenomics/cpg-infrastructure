@@ -686,13 +686,4 @@ class GcpInfrastructure(CloudInfraBase):
             content=contents,
         )
 
-    def add_member_to_billing_api(self, resource_key: str, project: str, account):
-        gcp.projects.IAMMember(
-            self.get_pulumi_name(resource_key),
-            role='roles/billing.viewer',
-            member=self.get_member_key(account),
-            project=project,
-            opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudbilling]),
-        )
-
     # endregion GCP SPECIFIC

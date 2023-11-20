@@ -407,13 +407,6 @@ class BillingAggregator(CpgInfrastructurePlugin):
             opts=pulumi.ResourceOptions(depends_on=[self.scheduler_service]),
         )
 
-        # Give machine account billing viewer role to be able to interrogate projects budget
-        self.infrastructure.common_gcp_infra.add_member_to_billing_api(
-            resource_key='billing-update-budget-user-role',
-            project=self.config.billing.gcp.project_id,
-            account=self.config.billing.coordinator_machine_account,
-        )
-
         _ = self.create_cloud_function(
             resource_name='billing-update-budget-function',
             name='update-budget',
