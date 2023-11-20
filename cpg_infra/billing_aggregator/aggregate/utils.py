@@ -13,7 +13,7 @@ from base64 import b64decode
 from datetime import date, datetime, timedelta
 from io import StringIO
 from pathlib import Path
-from typing import Any, Iterable, Iterator, Sequence, Type, TypeVar
+from typing import Any, Awaitable, Callable, Iterable, Iterator, Sequence, Type, TypeVar
 
 import aiohttp
 import google.cloud.bigquery as bq
@@ -476,6 +476,8 @@ async def process_entries_from_hail_in_chunks(
     log_prefix: str = '',
     mode: str = 'prod',
     output_path: str = './',
+    func_batches_preprocessor: Callable[[list[dict]], Awaitable[list[dict]]]
+    | None = None,
 ) -> int:
     """
     Process all the seqr entries from hail batch,
@@ -487,8 +489,6 @@ async def process_entries_from_hail_in_chunks(
     def insert_entries(_entries):
         if mode in ('prod', 'dry-run'):
             return upsert_rows_into_bigquery(
-                window_start=start.date(),
-                window_end=end.date(),
                 table=GCP_AGGREGATE_DEST_TABLE,
                 objs=_entries,
                 dry_run=mode == 'dry-run',
@@ -517,6 +517,8 @@ async def process_entries_from_hail_in_chunks(
     batches = await get_finished_batches_for_date(
         start=start, end=end, token=token, billing_project=billing_project
     )
+    if func_batches_preprocessor:
+        batches = await func_batches_preprocessor(batches)
     if len(batches) == 0:
         return 0
 
@@ -592,8 +594,6 @@ def billing_row_to_topic(row, dataset_to_gcp_map: dict) -> str | None:
 
 
 def upsert_rows_into_bigquery(
-    window_start: datetime | date,
-    window_end: datetime | date,
     objs: list[dict[str, Any]],
     dry_run: bool,
     table: str = GCP_AGGREGATE_DEST_TABLE,
@@ -612,10 +612,8 @@ def upsert_rows_into_bigquery(
     able to take an arbitrary amount of rows.
     """
 
-    if not window_start or not window_end:
-        raise ValueError('window_start and window_end must be defined')
-    elif window_start > window_end:
-        raise ValueError('window_start must be before window_end')
+    window_start = min(o['usage_start_time'] for o in objs)
+    window_end = max(o['usage_end_time'] for o in objs)
 
     if not objs:
         logger.info('Not inserting any rows')
