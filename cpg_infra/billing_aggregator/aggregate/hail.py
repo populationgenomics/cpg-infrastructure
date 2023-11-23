@@ -122,6 +122,7 @@ def get_finalised_entries_for_batch(batch: dict) -> List[Dict]:
             # to make the key unique, so we'll use the batch_id + job_id + resource_id
             # from 2023-01-01 onwards. We've migrated that data, so we're good to go.
 
+            key_components: tuple[str, ...]
             if start_time < datetime(2023, 1, 1):
                 key_components = (
                     SERVICE_ID,
