@@ -118,8 +118,12 @@ def get_finalised_entries_for_batch(batch: dict) -> List[Dict]:
             # with changing the resource_id again, we'll only use the batch_id + job_id
             # as the key as it's sensible for us to assume that all the entries exist if
             # one of the entries exists.
-            key = '-'.join(
-                (
+            # 2023-11-23 mfranklin: Later Michael here, I've changed my mind. We need
+            # to make the key unique, so we'll use the batch_id + job_id + resource_id
+            # from 2023-01-01 onwards. We've migrated that data, so we're good to go.
+
+            if start_time < datetime(2023, 1, 1):
+                key_components = (
                     SERVICE_ID,
                     dataset,
                     'batch',
@@ -127,7 +131,17 @@ def get_finalised_entries_for_batch(batch: dict) -> List[Dict]:
                     'job',
                     str(job_id),
                 )
-            ).replace('/', '-')
+            else:
+                key_components = (
+                    SERVICE_ID,
+                    dataset,
+                    'batch',
+                    str(batch_id),
+                    'job',
+                    str(job_id),
+                    batch_resource,
+                )
+            key = '-'.join(key_components).replace('/', '-')
             entries.append(
                 utils.get_hail_entry(
                     key=key,
