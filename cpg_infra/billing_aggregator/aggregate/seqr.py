@@ -265,7 +265,7 @@ def get_finalised_entries_for_dataset_batch_and_job(
         'batch_name': batch_name,
         'batch_id': str(batch_id),
         'job_id': str(job_id),
-        'namespace': namespace
+        'namespace': namespace,
     }
 
     if ar_guid:

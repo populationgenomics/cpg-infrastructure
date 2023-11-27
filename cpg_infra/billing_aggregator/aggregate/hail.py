@@ -61,6 +61,7 @@ def get_billing_projects():
     ds = list(set(server_config.keys()) - EXCLUDED_BATCH_PROJECTS)
     return ds
 
+
 def infer_batch_namespace(batch: dict) -> str:
     """
     Infer the namespace from the batch attributes
@@ -77,8 +78,9 @@ def infer_batch_namespace(batch: dict) -> str:
             return 'main'
         elif 'full' in user:
             return 'main'
-    
+
     return default
+
 
 def get_finalised_entries_for_batch(batch: dict) -> List[Dict]:
     """
