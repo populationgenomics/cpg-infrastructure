@@ -625,10 +625,10 @@ async def main(
         shared_computation_prop_map: ProportionateMapType | None = None
 
     result = 0
-    # bq_output_path = None
+    bq_output_path = None
     hail_output_path = None
     if output_path:
-        # bq_output_path = os.path.join(output_path, 'gcp')
+        bq_output_path = os.path.join(output_path, 'gcp')
         hail_output_path = os.path.join(output_path, 'hail')
 
         shutil.rmtree(output_path)
@@ -676,13 +676,13 @@ async def main(
         output_path=hail_output_path,
     )
 
-    # result += migrate_entries_from_bq(
-    #     start,
-    #     end,
-    #     prop_maps.seqr_hosting_prop_map,
-    #     mode=mode,
-    #     output_path=bq_output_path,
-    # )
+    result += migrate_entries_from_bq(
+        start,
+        end,
+        prop_maps.seqr_hosting_prop_map,
+        mode=mode,
+        output_path=bq_output_path,
+    )
 
     if mode == 'dry-run':
         logger.info(f'Finished dry run, would have inserted {result} entries')
