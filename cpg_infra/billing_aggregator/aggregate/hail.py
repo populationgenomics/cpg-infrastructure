@@ -61,6 +61,24 @@ def get_billing_projects():
     ds = list(set(server_config.keys()) - EXCLUDED_BATCH_PROJECTS)
     return ds
 
+def infer_batch_namespace(batch: dict) -> str:
+    """
+    Infer the namespace from the batch attributes
+    """
+    namespace = batch.get('attributes', {}).get('namespace')
+    user = batch.get('user')
+    default = None
+    if namespace:
+        return namespace
+    elif user:
+        if 'test' in user:
+            return 'test'
+        elif 'standard' in user:
+            return 'main'
+        elif 'full' in user:
+            return 'main'
+    
+    return default
 
 def get_finalised_entries_for_batch(batch: dict) -> List[Dict]:
     """
@@ -76,6 +94,7 @@ def get_finalised_entries_for_batch(batch: dict) -> List[Dict]:
     start_time = utils.parse_hail_time(batch['time_created'])
     end_time = utils.parse_hail_time(batch['time_completed'])
     batch_id = batch['id']
+    namespace = infer_batch_namespace(batch)
     dataset = batch['billing_project']
     currency_conversion_rate = utils.get_currency_conversion_rate_for_time(start_time)
     attributes = batch.get('attributes', {})
@@ -98,6 +117,7 @@ def get_finalised_entries_for_batch(batch: dict) -> List[Dict]:
                 'batch_resource': batch_resource,
                 'batch_name': attributes.get('name'),
                 'url': batch_url,
+                'namespace': namespace,
             }
 
             # Add all batch attributes, removing any duped labels

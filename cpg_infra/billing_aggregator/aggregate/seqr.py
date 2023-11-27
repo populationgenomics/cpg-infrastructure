@@ -35,6 +35,7 @@ import os
 import shutil
 from datetime import date, datetime
 from typing import Any, Literal
+from cpg_infra.billing_aggregator.aggregate.hail import infer_batch_namespace
 
 import functions_framework
 import google.cloud.bigquery as bq
@@ -88,6 +89,7 @@ def get_finalised_entries_for_batch(
 
     batch_id = batch['id']
     batch_attributes = batch.get('attributes', {})
+    namespace = infer_batch_namespace(batch)
     batch_name = batch_attributes.get('name')
     ar_guid = batch_attributes.get(AR_GUID_NAME, batch_attributes.get('ar_guid'))
 
@@ -119,6 +121,7 @@ def get_finalised_entries_for_batch(
                 batch_name=batch_name,
                 batch_start_time=start_time,
                 batch_end_time=end_time,
+                namespace=namespace,
                 job=job,
                 ar_guid=ar_guid,
                 currency_conversion_rate=currency_conversion_rate,
@@ -144,6 +147,7 @@ def get_finalised_entries_for_batch(
                 'batch_resource': batch_resource,
                 'url': hail_ui_url,
                 'job_id': str(job_id),
+                'namespace': namespace,
             }
 
             if ar_guid:
@@ -239,6 +243,7 @@ def get_finalised_entries_for_dataset_batch_and_job(
     batch_name: str,
     batch_start_time: datetime,
     batch_end_time: datetime,
+    namespace: str | None,
     job: dict[str, Any],
     currency_conversion_rate: float,
     ar_guid: str | None,
@@ -260,6 +265,7 @@ def get_finalised_entries_for_dataset_batch_and_job(
         'batch_name': batch_name,
         'batch_id': str(batch_id),
         'job_id': str(job_id),
+        'namespace': namespace
     }
 
     if ar_guid:
