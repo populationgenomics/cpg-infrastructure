@@ -612,8 +612,8 @@ def upsert_rows_into_bigquery(
     able to take an arbitrary amount of rows.
     """
 
-    window_start = min(o['usage_start_time'] for o in objs)
-    window_end = max(o['usage_end_time'] for o in objs)
+    window_start = datetime.fromisoformat(min(o['usage_start_time'] for o in objs))
+    window_end = datetime.fromisoformat(max(o['usage_end_time'] for o in objs))
 
     if not objs:
         logger.info('Not inserting any rows')
@@ -1079,3 +1079,24 @@ def get_invoice_month_range(convert_month: date) -> tuple[date, date]:
     last_day = next_month + timedelta(days=-1) + timedelta(days=INVOICE_DAY_DIFF)
 
     return start_day, last_day
+
+
+def infer_batch_namespace(batch: dict) -> str:
+    """
+    Infer the namespace from the batch attributes
+    """
+    namespace = batch.get('attributes', {}).get('namespace')
+    user = batch.get('user')
+    default = None
+    if namespace:
+        return namespace
+
+    if user:
+        if 'test' in user:
+            return 'test'
+        elif 'standard' in user:
+            return 'main'
+        elif 'full' in user:
+            return 'main'
+
+    return default
