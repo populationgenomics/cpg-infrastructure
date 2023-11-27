@@ -29,6 +29,7 @@ class CPGInfrastructureUser(DeserializableDataclass):
     id: MemberKey
     clouds: dict[str, Cloud]
     projects: list[str]
+    add_to_internal_hail_batch_projects: bool = False
 
 
 @dataclasses.dataclass(frozen=True)
@@ -291,6 +292,8 @@ class CPGDatasetConfig(DeserializableDataclass):
     create_container_registry: bool = False
 
     deploy_locations: list[str] = dataclasses.field(default_factory=lambda: ['gcp'])
+
+    is_internal_dataset: bool = False
 
     # creates a release requester-pays bucket
     enable_release: bool = False

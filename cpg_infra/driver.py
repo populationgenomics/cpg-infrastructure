@@ -302,8 +302,14 @@ class CPGInfrastructure:
             cloud_dataset.main()
 
     def setup_hail_batch_billing_project_members(self):
+        internal_users = [
+            user
+            for user in self.config.users.values()
+            if user.add_to_internal_hail_batch_projects
+        ]
+
         for dataset_infra in self.dataset_infrastructures.values():
-            for dataset_cloud_infra in dataset_infra.clouds.values():
+            for cloud, dataset_cloud_infra in dataset_infra.clouds.items():
                 if not dataset_cloud_infra.should_setup_hail:
                     continue
 
@@ -331,11 +337,18 @@ class CPGInfrastructure:
                 _group_members = self.group_provider.resolve_group_members(
                     dataset_cloud_infra.analysis_group
                 )
-                hail_batch_username = [
+                hail_batch_usernames = {
                     m.user.hail_batch_username
                     for m in _group_members
                     if m.user and m.user.hail_batch_username
-                ]
+                }
+                if dataset_infra.dataset_config.is_internal_dataset:
+                    hail_batch_usernames.update(
+                        user.clouds[cloud].hail_batch_username
+                        for user in internal_users
+                        if cloud in user.clouds
+                        and user.clouds[cloud].hail_batch_username
+                    )
 
                 def _make_add_member_function(
                     _data_provider: 'CPGDatasetCloudInfrastructure',
@@ -366,7 +379,7 @@ class CPGInfrastructure:
 
                     return _add_member_to_billing_project
 
-                pulumi.Output.all(*hail_batch_username).apply(
+                pulumi.Output.all(*hail_batch_usernames).apply(
                     _make_add_member_function(dataset_cloud_infra, infra)
                 )
 
