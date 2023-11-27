@@ -724,16 +724,15 @@ if __name__ == '__main__':
     logging.getLogger('asyncio').setLevel(logging.ERROR)
     logging.getLogger('urllib3').setLevel(logging.WARNING)
 
-    test_start = datetime.strptime('2023-05-01', '%Y-%m-%d')
-    test_end = datetime.strptime('2023-05-02', '%Y-%m-%d')
+    test_start, test_end = None, None
 
-    # test_start = datetime.now() - utils.timedelta(days=1)
-    # test_end = datetime.now()
+    test_start = datetime.now() - utils.timedelta(days=1)
+    test_end = datetime.now()
     asyncio.new_event_loop().run_until_complete(
         main(
             start=test_start,
             end=test_end,
-            # mode='dry-run',
+            mode='dry-run',
             # output_path=os.path.join(os.getcwd(), 'seqr'),
         )
     )
