@@ -62,26 +62,6 @@ def get_billing_projects():
     return ds
 
 
-def infer_batch_namespace(batch: dict) -> str:
-    """
-    Infer the namespace from the batch attributes
-    """
-    namespace = batch.get('attributes', {}).get('namespace')
-    user = batch.get('user')
-    default = None
-    if namespace:
-        return namespace
-    elif user:
-        if 'test' in user:
-            return 'test'
-        elif 'standard' in user:
-            return 'main'
-        elif 'full' in user:
-            return 'main'
-
-    return default
-
-
 def get_finalised_entries_for_batch(batch: dict) -> List[Dict]:
     """
     Take a batch, and generate the actual cost of all the jobs,
@@ -96,7 +76,7 @@ def get_finalised_entries_for_batch(batch: dict) -> List[Dict]:
     start_time = utils.parse_hail_time(batch['time_created'])
     end_time = utils.parse_hail_time(batch['time_completed'])
     batch_id = batch['id']
-    namespace = infer_batch_namespace(batch)
+    namespace = utils.infer_batch_namespace(batch)
     dataset = batch['billing_project']
     currency_conversion_rate = utils.get_currency_conversion_rate_for_time(start_time)
     attributes = batch.get('attributes', {})

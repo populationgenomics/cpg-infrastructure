@@ -35,7 +35,6 @@ import os
 import shutil
 from datetime import date, datetime
 from typing import Any, Literal
-from cpg_infra.billing_aggregator.aggregate.hail import infer_batch_namespace
 
 import functions_framework
 import google.cloud.bigquery as bq
@@ -89,7 +88,7 @@ def get_finalised_entries_for_batch(
 
     batch_id = batch['id']
     batch_attributes = batch.get('attributes', {})
-    namespace = infer_batch_namespace(batch)
+    namespace = utils.infer_batch_namespace(batch)
     batch_name = batch_attributes.get('name')
     ar_guid = batch_attributes.get(AR_GUID_NAME, batch_attributes.get('ar_guid'))
 
@@ -626,10 +625,10 @@ async def main(
         shared_computation_prop_map: ProportionateMapType | None = None
 
     result = 0
-    bq_output_path = None
+    # bq_output_path = None
     hail_output_path = None
     if output_path:
-        bq_output_path = os.path.join(output_path, 'gcp')
+        # bq_output_path = os.path.join(output_path, 'gcp')
         hail_output_path = os.path.join(output_path, 'hail')
 
         shutil.rmtree(output_path)
@@ -640,12 +639,15 @@ async def main(
 
     async def func_process_batches_to_fetch_prop_map(batches: list[dict]):
         """Just catch the batches loaded event to fetch the prop map"""
-        min_time = min(
-            start, *[utils.parse_hail_time(b['time_created']) for b in batches]
-        )
-        max_time = max(
-            end, *[utils.parse_hail_time(b['time_completed']) for b in batches]
-        )
+        time_created = [start] + [
+            utils.parse_hail_time(b['time_created']) for b in batches
+        ]
+        min_time = min(time_created)
+
+        time_completed = [end] + [
+            utils.parse_hail_time(b['time_completed']) for b in batches
+        ]
+        max_time = max(time_completed)
 
         (
             seqr_hosting_prop_map,
@@ -674,13 +676,13 @@ async def main(
         output_path=hail_output_path,
     )
 
-    result += migrate_entries_from_bq(
-        start,
-        end,
-        prop_maps.seqr_hosting_prop_map,
-        mode=mode,
-        output_path=bq_output_path,
-    )
+    # result += migrate_entries_from_bq(
+    #     start,
+    #     end,
+    #     prop_maps.seqr_hosting_prop_map,
+    #     mode=mode,
+    #     output_path=bq_output_path,
+    # )
 
     if mode == 'dry-run':
         logger.info(f'Finished dry run, would have inserted {result} entries')
@@ -722,15 +724,16 @@ if __name__ == '__main__':
     logging.getLogger('asyncio').setLevel(logging.ERROR)
     logging.getLogger('urllib3').setLevel(logging.WARNING)
 
-    test_start, test_end = None, None
+    test_start = datetime.strptime('2023-05-01', '%Y-%m-%d')
+    test_end = datetime.strptime('2023-05-02', '%Y-%m-%d')
 
-    test_start = datetime.now() - utils.timedelta(days=1)
-    test_end = datetime.now()
+    # test_start = datetime.now() - utils.timedelta(days=1)
+    # test_end = datetime.now()
     asyncio.new_event_loop().run_until_complete(
         main(
             start=test_start,
             end=test_end,
-            mode='dry-run',
+            # mode='dry-run',
             # output_path=os.path.join(os.getcwd(), 'seqr'),
         )
     )
