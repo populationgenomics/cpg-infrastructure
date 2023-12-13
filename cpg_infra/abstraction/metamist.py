@@ -117,7 +117,7 @@ class MetamistProjectMembersProvider(pulumi.dynamic.ResourceProvider):
 
         return pulumi.dynamic.CreateResult(
             id_=f'metamist-project-members::{project_name}',
-            outs={},
+            outs={**props},
         )
 
     def diff(self, _id: str, _olds, _news) -> pulumi.dynamic.DiffResult:
