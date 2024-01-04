@@ -2,15 +2,15 @@
 
 """Computes aggregate bucket disk usage stats."""
 
-from collections import defaultdict
 import gzip
 import json
 import logging
 import sys
+from collections import defaultdict
+
 from cloudpathlib import AnyPath
 from cpg_utils.hail_batch import get_config
 from google.cloud import storage
-
 
 # It's important not to list the `archive` bucket here, as Class B operations are very
 # expensive for that storage class.
