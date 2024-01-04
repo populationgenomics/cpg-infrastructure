@@ -291,10 +291,10 @@ class CloudInfraBase(ABC):
     def add_member_to_container_registry(
         self,
         resource_key: str,
-        registry,
-        member,
+        registry: Any,
+        member: Any,
         membership: ContainerRegistryMembership,
-        project: str = None,
+        project: Any | None = None,
     ) -> Any:
         # TODO: this might need more thought
         pass

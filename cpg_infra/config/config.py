@@ -285,6 +285,8 @@ class CPGDatasetConfig(DeserializableDataclass):
     gcp: Gcp
     azure: Azure | None = None
 
+    setup_test: bool = True
+
     deployment_service_account_test: str | None = None
     deployment_service_account_standard: str | None = None
     deployment_service_account_full: str | None = None
