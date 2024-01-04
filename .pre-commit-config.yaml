@@ -18,6 +18,12 @@ repos:
     hooks:
       - id: markdownlint
 
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        name: isort (python)
+
   - repo: https://github.com/ambv/black
     rev: 22.3.0
     hooks:
