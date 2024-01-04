@@ -8,10 +8,11 @@ import json
 import logging
 import re
 from collections import defaultdict
+
 import humanize
-from cloudpathlib import AnyPath
 import pandas as pd
 import plotly.express as px
+from cloudpathlib import AnyPath
 
 ROOT_NODE = '<root>'
 DATASET_REGEX = re.compile(r'gs:\/\/cpg-([A-z0-9-]+)-(main|test)')

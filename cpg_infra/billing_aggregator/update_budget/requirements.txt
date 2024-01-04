@@ -1,0 +1,4 @@
+flask
+functions-framework
+google-cloud-bigquery==3.13.0
+google-cloud-billing-budgets==1.12.1

@@ -20,18 +20,18 @@ Tasks:
     - Only sync 'settled' jobs within datetimes
         (ie: finished between START + END of previous time period)
 """
-import json
 import asyncio
+import json
 import logging
 import os
 import shutil
-
 from datetime import datetime
 from typing import Dict, List
 
 import functions_framework
-from flask import Request
 from cpg_utils.cloud import read_secret
+from cpg_utils.config import AR_GUID_NAME
+from flask import Request
 
 try:
     from . import utils
@@ -76,10 +76,14 @@ def get_finalised_entries_for_batch(batch: dict) -> List[Dict]:
     start_time = utils.parse_hail_time(batch['time_created'])
     end_time = utils.parse_hail_time(batch['time_completed'])
     batch_id = batch['id']
+    namespace = utils.infer_batch_namespace(batch)
     dataset = batch['billing_project']
     currency_conversion_rate = utils.get_currency_conversion_rate_for_time(start_time)
     attributes = batch.get('attributes', {})
     batch_url = utils.HAIL_UI_URL.replace('{batch_id}', str(batch_id))
+    if 'ar_guid' in attributes:
+        # sneaky rename
+        attributes[AR_GUID_NAME] = attributes.pop('ar_guid')
 
     for job in batch['jobs']:
         for batch_resource, raw_cost in job['cost'].items():
@@ -95,6 +99,7 @@ def get_finalised_entries_for_batch(batch: dict) -> List[Dict]:
                 'batch_resource': batch_resource,
                 'batch_name': attributes.get('name'),
                 'url': batch_url,
+                'namespace': namespace,
             }
 
             # Add all batch attributes, removing any duped labels
@@ -115,8 +120,13 @@ def get_finalised_entries_for_batch(batch: dict) -> List[Dict]:
             # with changing the resource_id again, we'll only use the batch_id + job_id
             # as the key as it's sensible for us to assume that all the entries exist if
             # one of the entries exists.
-            key = '-'.join(
-                (
+            # 2023-11-23 mfranklin: Later Michael here, I've changed my mind. We need
+            # to make the key unique, so we'll use the batch_id + job_id + resource_id
+            # from 2023-01-01 onwards. We've migrated that data, so we're good to go.
+
+            key_components: tuple[str, ...]
+            if start_time < datetime(2023, 1, 1):
+                key_components = (
                     SERVICE_ID,
                     dataset,
                     'batch',
@@ -124,7 +134,17 @@ def get_finalised_entries_for_batch(batch: dict) -> List[Dict]:
                     'job',
                     str(job_id),
                 )
-            ).replace('/', '-')
+            else:
+                key_components = (
+                    SERVICE_ID,
+                    dataset,
+                    'batch',
+                    str(batch_id),
+                    'job',
+                    str(job_id),
+                    batch_resource,
+                )
+            key = '-'.join(key_components).replace('/', '-')
             entries.append(
                 utils.get_hail_entry(
                     key=key,
@@ -162,7 +182,7 @@ def from_request(request: Request):
         logger.warning('Defaulting to None')
         start, end = None, None
 
-    asyncio.new_event_loop().run_until_complete(main(start, end))
+    return asyncio.new_event_loop().run_until_complete(main(start, end))
 
 
 def from_pubsub(data=None, _=None):
@@ -170,7 +190,7 @@ def from_pubsub(data=None, _=None):
     From pubsub message, get start and end time if present
     """
     start, end = utils.get_start_and_end_from_data(data)
-    asyncio.new_event_loop().run_until_complete(main(start, end))
+    return asyncio.new_event_loop().run_until_complete(main(start, end))
 
 
 async def main(
@@ -178,7 +198,7 @@ async def main(
     end: datetime = None,
     mode: str = 'prod',
     output_path: str = None,
-) -> int:
+) -> dict:
     """Main body function"""
     logger.info(f'Running Hail Billing Aggregation for [{start}, {end}]')
     start, end = utils.process_default_start_and_end(start, end)
@@ -198,7 +218,7 @@ async def main(
 
     logger.info(f'Migrated a total of {result} rows')
 
-    return result
+    return {'entriesInserted': result}
 
 
 if __name__ == '__main__':

@@ -1,5 +1,7 @@
-name: Lint
-on: [push, pull_request]
+name: Lint + Test
+on:
+  pull_request:
+    types: ["opened", "synchronize"]
 
 jobs:
   lint:
@@ -9,19 +11,11 @@ jobs:
         shell: bash -l {0}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v4
         with:
           python-version: "3.11"
-          cache: "pip"
-
-      - name: Authenticate to GitHub
-        env:
-          TOKEN: ${{ secrets.SAMPLE_METADATA_REPO_TOKEN }}
-        run: |
-          git config --global credential.helper store
-          echo "$TOKEN" | git credential approve
 
       - name: Install packages
         run: |
@@ -31,6 +25,7 @@ jobs:
               -r storage_visualization/requirements.txt
 
       - name: Run tests using coverage
+        id: runtests
         run: |
           coverage run -m unittest discover -s test/
           rc=$?
@@ -38,18 +33,17 @@ jobs:
 
           echo "rc=$rc" >> $GITHUB_OUTPUT
 
-# configure this later
-#      - name: "Upload coverage report"
-#        uses: codecov/codecov-action@v2
-#        with:
-#          files: ./coverage.xml
+      - name: "Upload coverage report"
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.xml
 
       - name: pre-commit
         run: pre-commit run --all-files
 
       - name: Fail if tests are not passing
         if: ${{ steps.runtests.outputs.rc != 0 }}
-        uses: actions/github-script@v3
+        uses: actions/github-script@v6
         with:
           script: |
             core.setFailed('Unit tests failed with rc = ${{ steps.runtests.outputs.rc }}')

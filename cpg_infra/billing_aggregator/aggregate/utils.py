@@ -2,28 +2,26 @@
 """
 Class of helper functions for billing aggregate functions
 """
+import asyncio
+import json
+import logging
+import math
 import os
 import re
 import sys
-import math
-import json
-import asyncio
-import logging
-
-from io import StringIO
-from pathlib import Path
 from base64 import b64decode
 from datetime import date, datetime, timedelta
-from typing import Any, Iterator, Sequence, TypeVar, Iterable, Type
+from io import StringIO
+from pathlib import Path
+from typing import Any, Awaitable, Callable, Iterable, Iterator, Sequence, Type, TypeVar
 
 import aiohttp
-import pandas as pd
-import google.cloud.logging
 import google.cloud.bigquery as bq
-from flask import Request
+import google.cloud.logging
+import pandas as pd
 import rapidjson
-
 from cpg_utils.cloud import read_secret
+from flask import Request
 from google.api_core.exceptions import ClientError
 from pandas import Timestamp
 
@@ -55,6 +53,8 @@ if os.getenv('DEBUG') in ('1', 'true', 'yes') or os.getenv('DEV') in (
 T = TypeVar('T')
 
 DEFAULT_TOPIC = 'admin'
+
+INVOICE_DAY_DIFF = 3
 
 GCP_PROJECT = os.getenv('BILLING_PROJECT_ID')
 GCP_BILLING_BQ_TABLE = os.getenv('GCP_BILLING_SOURCE_TABLE')
@@ -342,24 +342,28 @@ async def get_completed_batches(
     (optional): last_completed_timestamp (found in body of previous request)
     """
 
-    params = []
+    params = {}
 
     if last_completed_timestamp:
-        params.append(f'last_completed_timestamp={last_completed_timestamp}')
+        params['last_completed_timestamp'] = last_completed_timestamp
 
-    if limit:
-        params.append(f'limit={limit}')
+    for lim in (limit, 30, 15, 5):
+        try:
+            if lim:
+                logger.info(f'Using limit {lim} to get batches')
+                params['limit'] = lim
+            q = '?' + '&'.join(f'{k}={v}' for k, v in params.items())
+            url = HAIL_BATCHES_API + q
+            logger.info(f'Getting batches: {url}')
+            return await async_retry_transient_get_json_request(
+                url,
+                aiohttp.ClientError,
+                headers={'Authorization': 'Bearer ' + token},
+            )
+        except asyncio.TimeoutError as ex:
+            e = ex
 
-    q = '?' + '&'.join(params)
-    url = HAIL_BATCHES_API + q
-
-    logger.debug(f'Getting batches: {url}')
-
-    return await async_retry_transient_get_json_request(
-        url,
-        aiohttp.ClientError,
-        headers={'Authorization': 'Bearer ' + token},
-    )
+    raise e
 
 
 async def get_finished_batches_for_date(
@@ -374,7 +378,7 @@ async def get_finished_batches_for_date(
     when we find a batch that started before the date.
     """
     batches: list[dict] = []
-    last_completed_timestamp = None
+    last_completed_timestamp = math.ceil(end.timestamp() * 1000)
     n_requests = 0
     skipped = 0
 
@@ -472,6 +476,8 @@ async def process_entries_from_hail_in_chunks(
     log_prefix: str = '',
     mode: str = 'prod',
     output_path: str = './',
+    func_batches_preprocessor: Callable[[list[dict]], Awaitable[list[dict]]]
+    | None = None,
 ) -> int:
     """
     Process all the seqr entries from hail batch,
@@ -483,7 +489,9 @@ async def process_entries_from_hail_in_chunks(
     def insert_entries(_entries):
         if mode in ('prod', 'dry-run'):
             return upsert_rows_into_bigquery(
-                table=GCP_AGGREGATE_DEST_TABLE, objs=_entries, dry_run=mode == 'dry-run'
+                table=GCP_AGGREGATE_DEST_TABLE,
+                objs=_entries,
+                dry_run=mode == 'dry-run',
             )
 
         if mode == 'local':
@@ -509,6 +517,8 @@ async def process_entries_from_hail_in_chunks(
     batches = await get_finished_batches_for_date(
         start=start, end=end, token=token, billing_project=billing_project
     )
+    if func_batches_preprocessor:
+        batches = await func_batches_preprocessor(batches)
     if len(batches) == 0:
         return 0
 
@@ -602,6 +612,9 @@ def upsert_rows_into_bigquery(
     able to take an arbitrary amount of rows.
     """
 
+    window_start = datetime.fromisoformat(min(o['usage_start_time'] for o in objs))
+    window_end = datetime.fromisoformat(max(o['usage_end_time'] for o in objs))
+
     if not objs:
         logger.info('Not inserting any rows')
         return 0
@@ -629,7 +642,8 @@ def upsert_rows_into_bigquery(
     for chunk_idx, chunked_objs in enumerate(chunk(objs, chunk_size)):
         _query = f"""
             SELECT id FROM `{table}`
-            WHERE id IN UNNEST(@ids);
+            WHERE id IN UNNEST(@ids)
+            AND DATE_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end;
         """
 
         # NOTE: it's possible to have valid duplicate rows
@@ -640,6 +654,12 @@ def upsert_rows_into_bigquery(
         job_config = bq.QueryJobConfig(
             query_parameters=[
                 bq.ArrayQueryParameter('ids', 'STRING', list(ids)),
+                bq.ScalarQueryParameter(
+                    'window_start', 'STRING', window_start.strftime('%Y-%m-%d')
+                ),
+                bq.ScalarQueryParameter(
+                    'window_end', 'STRING', window_end.strftime('%Y-%m-%d')
+                ),
             ]
         )
 
@@ -699,7 +719,10 @@ def upsert_rows_into_bigquery(
 
 
 def upsert_aggregated_dataframe_into_bigquery(
-    df: pd.DataFrame, table: str = GCP_AGGREGATE_DEST_TABLE
+    df: pd.DataFrame,
+    window_start: datetime,
+    window_end: datetime,
+    table: str = GCP_AGGREGATE_DEST_TABLE,
 ):
     """
     Upsert rows from a dataframe into the BQ.aggregate table.
@@ -707,18 +730,25 @@ def upsert_aggregated_dataframe_into_bigquery(
     """
 
     if len(df['id']) == 0:
-        logger.info(f'No rows to insert')
+        logger.info('No rows to insert')
         return 0
 
     # Cannot use query parameters for table names
     # https://cloud.google.com/bigquery/docs/parameterized-queries
     _query = f"""
         SELECT id FROM {table}
-        WHERE id IN UNNEST(@ids);
+        WHERE id IN UNNEST(@ids)
+        AND DATE_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end;
     """
     job_config = bq.QueryJobConfig(
         query_parameters=[
             bq.ArrayQueryParameter('ids', 'STRING', list(set(df['id']))),
+            bq.ScalarQueryParameter(
+                'window_start', 'STRING', window_start.strftime('%Y-%m-%d')
+            ),
+            bq.ScalarQueryParameter(
+                'window_end', 'STRING', window_end.strftime('%Y-%m-%d')
+            ),
         ]
     )
 
@@ -758,21 +788,35 @@ def get_currency_conversion_rate_for_time(time: datetime):
     the job finishes.
     """
 
+    window_start, window_end = get_invoice_month_range(time)
+
     key = f'{time.year}{str(time.month).zfill(2)}'
     if key not in CACHED_CURRENCY_CONVERSION:
         logger.info(f'Looking up currency conversion rate for {key}')
         query = f"""
             SELECT currency_conversion_rate
             FROM {GCP_BILLING_BQ_TABLE}
-            WHERE invoice.month = "{key}"
+            WHERE invoice.month = @invoice_month
+            AND DATE_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end
             LIMIT 1
         """
-        query_result = get_bigquery_client().query(query).result()
+        job_config = bq.QueryJobConfig(
+            query_parameters=[
+                bq.ScalarQueryParameter('invoice_month', 'STRING', key),
+                bq.ScalarQueryParameter(
+                    'window_start', 'STRING', window_start.strftime('%Y-%m-%d')
+                ),
+                bq.ScalarQueryParameter(
+                    'window_end', 'STRING', window_end.strftime('%Y-%m-%d')
+                ),
+            ]
+        )
+        query_result = (
+            get_bigquery_client().query(query, job_config=job_config).result()
+        )
 
         if query_result.total_rows == 0:
-            raise ValueError(
-                f'Could not find billing data for {key!r}, for {time.date()}'
-            )
+            raise ValueError(f'Could not find billing data for {key!r}, for {time}')
 
         for r in query_result:
             CACHED_CURRENCY_CONVERSION[key] = r['currency_conversion_rate']
@@ -842,7 +886,7 @@ def get_start_and_end_from_request(
     logger.info(request_data)
 
     if not request_data or ('start' not in request_data and 'end' not in request_data):
-        logger.warning(f'Could not find start or end. Defaulting to None.')
+        logger.warning('Could not find start or end. Defaulting to None.')
         raise ValueError("JSON is invalid, or missing a 'start' or 'end' property")
 
     try:
@@ -1017,3 +1061,42 @@ def get_hail_entry(
         'cost_type': 'regular',
         'adjustment_info': None,
     }
+
+
+def get_invoice_month_range(convert_month: date) -> tuple[date, date]:
+    """Get the start and end date of the invoice month for a given date"""
+    first_day = convert_month.replace(day=1)
+
+    # Grab the first day of invoice month then subtract INVOICE_DAY_DIFF days
+    start_day = first_day + timedelta(days=-INVOICE_DAY_DIFF)
+
+    if convert_month.month == 12:
+        next_month = first_day.replace(month=1, year=convert_month.year + 1)
+    else:
+        next_month = first_day.replace(month=convert_month.month + 1)
+
+    # Grab the last day of invoice month then add INVOICE_DAY_DIFF days
+    last_day = next_month + timedelta(days=-1) + timedelta(days=INVOICE_DAY_DIFF)
+
+    return start_day, last_day
+
+
+def infer_batch_namespace(batch: dict) -> str:
+    """
+    Infer the namespace from the batch attributes
+    """
+    namespace = batch.get('attributes', {}).get('namespace')
+    user = batch.get('user')
+    default = None
+    if namespace:
+        return namespace
+
+    if user:
+        if 'test' in user:
+            return 'test'
+        elif 'standard' in user:
+            return 'main'
+        elif 'full' in user:
+            return 'main'
+
+    return default

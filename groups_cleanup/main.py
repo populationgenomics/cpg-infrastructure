@@ -2,9 +2,10 @@
 
 """Removes group memberships matching a given regular expression."""
 
-from urllib.parse import urlencode
-import sys
 import re
+import sys
+from urllib.parse import urlencode
+
 import googleapiclient.discovery
 
 CUSTOMER_ID = 'C010ys3gt'

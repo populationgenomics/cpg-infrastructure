@@ -1,25 +1,23 @@
 # pylint: disable=import-error,no-name-in-module,unused-argument
 """A Cloud Function to update the status of genomic samples."""
 
-import json
 import asyncio
+import json
 import logging
 import os
-from functools import cache
 from base64 import b64decode
-
-from datetime import datetime
+from datetime import date, datetime, timedelta
+from functools import cache
 
 import functions_framework
 import google.auth
 import google.cloud.bigquery as bq
+from flask import Request, Response, abort
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-
-from flask import abort, Response, Request
 from pandas import DataFrame
 
-
+INVOICE_DAY_DIFF = 3
 OUTPUT_GOOGLE_SHEET = os.getenv('OUTPUT_BILLING_SHEET')
 GCP_MONTHLY_BILLING_BQ_TABLE = os.getenv('BQ_MONTHLY_SUMMARY_TABLE')
 
@@ -179,20 +177,47 @@ def append_values_to_google_sheet(spreadsheet_id, _values, invoice_month):
         return error
 
 
+def get_invoice_month_range(convert_month: date) -> tuple[date, date]:
+    """Get the start and end date of the invoice month for a given date"""
+    first_day = convert_month.replace(day=1)
+
+    # Grab the first day of invoice month then subtract INVOICE_DAY_DIFF days
+    start_day = first_day + timedelta(days=-INVOICE_DAY_DIFF)
+
+    if convert_month.month == 12:
+        next_month = first_day.replace(month=1, year=convert_month.year + 1)
+    else:
+        next_month = first_day.replace(month=convert_month.month + 1)
+
+    # Grab the last day of invoice month then add INVOICE_DAY_DIFF days
+    last_day = next_month + timedelta(days=-1) + timedelta(days=INVOICE_DAY_DIFF)
+
+    return start_day, last_day
+
+
 def get_billing_data(invoice_month: str) -> DataFrame:
     """
     Retrieve the billing data for a particular billing month from the aggregation table
     Return results as a dataframe
     """
 
+    invoice_month_date = datetime.strptime(invoice_month, '%Y%m').date()
+    window_start, window_end = get_invoice_month_range(invoice_month_date)
     _query = f"""
         SELECT * FROM `{GCP_MONTHLY_BILLING_BQ_TABLE}`
-        WHERE month = @yearmonth
+        WHERE month = @invoice_month
+        AND DATE_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end
         ORDER BY topic
     """
     job_config = bq.QueryJobConfig(
         query_parameters=[
-            bq.ScalarQueryParameter('yearmonth', 'STRING', str(invoice_month)),
+            bq.ScalarQueryParameter('invoice_month', 'STRING', str(invoice_month)),
+            bq.ScalarQueryParameter(
+                'window_start', 'STRING', window_start.strftime('%Y-%m-%d')
+            ),
+            bq.ScalarQueryParameter(
+                'window_end', 'STRING', window_end.strftime('%Y-%m-%d')
+            ),
         ]
     )
 

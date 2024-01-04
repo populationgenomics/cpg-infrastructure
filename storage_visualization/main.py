@@ -7,19 +7,14 @@ import sys
 # See requirements.txt for why we're disabling the linter warnings here.
 import hailtop.batch as hb  # pylint: disable=import-error
 from cloudpathlib import AnyPath
-
 from cpg_utils.config import get_config
 from cpg_utils.git import (
-    prepare_git_job,
     get_git_commit_ref_of_current_repository,
     get_organisation_name_from_current_directory,
     get_repo_name_from_current_directory,
+    prepare_git_job,
 )
-from cpg_utils.hail_batch import (
-    copy_common_env,
-    remote_tmpdir,
-    output_path,
-)
+from cpg_utils.hail_batch import copy_common_env, output_path, remote_tmpdir
 from cpg_utils.slack import upload_file
 
 DOCKER_IMAGE = (

@@ -8,25 +8,24 @@ If we want custom role / permissions, potentially look at:
 import logging
 import re
 from datetime import date
-
-from typing import Any
 from functools import cached_property
+from typing import Any
 
 import pulumi
 import pulumi_azure_native as az
 import pulumi_azuread as azuread
 
-from cpg_infra.config import CPGInfrastructureConfig, CPGDatasetConfig
 from cpg_infra.abstraction.base import (
-    CloudInfraBase,
-    SecretMembership,
-    BucketMembership,
-    UNDELETE_PERIOD_IN_DAYS,
     ARCHIVE_PERIOD_IN_DAYS,
     TMP_BUCKET_PERIOD_IN_DAYS,
+    UNDELETE_PERIOD_IN_DAYS,
+    BucketMembership,
+    CloudInfraBase,
     ContainerRegistryMembership,
     MachineAccountRole,
+    SecretMembership,
 )
+from cpg_infra.config import CPGDatasetConfig, CPGInfrastructureConfig
 
 AZURE_BILLING_START_DATE = '2017-06-01T00:00:00Z'
 AZURE_BILLING_EXPIRY_DATE = '3141-25-09T00:00:00Z'
@@ -76,7 +75,7 @@ class AzureInfra(CloudInfraBase):
         return re.sub('[^a-z]', '', name.lower())
 
     @staticmethod
-    def member_id(member):
+    def member_id(member) -> str | pulumi.Output[str]:
         raise NotImplementedError
 
     @cached_property

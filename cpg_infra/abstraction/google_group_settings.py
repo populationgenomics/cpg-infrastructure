@@ -3,10 +3,11 @@ Contains pulumi.dynamic.ResourceProvider implementations for Google Groups setti
 """
 
 from functools import cache
-import pulumi
-import pulumi.dynamic
+
 import google.auth
 import googleapiclient.discovery
+import pulumi
+import pulumi.dynamic
 from google.auth.transport.requests import Request
 
 

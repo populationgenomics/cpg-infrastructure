@@ -11,6 +11,7 @@ from typing import Any, Iterable, Iterator, Type
 
 import cpg_utils.config
 import pulumi
+import pulumi_gcp as gcp
 import toml
 import xxhash
 from toml_sort import TomlSort
@@ -29,7 +30,7 @@ from cpg_infra.abstraction.hailbatch import (
     HailBatchBillingProject,
     HailBatchBillingProjectMembership,
 )
-from cpg_infra.abstraction.metamist import MetamistProject
+from cpg_infra.abstraction.metamist import MetamistProject, MetamistProjectMembers
 from cpg_infra.config import (
     CPGDatasetComponents,
     CPGDatasetConfig,
@@ -279,14 +280,16 @@ class CPGInfrastructure:
         self.setup_datasets()
         self.setup_gcp_access_cache_bucket()
         self.setup_gcp_sample_metadata_cloudrun_invoker()
+        self.setup_python_registry()
 
         self.deploy_datasets()
 
         for plugin in get_plugins().values():
-            plugin(self.config).main()
+            plugin(self, self.config).main()
 
         self.finalize_groups()
         self.setup_hail_batch_billing_project_members()
+        self.update_metamist_members()
         self.output_infrastructure_config()
 
     def setup_datasets(self):
@@ -306,8 +309,14 @@ class CPGInfrastructure:
             cloud_dataset.main()
 
     def setup_hail_batch_billing_project_members(self):
+        internal_users = [
+            user
+            for user in self.config.users.values()
+            if user.add_to_internal_hail_batch_projects
+        ]
+
         for dataset_infra in self.dataset_infrastructures.values():
-            for dataset_cloud_infra in dataset_infra.clouds.values():
+            for cloud, dataset_cloud_infra in dataset_infra.clouds.items():
                 if not dataset_cloud_infra.should_setup_hail:
                     continue
 
@@ -335,11 +344,18 @@ class CPGInfrastructure:
                 _group_members = self.group_provider.resolve_group_members(
                     dataset_cloud_infra.analysis_group
                 )
-                hail_batch_username = [
+                hail_batch_usernames = {
                     m.user.hail_batch_username
                     for m in _group_members
                     if m.user and m.user.hail_batch_username
-                ]
+                }
+                if dataset_infra.dataset_config.is_internal_dataset:
+                    hail_batch_usernames.update(
+                        user.clouds[cloud].hail_batch_username
+                        for user in internal_users
+                        if cloud in user.clouds
+                        and user.clouds[cloud].hail_batch_username
+                    )
 
                 def _make_add_member_function(
                     _data_provider: 'CPGDatasetCloudInfrastructure',
@@ -370,24 +386,27 @@ class CPGInfrastructure:
 
                     return _add_member_to_billing_project
 
-                pulumi.Output.all(*hail_batch_username).apply(
+                pulumi.Output.all(*hail_batch_usernames).apply(
                     _make_add_member_function(dataset_cloud_infra, infra)
                 )
 
-    def finalize_groups(self):
-        def _email_key(m_):
-            """
-            Sort on domain, then on name
-            """
-            s = m_.split('@')
-            return s[1], s[0]
+    @staticmethod
+    def _email_key(m_):
+        """Sort on domain, then on name"""
+        s = m_.split('@')
+        return s[1], s[0]
 
+    @staticmethod
+    def sort_members(members: list[str]):
+        """Sort members on domain, then on name"""
+        return sorted(
+            set(str(m).lower() for m in members), key=CPGInfrastructure._email_key
+        )
+
+    def finalize_groups(self):
         # capture these variables so they don't change during the resolution period
         def _process_members(members):
-            distinct_users = sorted(
-                set(str(m).lower() for m in members), key=_email_key
-            )
-
+            distinct_users = CPGInfrastructure.sort_members(members)
             return '\n'.join(distinct_users)
 
         # now resolve groups
@@ -430,6 +449,53 @@ class CPGInfrastructure:
                         contents=members_contents,
                         output_name=f'{group.name}-members.txt',
                     )
+
+    def update_metamist_members(self):
+        """Send a request to metamist to update group members"""
+
+        def prepare_group_members(dataset_infra: CPGDatasetInfrastructure, group_name):
+            # only add GCP accounts for now
+            clouds = [GcpInfrastructure.name()]
+            members: list[str | pulumi.Output[str]] = []
+            for cloud_name in clouds:
+                if cloud_name not in dataset_infra.clouds:
+                    continue
+                cloud_infra = dataset_infra.clouds[cloud_name]
+
+                sm_groups = cloud_infra.sample_metadata_groups
+                if group_name not in sm_groups:
+                    pulumi.warn(
+                        f'{dataset_infra.dataset} :: metamist-group {group_name!r} '
+                        'not in sm-groups'
+                    )
+                    continue
+                cloud_members = self.group_provider.resolve_group_members(
+                    sm_groups[group_name]
+                )
+                members.extend(
+                    cloud_infra.infra.member_id(member.cloud_id)
+                    for member in cloud_members
+                )
+
+            return pulumi.Output.all(*members).apply(CPGInfrastructure.sort_members)
+
+        for dataset, infra in self.dataset_infrastructures.items():
+            if not infra.dataset_config.enable_metamist_project:
+                continue
+
+            MetamistProjectMembers(
+                f'{dataset}-metamist-members',
+                metamist_project_name=infra.metamist_project.project_name,
+                read_members=prepare_group_members(infra, SM_MAIN_READ),
+                write_members=prepare_group_members(infra, SM_MAIN_WRITE),
+            )
+
+            MetamistProjectMembers(
+                f'{dataset}-metamist-test-members',
+                metamist_project_name=infra.metamist_test_project.project_name,
+                read_members=prepare_group_members(infra, SM_TEST_READ),
+                write_members=prepare_group_members(infra, SM_TEST_WRITE),
+            )
 
     # dataset agnostic infrastructure
 
@@ -507,6 +573,8 @@ class CPGInfrastructure:
                 membership=BucketMembership.READ,
             )
 
+    # endregion ACCESS_CACHE
+
     @cached_property
     def gcp_sample_metadata_invoker_group(self):
         return self.group_provider.create_group(
@@ -529,6 +597,29 @@ class CPGInfrastructure:
             project=self.config.sample_metadata.gcp.project,
             member=self.gcp_sample_metadata_invoker_group,
         )
+
+    @cached_property
+    def gcp_python_registry(self):
+        """
+        Create a registry for private python packages, we only need one for our org,
+        andt there's no equivalent for Azure.
+
+        """
+        return gcp.artifactregistry.Repository(
+            'python-artifact-registry',
+            repository_id='python-registry',
+            project=self.common_gcp_infra.project.project_id,
+            format='PYTHON',
+            location=self.config.gcp.region,
+            description='Python packages for CPG',
+        )
+
+    def setup_python_registry(self):
+        """
+        Setup the python registry permissions in gcp-common
+        """
+        # force the creation
+        _ = self.gcp_python_registry
 
 
 class CPGDatasetInfrastructure:
@@ -576,12 +667,20 @@ class CPGDatasetInfrastructure:
         if self.dataset_config.enable_metamist_project:
             # setup metamist project by accessing the property
             _ = self.metamist_project
+            _ = self.metamist_test_project
 
     @cached_property
     def metamist_project(self):
         return MetamistProject(
             f'metamist-project-{self.dataset}',
             project_name=self.dataset,
+        )
+
+    @cached_property
+    def metamist_test_project(self):
+        return MetamistProject(
+            f'metamist-project-{self.dataset}-test',
+            project_name=self.dataset + '-test',
         )
 
 
@@ -706,7 +805,7 @@ class CPGDatasetCloudInfrastructure:
             for access_level, machine_account in values:
                 yield kind, access_level, machine_account
 
-    def working_machine_accounts_by_access_level(self):
+    def working_machine_accounts_by_access_level(self) -> dict[AccessLevel, list[Any]]:
         machine_accounts: dict[AccessLevel, list[Any]] = defaultdict(list)
         for _, values in self.working_machine_accounts_by_type.items():
             for access_level, machine_account in values:
@@ -2089,7 +2188,8 @@ class CPGDatasetCloudInfrastructure:
             return
 
         # mostly because this current format requires the project_id
-        custom_container_registry = self.infra.create_container_registry('images')
+        main_container_registry = self.infra.create_container_registry('images')
+        dev_container_registry = self.infra.create_container_registry('images-dev')
 
         self.infra.add_member_to_container_registry(
             'images-reader-in-container-registry',
@@ -2101,6 +2201,18 @@ class CPGDatasetCloudInfrastructure:
             'images-writer-in-container-registry',
             registry=custom_container_registry,
             member=self.images_writer_group,
+            membership=ContainerRegistryMembership.WRITER,
+        )
+        self.infra.add_member_to_container_registry(
+            'test-full-reader-in-dev-container-registry',
+            registry=dev_container_registry,
+            member=self.test_full_group,
+            membership=ContainerRegistryMembership.READER,
+        )
+        self.infra.add_member_to_container_registry(
+            'analysis-writer-in-dev-container-registry',
+            registry=dev_container_registry,
+            member=self.analysis_group,
             membership=ContainerRegistryMembership.WRITER,
         )
 
