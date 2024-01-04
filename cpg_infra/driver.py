@@ -2193,13 +2193,13 @@ class CPGDatasetCloudInfrastructure:
 
         self.infra.add_member_to_container_registry(
             'images-reader-in-container-registry',
-            registry=custom_container_registry,
+            registry=main_container_registry,
             member=self.images_reader_group,
             membership=ContainerRegistryMembership.READER,
         )
         self.infra.add_member_to_container_registry(
             'images-writer-in-container-registry',
-            registry=custom_container_registry,
+            registry=main_container_registry,
             member=self.images_writer_group,
             membership=ContainerRegistryMembership.WRITER,
         )
