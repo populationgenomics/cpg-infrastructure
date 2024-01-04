@@ -490,12 +490,13 @@ class CPGInfrastructure:
                 write_members=prepare_group_members(infra, SM_MAIN_WRITE),
             )
 
-            MetamistProjectMembers(
-                f'{dataset}-metamist-test-members',
-                metamist_project_name=infra.metamist_test_project.project_name,
-                read_members=prepare_group_members(infra, SM_TEST_READ),
-                write_members=prepare_group_members(infra, SM_TEST_WRITE),
-            )
+            if infra.dataset_config.setup_test:
+                MetamistProjectMembers(
+                    f'{dataset}-metamist-test-members',
+                    metamist_project_name=infra.metamist_test_project.project_name,
+                    read_members=prepare_group_members(infra, SM_TEST_READ),
+                    write_members=prepare_group_members(infra, SM_TEST_WRITE),
+                )
 
     # dataset agnostic infrastructure
 
@@ -667,7 +668,8 @@ class CPGDatasetInfrastructure:
         if self.dataset_config.enable_metamist_project:
             # setup metamist project by accessing the property
             _ = self.metamist_project
-            _ = self.metamist_test_project
+            if self.dataset_config.setup_test:
+                _ = self.metamist_test_project
 
     @cached_property
     def metamist_project(self):
@@ -1292,24 +1294,24 @@ class CPGDatasetCloudInfrastructure:
         return d
 
     def _pulumi_prepare_storage_outputs_main_function(self, arg):
-        kwargs = dict(arg)
+        kwargs: dict[str, Any] = dict(arg)
         config_dict = {}
         if '_extra_configs' in kwargs:
             for config_str in kwargs.pop('_extra_configs').split(TOML_CONFIG_JOINER):
                 cpg_utils.config.update_dict(config_dict, toml.loads(config_str))
 
-        test_buckets = {
-            name.removeprefix('test-'): bucket_path
-            for name, bucket_path in kwargs.items()
-            if name.startswith('test-')
-        }
-        main_buckets = {
+        obj = {
             name.removeprefix('main-'): bucket_path
             for name, bucket_path in kwargs.items()
             if name.startswith('main-')
         }
+        if self.dataset_config.setup_test:
+            obj['test'] = {
+                name.removeprefix('test-'): bucket_path
+                for name, bucket_path in kwargs.items()
+                if name.startswith('test-')
+            }
 
-        obj = {**main_buckets, 'test': test_buckets}
         storage_dict = {
             'storage': {
                 'default': obj,
