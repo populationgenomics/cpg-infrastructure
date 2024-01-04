@@ -10,8 +10,8 @@ import yaml
 
 # See requirements.txt for why we're disabling the linter warnings here.
 from analysis_runner.cli_analysisrunner import (
-    run_analysis_runner,
-)  # pylint: disable=import-error
+    run_analysis_runner,  # pylint: disable=import-error
+)
 
 ALL_DATASETS = 'all-datasets'
 
