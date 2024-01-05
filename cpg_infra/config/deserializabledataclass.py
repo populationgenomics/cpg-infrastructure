@@ -168,6 +168,12 @@ def try_parse_value_as_type(value: Any, dtype: Any) -> Any:
             )
         return tuple(try_parse_value_as_type(v, t) for v, t in zip(value, tuple_types))
 
+    if str(getattr(dtype, '__origin__', None)) == 'typing.Literal':
+        arg_values = get_args(dtype)
+        if value not in arg_values:
+            raise ValueError(f'Expected literal {arg_values}, got {value!r}')
+        return value
+
     if isinstance(value, dtype):
         return value
 

@@ -2,6 +2,7 @@
 Test module for checking the parsing of values in the config
 """
 from unittest import TestCase
+from typing import Literal
 
 from cpg_infra.config import CPGDatasetConfig, CPGInfrastructureConfig
 from cpg_infra.config.deserializabledataclass import try_parse_value_as_type
@@ -147,3 +148,16 @@ class TestParseValues(TestCase):
             },
         }
         _ = try_parse_value_as_type(dataset_config, CPGDatasetConfig)
+
+    def test_subscripted(self):
+        """
+        Check that we can parse a subscripted type
+        """
+        _ = try_parse_value_as_type('hi', Literal['hi'])
+
+    def test_literal_fail(self):
+        """
+        Check that we fail to parse a value not in the literal
+        """
+        with self.assertRaises(ValueError):
+            _ = try_parse_value_as_type('hi', Literal['hello'])
