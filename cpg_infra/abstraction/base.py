@@ -117,7 +117,7 @@ class CloudInfraBase(ABC):
 
     @staticmethod
     @abstractmethod
-    def name():
+    def name() -> str:
         pass
 
     @staticmethod
