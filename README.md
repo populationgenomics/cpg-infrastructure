@@ -4,7 +4,7 @@ The CPG manages its cloud infrastructure through Pulumi. Specifically, we have d
 
 This repository contains all the driving code to build our pulumi stack, but none of the actual configuration. In your own environment, once you have a `CPGInfrastructureConfig` and each dataset's `CPGDatasetConfig`, you can instantiate a `CPGInfrastructure` object and call main within a pulumi context:
 
-```
+```python
 # inside a pulumi context
 config = CPGInfrastructureConfig.from_dict(...)
 datasets = [CPGDatasetConfig.from_dict(...) for d in _datasets]
@@ -13,7 +13,6 @@ infra.main()
 ```
 
 This creates pulumi resources, which pulumi could then create.
-
 
 ## Overview
 
@@ -25,7 +24,6 @@ There are 3 levels to our infrastructure which is represented by the 3 driver cl
 
 Noting that we often refer to a `common` dataset, which is where we place most CPG-wide infrastructure - and by default, all datasets have access to resources within this _common_ dataset.
 
-
 ### Configuration
 
 The core of configuration is the `CPGInfrastructureConfig` and `CPGDatasetConfig`. These validate on construction, so you'll know if you have a valid config before running any more code.
@@ -33,7 +31,6 @@ The core of configuration is the `CPGInfrastructureConfig` and `CPGDatasetConfig
 The `CPGInfrastructureConfig` provides config information about the whole infrastructure. This still contains references to resources that were created manually - and is structured into sections. See the `CPGInfrastructureConfig` class for more information (it's fairly well documented).
 
 The `CPGDatasetConfig` contains configuration information for each datasets to deploy. Note you MUST supply a config for the `common` dataset.
-
 
 ### Driver
 
@@ -55,7 +52,7 @@ def main_bucket(self):
     )
 ```
 
-When the `CPGInfrastructure` creates each `CPGDatasetInfrastructure` which creates each `CPGDatasetCloudInfrastructure`, it passes a reference to itself, so that a dataset could access org-wide resources. 
+When the `CPGInfrastructure` creates each `CPGDatasetInfrastructure` which creates each `CPGDatasetCloudInfrastructure`, it passes a reference to itself, so that a dataset could access org-wide resources.
 
 ### Group memberships
 
@@ -90,12 +87,11 @@ There is sometimes behaviour that we want to make optional, or not declare it in
 
 Currently the [`BillingAggregator`](cpg_infra/billing_aggregator/), and [`MetamistInfra`](https://github.com/populationgenomics/metamist/tree/dev/metamist_infrastructure) are the two plugins used in our deploy.
 
-
 ### Internal datasets
 
 This concept was designed to make it easier to have developers added to _internal_ Hail Batch projects to facilitate debugging. To do this:
 
-- a user config must have `add_to_internal_hail_batch_projects = True`, and 
+- a user config must have `add_to_internal_hail_batch_projects = True`, and
 - the dataset config must `is_internal_dataset = True`.
 
 ## Infrastructure
@@ -123,11 +119,10 @@ Members have different roles within a dataset, those roles include:
 - metadata:
   - Gives you read-access to metadata
   - \+ web
-- web: 
+- web:
   - Access to view main-web bucket through web server
 - upload:
   - Upload data into main-upload
-
 
 ## Setup
 
@@ -181,8 +176,6 @@ Structure:
 - The `driver.py` turns this configuration in a pulumi state by calling methods on a `infra`.
 
 To develop, you can run the driver file directly, which given a config TOML, will print infrastructure to the console.
-
-
 
 ### Motiviations
 

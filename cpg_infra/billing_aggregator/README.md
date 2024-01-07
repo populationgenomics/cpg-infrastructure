@@ -16,7 +16,7 @@ Here is the rough method for breaking these costs down:
 
 ## Implementation
 
-The Billing Aggregator [`driver.py`](driver.py) is implemented as a `CpgInfrastructurePlugin`, 
+The Billing Aggregator [`driver.py`](driver.py) is implemented as a `CpgInfrastructurePlugin`.
 
 There is one aggregator for each of the elements above, deployed in GCP cloud functions. The config in `cpg.toml` declares how frequently they get run, but as of writing it was once every 4 hours.
 

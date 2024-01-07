@@ -2,6 +2,7 @@
 """
 CPG Dataset infrastructure
 """
+import graphlib
 import os.path
 import re
 from collections import defaultdict
@@ -9,7 +10,6 @@ from functools import cached_property
 from typing import Any, Iterable, Iterator, NamedTuple, Type
 
 import cpg_utils.config
-import graphlib
 import pulumi
 import pulumi_gcp as gcp
 import toml
@@ -46,6 +46,7 @@ class SampleMetadataAccessorMembership(NamedTuple):
     name: str
     member: Any
     permissions: Iterable[str]
+
 
 SM_TEST_READ = 'test-read'
 SM_TEST_WRITE = 'test-write'
@@ -546,9 +547,11 @@ class CPGInfrastructure:
             autoclass=False,  # Always accessed frequently.
             lifecycle_rules=[],
         )
-        
+
         # run as a pulumi export, even though it's exported in the config
-        pulumi.export('members-cache-bucket', self.common_gcp_infra.bucket_output_path(bucket))
+        pulumi.export(
+            'members-cache-bucket', self.common_gcp_infra.bucket_output_path(bucket)
+        )
         return bucket
 
     def setup_gcp_access_cache_bucket(self):
@@ -740,7 +743,7 @@ class CPGDatasetCloudInfrastructure:
     def create_group(self, name: str, cache_members: bool = False):
         """
         Create a group with the dataset name as a prefix.
-        
+
         :param name: name of the group, without the dataset prefix
         :param cache_members: whether to cache the members in a bucket
         """
@@ -1151,7 +1154,11 @@ class CPGDatasetCloudInfrastructure:
         )
 
     def setup_storage_outputs(self):
-        web_url_template = self.config.web_service.web_url_template if self.config.web_service else None
+        web_url_template = (
+            self.config.web_service.web_url_template
+            if self.config.web_service
+            else None
+        )
 
         buckets = {
             'main': {
@@ -1178,7 +1185,7 @@ class CPGDatasetCloudInfrastructure:
                 'tmp': self.infra.bucket_output_path(self.test_tmp_bucket),
                 'upload': self.infra.bucket_output_path(self.test_upload_bucket),
             }
-            
+
             if web_url_template:
                 buckets['test']['web_url'] = web_url_template.format(
                     namespace='test', dataset=self.dataset_config.dataset
