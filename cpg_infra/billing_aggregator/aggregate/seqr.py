@@ -149,7 +149,7 @@ def get_finalised_entries_for_batch(
                 'namespace': namespace,
             }
 
-            if labels['name']:
+            if labels.get('name'):
                 labels['job_name'] = labels.pop('name')
 
             if ar_guid:
