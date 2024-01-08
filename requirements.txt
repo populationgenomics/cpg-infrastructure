@@ -4,10 +4,10 @@ botocore==1.31.56
 cpg-utils>=4.15.1
 google-api-python-client==2.*
 google-auth==2.*
-pulumi-azure-native==1.104.0
-pulumi-azuread==5.40.0
-pulumi-gcp==6.66.0
-pulumi==3.79.0
+pulumi-azure-native==2.21.2
+pulumi-azuread==5.46.0
+pulumi-gcp==7.2.2
+pulumi==3.96.2
 toml-sort
 toml==0.10.2
 xxhash==3.2.0

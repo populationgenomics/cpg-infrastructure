@@ -2,7 +2,8 @@
 Test module for checking the parsing of values in the config
 """
 from unittest import TestCase
-from cpg_infra.config import CPGInfrastructureConfig, CPGDatasetConfig
+
+from cpg_infra.config import CPGDatasetConfig, CPGInfrastructureConfig
 from cpg_infra.config.deserializabledataclass import try_parse_value_as_type
 
 

@@ -3,12 +3,12 @@
 Contains pulumi.dyanmic.ResourceProvider implementations
 for Hail Batch Billing Projects and Users.
 """
-import os
 import json
+import os
 
-import requests
 import pulumi
 import pulumi.dynamic
+import requests
 
 HAIL_GET_BILLING_PROJECT_PATH = (
     '{hail_batch_url}/api/v1alpha/billing_projects/{billing_project}'

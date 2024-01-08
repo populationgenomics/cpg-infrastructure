@@ -1,23 +1,20 @@
 # pylint: disable=import-error,no-name-in-module,unused-argument
 """A Cloud Function to update the status of genomic samples."""
 
-import os
-import json
 import asyncio
+import json
 import logging
-
-from functools import cache
+import os
 from base64 import b64decode
-
-from datetime import datetime, timedelta, date
+from datetime import date, datetime, timedelta
+from functools import cache
 
 import functions_framework
 import google.auth
 import google.cloud.bigquery as bq
+from flask import Request, Response, abort
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-
-from flask import abort, Response, Request
 from pandas import DataFrame
 
 INVOICE_DAY_DIFF = 3

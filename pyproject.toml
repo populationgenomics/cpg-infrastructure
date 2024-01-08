@@ -4,3 +4,4 @@ skip-string-normalization = true
 
 [tool.isort]
 py_version = 311
+profile = "black"

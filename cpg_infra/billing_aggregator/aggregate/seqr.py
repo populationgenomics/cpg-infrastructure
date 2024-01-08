@@ -28,6 +28,7 @@ TO DO :
 - Getting latest cram for sample by sequence type (eg: exome / genome)
 """
 import asyncio
+import dataclasses
 import hashlib
 import logging
 import os
@@ -63,10 +64,6 @@ ES_ANALYSIS_OBJ_INTRO_DATE = date(2022, 6, 21)
 SEQR_FIRST_LOAD = date(2021, 9, 1)
 SEQR_ROUND = 6
 
-GCP_BILLING_BQ_TABLE = (
-    'billing-admin-290403.billing.gcp_billing_export_v1_01D012_20A6A2_CBD343'
-)
-
 BASE = 'https://batch.hail.populationgenomics.org.au'
 BATCHES_API = BASE + '/api/v1alpha/batches'
 JOBS_API = BASE + '/api/v1alpha/batches/{batch_id}/jobs/resources'
@@ -91,6 +88,7 @@ def get_finalised_entries_for_batch(
 
     batch_id = batch['id']
     batch_attributes = batch.get('attributes', {})
+    namespace = utils.infer_batch_namespace(batch)
     batch_name = batch_attributes.get('name')
     ar_guid = batch_attributes.get(AR_GUID_NAME, batch_attributes.get('ar_guid'))
 
@@ -122,6 +120,7 @@ def get_finalised_entries_for_batch(
                 batch_name=batch_name,
                 batch_start_time=start_time,
                 batch_end_time=end_time,
+                namespace=namespace,
                 job=job,
                 ar_guid=ar_guid,
                 currency_conversion_rate=currency_conversion_rate,
@@ -147,6 +146,7 @@ def get_finalised_entries_for_batch(
                 'batch_resource': batch_resource,
                 'url': hail_ui_url,
                 'job_id': str(job_id),
+                'namespace': namespace,
             }
 
             if ar_guid:
@@ -178,8 +178,13 @@ def get_finalised_entries_for_batch(
                 # dataset to distribute to, batch_id, job_id as the key as it's
                 # sensible for us to assume that all the entries exist
                 # (for each resource) if one of the entries exists
-                key = '-'.join(
-                    (
+                # 2023-11-23 mfranklin: Later Michael here, I've changed my mind. We need
+                # to make the key unique, so we'll use the batch_id + job_id + resource_id
+                # from 2023-01-01 onwards. We've migrated that data, so we're good to go.
+
+                key_components: tuple[str, ...]
+                if start_time < datetime(2023, 1, 1):
+                    key_components = (
                         SERVICE_ID,
                         'distributed',
                         dataset,
@@ -188,7 +193,18 @@ def get_finalised_entries_for_batch(
                         'job',
                         str(job_id),
                     )
-                )
+                else:
+                    key_components = (
+                        SERVICE_ID,
+                        'distributed',
+                        dataset,
+                        'batch',
+                        str(batch_id),
+                        'job',
+                        str(job_id),
+                        batch_resource,
+                    )
+                key = '-'.join(key_components).replace('/', '-')
                 entries.append(
                     utils.get_hail_entry(
                         key=key,
@@ -226,6 +242,7 @@ def get_finalised_entries_for_dataset_batch_and_job(
     batch_name: str,
     batch_start_time: datetime,
     batch_end_time: datetime,
+    namespace: str | None,
     job: dict[str, Any],
     currency_conversion_rate: float,
     ar_guid: str | None,
@@ -247,6 +264,7 @@ def get_finalised_entries_for_dataset_batch_and_job(
         'batch_name': batch_name,
         'batch_id': str(batch_id),
         'job_id': str(job_id),
+        'namespace': namespace,
     }
 
     if ar_guid:
@@ -325,7 +343,7 @@ def migrate_entries_from_bq(
             service, sku, usage_start_time, usage_end_time, labels, system_labels,
             location, export_time, cost, currency, currency_conversion_rate, usage,
             credits, invoice, cost_type, adjustment_info
-        FROM `{GCP_BILLING_BQ_TABLE}`
+        FROM `{utils.GCP_BILLING_BQ_TABLE}`
         WHERE DATE_TRUNC(usage_end_time, DAY) BETWEEN @start AND @end
             AND project.id IN UNNEST(@projects)
         ORDER BY usage_start_time
@@ -368,7 +386,7 @@ def migrate_entries_from_bq(
 
     for json_objs in json_objs_iter:
         entries = []
-        param_map, current_date = None, None
+        seqr_wide_param_map, current_date = None, None
         for obj in json_objs:
             labels = obj['labels']
 
@@ -385,11 +403,16 @@ def migrate_entries_from_bq(
             # Assign all seqr cost to seqr topic before first ever load
             # Otherwise, determine proportion cost across topics
             if usage_start_time.date() < SEQR_FIRST_LOAD:
-                param_map = {'seqr': (1.0, 1)}
+                seqr_wide_param_map = {'seqr': (1.0, 1)}
             elif current_date is None or usage_start_time.date() > current_date:
-                current_date, param_map = get_ratios_from_date(
+                current_date, seqr_wide_param_map = get_ratios_from_date(
                     dt=usage_end_time.date(), prop_map=prop_map
                 )
+
+            _obj_param_map = seqr_wide_param_map
+            if 'dataset' in labels:
+                # specific override where 'dataset' is specified in GCP resource
+                _obj_param_map = {labels['dataset']: (1.0, 1)}
 
             # Data transforms and key changes
             obj['topic'] = 'seqr'
@@ -409,7 +432,7 @@ def migrate_entries_from_bq(
                 )
             )
 
-            for dataset, (ratio, dataset_size) in param_map.items():
+            for dataset, (ratio, dataset_size) in _obj_param_map.items():
                 new_entry = obj.copy()
 
                 new_entry['topic'] = dataset
@@ -429,8 +452,6 @@ def migrate_entries_from_bq(
             result += len(entries)
         elif mode == 'prod':
             result += utils.upsert_rows_into_bigquery(
-                window_start=istart.date(),
-                window_end=iend.date(),
                 table=utils.GCP_AGGREGATE_DEST_TABLE,
                 objs=entries,
                 dry_run=False,
@@ -596,12 +617,13 @@ async def main(
 
     seqr_project_map = get_seqr_dataset_id_map()
 
-    (
-        seqr_hosting_prop_map,
-        shared_computation_prop_map,
-    ) = await generate_proportionate_maps_of_datasets(
-        start, end, seqr_project_map=seqr_project_map
-    )
+    @dataclasses.dataclass
+    class PropMaps:
+        """Class to hold proportionate maps so we don't need to think about references"""
+
+        seqr_hosting_prop_map: ProportionateMapType | None = None
+        shared_computation_prop_map: ProportionateMapType | None = None
+
     result = 0
     bq_output_path = None
     hail_output_path = None
@@ -613,24 +635,53 @@ async def main(
         for suffix in 'gcp', 'hail':
             os.makedirs(os.path.join(output_path, suffix), exist_ok=True)
 
-    result += migrate_entries_from_bq(
-        start,
-        end,
-        seqr_hosting_prop_map,
-        mode=mode,
-        output_path=bq_output_path,
-    )
+    prop_maps = PropMaps()
+
+    async def func_process_batches_to_fetch_prop_map(batches: list[dict]):
+        """Just catch the batches loaded event to fetch the prop map"""
+        time_created = [start] + [
+            utils.parse_hail_time(b['time_created']) for b in batches
+        ]
+        min_time = min(time_created)
+
+        time_completed = [end] + [
+            utils.parse_hail_time(b['time_completed']) for b in batches
+        ]
+        max_time = max(time_completed)
+
+        (
+            seqr_hosting_prop_map,
+            shared_computation_prop_map,
+        ) = await generate_proportionate_maps_of_datasets(
+            min_time, max_time, seqr_project_map=seqr_project_map
+        )
+
+        prop_maps.seqr_hosting_prop_map = seqr_hosting_prop_map
+        prop_maps.shared_computation_prop_map = shared_computation_prop_map
+
+        return batches
 
     def func_get_finalised_entries(batch):
-        return get_finalised_entries_for_batch(batch, shared_computation_prop_map)
+        return get_finalised_entries_for_batch(
+            batch, prop_maps.shared_computation_prop_map
+        )
 
     result += await utils.process_entries_from_hail_in_chunks(
         start=start,
         end=end,
         billing_project=SEQR_HAIL_BILLING_PROJECT,
         func_get_finalised_entries_for_batch=func_get_finalised_entries,
+        func_batches_preprocessor=func_process_batches_to_fetch_prop_map,
         mode=mode,
         output_path=hail_output_path,
+    )
+
+    result += migrate_entries_from_bq(
+        start,
+        end,
+        prop_maps.seqr_hosting_prop_map,
+        mode=mode,
+        output_path=bq_output_path,
     )
 
     if mode == 'dry-run':
