@@ -68,7 +68,7 @@ BASE = 'https://batch.hail.populationgenomics.org.au'
 BATCHES_API = BASE + '/api/v1alpha/batches'
 JOBS_API = BASE + '/api/v1alpha/batches/{batch_id}/jobs/resources'
 
-JOB_ATTRIBUTES_IGNORE = {'name', 'dataset', 'samples'}
+JOB_ATTRIBUTES_IGNORE = {'dataset', 'samples'}
 RunMode = Literal['prod', 'local', 'dry-run']
 
 logger = utils.logger.getChild('seqr')
@@ -148,6 +148,9 @@ def get_finalised_entries_for_batch(
                 'job_id': str(job_id),
                 'namespace': namespace,
             }
+
+            if labels['name']:
+                labels['job_name'] = labels.pop('name')
 
             if ar_guid:
                 labels[AR_GUID_NAME] = ar_guid
