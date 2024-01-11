@@ -23,7 +23,7 @@ from typing import Any, Callable
 
 import pulumi
 
-from cpg_infra.config import CPGDatasetConfig, CPGInfrastructureConfig
+from cpg_infra.config import CloudName, CPGDatasetConfig, CPGInfrastructureConfig
 
 UNDELETE_PERIOD_IN_DAYS = 30
 TMP_BUCKET_PERIOD_IN_DAYS = 8  # tmp content gets deleted afterwards.
@@ -117,7 +117,7 @@ class CloudInfraBase(ABC):
 
     @staticmethod
     @abstractmethod
-    def name():
+    def name() -> CloudName:
         pass
 
     @staticmethod

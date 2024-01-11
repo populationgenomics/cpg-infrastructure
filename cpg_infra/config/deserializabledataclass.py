@@ -6,7 +6,7 @@ with some extra functionality for parsing types.
 import dataclasses
 from inspect import isclass
 from types import UnionType
-from typing import get_args, get_origin
+from typing import Any, Literal, get_args, get_origin
 
 
 class DeserializableDataclass:
@@ -20,7 +20,7 @@ class DeserializableDataclass:
     """
 
     @classmethod
-    def instantiate(cls, **kwargs):
+    def instantiate(cls, **kwargs: dict[str, Any]):
         return cls(**kwargs)
 
     def __post_init__(self):
@@ -43,14 +43,14 @@ class DeserializableDataclass:
         return f'{self.__class__.__name__}( {args} )'
 
 
-def get_display_type_from_value(value):
+def get_display_type_from_value(value: Any):
     """Get display string for type of value"""
     if value is None:
         return 'None'
     return get_display_type(type(value))
 
 
-def get_display_type(t):
+def get_display_type(t: Any):
     """Get display string for type, t"""
     if isinstance(t, type(None)):
         return 'NoneType'
@@ -65,7 +65,7 @@ def get_display_type(t):
     return repr(t)
 
 
-def try_parse_value_as_type(value, dtype):
+def try_parse_value_as_type(value: Any, dtype: Any) -> Any:
     """
     Try to parse a value as a specific type.
     Raise a ValueError if it can't be parsed.
@@ -167,6 +167,12 @@ def try_parse_value_as_type(value, dtype):
                 f'Expected tuple of length {len(tuple_types)}, got {len(value)} for {value!r}'
             )
         return tuple(try_parse_value_as_type(v, t) for v, t in zip(value, tuple_types))
+
+    if get_origin(dtype) is Literal:
+        arg_values = get_args(dtype)
+        if value not in arg_values:
+            raise ValueError(f'Expected literal {arg_values}, got {value!r}')
+        return value
 
     if isinstance(value, dtype):
         return value

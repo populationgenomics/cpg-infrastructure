@@ -5,9 +5,9 @@ CPG Dataset infrastructure
 import graphlib
 import os.path
 import re
-from collections import defaultdict, namedtuple
+from collections import defaultdict
 from functools import cached_property
-from typing import Any, Iterable, Iterator, Type
+from typing import Any, Iterable, Iterator, NamedTuple, Type
 
 import cpg_utils.config
 import pulumi
@@ -32,6 +32,7 @@ from cpg_infra.abstraction.hailbatch import (
 )
 from cpg_infra.abstraction.metamist import MetamistProject, MetamistProjectMembers
 from cpg_infra.config import (
+    CloudName,
     CPGDatasetComponents,
     CPGDatasetConfig,
     CPGInfrastructureConfig,
@@ -40,10 +41,12 @@ from cpg_infra.config import (
 )
 from cpg_infra.plugin import get_plugins
 
-SampleMetadataAccessorMembership = namedtuple(
-    'SampleMetadataAccessorMembership',
-    ['name', 'member', 'permissions'],
-)
+
+class SampleMetadataAccessorMembership(NamedTuple):
+    name: str
+    member: Any
+    permissions: Iterable[str]
+
 
 SM_TEST_READ = 'test-read'
 SM_TEST_WRITE = 'test-write'
@@ -189,7 +192,7 @@ class CPGInfrastructure:
 
             return group
 
-        def static_group_order(self, cloud) -> list[Group]:
+        def static_group_order(self, cloud: CloudName) -> list[Group]:
             """
             not that it super matters because we do recursively look it up and
             cache the result, but it's nice to grab the groups in an order that
@@ -500,7 +503,7 @@ class CPGInfrastructure:
 
     # dataset agnostic infrastructure
 
-    def build_infrastructure_config_output(self) -> dict:
+    def build_infrastructure_config_output(self) -> dict[str, pulumi.Output[str] | str]:
         return {
             'members_cache_location': self.common_gcp_infra.bucket_output_path(
                 self.gcp_members_cache_bucket
@@ -537,13 +540,19 @@ class CPGInfrastructure:
 
     @cached_property
     def gcp_members_cache_bucket(self):
-        return self.common_gcp_infra.create_bucket(
+        bucket = self.common_gcp_infra.create_bucket(
             f'{self.config.gcp.dataset_storage_prefix}members-group-cache',
             unique=True,
             versioning=True,
             autoclass=False,  # Always accessed frequently.
             lifecycle_rules=[],
         )
+
+        # run as a pulumi export, even though it's exported in the config
+        pulumi.export(
+            'members-cache-bucket', self.common_gcp_infra.bucket_output_path(bucket)
+        )
+        return bucket
 
     def setup_gcp_access_cache_bucket(self):
         group_cache_accessors = []
@@ -732,6 +741,12 @@ class CPGDatasetCloudInfrastructure:
         self.storage_tomls: dict = {}
 
     def create_group(self, name: str, cache_members: bool = False):
+        """
+        Create a group with the dataset name as a prefix.
+
+        :param name: name of the group, without the dataset prefix
+        :param cache_members: whether to cache the members in a bucket
+        """
         group_name = f'{self.dataset_config.dataset}-{name}'
         # group = self.infra.create_group(group_name)
         group = self.group_provider.create_group(
@@ -835,6 +850,7 @@ class CPGDatasetCloudInfrastructure:
             self.metadata_access_group,
             self.upload_group,
             self.web_access_group,
+            self.release_access_group,
         ]
 
         for group in groups:
@@ -1138,6 +1154,12 @@ class CPGDatasetCloudInfrastructure:
         )
 
     def setup_storage_outputs(self):
+        web_url_template = (
+            self.config.web_service.web_url_template
+            if self.config.web_service
+            else None
+        )
+
         buckets = {
             'main': {
                 'default': self.infra.bucket_output_path(self.main_bucket),
@@ -1147,11 +1169,13 @@ class CPGDatasetCloudInfrastructure:
                 'upload': self.infra.bucket_output_path(
                     self.main_upload_buckets['main-upload']
                 ),
-                'web_url': self.config.web_url_template.format(
-                    namespace='main', dataset=self.dataset_config.dataset
-                ),
             },
         }
+
+        if web_url_template:
+            buckets['main']['web_url'] = web_url_template.format(
+                namespace='main', dataset=self.dataset_config.dataset
+            )
 
         if self.dataset_config.setup_test:
             buckets['test'] = {
@@ -1160,10 +1184,12 @@ class CPGDatasetCloudInfrastructure:
                 'analysis': self.infra.bucket_output_path(self.test_analysis_bucket),
                 'tmp': self.infra.bucket_output_path(self.test_tmp_bucket),
                 'upload': self.infra.bucket_output_path(self.test_upload_bucket),
-                'web_url': self.config.web_url_template.format(
-                    namespace='test', dataset=self.dataset_config.dataset
-                ),
             }
+
+            if web_url_template:
+                buckets['test']['web_url'] = web_url_template.format(
+                    namespace='test', dataset=self.dataset_config.dataset
+                )
 
         dependent_datasets = {
             *(self.dataset_config.depends_on or []),
