@@ -2,7 +2,7 @@
 
 The CPG manages its cloud infrastructure through Pulumi. Specifically, we have developed an abstraction over the GCP and Azure clouds, that allow us with one `driver.py` to spin up infrastructure on both GCP and Azure. We manage all infrastructure for all datasets in one stack.
 
-This repository contains all the driving code to build our pulumi stack, but none of the actual configuration. In your own environment, once you have a `CPGInfrastructureConfig` and each dataset's `CPGDatasetConfig`, you can instantiate a `CPGInfrastructure` object and call main within a pulumi context:
+This repository contains all the driving code to build our pulumi stack, but none of the actual configuration. In your own environment, once you have a `CPGInfrastructureConfig` and each dataset's `CPGDatasetConfig`, you can instantiate a `CPGInfrastructure` object and call `main` within a pulumi context:
 
 ```python
 # inside a pulumi context
@@ -68,8 +68,8 @@ There are 4 places where group memberships are stored:
 
 - In the Google / Azure groups themselves, we DON'T expand nested group members
 - Cached in a blob in a _members cache_ location. This bucket is created in the `CPGInfrastructure` driver, and exported into an infra config, and a pulumi export.
-- Provided to metamist as it uses it's own [inbuilt groups](https://github.com/populationgenomics/metamist/pull/568) to manage permissions.
-- Provided to Hail batch as it uses it's own billing projects to manage access.
+- Provided to metamist as it uses its own [inbuilt groups](https://github.com/populationgenomics/metamist/pull/568) to manage permissions.
+- Provided to Hail batch as it uses its own billing projects to manage access.
 
 Note, in our implementation, we create _placeholder groups_ through the majority of the code, and at the end, we call `CPGInfrastructure.finalize_groups` to create outputs to the aforementioned 4 places.
 
@@ -92,7 +92,7 @@ Currently the [`BillingAggregator`](cpg_infra/billing_aggregator/), and [`Metami
 This concept was designed to make it easier to have developers added to _internal_ Hail Batch projects to facilitate debugging. To do this:
 
 - a user config must have `add_to_internal_hail_batch_projects = True`, and
-- the dataset config must `is_internal_dataset = True`.
+- the dataset config must have `is_internal_dataset = True`.
 
 ## Infrastructure
 
