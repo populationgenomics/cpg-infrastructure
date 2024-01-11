@@ -191,6 +191,8 @@ class GcpInfrastructure(CloudInfraBase):
             name=name,
             billing_account=self.config.billing.gcp.account_id,
             opts=opts,
+            # deleting projects is pretty tedious, so let's just NOT do that.
+            skip_delete=True,
         )
 
     def create_budget(self, resource_key: str, *, project, budget: int, budget_filter):
