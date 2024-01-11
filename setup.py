@@ -7,7 +7,7 @@ import setuptools
 with open('requirements.txt', encoding='utf-8') as f:
     requirements = [line.strip() for line in f.readlines()]
 
-with open('cpg_infra/README.md', encoding='utf-8') as f:
+with open('README.md', encoding='utf-8') as f:
     long_description = f.read()
 
 setuptools.setup(

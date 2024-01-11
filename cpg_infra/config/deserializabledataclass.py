@@ -6,7 +6,7 @@ with some extra functionality for parsing types.
 import dataclasses
 from inspect import isclass
 from types import UnionType
-from typing import Any, get_args, get_origin
+from typing import Any, Literal, get_args, get_origin
 
 
 class DeserializableDataclass:
@@ -168,7 +168,7 @@ def try_parse_value_as_type(value: Any, dtype: Any) -> Any:
             )
         return tuple(try_parse_value_as_type(v, t) for v, t in zip(value, tuple_types))
 
-    if str(getattr(dtype, '__origin__', None)) == 'typing.Literal':
+    if get_origin(dtype) is Literal:
         arg_values = get_args(dtype)
         if value not in arg_values:
             raise ValueError(f'Expected literal {arg_values}, got {value!r}')
