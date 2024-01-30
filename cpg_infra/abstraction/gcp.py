@@ -417,7 +417,7 @@ class GcpInfrastructure(CloudInfraBase):
 
     def bucket_membership_to_role(self, membership: BucketMembership):
         if membership == BucketMembership.MUTATE:
-            return 'roles/storage.admin'
+            return 'roles/storage.objectAdmin'
         if membership == BucketMembership.APPEND:
             return f'{self.organization.id}/roles/StorageViewerAndCreator'
         if membership == BucketMembership.READ:
