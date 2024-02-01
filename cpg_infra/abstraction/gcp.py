@@ -429,10 +429,6 @@ class GcpInfrastructure(CloudInfraBase):
     ):
         if membership == BucketMembership.MUTATE:
             return [
-                # @deprecated, storage.admin is too broad of a permission as it
-                # allows for deletion of the bucket. This will be removed in a second
-                # stage of this deploy
-                BucketMembershipRole('roles/storage.admin', resource_key),
                 # This role allows mutation of bucket objects but not deletion of the
                 # bucket itself
                 BucketMembershipRole(
