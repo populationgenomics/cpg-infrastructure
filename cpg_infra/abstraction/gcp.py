@@ -437,7 +437,7 @@ class GcpInfrastructure(CloudInfraBase):
                 # bucket itself
                 BucketMembershipRole(
                     f'{self.organization.id}/roles/StorageObjectAndBucketMutator',
-                    f'{resource_key}_no_bucket_deletion',
+                    f'{resource_key}-no-bucket-deletion',
                 ),
             ]
         if membership == BucketMembership.APPEND:
