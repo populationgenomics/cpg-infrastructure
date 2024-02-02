@@ -612,14 +612,11 @@ def upsert_rows_into_bigquery(
     able to take an arbitrary amount of rows.
     """
     if not objs:
+        logger.info('Not inserting any rows')
         return 0
 
     window_start = datetime.fromisoformat(min(o['usage_start_time'] for o in objs))
     window_end = datetime.fromisoformat(max(o['usage_end_time'] for o in objs))
-
-    if not objs:
-        logger.info('Not inserting any rows')
-        return 0
 
     n_chunks = math.ceil(len(objs) / chunk_size)
     total_size_mb = sys.getsizeof(objs) / (1024 * 1024)
