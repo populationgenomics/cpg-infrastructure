@@ -106,7 +106,7 @@ def get_finalised_entries_for_batch(batch: dict) -> List[Dict]:
             labels.update(attributes)
             labels.update(job.get('attributes', {}))
             if labels.get('name'):
-                labels.pop('name')
+                labels['job_name'] = labels.pop('name')
 
             # Remove any labels with falsey values e.g. None, '', 0
             labels = dict(filter(lambda lbl: lbl[1], labels.items()))

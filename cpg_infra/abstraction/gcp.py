@@ -5,7 +5,7 @@ GCP implementation for abstract infrastructure
 import base64
 from datetime import date
 from functools import cached_property
-from typing import Any
+from typing import Any, NamedTuple
 
 import pulumi
 import pulumi_gcp as gcp
@@ -23,6 +23,11 @@ from cpg_infra.abstraction.base import (
 )
 from cpg_infra.abstraction.google_group_settings import GoogleGroupSettings
 from cpg_infra.config import CPGDatasetConfig, CPGInfrastructureConfig
+
+
+class BucketMembershipRole(NamedTuple):
+    role: str
+    resource_key: str
 
 
 class GcpInfrastructure(CloudInfraBase):
@@ -415,39 +420,79 @@ class GcpInfrastructure(CloudInfraBase):
 
         raise NotImplementedError(f'Not valid for type {type(secret)}')
 
-    def bucket_membership_to_role(self, membership: BucketMembership):
+    # This method returns a list so that changes to roles can be made in a safe way by
+    # adding a new role without deleting the old one. The resource key is defined
+    # explicitly so that resources can maintain the same resource key no matter where
+    # they appear in the list.
+    def bucket_membership_to_role_list(
+        self, membership: BucketMembership, resource_key: str
+    ):
         if membership == BucketMembership.MUTATE:
-            return 'roles/storage.admin'
+            return [
+                # This role allows mutation of bucket objects but not deletion of the
+                # bucket itself
+                BucketMembershipRole(
+                    f'{self.organization.id}/roles/StorageObjectAndBucketMutator',
+                    f'{resource_key}-no-bucket-deletion',
+                ),
+            ]
         if membership == BucketMembership.APPEND:
-            return f'{self.organization.id}/roles/StorageViewerAndCreator'
+            return [
+                BucketMembershipRole(
+                    f'{self.organization.id}/roles/StorageViewerAndCreator',
+                    resource_key,
+                ),
+            ]
         if membership == BucketMembership.READ:
-            return f'{self.organization.id}/roles/StorageObjectAndBucketViewer'
+            return [
+                BucketMembershipRole(
+                    f'{self.organization.id}/roles/StorageObjectAndBucketViewer',
+                    resource_key,
+                )
+            ]
         if membership == BucketMembership.LIST:
-            return f'{self.organization.id}/roles/StorageLister'
+            return [
+                BucketMembershipRole(
+                    f'{self.organization.id}/roles/StorageLister',
+                    resource_key,
+                ),
+            ]
 
         raise ValueError(f'Unrecognised bucket membership type {membership}')
 
     def add_member_to_bucket(
         self, resource_key: str, bucket, member, membership: BucketMembership
     ) -> Any:
-        gcp.storage.BucketIAMMember(
-            self.get_pulumi_name(resource_key),
-            bucket=self.get_member_key(bucket),
-            member=self.get_member_key(member),
-            role=self.bucket_membership_to_role(membership),
-            opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
-        )
+        role_list = self.bucket_membership_to_role_list(membership, resource_key)
+
+        for role_item in role_list:
+            gcp.storage.BucketIAMMember(
+                self.get_pulumi_name(role_item.resource_key),
+                bucket=self.get_member_key(bucket),
+                member=self.get_member_key(member),
+                role=role_item.role,
+                opts=pulumi.resource.ResourceOptions(
+                    depends_on=[self._svc_cloudidentity]
+                ),
+            )
 
     def give_member_ability_to_list_buckets(
         self, resource_key: str, member, project: str = None
     ):
-        gcp.projects.IAMMember(
-            self.get_pulumi_name(resource_key),
-            role=self.bucket_membership_to_role(BucketMembership.LIST),
-            member=self.get_member_key(member),
-            project=project or self.project_id,
-            opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
+        role_list = self.bucket_membership_to_role_list(
+            BucketMembership.LIST, resource_key
         )
+
+        for role_item in role_list:
+            gcp.projects.IAMMember(
+                self.get_pulumi_name(role_item.resource_key),
+                role=role_item.role,
+                member=self.get_member_key(member),
+                project=project or self.project_id,
+                opts=pulumi.resource.ResourceOptions(
+                    depends_on=[self._svc_cloudidentity]
+                ),
+            )
 
     def create_machine_account(
         self, name: str, project: str = None, *, resource_key: str = None
