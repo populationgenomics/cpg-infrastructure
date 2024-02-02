@@ -9,8 +9,9 @@ import sys
 from collections import defaultdict
 
 from cloudpathlib import AnyPath
-from cpg_utils.hail_batch import get_config
 from google.cloud import storage
+
+from cpg_utils.hail_batch import get_config
 
 # It's important not to list the `archive` bucket here, as Class B operations are very
 # expensive for that storage class.
@@ -58,7 +59,7 @@ def aggregate_level(name: str) -> str:
 
 def main():
     """Main entrypoint."""
-    if len(sys.argv) != 3:
+    if len(sys.argv) != 3:  # noqa: PLR2004
         print('Usage: disk_usage.py <dataset> <output.json.gz>')
         sys.exit(1)
 
@@ -101,9 +102,8 @@ def main():
 
     output = sys.argv[2]
     logging.info(f'Writing results to {output}...')
-    with AnyPath(output).open('wb') as f:
-        with gzip.open(f, 'wt') as gzf:
-            json.dump(aggregate_stats, gzf)
+    with AnyPath(output).open('wb') as f, gzip.open(f, 'wt') as gzf:
+        json.dump(aggregate_stats, gzf)
 
 
 if __name__ == '__main__':

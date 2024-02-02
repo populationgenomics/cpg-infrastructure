@@ -1,4 +1,4 @@
-# pylint: disable=import-error,no-name-in-module,unused-argument
+# flake8: noqa:DTZ005,DTZ006,DTZ007,PLR2004,C901,PLR2004
 """A Cloud Function to update the status of genomic samples."""
 
 import asyncio
@@ -94,11 +94,11 @@ def from_request(request: Request):
         invoice_month = None
 
     return asyncio.new_event_loop().run_until_complete(
-        process_and_upload_monthly_billing_report(invoice_month)
+        process_and_upload_monthly_billing_report(invoice_month),
     )
 
 
-async def load_for_year(year):
+async def load_for_year(year: int):
     """Load all months for the specified year (except the current month)"""
     for month in range(1, 13):
         invoice_month = f'{year}{month}'
@@ -109,7 +109,9 @@ async def load_for_year(year):
         await process_and_upload_monthly_billing_report(invoice_month)
 
 
-async def process_and_upload_monthly_billing_report(invoice_month: str = None):
+async def process_and_upload_monthly_billing_report(
+    invoice_month: str | None = None,
+):
     """Main entry point for the Cloud Function."""
 
     if not invoice_month:
@@ -122,11 +124,11 @@ async def process_and_upload_monthly_billing_report(invoice_month: str = None):
     data = get_billing_data(invoice_month)
     if len(data) == 0:
         logger.info(f'Skipping {invoice_month} with no data')
-        return
+        return None
 
     data['cost'].fillna(0)
     data['key'] = data.topic + '-' + data.month + '-' + data.cost_category
-    values: list = data.values.tolist()
+    values: list = data.to_numpy().tolist()
     updated = append_values_to_google_sheet(OUTPUT_GOOGLE_SHEET, values, invoice_month)
 
     return f'{updated} cells appended for invoice month {invoice_month}', 200
@@ -137,7 +139,11 @@ def abort_message(status: int, message: str):
     return abort(Response(json.dumps({'message': message}), status))
 
 
-def append_values_to_google_sheet(spreadsheet_id, _values, invoice_month):
+def append_values_to_google_sheet(
+    spreadsheet_id: str,
+    _values: list,
+    invoice_month: str,
+):
     """
     Creates the batch_update the user has access to.
     Load pre-authorized user credentials from the environment.
@@ -200,6 +206,12 @@ def get_billing_data(invoice_month: str) -> DataFrame:
     Retrieve the billing data for a particular billing month from the aggregation table
     Return results as a dataframe
     """
+    assert GCP_MONTHLY_BILLING_BQ_TABLE
+
+    if '`' in GCP_MONTHLY_BILLING_BQ_TABLE:
+        raise ValueError(
+            f'Do not include backticks in the table ({GCP_MONTHLY_BILLING_BQ_TABLE})',
+        )
 
     invoice_month_date = datetime.strptime(invoice_month, '%Y%m').date()
     window_start, window_end = get_invoice_month_range(invoice_month_date)
@@ -208,27 +220,29 @@ def get_billing_data(invoice_month: str) -> DataFrame:
         WHERE month = @invoice_month
         AND DATE_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end
         ORDER BY topic
-    """
+    """  # noqa: S608
     job_config = bq.QueryJobConfig(
         query_parameters=[
             bq.ScalarQueryParameter('invoice_month', 'STRING', str(invoice_month)),
             bq.ScalarQueryParameter(
-                'window_start', 'STRING', window_start.strftime('%Y-%m-%d')
+                'window_start',
+                'STRING',
+                window_start.strftime('%Y-%m-%d'),
             ),
             bq.ScalarQueryParameter(
-                'window_end', 'STRING', window_end.strftime('%Y-%m-%d')
+                'window_end',
+                'STRING',
+                window_end.strftime('%Y-%m-%d'),
             ),
-        ]
+        ],
     )
 
-    migrate_rows = (
+    return (
         get_bigquery_client()
         .query(_query, job_config=job_config)
         .result()
         .to_dataframe()
     )
-
-    return migrate_rows
 
 
 if __name__ == '__main__':

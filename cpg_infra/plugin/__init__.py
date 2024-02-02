@@ -9,7 +9,11 @@ PLUGIN_ENTRYPOINT_NAME = 'cpginfra.plugins'
 class CpgInfrastructurePlugin:
     """Billing aggregator Infrastructure (as code) for Pulumi"""
 
-    def __init__(self, infrastructure, config: CPGInfrastructureConfig):
+    def __init__(
+        self,
+        infrastructure,  # noqa: ANN001
+        config: CPGInfrastructureConfig,
+    ) -> None:
         self.config = config
         self.infrastructure = infrastructure
 

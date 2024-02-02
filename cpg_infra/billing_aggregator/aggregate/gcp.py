@@ -1,4 +1,4 @@
-# pylint: disable=unused-argument
+# flake8: noqa: PGH003,ANN001,DTZ001,ARG001,ANN002,
 """
 Cloud function that runs once a month that synchronises a portion of data from:
 
@@ -30,13 +30,14 @@ import json
 import logging
 import time
 from datetime import datetime
-from typing import Dict
+from typing import Dict, Optional
 
 import functions_framework
 import google.cloud.bigquery as bq
 import rapidjson
-from cpg_utils.cloud import read_secret
 from flask import Request
+
+from cpg_utils.cloud import read_secret
 
 try:
     from . import utils
@@ -45,7 +46,6 @@ except ImportError:
 
 logger = utils.logger.getChild('gcp')
 logger.setLevel(logging.INFO)
-# logger.propagate = False
 
 
 ##########################
@@ -90,7 +90,7 @@ async def migrate_billing_data(start, end, dataset_to_topic) -> int:
 
     logger.info(f'Migrating data from {start} to {end}')
 
-    def get_topic(row):
+    def get_topic(row: dict) -> str | None:
         return utils.billing_row_to_topic(row, dataset_to_topic)
 
     # to_df_iterable pages the response so it's more manageable,
@@ -107,10 +107,12 @@ async def migrate_billing_data(start, end, dataset_to_topic) -> int:
         mins = min(chunk.get('export_time'))
         maxf = max(chunk.get('export_time'))
         logger.info(
-            f'Processed {len(chunk)} in chunk ({time.time() - s:4f}s) [{mins}, {maxf}]'
+            f'Processed {len(chunk)} in chunk ({time.time() - s:4f}s) [{mins}, {maxf}]',
         )
         result += utils.upsert_aggregated_dataframe_into_bigquery(
-            df=chunk, window_start=start.date(), window_end=end.date()
+            dataframe=chunk,
+            window_start=start.date(),
+            window_end=end.date(),
         )
 
     return result
@@ -143,7 +145,7 @@ def get_billing_data(start: datetime, end: datetime):
             bq.ScalarQueryParameter('start', 'STRING', start.strftime('%Y-%m-%d')),
             bq.ScalarQueryParameter('end', 'STRING', end.strftime('%Y-%m-%d')),
             bq.ArrayQueryParameter('exclude', 'STRING', exclude_projects),
-        ]
+        ],
     )
 
     return utils.get_bigquery_client().query(_query, job_config=job_config).result()
@@ -154,7 +156,7 @@ DATE_FORMAT = '%Y-%m-%dT%H:%M:%S'
 
 def billing_row_to_key(row) -> str:
     """Convert a billing row to a hash which will be the row key"""
-    identifier = hashlib.md5()
+    identifier = hashlib.md5()  # noqa: S324
     d = row.to_dict()
     d['usage_end_time'] = d['usage_end_time'].strftime(DATE_FORMAT)
     d['export_time'] = d['export_time'].strftime(DATE_FORMAT)
@@ -168,8 +170,10 @@ def get_dataset_to_topic_map() -> Dict[str, str]:
     """Get the server-config from the secret manager"""
     server_config = json.loads(
         read_secret(
-            utils.ANALYSIS_RUNNER_PROJECT_ID, 'server-config', fail_gracefully=False
-        )
+            utils.ANALYSIS_RUNNER_PROJECT_ID,
+            'server-config',
+            fail_gracefully=False,
+        ),
     )
     return {v['gcp']['projectId']: k for k, v in server_config.items()}
 
@@ -179,7 +183,10 @@ def get_dataset_to_topic_map() -> Dict[str, str]:
 ##############
 
 
-async def main(start: datetime = None, end: datetime = None) -> dict:
+async def main(
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
+) -> dict:
     """Main body function"""
     s, e = utils.process_default_start_and_end(start, end)
     logger.info(f'Running GCP Billing Aggregation for [{start}, {end}]')
@@ -192,8 +199,7 @@ async def main(start: datetime = None, end: datetime = None) -> dict:
     # This is because depending on the start-end interval all of the billing
     # data may not be able to be held in memory during the migration
     # Memory is particularly limited for cloud functions
-    # result = 0
-    # for begin, finish in interval_iterator:
+
     result = await migrate_billing_data(s, e, dataset_to_topic_map)
 
     logger.info(f'Migrated a total of {result} rows')

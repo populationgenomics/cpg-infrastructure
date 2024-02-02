@@ -1,4 +1,4 @@
-# pylint: disable=logging-format-interpolation,too-many-locals,too-many-branches,too-many-lines,c-extension-no-member   # noqa: E501
+# flake8: noqa: PGH003,ANN001,ERA001,DTZ007,DTZ001,C901
 """
 This cloud function runs DAILY, and distributes the cost of
 SEQR on the sample size within SEQR.
@@ -34,13 +34,14 @@ import logging
 import os
 import shutil
 from datetime import date, datetime
-from typing import Any, Literal
+from typing import Any, Generator, Literal
 
 import functions_framework
 import google.cloud.bigquery as bq
 import rapidjson
-from cpg_utils.config import AR_GUID_NAME
 from flask import Request
+
+from cpg_utils.config import AR_GUID_NAME
 from metamist.apis import AnalysisApi, ProjectApi, SampleApi
 from metamist.model.body_get_proportionate_map import BodyGetProportionateMap
 from metamist.model.proportional_date_temporal_method import (
@@ -79,7 +80,8 @@ aapi = AnalysisApi()
 
 
 def get_finalised_entries_for_batch(
-    batch, proportion_map: ProportionateMapType
+    batch,
+    proportion_map: ProportionateMapType,
 ) -> list[dict[str, Any]]:
     """
     Take a batch dictionary, and the full proportion map
@@ -124,7 +126,7 @@ def get_finalised_entries_for_batch(
                 job=job,
                 ar_guid=ar_guid,
                 currency_conversion_rate=currency_conversion_rate,
-            )
+            ),
         )
 
     # Now go through each job within the batch withOUT a dataset
@@ -162,7 +164,7 @@ def get_finalised_entries_for_batch(
                     logger.info(f'Empty stage for {batch_id}/{job_id}')
 
                 if k == 'ar_guid':
-                    k = 'ar-guid'
+                    k = 'ar-guid'  # noqa: PLW2901
 
                 labels[k] = str(v)
 
@@ -170,7 +172,8 @@ def get_finalised_entries_for_batch(
             labels = dict(filter(lambda lbl: lbl[1], labels.items()))
 
             gross_cost = utils.get_total_hail_cost(
-                currency_conversion_rate, raw_cost=raw_cost
+                currency_conversion_rate,
+                raw_cost=raw_cost,
             )
             raw_usage = job['resources'].get(batch_resource, 0)
 
@@ -227,13 +230,15 @@ def get_finalised_entries_for_batch(
                             'fraction': str(round(100 * fraction) / 100),
                             'dataset_size': str(dataset_size),
                         },
-                    )
+                    ),
                 )
 
     entries.extend(
         utils.get_credits(
-            entries=entries, topic='hail', project=utils.HAIL_PROJECT_FIELD
-        )
+            entries=entries,
+            topic='hail',
+            project=utils.HAIL_PROJECT_FIELD,
+        ),
     )
 
     return entries
@@ -304,7 +309,7 @@ def get_finalised_entries_for_dataset_batch_and_job(
                 str(batch_id),
                 'job',
                 str(job_id),
-            )
+            ),
         )
         entries.append(
             utils.get_hail_entry(
@@ -319,7 +324,7 @@ def get_finalised_entries_for_dataset_batch_and_job(
                 start_time=batch_start_time,
                 end_time=batch_end_time,
                 labels=labels,
-            )
+            ),
         )
 
     return entries
@@ -358,10 +363,12 @@ def migrate_entries_from_bq(
             bq.ScalarQueryParameter('start', 'STRING', istart.strftime('%Y-%m-%d')),
             bq.ScalarQueryParameter('end', 'STRING', iend.strftime('%Y-%m-%d')),
             bq.ArrayQueryParameter('projects', 'STRING', projects),
-        ]
+        ],
     )
 
     temp_file = f'seqr-query-{istart.isoformat()}-{iend.isoformat()}.json'
+
+    json_objs_iter: Generator[dict, None, None] | list[dict]
 
     if mode == 'local' and os.path.exists(temp_file):
         logger.info(f'Loading BQ data from {temp_file}')
@@ -380,7 +387,7 @@ def migrate_entries_from_bq(
             json_objs_iter = [rapidjson.loads(json_str)]
         else:
 
-            def generator():
+            def generator() -> Generator[dict, None, None]:
                 for df in df_bq_result.to_dataframe_iterable():
                     logger.info('Received another page of records from bigquery')
                     yield df.to_dict(orient='records')
@@ -394,10 +401,12 @@ def migrate_entries_from_bq(
             labels = obj['labels']
 
             usage_start_time = utils.get_date_time_from_value(
-                'usage_start_time', obj['usage_start_time']
+                'usage_start_time',
+                obj['usage_start_time'],
             )
             usage_end_time = utils.get_date_time_from_value(
-                'usage_end_time', obj['usage_end_time']
+                'usage_end_time',
+                obj['usage_end_time'],
             )
             dates = ['usage_start_time', 'usage_end_time', 'export_time']
             for k in dates:
@@ -409,7 +418,8 @@ def migrate_entries_from_bq(
                 seqr_wide_param_map = {'seqr': (1.0, 1)}
             elif current_date is None or usage_start_time.date() > current_date:
                 current_date, seqr_wide_param_map = get_ratios_from_date(
-                    dt=usage_end_time.date(), prop_map=prop_map
+                    dt=usage_end_time.date(),
+                    prop_map=prop_map,
                 )
 
             _obj_param_map = seqr_wide_param_map
@@ -432,7 +442,7 @@ def migrate_entries_from_bq(
                     entries=[obj],
                     topic='seqr',
                     project=utils.SEQR_PROJECT_FIELD,
-                )
+                ),
             )
 
             for dataset, (ratio, dataset_size) in _obj_param_map.items():
@@ -479,7 +489,7 @@ def migrate_entries_from_bq(
 
 def billing_obj_to_key(obj: dict[str, Any]) -> str:
     """Convert a billing row to a hash which will be the row key"""
-    identifier = hashlib.md5()
+    identifier = hashlib.md5()  # noqa: S324
     identifier.update(rapidjson.dumps(obj, sort_keys=True).encode())
     return identifier.hexdigest()
 
@@ -507,7 +517,7 @@ async def generate_proportionate_maps_of_datasets(
     missing_projects = set(projects) - set(sm_pid_to_dataset.values())
     if missing_projects:
         raise ValueError(
-            f"The datasets {', '.join(missing_projects)} were not found in SM"
+            f"The datasets {', '.join(missing_projects)} were not found in SM",
         )
 
     result = await aapi.get_proportionate_map_async(
@@ -523,7 +533,7 @@ async def generate_proportionate_maps_of_datasets(
         end=end.strftime('%Y-%m-%d') if end else None,
     )
 
-    def fix_types_in_result(res):
+    def fix_types_in_result(res) -> list[tuple[date, dict[str, tuple[float, int]]]]:
         # received: list[{date: str, projects: list[{project, proportion, total}]}]
         # expected: list[tuple[datetime, dict[str, tuple[float, int]]]]
         return [
@@ -547,7 +557,8 @@ async def generate_proportionate_maps_of_datasets(
 
 
 def get_ratios_from_date(
-    dt: date, prop_map: ProportionateMapType
+    dt: date,
+    prop_map: ProportionateMapType,
 ) -> tuple[date, dict[str, tuple[float, int]]]:
     """
     From the prop_map, get the ratios for the applicable date.
@@ -601,18 +612,17 @@ def get_seqr_dataset_id_map() -> dict[str, int]:
     """
 
     projects = papi.get_seqr_projects()
-    projects = {x['name']: x['id'] for x in projects}
-    return projects
+    return {x['name']: x['id'] for x in projects}
 
 
 # DRIVER functions
 
 
 async def main(
-    start: datetime = None,
-    end: datetime = None,
+    start: datetime | None = None,
+    end: datetime | None = None,
     mode: RunMode = 'prod',
-    output_path: str = None,
+    output_path: str | None = None,
 ):
     """Main body function"""
     logger.info(f'Running Seqr Billing Aggregation for [{start}, {end}]')
@@ -640,7 +650,7 @@ async def main(
 
     prop_maps = PropMaps()
 
-    async def func_process_batches_to_fetch_prop_map(batches: list[dict]):
+    async def func_process_batches_to_fetch_prop_map(batches: list[dict]) -> list[dict]:
         """Just catch the batches loaded event to fetch the prop map"""
         time_created = [start] + [
             utils.parse_hail_time(b['time_created']) for b in batches
@@ -656,7 +666,9 @@ async def main(
             seqr_hosting_prop_map,
             shared_computation_prop_map,
         ) = await generate_proportionate_maps_of_datasets(
-            min_time, max_time, seqr_project_map=seqr_project_map
+            min_time,
+            max_time,
+            seqr_project_map=seqr_project_map,
         )
 
         prop_maps.seqr_hosting_prop_map = seqr_hosting_prop_map
@@ -664,9 +676,10 @@ async def main(
 
         return batches
 
-    def func_get_finalised_entries(batch):
+    def func_get_finalised_entries(batch) -> list[dict[str, Any]]:
         return get_finalised_entries_for_batch(
-            batch, prop_maps.shared_computation_prop_map
+            batch,
+            prop_maps.shared_computation_prop_map,
         )
 
     result += await utils.process_entries_from_hail_in_chunks(
@@ -727,15 +740,13 @@ if __name__ == '__main__':
     logging.getLogger('asyncio').setLevel(logging.ERROR)
     logging.getLogger('urllib3').setLevel(logging.WARNING)
 
-    test_start, test_end = None, None
+    test_start, test_end = datetime(2024, 1, 1), None
 
-    test_start = datetime.now() - utils.timedelta(days=1)
-    test_end = datetime.now()
     asyncio.new_event_loop().run_until_complete(
         main(
             start=test_start,
             end=test_end,
-            mode='dry-run',
+            mode='prod',
             # output_path=os.path.join(os.getcwd(), 'seqr'),
-        )
+        ),
     )

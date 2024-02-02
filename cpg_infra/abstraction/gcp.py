@@ -1,11 +1,11 @@
-# pylint: disable=missing-class-docstring,missing-function-docstring,too-many-public-methods
+# flake8: noqa: ERA001,ANN001,ANN102,ANN202,ANN205,ANN206,ANN401,ARG002
 """
 GCP implementation for abstract infrastructure
 """
 import base64
 from datetime import date
 from functools import cached_property
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, Optional
 
 import pulumi
 import pulumi_gcp as gcp
@@ -17,6 +17,7 @@ from cpg_infra.abstraction.base import (
     UNDELETE_PERIOD_IN_DAYS,
     BucketMembership,
     CloudInfraBase,
+    CloudName,
     ContainerRegistryMembership,
     MachineAccountRole,
     SecretMembership,
@@ -32,12 +33,15 @@ class BucketMembershipRole(NamedTuple):
 
 class GcpInfrastructure(CloudInfraBase):
     @staticmethod
-    def name():
+    def name() -> CloudName:
         return 'gcp'
 
     def __init__(
-        self, config: CPGInfrastructureConfig, dataset_config: CPGDatasetConfig
-    ):
+        self,
+        config: CPGInfrastructureConfig,
+        dataset_config: CPGDatasetConfig,
+    ) -> None:
+        assert config.gcp
         super().__init__(config=config, dataset_config=dataset_config)
         self.region = config.gcp.region
         if dataset_config and dataset_config.gcp.region:
@@ -93,7 +97,7 @@ class GcpInfrastructure(CloudInfraBase):
             service='cloudidentity.googleapis.com',
             disable_on_destroy=False,
             opts=pulumi.resource.ResourceOptions(
-                depends_on=[self._svc_cloudresourcemanager]
+                depends_on=[self._svc_cloudresourcemanager],
             ),
             project=self.project_id,
         )
@@ -114,7 +118,7 @@ class GcpInfrastructure(CloudInfraBase):
             service='secretmanager.googleapis.com',
             disable_on_destroy=False,
             opts=pulumi.resource.ResourceOptions(
-                depends_on=[self._svc_cloudresourcemanager]
+                depends_on=[self._svc_cloudresourcemanager],
             ),
             project=self.project_id,
         )
@@ -126,7 +130,7 @@ class GcpInfrastructure(CloudInfraBase):
             service='dataproc.googleapis.com',
             disable_on_destroy=False,
             opts=pulumi.resource.ResourceOptions(
-                depends_on=[self._svc_cloudresourcemanager]
+                depends_on=[self._svc_cloudresourcemanager],
             ),
             project=self.project_id,
         )
@@ -149,7 +153,7 @@ class GcpInfrastructure(CloudInfraBase):
             disable_on_destroy=False,
             project=self.project_id,
             opts=pulumi.resource.ResourceOptions(
-                depends_on=[self._svc_cloudresourcemanager]
+                depends_on=[self._svc_cloudresourcemanager],
             ),
         )
 
@@ -171,7 +175,7 @@ class GcpInfrastructure(CloudInfraBase):
             disable_on_destroy=False,
             project=self.project_id,
             opts=pulumi.resource.ResourceOptions(
-                depends_on=[self._svc_cloudresourcemanager]
+                depends_on=[self._svc_cloudresourcemanager],
             ),
         )
 
@@ -184,9 +188,9 @@ class GcpInfrastructure(CloudInfraBase):
             opts = pulumi.ResourceOptions(
                 aliases=[
                     pulumi.Alias(
-                        name=f'gcp-{self.dataset_config.gcp.project}-shared-project'
-                    )
-                ]
+                        name=f'gcp-{self.dataset_config.gcp.project}-shared-project',
+                    ),
+                ],
             )
 
         return gcp.organizations.Project(
@@ -219,13 +223,13 @@ class GcpInfrastructure(CloudInfraBase):
                     units=str(budget),
                     currency_code=self.config.budget_currency,
                     nanos=0,
-                )
+                ),
             ),
             billing_account=self.config.billing.gcp.account_id,
             display_name=(project or self.project).name,
             budget_filter=budget_filter,
             opts=pulumi.resource.ResourceOptions(
-                depends_on=[self._svc_cloudbillingbudgets]
+                depends_on=[self._svc_cloudbillingbudgets],
             ),
             **kwargs,
         )
@@ -248,8 +252,10 @@ class GcpInfrastructure(CloudInfraBase):
                 custom_period=gcp.billing.BudgetBudgetFilterCustomPeriodArgs(
                     # arbitrary start date before all shared projects
                     start_date=gcp.billing.BudgetBudgetFilterCustomPeriodStartDateArgs(
-                        year=start_date.year, month=start_date.month, day=start_date.day
-                    )
+                        year=start_date.year,
+                        month=start_date.month,
+                        day=start_date.day,
+                    ),
                 ),
             ),
             project=project,
@@ -272,14 +278,16 @@ class GcpInfrastructure(CloudInfraBase):
         return gcp.storage.BucketLifecycleRuleArgs(
             action=gcp.storage.BucketLifecycleRuleActionArgs(type='Delete'),
             condition=gcp.storage.BucketLifecycleRuleConditionArgs(
-                days_since_noncurrent_time=days, with_state='ARCHIVED'
+                days_since_noncurrent_time=days,
+                with_state='ARCHIVED',
             ),
         )
 
     def bucket_rule_archive(self, days=ARCHIVE_PERIOD_IN_DAYS) -> Any:
         return gcp.storage.BucketLifecycleRuleArgs(
             action=gcp.storage.BucketLifecycleRuleActionArgs(
-                type='SetStorageClass', storage_class='ARCHIVE'
+                type='SetStorageClass',
+                storage_class='ARCHIVE',
             ),
             condition=gcp.storage.BucketLifecycleRuleConditionArgs(age=days),
         )
@@ -291,14 +299,15 @@ class GcpInfrastructure(CloudInfraBase):
         )
 
     def bucket_rule_abort_incomplete_multipart_upload(
-        self, days=BUCKET_DELETE_INCOMPLETE_UPLOAD_PERIOD_IN_DAYS
+        self,
+        days=BUCKET_DELETE_INCOMPLETE_UPLOAD_PERIOD_IN_DAYS,
     ):
         """
         Lifecycle rule that deletes incomplete multipart uploads after n days
         """
         return gcp.storage.BucketLifecycleRuleArgs(
             action=gcp.storage.BucketLifecycleRuleActionArgs(
-                type='AbortIncompleteMultipartUpload'
+                type='AbortIncompleteMultipartUpload',
             ),
             condition=gcp.storage.BucketLifecycleRuleConditionArgs(age=days),
         )
@@ -318,7 +327,7 @@ class GcpInfrastructure(CloudInfraBase):
         requester_pays=False,
         versioning: bool = True,
         autoclass: bool = False,
-        project: str = None,
+        project: Optional[str] = None,
     ) -> Any:
         unique_bucket_name = name
         if not unique:
@@ -364,7 +373,7 @@ class GcpInfrastructure(CloudInfraBase):
 
         if isinstance(member, str):
             if member.endswith('.iam.gserviceaccount.com') and not member.startswith(
-                'serviceAccount:'
+                'serviceAccount:',
             ):
                 return f'serviceAccount:{member}'
 
@@ -387,7 +396,7 @@ class GcpInfrastructure(CloudInfraBase):
             return member
 
         raise NotImplementedError(
-            f'Invalid preferred GroupMembership type {type(member)}'
+            f'Invalid preferred GroupMembership type {type(member)}',
         )
 
     def get_group_key(self, group):
@@ -400,7 +409,7 @@ class GcpInfrastructure(CloudInfraBase):
 
         if isinstance(group, str):
             if group.endswith(
-                '@' + self.config.gcp.groups_domain
+                '@' + self.config.gcp.groups_domain,
             ) and not group.startswith('group:'):
                 return f'group:{group}'
 
@@ -425,7 +434,9 @@ class GcpInfrastructure(CloudInfraBase):
     # explicitly so that resources can maintain the same resource key no matter where
     # they appear in the list.
     def bucket_membership_to_role_list(
-        self, membership: BucketMembership, resource_key: str
+        self,
+        membership: BucketMembership,
+        resource_key: str,
     ):
         if membership == BucketMembership.MUTATE:
             return [
@@ -448,7 +459,7 @@ class GcpInfrastructure(CloudInfraBase):
                 BucketMembershipRole(
                     f'{self.organization.id}/roles/StorageObjectAndBucketViewer',
                     resource_key,
-                )
+                ),
             ]
         if membership == BucketMembership.LIST:
             return [
@@ -461,7 +472,11 @@ class GcpInfrastructure(CloudInfraBase):
         raise ValueError(f'Unrecognised bucket membership type {membership}')
 
     def add_member_to_bucket(
-        self, resource_key: str, bucket, member, membership: BucketMembership
+        self,
+        resource_key: str,
+        bucket,
+        member,
+        membership: BucketMembership,
     ) -> Any:
         role_list = self.bucket_membership_to_role_list(membership, resource_key)
 
@@ -472,15 +487,19 @@ class GcpInfrastructure(CloudInfraBase):
                 member=self.get_member_key(member),
                 role=role_item.role,
                 opts=pulumi.resource.ResourceOptions(
-                    depends_on=[self._svc_cloudidentity]
+                    depends_on=[self._svc_cloudidentity],
                 ),
             )
 
     def give_member_ability_to_list_buckets(
-        self, resource_key: str, member, project: str = None
+        self,
+        resource_key: str,
+        member,
+        project: Optional[str] = None,
     ):
         role_list = self.bucket_membership_to_role_list(
-            BucketMembership.LIST, resource_key
+            BucketMembership.LIST,
+            resource_key,
         )
 
         for role_item in role_list:
@@ -490,12 +509,16 @@ class GcpInfrastructure(CloudInfraBase):
                 member=self.get_member_key(member),
                 project=project or self.project_id,
                 opts=pulumi.resource.ResourceOptions(
-                    depends_on=[self._svc_cloudidentity]
+                    depends_on=[self._svc_cloudidentity],
                 ),
             )
 
     def create_machine_account(
-        self, name: str, project: str = None, *, resource_key: str = None
+        self,
+        name: str,
+        project: Optional[str] = None,
+        *,
+        resource_key: Optional[str] = None,
     ) -> Any:
         if project and isinstance(project, gcp.organizations.Project):
             project = project.project_id
@@ -534,7 +557,7 @@ class GcpInfrastructure(CloudInfraBase):
             role=_role,
             member=self.get_member_key(member),
             opts=pulumi.resource.ResourceOptions(
-                depends_on=[self._svc_cloudidentity, self._svc_iam]
+                depends_on=[self._svc_cloudidentity, self._svc_iam],
             ),
         )
 
@@ -564,7 +587,11 @@ class GcpInfrastructure(CloudInfraBase):
         return group
 
     def add_group_member(
-        self, resource_key: str, group, member, unique_resource_key: bool = False
+        self,
+        resource_key: str,
+        group,
+        member,
+        unique_resource_key: bool = False,
     ) -> Any:
         if self.config.disable_group_memberships:
             return
@@ -576,13 +603,13 @@ class GcpInfrastructure(CloudInfraBase):
             resource_key,
             group=self.get_group_key(group),
             preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
-                id=self.get_preferred_group_membership_key(member)
+                id=self.get_preferred_group_membership_key(member),
             ),
             roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
         )
 
-    def create_secret(self, name: str, project: str = None) -> Any:
+    def create_secret(self, name: str, project: Optional[str] = None) -> Any:
         return gcp.secretmanager.Secret(
             self.get_pulumi_name(name),
             secret_id=name,
@@ -605,7 +632,7 @@ class GcpInfrastructure(CloudInfraBase):
         secret,
         member,
         membership: SecretMembership,
-        project: str = None,
+        project: Optional[str] = None,
     ) -> Any:
         if membership == SecretMembership.ADMIN:
             role = 'roles/secretmanager.secretVersionManager'
@@ -618,11 +645,14 @@ class GcpInfrastructure(CloudInfraBase):
             secret_id = secret.id
         elif isinstance(secret, str):
             secret_id = secret
-            if not secret.count('/') == 3:
+            if secret.count('/') != 3:  # noqa: PLR2004
                 if isinstance(project, gcp.organizations.Project):
                     project = project.id
                 secret_id = pulumi.Output.concat(
-                    'projects/', project or self.project_id, '/secrets/', secret
+                    'projects/',
+                    project or self.project_id,
+                    '/secrets/',
+                    secret,
                 )
         else:
             raise ValueError(f'Unexpected secret type: {secret} ({type(secret)})')
@@ -642,7 +672,9 @@ class GcpInfrastructure(CloudInfraBase):
         contents: Any,
     ):
         return gcp.secretmanager.SecretVersion(
-            self.get_pulumi_name(resource_key), secret=secret.id, secret_data=contents
+            self.get_pulumi_name(resource_key),
+            secret=secret.id,
+            secret_data=contents,
         )
 
     # region CONTAINER REGISTRY
@@ -657,7 +689,12 @@ class GcpInfrastructure(CloudInfraBase):
         )
 
     def add_member_to_container_registry(
-        self, resource_key: str, registry, member, membership, project=None
+        self,
+        resource_key: str,
+        registry,
+        member,
+        membership,
+        project=None,
     ) -> Any:
         if membership == ContainerRegistryMembership.READER:
             role = 'roles/artifactregistry.reader'
@@ -702,7 +739,12 @@ class GcpInfrastructure(CloudInfraBase):
         )
 
     def add_cloudrun_invoker(
-        self, resource_key: str, *, service: str, project: str, member
+        self,
+        resource_key: str,
+        *,
+        service: str,
+        project: str,
+        member,
     ):
         gcp.cloudrun.IamMember(
             self.get_pulumi_name(resource_key),
@@ -714,7 +756,12 @@ class GcpInfrastructure(CloudInfraBase):
         )
 
     def add_project_role(
-        self, resource_key: str, *, member: Any, role: str, project: str = None
+        self,
+        resource_key: str,
+        *,
+        member: Any,
+        role: str,
+        project: Optional[str] = None,
     ):
         gcp.projects.IAMMember(
             self.get_pulumi_name(resource_key),

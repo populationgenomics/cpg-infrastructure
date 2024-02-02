@@ -1,4 +1,4 @@
-# pylint: disable=missing-function-docstring,missing-class-docstring,invalid-name,too-many-return-statements
+# flake8: noqa: ANN102,ANN204,ANN206,,C901,ANN401,PLR2004mERA001
 """
 This module contains all the configuration objects that are used to
 describe the CPG infrastructure, including what's required from a
@@ -29,10 +29,10 @@ GroupName = Literal[
 class CPGInfrastructureUser(DeserializableDataclass):
     @dataclasses.dataclass(frozen=True)
     class Cloud(DeserializableDataclass):
-        id: str
+        id: str  # noqa: A003
         hail_batch_username: str | None = None
 
-    id: MemberKey
+    id: MemberKey  # noqa: A003
     clouds: dict[CloudName, Cloud]
     projects: list[str]
     add_to_internal_hail_batch_projects: bool = False
@@ -216,7 +216,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
 
     # The default budget notification thresholds
     budget_notification_thresholds: list[float] = dataclasses.field(
-        default_factory=lambda: [0.5, 0.9, 1.0]
+        default_factory=lambda: [0.5, 0.9, 1.0],
     )
 
     @staticmethod
@@ -226,7 +226,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         return CPGInfrastructureConfig.from_dict(d)
 
     @staticmethod
-    def from_dict(d: dict[str, Any]):
+    def from_dict(d: dict[str, Any]) -> 'CPGInfrastructureConfig':
         if 'infrastructure' in d:
             d = d['infrastructure']
         return CPGInfrastructureConfig(**d)
@@ -247,7 +247,9 @@ class CPGDatasetComponents(Enum):
     ANALYSIS_RUNNER = 'analysis-runner'
 
     @staticmethod
-    def default_component_for_infrastructure():
+    def default_component_for_infrastructure() -> (
+        dict[str, list['CPGDatasetComponents']]
+    ):
         return {
             'dry-run': list(CPGDatasetComponents),
             'gcp': list(CPGDatasetComponents),
@@ -281,7 +283,7 @@ class CPGDatasetConfig(DeserializableDataclass):
             super().__post_init__()
         except TypeError as e:
             raise TypeError(
-                f'Could not instantiate {self.__class__.__name__} for {self.dataset!r}: {str(e)}'
+                f'Could not instantiate {self.__class__.__name__} for {self.dataset!r}: {e!s}',
             ) from e
 
     @dataclasses.dataclass(frozen=True)
@@ -336,7 +338,7 @@ class CPGDatasetConfig(DeserializableDataclass):
 
     # which clouds do you want to deploy to?
     deploy_locations: list[CloudName] = dataclasses.field(
-        default_factory=lambda: ['gcp']
+        default_factory=lambda: ['gcp'],
     )
 
     is_internal_dataset: bool = False
@@ -369,7 +371,7 @@ class CPGDatasetConfig(DeserializableDataclass):
 
     # which components should this dataset deploy on each cloud
     components: dict[CloudName, list[CPGDatasetComponents]] = dataclasses.field(
-        default_factory=dict
+        default_factory=dict,
     )
 
     # Which users to do you want to be a part of each group.

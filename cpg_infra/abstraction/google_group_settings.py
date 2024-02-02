@@ -1,3 +1,4 @@
+# flake8: noqa: ANN001,ARG002
 """
 Contains pulumi.dynamic.ResourceProvider implementations for Google Groups settings.
 """
@@ -25,7 +26,7 @@ class GoogleGroupSettings(pulumi.dynamic.Resource):
         group_email: str,
         settings: dict,
         opts: pulumi.ResourceOptions | None = None,
-    ):
+    ) -> None:
         super().__init__(
             GoogleGroupSettingsProvider(),
             name,
@@ -52,7 +53,8 @@ class GoogleGroupSettingsProvider(pulumi.dynamic.ResourceProvider):
             'settings': updated_settings,
         }
         return pulumi.dynamic.CreateResult(
-            id_=f'google_group_settings::{group_email}', outs=outputs
+            id_=f'google_group_settings::{group_email}',
+            outs=outputs,
         )
 
     def read(self, id_, props):
@@ -99,7 +101,9 @@ def get_groups_credentials():
 def get_groups_settings_service():
     """Returns the Google Groups settings service."""
     return googleapiclient.discovery.build(
-        'groupssettings', 'v1', credentials=get_groups_credentials()
+        'groupssettings',
+        'v1',
+        credentials=get_groups_credentials(),
     ).groups()
 
 

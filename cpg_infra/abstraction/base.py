@@ -1,4 +1,4 @@
-# pylint: disable=missing-function-docstring,unnecessary-pass,too-many-public-methods,unused-argument
+# flake8: noqa: ERA001,ANN001,ANN102,ANN202,ANN205,ANN206,ANN401,ARG002
 """
 Generic Infrastructure abstraction that relies on each to be subclassed
 by an equivalent GCP / Azure implementation.
@@ -19,7 +19,7 @@ from abc import ABC, abstractmethod
 from datetime import date
 from enum import Enum
 from functools import cached_property
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 import pulumi
 
@@ -74,8 +74,10 @@ class CloudInfraBase(ABC):
     """
 
     def __init__(
-        self, config: CPGInfrastructureConfig, dataset_config: CPGDatasetConfig
-    ):
+        self,
+        config: CPGInfrastructureConfig,
+        dataset_config: CPGDatasetConfig,
+    ) -> None:
         super().__init__()
         self.config = config
         self.dataset_config = dataset_config
@@ -100,7 +102,6 @@ class CloudInfraBase(ABC):
     @abstractmethod
     def storage_url_regex(cls):
         """Regex for matching storage urls"""
-        pass
 
     @property
     def dataset(self):
@@ -124,7 +125,6 @@ class CloudInfraBase(ABC):
     @abstractmethod
     def member_id(member) -> str | pulumi.Output[str]:
         """Get the identifier for the user, that can be used in the group-cache"""
-        pass
 
     # region PROJECT
 
@@ -144,7 +144,12 @@ class CloudInfraBase(ABC):
 
     @abstractmethod
     def create_fixed_budget(
-        self, resource_key: str, *, project, budget, start_date: date = date(2022, 1, 1)
+        self,
+        resource_key: str,
+        *,
+        project,
+        budget,
+        start_date: date = date(2022, 1, 1),
     ):
         pass
 
@@ -152,19 +157,17 @@ class CloudInfraBase(ABC):
 
     # region BUCKET
     @abstractmethod
-    def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
+    def bucket_rule_undelete(self, days: int = UNDELETE_PERIOD_IN_DAYS) -> Any:
         """
         Return a lifecycle_rule that stores data for n days after delete"""
-        pass
 
     @abstractmethod
-    def bucket_rule_temporary(self, days=TMP_BUCKET_PERIOD_IN_DAYS) -> Any:
+    def bucket_rule_temporary(self, days: int = TMP_BUCKET_PERIOD_IN_DAYS) -> Any:
         """
         Return a lifecycle_rule that deletes data n days after its creation"""
-        pass
 
     @abstractmethod
-    def bucket_rule_archive(self, days=ARCHIVE_PERIOD_IN_DAYS) -> Any:
+    def bucket_rule_archive(self, days: int = ARCHIVE_PERIOD_IN_DAYS) -> Any:
         pass
 
     @abstractmethod
@@ -176,14 +179,13 @@ class CloudInfraBase(ABC):
         requester_pays: bool = False,
         versioning: bool = True,
         autoclass: bool = False,
-        project: str = None,
+        project: Optional[str] = None,
     ) -> Any:
         """
         This should take a potentially `non-unique` bucket name,
         and create a bucket, returning a resource.
         :param requester_pays:
         """
-        pass
 
     @abstractmethod
     def bucket_output_path(self, bucket):
@@ -193,27 +195,31 @@ class CloudInfraBase(ABC):
             https://cpg-dataset.blob.core.windows.net/main/
             s3://cpg-{dataset}-main
         """
-        pass
 
     @abstractmethod
     def add_member_to_bucket(
-        self, resource_key: str, bucket, member, membership: BucketMembership
+        self,
+        resource_key: str,
+        bucket,
+        member,
+        membership: BucketMembership,
     ) -> Any:
         """
         Add some member to a bucket.
         Note: You MUST specify a unique resource_key
         :param membership:
         """
-        pass
 
     @abstractmethod
     def add_blob_to_bucket(self, resource_name, bucket, output_name, contents):
         """Add blob to a bucket, contents can be awaitable string"""
-        pass
 
     @abstractmethod
     def give_member_ability_to_list_buckets(
-        self, resource_key: str, member, project: str = None
+        self,
+        resource_key: str,
+        member,
+        project: Optional[str] = None,
     ):
         pass
 
@@ -222,13 +228,16 @@ class CloudInfraBase(ABC):
     # region MACHINE ACCOUNTS
     @abstractmethod
     def create_machine_account(
-        self, name: str, project: str = None, *, resource_key: str = None
+        self,
+        name: str,
+        project: Optional[str] = None,
+        *,
+        resource_key: Optional[str] = None,
     ) -> Any:
         """
         Generate a non-person account with some name
         :param project:
         """
-        pass
 
     @abstractmethod
     def add_member_to_machine_account_role(
@@ -237,7 +246,7 @@ class CloudInfraBase(ABC):
         machine_account,
         member,
         role: MachineAccountRole,
-        project: str = None,
+        project: Optional[str] = None,
     ) -> Any:
         pass
 
@@ -255,14 +264,18 @@ class CloudInfraBase(ABC):
 
     @abstractmethod
     def add_group_member(
-        self, resource_key: str, group, member, unique_resource_key: bool = False
+        self,
+        resource_key: str,
+        group,
+        member,
+        unique_resource_key: bool = False,
     ) -> Any:
         pass
 
     # SECRETS
 
     @abstractmethod
-    def create_secret(self, name: str, project: str = None) -> Any:
+    def create_secret(self, name: str, project: Optional[str] = None) -> Any:
         pass
 
     @abstractmethod
@@ -272,7 +285,7 @@ class CloudInfraBase(ABC):
         secret,
         member,
         membership: SecretMembership,
-        project: str = None,
+        project: Optional[str] = None,
     ) -> Any:
         pass
 
@@ -336,14 +349,19 @@ class DryRunInfra(CloudInfraBase):
         project=None,
     ):
         print(
-            f'{resource_key} :: Create monthly budget for {project}: ${budget} {self.config.budget_currency}'
+            f'{resource_key} :: Create monthly budget for {project}: ${budget} {self.config.budget_currency}',
         )
 
     def create_fixed_budget(
-        self, resource_key: str, *, project, budget, start_date: date = date(2022, 1, 1)
+        self,
+        resource_key: str,
+        *,
+        project,
+        budget,
+        start_date: date = date(2022, 1, 1),
     ):
         print(
-            f'{resource_key} :: Create fixed budget for {project}: ${budget} {self.config.budget_currency} (from {start_date})'
+            f'{resource_key} :: Create fixed budget for {project}: ${budget} {self.config.budget_currency} (from {start_date})',
         )
 
     def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
@@ -363,7 +381,7 @@ class DryRunInfra(CloudInfraBase):
         requester_pays: bool = False,
         versioning: bool = True,
         autoclass: bool = False,
-        project: str = None,
+        project: Optional[str] = None,
     ) -> Any:
         print(f'Create bucket: {name} w/ rules: {", ".join(lifecycle_rules)}')
         return f'BUCKET://{name}'
@@ -372,7 +390,11 @@ class DryRunInfra(CloudInfraBase):
         print(f'{resource_key} :: Add {member} to {bucket}')
 
     def create_machine_account(
-        self, name: str, project: str = None, *, resource_key: str = None
+        self,
+        name: str,
+        project: Optional[str] = None,
+        *,
+        resource_key: Optional[str] = None,
     ) -> Any:
         print(f'Creating SA: {name}')
         return name + '@generated.service-account'
@@ -383,7 +405,7 @@ class DryRunInfra(CloudInfraBase):
         machine_account,
         member,
         role: MachineAccountRole,
-        project: str = None,
+        project: Optional[str] = None,
     ) -> Any:
         print(f'Allow {member} to access {machine_account}')
 
@@ -395,16 +417,25 @@ class DryRunInfra(CloudInfraBase):
         return f'{name}@{self.config.gcp.groups_domain}'
 
     def add_group_member(
-        self, resource_key: str, group, member, unique_resource_key: bool = False
+        self,
+        resource_key: str,
+        group,
+        member,
+        unique_resource_key: bool = False,
     ) -> Any:
         print(f'{resource_key} :: Add {member} to {group}')
 
-    def create_secret(self, name: str, project: str = None) -> Any:
+    def create_secret(self, name: str, project: Optional[str] = None) -> Any:
         print(f'Creating secret: {name}')
         return f'SECRET:{name}'
 
     def add_secret_member(
-        self, resource_key: str, secret, member, membership, project: str = None
+        self,
+        resource_key: str,
+        secret,
+        member,
+        membership,
+        project: Optional[str] = None,
     ) -> Any:
         print(f'{resource_key} :: Allow {member} to read secret {secret}')
 
@@ -413,18 +444,26 @@ class DryRunInfra(CloudInfraBase):
         resource_key: str,
         secret: Any,
         contents: Any,
-        processor: Callable[[Any], Any] = None,
+        processor: Optional[Callable[[Any], Any]] = None,
     ):
         _processor = processor or (lambda el: el)
         return f'{resource_key} :: {secret}.add_version({_processor(contents)!r})'
 
     def add_member_to_container_registry(
-        self, resource_key: str, registry, member, membership, project=None
+        self,
+        resource_key: str,
+        registry,
+        member,
+        membership,
+        project=None,
     ) -> Any:
         return f'{resource_key} :: Add {member} to CONTAINER registry {registry}'
 
     def give_member_ability_to_list_buckets(
-        self, resource_key: str, member, project: str = None
+        self,
+        resource_key: str,
+        member,
+        project: Optional[str] = None,
     ):
         return f'{resource_key} :: {member} can list buckets'
 

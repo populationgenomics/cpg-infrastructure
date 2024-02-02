@@ -1,6 +1,6 @@
 # !/usr/bin/env python
 # Disable rule for that module-level exports be ALL_CAPS, for legibility.
-# pylint: disable=C0103,missing-function-docstring,W0613
+# flake8: noqa: ERA001
 """
 Python Pulumi program for creating Aggregate Billing Function Stack.
 
@@ -27,17 +27,19 @@ from functools import cached_property
 
 import pulumi
 import pulumi_gcp as gcp
-from cpg_utils.cloud import read_secret
 
 from cpg_infra.plugin import CpgInfrastructurePlugin
 from cpg_infra.utils import archive_folder
+from cpg_utils.cloud import read_secret
 
 PATH_TO_AGGREGATE_SOURCE_CODE = os.path.join(os.path.dirname(__file__), 'aggregate')
 PATH_TO_MONTHLY_AGGREGATE_SOURCE_CODE = os.path.join(
-    os.path.dirname(__file__), 'monthly_aggregate'
+    os.path.dirname(__file__),
+    'monthly_aggregate',
 )
 PATH_TO_UPDATE_BUDGET_SOURCE_CODE = os.path.join(
-    os.path.dirname(__file__), 'update_budget'
+    os.path.dirname(__file__),
+    'update_budget',
 )
 
 
@@ -137,7 +139,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
         ):
             print(
                 'Skipping monthly export as billing_sheet_id / '
-                'monthly_summary_table were not set'
+                'monthly_summary_table were not set',
             )
             return
 
@@ -192,17 +194,17 @@ class BillingAggregator(CpgInfrastructurePlugin):
 
     def setup_aggregator_functions(self):
         """Setup hourly aggregator functions"""
-        if not 0 < self.config.billing.aggregator.interval_hours <= 24:
+        if not 0 < self.config.billing.aggregator.interval_hours <= 24:  # noqa: PLR2004
             raise ValueError(
                 f'Invalid aggregator interval, {self.config.billing.aggregator.interval_hours} '
-                f'hours (0, 24]'
+                f'hours (0, 24]',
             )
 
         if 24 % self.config.billing.aggregator.interval_hours != 0:
             print(
                 f'The aggregator interval ({self.config.billing.aggregator.interval_hours}hrs) '
                 f'does not cleanly fit into 24 hours, this means there might be '
-                f'two runs within the interval period'
+                f'two runs within the interval period',
             )
 
         # The Cloud Function source code itself needs to be zipped up into an
@@ -331,7 +333,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
             project=self.config.billing.gcp.project_id,
             location=self.config.gcp.region,
             opts=pulumi.ResourceOptions(
-                depends_on=[self.functions_service, self.build_service]
+                depends_on=[self.functions_service, self.build_service],
             ),
         )
 
@@ -341,7 +343,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 resource.type="cloud_function"
                 AND resource.labels.function_name="{fxn_name}"
                 AND severity >= WARNING
-            """
+            """,
         )
 
         # Create the Cloud Function's event alert
@@ -362,7 +364,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
             alert_strategy=gcp.monitoring.AlertPolicyAlertStrategyArgs(
                 notification_rate_limit=(
                     gcp.monitoring.AlertPolicyAlertStrategyNotificationRateLimitArgs(
-                        period='300s'
+                        period='300s',
                     )
                 ),
             ),

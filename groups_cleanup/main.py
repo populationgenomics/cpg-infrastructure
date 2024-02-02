@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+# flake8: noqa: ANN001
 """Removes group memberships matching a given regular expression."""
 
 import re
@@ -22,7 +22,7 @@ def list_all_groups(service):
                 'query': f'parent=="customerId/{CUSTOMER_ID}" && "cloudidentity.googleapis.com/groups.discussion_forum" in labels',
                 'page_size': PAGE_SIZE,
                 'page_token': next_page_token,
-            }
+            },
         )
         search_group_request = service.groups().search()
         param = '&' + search_query
@@ -35,10 +35,7 @@ def list_all_groups(service):
         for group in response['groups']:
             groups[group['groupKey']['id']] = group['name']
 
-        if 'nextPageToken' in response:
-            next_page_token = response['nextPageToken']
-        else:
-            next_page_token = ''
+        next_page_token = response.get('nextPageToken', '')
 
         if len(next_page_token) == 0:
             break
@@ -55,7 +52,7 @@ def list_members(service, group_name):
             {
                 'page_size': PAGE_SIZE,
                 'page_token': next_page_token,
-            }
+            },
         )
         search_members_request = service.groups().memberships().list(parent=group_name)
         param = '&' + search_query
@@ -68,10 +65,7 @@ def list_members(service, group_name):
         for member in response['memberships']:
             members[member['preferredMemberKey']['id']] = member['name']
 
-        if 'nextPageToken' in response:
-            next_page_token = response['nextPageToken']
-        else:
-            next_page_token = ''
+        next_page_token = response.get('nextPageToken', '')
 
         if len(next_page_token) == 0:
             break
@@ -81,7 +75,7 @@ def list_members(service, group_name):
 
 def main():
     """Main entrypoint."""
-    if len(sys.argv) != 2:
+    if len(sys.argv) != 2:  # noqa: PLR2004
         print('Usage: submit.py <member_regex>')
         sys.exit(1)
 
