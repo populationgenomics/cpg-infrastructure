@@ -629,13 +629,12 @@ def upsert_rows_into_bigquery(
     It has some optimisations about max insert size, so this should be
     able to take an arbitrary amount of rows.
     """
-
-    window_start = datetime.fromisoformat(min(o['usage_start_time'] for o in objs))
-    window_end = datetime.fromisoformat(max(o['usage_end_time'] for o in objs))
-
     if not objs:
         logger.info('Not inserting any rows')
         return 0
+
+    window_start = datetime.fromisoformat(min(o['usage_start_time'] for o in objs))
+    window_end = datetime.fromisoformat(max(o['usage_end_time'] for o in objs))
 
     n_chunks = math.ceil(len(objs) / chunk_size)
     total_size_mb = sys.getsizeof(objs) / (1024 * 1024)
@@ -814,7 +813,7 @@ def upsert_aggregated_dataframe_into_bigquery(
 CACHED_CURRENCY_CONVERSION: dict[str, float] = {}
 
 
-def get_currency_conversion_rate_for_time(time: datetime):
+def get_currency_conversion_rate_for_time(time: datetime) -> float:
     """
     Get the currency conversion rate for a given time.
     Noting that GCP conversion rates are decided at the start of the month,
@@ -825,8 +824,12 @@ def get_currency_conversion_rate_for_time(time: datetime):
     assert GCP_BILLING_BQ_TABLE
 
     window_start, window_end = get_invoice_month_range(time)
-
-    key = f'{time.year}{str(time.month).zfill(2)}'
+    # mfranklin: don't jump ahead of the start of the new invoice.month,
+    #   it's only about 18 hours, but we'll use 22 to give some time for new billing
+    #   data to be available.
+    adjusted_time = time - timedelta(hours=22)
+    window_start = window_start - timedelta(hours=22)
+    key = f'{adjusted_time.year}{str(adjusted_time.month).zfill(2)}'
     if key not in CACHED_CURRENCY_CONVERSION:
         logger.info(f'Looking up currency conversion rate for {key}')
         if '`' in GCP_BILLING_BQ_TABLE:
@@ -860,7 +863,9 @@ def get_currency_conversion_rate_for_time(time: datetime):
         )
 
         if query_result.total_rows == 0:
-            raise ValueError(f'Could not find billing data for {key!r}, for {time}')
+            logging.warning(f'Could not find billing data for {key!r}, for {time}')
+            # find it from 2 days ago
+            return get_currency_conversion_rate_for_time(time - timedelta(days=2))
 
         for r in query_result:
             CACHED_CURRENCY_CONVERSION[key] = r['currency_conversion_rate']
