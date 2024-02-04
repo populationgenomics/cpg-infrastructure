@@ -22,7 +22,6 @@ setuptools.setup(
         'cpg_infra',
         *['cpg_infra.' + p for p in sorted(setuptools.find_packages('./cpg_infra'))],
     ],
-    # package_data={},
     include_package_data=True,
     zip_safe=False,
     scripts=[],

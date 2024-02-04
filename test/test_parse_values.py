@@ -59,14 +59,16 @@ class TestParseValues(TestCase):
         """Check we allow a dict without a type"""
         dtype = dict
         self.assertDictEqual(
-            {'hello': 'world'}, try_parse_value_as_type({'hello': 'world'}, dtype)
+            {'hello': 'world'},
+            try_parse_value_as_type({'hello': 'world'}, dtype),
         )
 
     def test_parse_dict_str_type(self):
         """Check we allow a dict with a type"""
         dtype = dict[str, str]
         self.assertDictEqual(
-            {'hello': 'world'}, try_parse_value_as_type({'hello': 'world'}, dtype)
+            {'hello': 'world'},
+            try_parse_value_as_type({'hello': 'world'}, dtype),
         )
 
     def test_parse_dict_str_failure(self):
@@ -93,14 +95,16 @@ class TestParseValues(TestCase):
         """Check we allow a tuple without a type"""
         dtype = tuple
         self.assertTupleEqual(
-            ('hello', 'world'), try_parse_value_as_type(('hello', 'world'), dtype)
+            ('hello', 'world'),
+            try_parse_value_as_type(('hello', 'world'), dtype),
         )
 
     def test_parse_tuple_with_type(self):
         """Check we allow a tuple with a type"""
         dtype = tuple[str, str]
         self.assertTupleEqual(
-            ('hello', 'world'), try_parse_value_as_type(('hello', 'world'), dtype)
+            ('hello', 'world'),
+            try_parse_value_as_type(('hello', 'world'), dtype),
         )
 
     def test_parse_tuple_mismatched_length(self):

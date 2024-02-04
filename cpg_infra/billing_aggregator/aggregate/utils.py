@@ -1,4 +1,4 @@
-# pylint: disable=global-statement,too-many-arguments,line-too-long,too-many-lines
+# flake8: noqa: PLR2004,ERA001,DTZ003,DTZ005,DTZ006,DTZ007,C901,ANN401
 """
 Class of helper functions for billing aggregate functions
 """
@@ -13,17 +13,28 @@ from base64 import b64decode
 from datetime import date, datetime, timedelta
 from io import StringIO
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Iterable, Iterator, Sequence, Type, TypeVar
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Iterable,
+    Iterator,
+    Optional,
+    Sequence,
+    Type,
+    TypeVar,
+)
 
 import aiohttp
 import google.cloud.bigquery as bq
 import google.cloud.logging
 import pandas as pd
 import rapidjson
-from cpg_utils.cloud import read_secret
 from flask import Request
 from google.api_core.exceptions import ClientError
 from pandas import Timestamp
+
+from cpg_utils.cloud import read_secret
 
 for lname in (
     'asyncio',
@@ -113,7 +124,7 @@ SEQR_PROJECT_FIELD = {
         {
             'resource_name': 'organizations/648561325637',
             'display_name': 'populationgenomics.org.au',
-        }
+        },
     ],
 }
 
@@ -130,32 +141,31 @@ def get_bigquery_client():
 
 
 async def async_retry_transient_get_json_request(
-    url,
+    url: str,
     errors: Type[Exception] | tuple[Type[Exception], ...],
-    *args,
-    attempts=5,
-    session=None,
-    timeout_seconds=60,
-    **kwargs,
+    *args: list[Any],
+    attempts: int = 5,
+    session: aiohttp.ClientSession | None = None,
+    timeout_seconds: int = 60,
+    **kwargs: dict[str, Any],
 ):
     """
     Retry a function with exponential backoff.
     """
 
-    async def inner_block(_session):
+    async def inner_block(_session: aiohttp.ClientSession) -> dict | list | None:
         for attempt in range(1, attempts + 1):
             try:
                 async with _session.get(
                     url,
-                    timeout=aiohttp.ClientTimeout(total=timeout_seconds),
                     *args,
+                    timeout=aiohttp.ClientTimeout(total=timeout_seconds),
                     **kwargs,
                 ) as resp:
                     resp.raise_for_status()
-                    j = await resp.json()
-                    return j
+                    return await resp.json()
             # pylint: disable=broad-except
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 if not isinstance(e, errors):
                     raise
                 if attempt == attempts:
@@ -164,6 +174,7 @@ async def async_retry_transient_get_json_request(
             t = 2 ** (attempt + 1)
             logger.warning(f'Backing off {t} seconds for {url}')
             await asyncio.sleep(t)
+        return None
 
     if session:
         return await inner_block(session)
@@ -172,7 +183,7 @@ async def async_retry_transient_get_json_request(
         return await inner_block(session2)
 
 
-def chunk(iterable: Sequence[T], chunk_size) -> Iterator[Sequence[T]]:
+def chunk(iterable: Sequence[T], chunk_size: int) -> Iterator[Sequence[T]]:
     """
     Chunk a sequence by yielding lists of `chunk_size`
     """
@@ -180,7 +191,7 @@ def chunk(iterable: Sequence[T], chunk_size) -> Iterator[Sequence[T]]:
         yield iterable[i : i + chunk_size]
 
 
-def get_total_hail_cost(currency_conversion_rate, raw_cost):
+def get_total_hail_cost(currency_conversion_rate: float, raw_cost: float):
     """Get cost from hail batch_resource, including SERVICE_FEE"""
 
     return (1 + HAIL_SERVICE_FEE) * currency_conversion_rate * raw_cost
@@ -191,7 +202,7 @@ def get_schema_json(file: str) -> list[dict[str, Any]]:
     pwd = Path(__file__).parent.resolve()
     schema_path = pwd / file
     try:
-        with open(schema_path, 'r', encoding='utf-8') as f:
+        with open(schema_path, encoding='utf-8') as f:
             return json.load(f)
     except Exception as exp:
         raise exp
@@ -202,7 +213,7 @@ def get_bq_schema_json() -> list[dict[str, Any]]:
     return get_schema_json('aggregate_schema.json')
 
 
-def _format_bq_schema_json(schema: list[dict[str, Any]]):
+def _format_bq_schema_json(schema: list[dict[str, Any]]) -> list[dict]:
     """
     Take bq json schema, and convert it to bq.SchemaField objects"""
     formatted_schema = []
@@ -233,7 +244,7 @@ def parse_date_only_string(d: str | None) -> date | None:
 
     try:
         return datetime.strptime(d, '%Y-%m-%d').date()
-    except Exception as excep:
+    except Exception as excep:  # noqa: BLE001
         raise ValueError(f'Date could not be converted: {d}') from excep
 
 
@@ -264,20 +275,19 @@ def to_bq_time(time: datetime):
     return time.strftime('%Y-%m-%d %H:%M:%S')
 
 
-def get_date_time_from_value(key, value):
+def get_date_time_from_value(key: str, value: Any) -> datetime:
     """
     Guess datetime from some value
     """
     if isinstance(value, Timestamp):
         return value.to_pydatetime()
-    if isinstance(value, str):
-        if value.isdigit():
-            value = int(value)
+    if isinstance(value, str) and value.isdigit():
+        value = int(value)
     if isinstance(value, (int, float)):
         return datetime.fromtimestamp(int(value / 1000))
 
     raise ValueError(
-        f'Unable to determine {key} datetime conversion format: {value} :: {type(value)}'
+        f'Unable to determine {key} datetime conversion format: {value} :: {type(value)}',
     )
 
 
@@ -292,7 +302,9 @@ def get_hail_token() -> str:
 
     assert GCP_PROJECT
     return read_secret(
-        GCP_PROJECT, 'aggregate-billing-hail-token', fail_gracefully=False
+        GCP_PROJECT,
+        'aggregate-billing-hail-token',
+        fail_gracefully=False,
     )
 
 
@@ -387,7 +399,8 @@ async def get_finished_batches_for_date(
     while True:
         n_requests += 1
         jresponse = await get_completed_batches(
-            last_completed_timestamp=last_completed_timestamp, token=token
+            last_completed_timestamp=last_completed_timestamp,
+            token=token,
         )
 
         if (
@@ -396,12 +409,12 @@ async def get_finished_batches_for_date(
         ):
             raise ValueError(
                 'Something weird is happening with last_completed_timestamp: '
-                f'{last_completed_timestamp}'
+                f'{last_completed_timestamp}',
             )
         if n_requests > 0 and n_requests % 100 == 0:
             min_time_completed = min(b['time_completed'] for b in batches)
             logger.info(
-                f'At {n_requests} requests ({min_time_completed}) for getting completed batches'
+                f'At {n_requests} requests ({min_time_completed}) for getting completed batches',
             )
         last_completed_timestamp = jresponse.get('last_completed_timestamp')
         if not jresponse.get('batches'):
@@ -419,7 +432,7 @@ async def get_finished_batches_for_date(
             if time_completed < start:
                 logger.info(
                     f'{billing_project} :: Got {len(batches)} batches '
-                    f'in {n_requests} requests, skipping {skipped}'
+                    f'in {n_requests} requests, skipping {skipped}',
                 )
                 return batches
             if in_date_range:
@@ -428,7 +441,7 @@ async def get_finished_batches_for_date(
                 skipped += 1
 
 
-async def get_jobs_for_batch(batch_id, token: str) -> list[dict[str, Any]]:
+async def get_jobs_for_batch(batch_id: int, token: str) -> list[dict[str, Any]]:
     """
     For a single batch, fill in the 'jobs' field.
     """
@@ -469,10 +482,13 @@ async def get_jobs_for_batch(batch_id, token: str) -> list[dict[str, Any]]:
 async def process_entries_from_hail_in_chunks(
     start: datetime,
     end: datetime,
-    func_get_finalised_entries_for_batch,
-    billing_project: str = None,
-    entry_chunk_size=500,
-    batch_group_chunk_size=30,
+    func_get_finalised_entries_for_batch: Callable[
+        [dict[str, Any]],
+        list[dict[str, Any]],
+    ],
+    billing_project: Optional[str] = None,
+    entry_chunk_size: int = 500,
+    batch_group_chunk_size: int = 30,
     log_prefix: str = '',
     mode: str = 'prod',
     output_path: str = './',
@@ -486,7 +502,7 @@ async def process_entries_from_hail_in_chunks(
     Break them down by dataset, and then proportion the rest of the costs.
     """
 
-    def insert_entries(_entries):
+    def insert_entries(_entries: list[dict[str, Any]]) -> int:
         if mode in ('prod', 'dry-run'):
             return upsert_rows_into_bigquery(
                 table=GCP_AGGREGATE_DEST_TABLE,
@@ -515,7 +531,10 @@ async def process_entries_from_hail_in_chunks(
     lp = f'{log_prefix} ::' if log_prefix else ''
 
     batches = await get_finished_batches_for_date(
-        start=start, end=end, token=token, billing_project=billing_project
+        start=start,
+        end=end,
+        token=token,
+        billing_project=billing_project,
     )
     if func_batches_preprocessor:
         batches = await func_batches_preprocessor(batches)
@@ -532,19 +551,19 @@ async def process_entries_from_hail_in_chunks(
 
         # Get jobs for a fraction of each chunked batches
         # to avoid hitting hail batch too much
-        for chunked_batch_Group in chunk(batch_group, batch_group_chunk_size):
+        for chunked_batch_group in chunk(batch_group, batch_group_chunk_size):
             chunk_counter += 1
-            times = [b['time_created'] for b in chunked_batch_Group]
+            times = [b['time_created'] for b in chunked_batch_group]
             min_batch = min(times)
             max_batch = max(times)
 
             if len(batches) > 100:
                 logger.debug(
                     f'{lp}Getting jobs for batch chunk {chunk_counter}/{nchnks} '
-                    f'[{min_batch}, {max_batch}]'
+                    f'[{min_batch}, {max_batch}]',
                 )
 
-            promises = [get_jobs_for_batch(b['id'], token) for b in chunked_batch_Group]
+            promises = [get_jobs_for_batch(b['id'], token) for b in chunked_batch_group]
             jobs_in_batch.extend(await asyncio.gather(*promises))
 
         # insert all entries for each batch
@@ -553,7 +572,7 @@ async def process_entries_from_hail_in_chunks(
             if len(jobs) > 10000 and len(entries) > 1000:
                 logger.info(
                     f'Expecting large number of jobs ({len(jobs)}) from '
-                    f"batch {batch['id']}, inserting contents early"
+                    f"batch {batch['id']}, inserting contents early",
                 )
                 result += insert_entries(entries)
                 entries = []
@@ -574,7 +593,7 @@ async def process_entries_from_hail_in_chunks(
 RE_matcher = re.compile(r'-\d+$')
 
 
-def billing_row_to_topic(row, dataset_to_gcp_map: dict) -> str | None:
+def billing_row_to_topic(row: dict[str, Any], dataset_to_gcp_map: dict) -> str | None:
     """Convert a billing row to a topic name"""
     project_id = None
 
@@ -589,16 +608,15 @@ def billing_row_to_topic(row, dataset_to_gcp_map: dict) -> str | None:
     if not topic:
         return DEFAULT_TOPIC
 
-    topic = RE_matcher.sub('', topic)
-    return topic
+    return RE_matcher.sub('', topic)
 
 
 def upsert_rows_into_bigquery(
     objs: list[dict[str, Any]],
     dry_run: bool,
     table: str = GCP_AGGREGATE_DEST_TABLE,
-    chunk_size=DEFAULT_BQ_INSERT_CHUNK_SIZE,
-    max_chunk_size_mb=6,
+    chunk_size: int = DEFAULT_BQ_INSERT_CHUNK_SIZE,
+    max_chunk_size_mb: int = 6,
 ) -> int:
     """
     Upsert JSON rows into the BQ.aggregate table.
@@ -629,7 +647,7 @@ def upsert_rows_into_bigquery(
 
         logger.info(
             'The size of the objects to insert into BQ is too large, '
-            f'adjusting the chunk size to {chunk_size}'
+            f'adjusting the chunk size to {chunk_size}',
         )
 
     if n_chunks > 1:
@@ -639,27 +657,34 @@ def upsert_rows_into_bigquery(
     inserted_ids: set[int] = set()
 
     for chunk_idx, chunked_objs in enumerate(chunk(objs, chunk_size)):
+        if '`' in table:
+            raise ValueError('Table name cannot contain backticks')
+
         _query = f"""
             SELECT id FROM `{table}`
             WHERE id IN UNNEST(@ids)
             AND DATE_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end;
-        """
+        """  # noqa: S608
 
         # NOTE: it's possible to have valid duplicate rows
         # allow for adding duplicates on first upload only
         # Protects us against duplicate ids falling across chunks
-        ids = set(o['id'] for o in chunked_objs) - inserted_ids
+        ids = {o['id'] for o in chunked_objs} - inserted_ids
 
         job_config = bq.QueryJobConfig(
             query_parameters=[
                 bq.ArrayQueryParameter('ids', 'STRING', list(ids)),
                 bq.ScalarQueryParameter(
-                    'window_start', 'STRING', window_start.strftime('%Y-%m-%d')
+                    'window_start',
+                    'STRING',
+                    window_start.strftime('%Y-%m-%d'),
                 ),
                 bq.ScalarQueryParameter(
-                    'window_end', 'STRING', window_end.strftime('%Y-%m-%d')
+                    'window_end',
+                    'STRING',
+                    window_end.strftime('%Y-%m-%d'),
                 ),
-            ]
+            ],
         )
 
         result = get_bigquery_client().query(_query, job_config=job_config).result()
@@ -673,14 +698,14 @@ def upsert_rows_into_bigquery(
         if nrows == 0:
             logger.info(
                 f'Not inserting any rows 0/{len(chunked_objs)} '
-                f'({chunk_idx+1}/{n_chunks} chunk)'
+                f'({chunk_idx+1}/{n_chunks} chunk)',
             )
             continue
 
         if dry_run:
             logger.info(
                 f'DRY_RUN: Inserting {nrows}/{len(chunked_objs)} rows '
-                f'({chunk_idx+1}/{n_chunks} chunk)'
+                f'({chunk_idx+1}/{n_chunks} chunk)',
             )
             inserts += nrows
             continue
@@ -688,7 +713,7 @@ def upsert_rows_into_bigquery(
         # Count number of rows adding
         logger.info(
             f'Inserting {nrows}/{len(chunked_objs)} rows '
-            f'({chunk_idx+1}/{n_chunks} chunk)'
+            f'({chunk_idx+1}/{n_chunks} chunk)',
         )
 
         # Insert the new rows
@@ -699,13 +724,16 @@ def upsert_rows_into_bigquery(
         j = '\n'.join(json.dumps(o) for o in filtered_obj)
 
         resp = get_bigquery_client().load_table_from_file(
-            StringIO(j), table, job_config=job_config, project=GCP_PROJECT
+            StringIO(j),
+            table,
+            job_config=job_config,
+            project=GCP_PROJECT,
         )
         try:
             result = resp.result()
             logger.info(
                 f'Inserted {result.output_rows}/{nrows} rows '
-                f'({chunk_idx+1}/{n_chunks} chunk)'
+                f'({chunk_idx+1}/{n_chunks} chunk)',
             )
         except ClientError as e:
             logger.error(resp.errors)
@@ -718,7 +746,7 @@ def upsert_rows_into_bigquery(
 
 
 def upsert_aggregated_dataframe_into_bigquery(
-    df: pd.DataFrame,
+    dataframe: pd.DataFrame,
     window_start: datetime,
     window_end: datetime,
     table: str = GCP_AGGREGATE_DEST_TABLE,
@@ -728,43 +756,49 @@ def upsert_aggregated_dataframe_into_bigquery(
     It must respect the schema defined in get_bq_schema_json().
     """
 
-    if len(df['id']) == 0:
+    if len(dataframe['id']) == 0:
         logger.info('No rows to insert')
         return 0
 
     # Cannot use query parameters for table names
     # https://cloud.google.com/bigquery/docs/parameterized-queries
+    if '`' in table:
+        raise ValueError(f'Table name ({table}) cannot contain backticks')
     _query = f"""
         SELECT id FROM {table}
         WHERE id IN UNNEST(@ids)
         AND DATE_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end;
-    """
+    """  # noqa: S608
     job_config = bq.QueryJobConfig(
         query_parameters=[
-            bq.ArrayQueryParameter('ids', 'STRING', list(set(df['id']))),
+            bq.ArrayQueryParameter('ids', 'STRING', list(set(dataframe['id']))),
             bq.ScalarQueryParameter(
-                'window_start', 'STRING', window_start.strftime('%Y-%m-%d')
+                'window_start',
+                'STRING',
+                window_start.strftime('%Y-%m-%d'),
             ),
             bq.ScalarQueryParameter(
-                'window_end', 'STRING', window_end.strftime('%Y-%m-%d')
+                'window_end',
+                'STRING',
+                window_end.strftime('%Y-%m-%d'),
             ),
-        ]
+        ],
     )
 
     result = get_bigquery_client().query(_query, job_config=job_config).result()
     existing_ids = set(result.to_dataframe()['id'])
 
     # Filter out any rows that are already in the table
-    df = df[~df['id'].isin(existing_ids)]
+    dataframe = dataframe[~dataframe['id'].isin(existing_ids)]
 
     # Count number of rows adding
-    adding_rows = len(df)
+    adding_rows = len(dataframe)
 
     # Insert the new rows
     project_id = table.split('.')[0]
 
     table_schema = get_bq_schema_json()
-    df.to_gbq(
+    dataframe.to_gbq(
         table,
         project_id=project_id,
         table_schema=table_schema,
@@ -786,7 +820,9 @@ def get_currency_conversion_rate_for_time(time: datetime) -> float:
     and apply to each job that starts within the month, regardless of when
     the job finishes.
     """
+
     assert GCP_BILLING_BQ_TABLE
+
     window_start, window_end = get_invoice_month_range(time)
     # mfranklin: don't jump ahead of the start of the new invoice.month,
     #   it's only about 18 hours, but we'll use 22 to give some time for new billing
@@ -796,23 +832,31 @@ def get_currency_conversion_rate_for_time(time: datetime) -> float:
     key = f'{adjusted_time.year}{str(adjusted_time.month).zfill(2)}'
     if key not in CACHED_CURRENCY_CONVERSION:
         logger.info(f'Looking up currency conversion rate for {key}')
+        if '`' in GCP_BILLING_BQ_TABLE:
+            raise ValueError(
+                f'Table name ({GCP_BILLING_BQ_TABLE}) cannot contain backticks',
+            )
         query = f"""
             SELECT currency_conversion_rate
-            FROM {GCP_BILLING_BQ_TABLE}
+            FROM `{GCP_BILLING_BQ_TABLE}`
             WHERE invoice.month = @invoice_month
             AND DATE_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end
             LIMIT 1
-        """
+        """  # noqa: S608
         job_config = bq.QueryJobConfig(
             query_parameters=[
                 bq.ScalarQueryParameter('invoice_month', 'STRING', key),
                 bq.ScalarQueryParameter(
-                    'window_start', 'STRING', window_start.strftime('%Y-%m-%d')
+                    'window_start',
+                    'STRING',
+                    window_start.strftime('%Y-%m-%d'),
                 ),
                 bq.ScalarQueryParameter(
-                    'window_end', 'STRING', window_end.strftime('%Y-%m-%d')
+                    'window_end',
+                    'STRING',
+                    window_end.strftime('%Y-%m-%d'),
                 ),
-            ]
+            ],
         )
         query_result = (
             get_bigquery_client().query(query, job_config=job_config).result()
@@ -908,9 +952,9 @@ def get_start_and_end_from_request(
 
 
 def date_range_iterator(
-    start,
-    end,
-    intv=DEFAULT_RANGE_INTERVAL,
+    start: datetime,
+    end: datetime,
+    intv: timedelta = DEFAULT_RANGE_INTERVAL,
 ) -> Iterator[tuple[datetime, datetime]]:
     """
     Iterate over a range of dates.
@@ -924,7 +968,7 @@ def date_range_iterator(
     >>> list(date_range_iterator(datetime(2019, 1, 1), datetime(2019, 1, 4), intv=timedelta(days=2)))
     [(datetime.datetime(2019, 1, 1, 0, 0), datetime.datetime(2019, 1, 3, 0, 0)), (datetime.datetime(2019, 1, 3, 0, 0), datetime.datetime(2019, 1, 4, 0, 0))]
 
-    """  # noqa: E501
+    """
     dt_from = start
     dt_to = start + intv
     while dt_to < end:
@@ -937,7 +981,9 @@ def date_range_iterator(
         yield dt_from, dt_to
 
 
-def get_start_and_end_from_data(data) -> tuple[datetime | None, datetime | None]:
+def get_start_and_end_from_data(
+    data: str | dict | None,
+) -> tuple[datetime | None, datetime | None]:
     """
     Get the start and end times from the cloud function data.
     """
@@ -1018,7 +1064,7 @@ def get_hail_entry(
     batch_resource: str,
     start_time: datetime,
     end_time: datetime,
-    labels: dict[str, str] = None,
+    labels: Optional[dict[str, str]] = None,
 ) -> dict[str, Any]:
     """
     Get well-formed entry dictionary from keys
@@ -1099,9 +1145,9 @@ def infer_batch_namespace(batch: dict) -> str:
     if user:
         if 'test' in user:
             return 'test'
-        elif 'standard' in user:
+        if 'standard' in user:
             return 'main'
-        elif 'full' in user:
+        if 'full' in user:
             return 'main'
 
     return default

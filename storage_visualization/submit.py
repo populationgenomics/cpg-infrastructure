@@ -18,7 +18,7 @@ ALL_DATASETS = 'all-datasets'
 
 def main():
     """Main entrypoint."""
-    if len(sys.argv) != 2:
+    if len(sys.argv) != 2:  # noqa: PLR2004
         print('Usage: submit.py <config.yaml>')
         sys.exit(1)
 
@@ -26,16 +26,16 @@ def main():
         config = yaml.safe_load(f)
 
     # Generate a list of all datasets to invoke main.py with.
-    datasets = sorted(list(set(config.keys()) - {ALL_DATASETS}))
+    datasets = sorted(set(config.keys()) - {ALL_DATASETS})
 
     run_analysis_runner(
         dataset=ALL_DATASETS,
         access_level=os.getenv('ACCESS_LEVEL', 'full'),
         config=['storage_visualization/slack.toml'],
         output_dir='storage_visualization/'
-        + datetime.date.today().strftime('%y-%m-%d'),
+        + datetime.datetime.now().date().strftime('%y-%m-%d'),  # noqa: DTZ005
         description='Storage visualization',
-        script=['storage_visualization/main.py'] + datasets,
+        script=['storage_visualization/main.py', *datasets],
     )
 
 
