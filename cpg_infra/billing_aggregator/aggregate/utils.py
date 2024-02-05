@@ -1158,7 +1158,7 @@ def format_as_string(data: list[dict[str, Any]]) -> str:
     """
     labels = {}
     for kv in data:
-        if kv['key'] in labels:
+        if 'key' in kv:
             labels[kv['key']] = kv['value']
         else:
             # otherwise keep the original key
