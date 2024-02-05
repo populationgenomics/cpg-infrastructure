@@ -104,6 +104,13 @@ async def migrate_billing_data(start, end, dataset_to_topic) -> int:
         s = time.time()
         chunk.insert(0, 'id', chunk.apply(billing_row_to_key, axis=1))
         chunk.insert(0, 'topic', chunk.apply(get_topic, axis=1))
+
+        # reformat labels and system labels
+        chunk['labels'] = chunk['labels'].apply(lambda x: utils.format_as_string(x))
+        chunk['system_labels'] = chunk['system_labels'].apply(
+            lambda x: utils.format_as_string(x)  # noqa: COM812
+        )
+
         mins = min(chunk.get('export_time'))
         maxf = max(chunk.get('export_time'))
         logger.info(

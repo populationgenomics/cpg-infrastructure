@@ -137,42 +137,14 @@
   },
   {
     "name": "labels",
-    "type": "RECORD",
-    "mode": "REPEATED",
-    "fields": [
-      {
-        "name": "key",
-        "type": "STRING",
-        "mode": "NULLABLE",
-        "description": ""
-      },
-      {
-        "name": "value",
-        "type": "STRING",
-        "mode": "NULLABLE",
-        "description": ""
-      }
-    ],
-    "description": ""
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Labels JSON record as string, it has to be as a string as it is used in Materialized Views, MV do not support group by JSON or STRUCT"
   },
   {
     "name": "system_labels",
-    "type": "RECORD",
-    "mode": "REPEATED",
-    "fields": [
-      {
-        "name": "key",
-        "type": "STRING",
-        "mode": "NULLABLE",
-        "description": ""
-      },
-      {
-        "name": "value",
-        "type": "STRING",
-        "mode": "NULLABLE",
-        "description": ""
-      }
-    ],
+    "type": "STRING",
+    "mode": "NULLABLE",
     "description": ""
   },
   {

@@ -425,12 +425,17 @@ def migrate_entries_from_bq(
             _obj_param_map = seqr_wide_param_map
             if 'dataset' in labels:
                 # specific override where 'dataset' is specified in GCP resource
+                # MiloH question: labels seems to have format {'key': 'KEY1, 'value': 'VAL'}
+                # so how does this work?
                 _obj_param_map = {labels['dataset']: (1.0, 1)}
 
             # Data transforms and key changes
             obj['topic'] = 'seqr'
             obj['service']['id'] = SERVICE_ID
-            obj['labels'] = labels
+
+            # reformat labels & system lables as JSON string
+            obj['labels'] = utils.format_as_string(labels)
+            obj['system_labels'] = utils.format_as_string(obj['system_labels'])
 
             nid = '-'.join([SERVICE_ID, 'seqr', billing_obj_to_key(obj)])
             obj['id'] = nid
@@ -449,11 +454,14 @@ def migrate_entries_from_bq(
                 new_entry = obj.copy()
 
                 new_entry['topic'] = dataset
-                new_entry['labels'] = [
-                    *labels,
-                    {'key': 'proportion', 'value': ratio},
-                    {'key': 'dataset_size', 'value': dataset_size},
-                ]
+                new_labels = utils.format_as_string(
+                    [
+                        *labels,
+                        {'key': 'proportion', 'value': ratio},
+                        {'key': 'dataset_size', 'value': dataset_size},
+                    ],
+                )
+                new_entry['labels'] = new_labels
                 new_entry['cost'] *= ratio
 
                 nid = '-'.join([SERVICE_ID, dataset, billing_obj_to_key(new_entry)])
