@@ -21,6 +21,7 @@ TODO:
 
     - action monthly billing function
 """
+import json
 import os
 from base64 import b64encode
 from functools import cached_property
@@ -28,10 +29,6 @@ from functools import cached_property
 import pulumi
 import pulumi_gcp as gcp
 
-from cpg_infra.billing_aggregator.aggregate.utils import (
-    get_bq_schema_json,
-    get_sql_code,
-)
 from cpg_infra.plugin import CpgInfrastructurePlugin
 from cpg_infra.utils import archive_folder
 from cpg_utils.cloud import read_secret
@@ -45,6 +42,16 @@ PATH_TO_UPDATE_BUDGET_SOURCE_CODE = os.path.join(
     os.path.dirname(__file__),
     'update_budget',
 )
+
+
+def get_file_content(filename: str, as_json: bool = False) -> str:
+    with open(filename, encoding='utf-8') as file:
+        # do it this way to stop any issues with changing paths
+        if as_json:
+            return json.load(file)
+
+        # otherwise as txt
+        return file.read()
 
 
 def set_deletion_protection(bigquery_table: gcp.bigquery.Table):
@@ -474,7 +481,10 @@ class BillingAggregator(CpgInfrastructurePlugin):
         (project_id, dataset_id, table_id) = self.extract_dataset_table()
 
         # Load schema from a JSON file
-        schema = get_bq_schema_json()
+        schema = get_file_content(
+            f'{PATH_TO_AGGREGATE_SOURCE_CODE}/aggregate_schema.json',
+            as_json=True,
+        )
 
         # Create a BigQuery Table with clustering, time-based partitioning
         table = gcp.bigquery.Table(
@@ -505,7 +515,9 @@ class BillingAggregator(CpgInfrastructurePlugin):
 
         materialized_views = ['aggregate_daily', 'aggregate_daily_extended']
         for view_name in materialized_views:
-            materialized_view_query = get_sql_code(f'{view_name}_view.sql').replace(
+            materialized_view_query = get_file_content(
+                f'{PATH_TO_AGGREGATE_SOURCE_CODE}/{view_name}_view.sql',
+            ).replace(
                 '%AGGREGATE_TABLE%',
                 self.config.billing.aggregator.destination_bq_table,
             )

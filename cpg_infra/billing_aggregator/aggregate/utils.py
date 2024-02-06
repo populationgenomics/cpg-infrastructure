@@ -492,8 +492,9 @@ async def process_entries_from_hail_in_chunks(
     log_prefix: str = '',
     mode: str = 'prod',
     output_path: str = './',
-    func_batches_preprocessor: Callable[[list[dict]], Awaitable[list[dict]]]
-    | None = None,
+    func_batches_preprocessor: (
+        Callable[[list[dict]], Awaitable[list[dict]]] | None
+    ) = None,
 ) -> int:
     """
     Process all the seqr entries from hail batch,
@@ -1166,14 +1167,3 @@ def format_as_string(data: list[dict[str, Any]]) -> str:
                 labels[k] = v
 
     return rapidjson.dumps(labels, sort_keys=True)
-
-
-def get_sql_code(file: str) -> str:
-    """Read file with sql code"""
-    pwd = Path(__file__).parent.resolve()
-    schema_path = pwd / file
-    try:
-        with open(schema_path, encoding='utf-8') as f:
-            return f.read()
-    except Exception as exp:
-        raise exp
