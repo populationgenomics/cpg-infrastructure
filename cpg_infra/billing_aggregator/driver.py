@@ -27,8 +27,11 @@ from functools import cached_property
 
 import pulumi
 import pulumi_gcp as gcp
-from aggregate.utils import get_bq_schema_json, get_sql_code
 
+from cpg_infra.billing_aggregator.aggregate.utils import (
+    get_bq_schema_json,
+    get_sql_code,
+)
 from cpg_infra.plugin import CpgInfrastructurePlugin
 from cpg_infra.utils import archive_folder
 from cpg_utils.cloud import read_secret
