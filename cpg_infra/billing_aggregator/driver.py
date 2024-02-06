@@ -451,7 +451,6 @@ class BillingAggregator(CpgInfrastructurePlugin):
             },
         )
 
-    @cached_property
     def extract_dataset_table(self):
         expected_table_name_parts = 3
         table_full_name = self.config.billing.aggregator.destination_bq_table.split('.')
@@ -468,7 +467,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
             )
 
         # projectid, dataset_id, table_id
-        return (table_full_name[0], table_full_name[1], table_full_name[2])
+        return table_full_name[0], table_full_name[1], table_full_name[2]
 
     def setup_aggregate_table(self):
         """
