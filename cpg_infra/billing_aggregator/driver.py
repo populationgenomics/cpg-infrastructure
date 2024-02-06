@@ -455,7 +455,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
     def extract_dataset_table(self):
         expected_table_name_parts = 3
         table_full_name = self.config.billing.aggregator.destination_bq_table.split('.')
-        if table_full_name.length() != expected_table_name_parts:
+        if len(table_full_name) != expected_table_name_parts:
             raise ValueError(
                 'Invalid destination_bq_table, should be in the format: '
                 'project_id.dataset_id.table_id',
