@@ -338,19 +338,19 @@ class BillingAggregator(CpgInfrastructurePlugin):
         )
 
         # Slack notifications
-        filter_string = fxn.name.apply(
-            lambda fxn_name: f"""
-                resource.type="cloud_function"
-                AND resource.labels.function_name="{fxn_name}"
-                AND severity >= WARNING
-            """,
-        )
 
         # Create the Cloud Function's event alert
         alert_condition = gcp.monitoring.AlertPolicyConditionArgs(
             condition_matched_log=(
                 gcp.monitoring.AlertPolicyConditionConditionMatchedLogArgs(
-                    filter=filter_string,
+                    filter=(
+                        f"""
+                        resource.type="cloud_function"
+                        AND resource.labels.function_name="{fxn.name}"
+                        AND severity >= WARNING
+                        """
+                    ),
+                    label_extractors={'severity': 'EXTRACT(jsonPayload.severity)'},
                 )
             ),
             display_name='Function warning/error',
