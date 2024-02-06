@@ -1166,3 +1166,14 @@ def format_as_string(data: list[dict[str, Any]]) -> str:
                 labels[k] = v
 
     return rapidjson.dumps(labels, sort_keys=True)
+
+
+def get_sql_code(file: str) -> str:
+    """Read file with sql code"""
+    pwd = Path(__file__).parent.resolve()
+    schema_path = pwd / file
+    try:
+        with open(schema_path, encoding='utf-8') as f:
+            return f.read()
+    except Exception as exp:
+        raise exp

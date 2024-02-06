@@ -27,6 +27,7 @@ from functools import cached_property
 
 import pulumi
 import pulumi_gcp as gcp
+from aggregate.utils import get_bq_schema_json, get_sql_code
 
 from cpg_infra.plugin import CpgInfrastructurePlugin
 from cpg_infra.utils import archive_folder
@@ -41,6 +42,18 @@ PATH_TO_UPDATE_BUDGET_SOURCE_CODE = os.path.join(
     os.path.dirname(__file__),
     'update_budget',
 )
+
+
+def set_deletion_protection(bigquery_table: gcp.bigquery.Table):
+    """Sets deletion protection on the resource to prevent accidental deletion."""
+    # Add a label to flag that deletion protection is enabled
+    gcp.bigquery.TableResource(
+        f'{bigquery_table.table_id}_resource',
+        name=bigquery_table.table_id,
+        dataset_id=bigquery_table.dataset_id,
+        project=bigquery_table.project,
+        labels={"deletion_protection": "true"},
+    )
 
 
 class BillingAggregator(CpgInfrastructurePlugin):
@@ -58,6 +71,9 @@ class BillingAggregator(CpgInfrastructurePlugin):
         self.setup_aggregator_functions()
         self.setup_monthly_export()
         self.setup_update_budget()
+        # setup BQ objects
+        self.setup_aggregate_table()
+        self.setup_materialized_views()
 
     @cached_property
     def functions_service(self):
@@ -424,6 +440,99 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 ),
             },
         )
+
+    @cached_property
+    def extract_dataset_table(self):
+        expected_table_name_parts = 3
+        table_full_name = self.config.billing.aggregator.destination_bq_table.split('.')
+        if table_full_name.length() != expected_table_name_parts:
+            raise ValueError(
+                'Invalid destination_bq_table, should be in the format: '
+                'project_id.dataset_id.table_id',
+            )
+
+        if table_full_name[0] != self.config.billing.gcp.project_id:
+            raise ValueError(
+                'Invalid destination_bq_table, project_id does not match the '
+                'billing project_id',
+            )
+
+        # projectid, dataset_id, table_id
+        return (table_full_name[0], table_full_name[1], table_full_name[2])
+
+    def setup_aggregate_table(self):
+        """
+        This function creates BQ aggregate table
+
+        self.config.billing.aggregator.destination_bq_table
+        has format:
+        project_id.dataset_id.table_id
+        """
+        (project_id, dataset_id, table_id) = self.extract_dataset_table()
+
+        # Load schema from a JSON file
+        schema = get_bq_schema_json()
+
+        # Create a BigQuery Table with clustering, time-based partitioning
+        table = gcp.bigquery.Table(
+            f'billing-{table_id}-table',
+            dataset_id=dataset_id,
+            table_id=table_id,
+            schema=schema,
+            project=project_id,
+            time_partitioning=gcp.bigquery.TableTimePartitioningArgs(
+                type="DAY",
+                field="usage_end_time",
+            ),
+            clustering=gcp.bigquery.TableClusteringArgs(
+                fields=["topic"],
+            ),
+            deletion_protection=True,
+            opts=pulumi.ResourceOptions(ignore_changes=["deletionProtection"]),
+        )
+        # Invoke the deletion protection callback
+        set_deletion_protection(table)
+        return table
+
+    def setup_materialized_views(self):
+        """
+        Create materlized views for the aggregate table
+        """
+        (project_id, dataset_id, _table_id) = self.extract_dataset_table()
+
+        materialized_views = ['aggregate_daily', 'aggregate_daily_extended']
+        for view_name in materialized_views:
+            materialized_view_query = get_sql_code(f'{view_name}_view.sql').replace(
+                '%AGGREGATE_TABLE%',
+                self.config.billing.aggregator.destination_bq_table,
+            )
+
+            cluster_by = 'topic'
+            if view_name == 'aggregate_daily_extended':
+                cluster_by = 'ar_guid'
+
+            _ = gcp.bigquery.Table(
+                f'{view_name}_view',
+                dataset_id=dataset_id,
+                table_id=view_name,
+                project=project_id,
+                materialized_view=gcp.bigquery.TableMaterializedViewArgs(
+                    query=materialized_view_query,
+                    enable_refresh=True,
+                    refresh_interval_ms=1800000,
+                ),
+                # Define time-based partitioning on 'purchaseDate' field
+                time_partitioning=gcp.bigquery.TableTimePartitioningArgs(
+                    type='DAY',
+                    field='day',  # The field must be present in the SELECT list of the materialized view query
+                ),
+                # Define clustering on 'productId' for better query performance
+                clustering=gcp.bigquery.TableClusteringArgs(
+                    fields=[
+                        cluster_by,
+                    ],  # The field must be present in the SELECT list of the materialized view query
+                ),
+            )
 
 
 def b64encode_str(s: str) -> str:
