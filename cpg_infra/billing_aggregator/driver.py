@@ -21,7 +21,6 @@ TODO:
 
     - action monthly billing function
 """
-import json
 import os
 from base64 import b64encode
 from functools import cached_property
@@ -44,26 +43,10 @@ PATH_TO_UPDATE_BUDGET_SOURCE_CODE = os.path.join(
 )
 
 
-def get_file_content(filename: str, as_json: bool = False) -> str:
+def get_file_content(filename: str) -> str:
+    """Read content of the file"""
     with open(filename, encoding='utf-8') as file:
-        # do it this way to stop any issues with changing paths
-        if as_json:
-            return json.load(file)
-
-        # otherwise as txt
         return file.read()
-
-
-def set_deletion_protection(bigquery_table: gcp.bigquery.Table):
-    """Sets deletion protection on the resource to prevent accidental deletion."""
-    # Add a label to flag that deletion protection is enabled
-    gcp.bigquery.TableResource(
-        f'{bigquery_table.table_id}_resource',
-        name=bigquery_table.table_id,
-        dataset_id=bigquery_table.dataset_id,
-        project=bigquery_table.project,
-        labels={"deletion_protection": "true"},
-    )
 
 
 class BillingAggregator(CpgInfrastructurePlugin):
@@ -275,8 +258,11 @@ class BillingAggregator(CpgInfrastructurePlugin):
             # https://cloud.google.com/functions/docs/configuring/memory
             memory = '1024M'
             cpu = 1
-            if function in ('hail', 'seqr'):
+            if function == 'hail':
                 memory = '2048M'
+            if function == 'seqr':
+                # 2GB is not enough for seqr
+                memory = '2560M'
             # Create the function, the trigger and subscription.
             _ = self.create_cloud_function(
                 resource_name=f'billing-aggregator-{function}-billing-function',
@@ -364,19 +350,24 @@ class BillingAggregator(CpgInfrastructurePlugin):
         )
 
         # Slack notifications
+        filter_string = fxn.name.apply(
+            lambda fxn_name: f"""
+                ((
+                    resource.type="cloud_function"
+                    AND resource.labels.function_name="{fxn_name}"
+                ) OR (
+                    resource.type="cloud_run_revision"
+                    AND resource.labels.service_name="{fxn_name}"
+                ))
+                AND severity>=WARNING
+            """,
+        )
 
         # Create the Cloud Function's event alert
         alert_condition = gcp.monitoring.AlertPolicyConditionArgs(
             condition_matched_log=(
                 gcp.monitoring.AlertPolicyConditionConditionMatchedLogArgs(
-                    filter=(
-                        f"""
-                        resource.type="cloud_function"
-                        AND resource.labels.function_name="{fxn.name}"
-                        AND severity >= WARNING
-                        """
-                    ),
-                    label_extractors={'severity': 'EXTRACT(jsonPayload.severity)'},
+                    filter=filter_string,
                 )
             ),
             display_name='Function warning/error',
@@ -482,29 +473,19 @@ class BillingAggregator(CpgInfrastructurePlugin):
         # Load schema from a JSON file
         schema = get_file_content(
             f'{PATH_TO_AGGREGATE_SOURCE_CODE}/aggregate_schema.json',
-            as_json=True,
         )
 
         # Create a BigQuery Table with clustering, time-based partitioning
-        table = gcp.bigquery.Table(
+        return gcp.bigquery.Table(
             f'billing-{table_id}-table',
             dataset_id=dataset_id,
             table_id=table_id,
             schema=schema,
             project=project_id,
-            time_partitioning=gcp.bigquery.TableTimePartitioningArgs(
-                type="DAY",
-                field="usage_end_time",
-            ),
-            clustering=gcp.bigquery.TableClusteringArgs(
-                fields=["topic"],
-            ),
+            clusterings=['topic'],
+            time_partitioning={'type': 'DAY', 'field': 'usage_end_time'},
             deletion_protection=True,
-            opts=pulumi.ResourceOptions(ignore_changes=["deletionProtection"]),
         )
-        # Invoke the deletion protection callback
-        set_deletion_protection(table)
-        return table
 
     def setup_materialized_views(self):
         """
@@ -521,9 +502,9 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 self.config.billing.aggregator.destination_bq_table,
             )
 
-            cluster_by = 'topic'
+            cluster_by = ['topic', 'gcp_project']
             if view_name == 'aggregate_daily_extended':
-                cluster_by = 'ar_guid'
+                cluster_by = ['ar_guid', 'batch_id']
 
             _ = gcp.bigquery.Table(
                 f'{view_name}_view',
@@ -536,16 +517,8 @@ class BillingAggregator(CpgInfrastructurePlugin):
                     refresh_interval_ms=1800000,
                 ),
                 # Define time-based partitioning on 'purchaseDate' field
-                time_partitioning=gcp.bigquery.TableTimePartitioningArgs(
-                    type='DAY',
-                    field='day',  # The field must be present in the SELECT list of the materialized view query
-                ),
-                # Define clustering on 'productId' for better query performance
-                clustering=gcp.bigquery.TableClusteringArgs(
-                    fields=[
-                        cluster_by,
-                    ],  # The field must be present in the SELECT list of the materialized view query
-                ),
+                clusterings=cluster_by,
+                time_partitioning={'type': 'DAY', 'field': 'day'},
             )
 
 
