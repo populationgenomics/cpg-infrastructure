@@ -28,6 +28,7 @@ TO DO :
 - Getting latest cram for sample by sequence type (eg: exome / genome)
 """
 import asyncio
+import copy
 import dataclasses
 import hashlib
 import logging
@@ -456,7 +457,7 @@ def migrate_entries_from_bq(
 
                 new_entry['topic'] = dataset
 
-                new_labels = labels.copy()
+                new_labels = copy.deepcopy(labels)
                 new_labels['proportion'] = ratio
                 new_labels['dataset_size'] = dataset_size
 
