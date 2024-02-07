@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+# flake8: noqa: PLR2004,SLF001
 """Main entrypoint for the storage visualization driver."""
 
 import sys
@@ -7,14 +7,14 @@ import sys
 # See requirements.txt for why we're disabling the linter warnings here.
 import hailtop.batch as hb  # pylint: disable=import-error
 from cloudpathlib import AnyPath
-from cpg_utils.config import get_config
+
 from cpg_utils.git import (
     get_git_commit_ref_of_current_repository,
     get_organisation_name_from_current_directory,
     get_repo_name_from_current_directory,
     prepare_git_job,
 )
-from cpg_utils.hail_batch import copy_common_env, output_path, remote_tmpdir
+from cpg_utils.hail_batch import copy_common_env, get_batch, output_path
 from cpg_utils.slack import upload_file
 
 DOCKER_IMAGE = (
@@ -22,7 +22,7 @@ DOCKER_IMAGE = (
 )
 
 
-def prepare_job(job, clone_repo):
+def prepare_job(job: hb.batches.job.Job, clone_repo: bool):
     """Sets up the given job to run scripts in the same repository."""
     job.image(DOCKER_IMAGE)
     copy_common_env(job)
@@ -38,7 +38,7 @@ def prepare_job(job, clone_repo):
 def post_to_slack():
     """Posts the URL of the generated treemap together with a preview image to Slack."""
     with AnyPath(output_path('treemap.png', dataset='common', category='web')).open(
-        'rb'
+        'rb',
     ) as f:
         content = f.read()
 
@@ -55,11 +55,7 @@ def main():
         print('Usage: main.py <dataset1> <dataset2> ...')
         sys.exit(1)
 
-    service_backend = hb.ServiceBackend(
-        billing_project=get_config()['hail']['billing_project'],
-        remote_tmpdir=remote_tmpdir(),
-    )
-    batch = hb.Batch(name='Storage visualization driver', backend=service_backend)
+    batch = get_batch(name='Storage visualization driver')
 
     # Process all datasets in parallel, as separate jobs.
     job_output_paths = {}
@@ -85,7 +81,7 @@ def main():
 
     web_path = output_path('treemap', dataset='common', category='web')
     treemap_job.command(
-        f'storage_visualization/treemap.py --output-prefix {web_path} --group-by-dataset {" ".join(f"--input {path}" for path in job_output_paths.values())}'
+        f'storage_visualization/treemap.py --output-prefix {web_path} --group-by-dataset {" ".join(f"--input {path}" for path in job_output_paths.values())}',
     )
 
     # Send a Slack message when the HTML page has been generated.

@@ -1,4 +1,4 @@
-# pylint: disable=missing-class-docstring, missing-function-docstring,too-many-public-methods
+# flake8: noqa: ERA001,ANN001,ANN102,ANN202,ANN205,ANN206,ANN401,ARG002
 """
 Azure implementation for abstract infrastructure
 
@@ -9,7 +9,7 @@ import logging
 import re
 from datetime import date
 from functools import cached_property
-from typing import Any
+from typing import Any, Optional
 
 import pulumi
 import pulumi_azure_native as az
@@ -21,6 +21,7 @@ from cpg_infra.abstraction.base import (
     UNDELETE_PERIOD_IN_DAYS,
     BucketMembership,
     CloudInfraBase,
+    CloudName,
     ContainerRegistryMembership,
     MachineAccountRole,
     SecretMembership,
@@ -33,8 +34,10 @@ AZURE_BILLING_EXPIRY_DATE = '3141-25-09T00:00:00Z'
 
 class AzureInfra(CloudInfraBase):
     def __init__(
-        self, config: CPGInfrastructureConfig, dataset_config: CPGDatasetConfig
-    ):
+        self,
+        config: CPGInfrastructureConfig,
+        dataset_config: CPGDatasetConfig,
+    ) -> None:
         super().__init__(config, dataset_config)
 
         assert config.azure, 'config.azure is required to deploy to Azure'
@@ -43,7 +46,7 @@ class AzureInfra(CloudInfraBase):
         self.region = config.azure.region
         self._resource_group_name = f'{self.dataset_storage_prefix}{self.dataset}'
         self._storage_account_name = self.fix_azure_alphanum_names(
-            f'{self.dataset_storage_prefix}{self.dataset}'
+            f'{self.dataset_storage_prefix}{self.dataset}',
         )
         self.storage_account_lifecycle_rules: list[Any] = []
         self.storage_account_undelete_rule = None
@@ -61,17 +64,17 @@ class AzureInfra(CloudInfraBase):
             self._undelete(self.storage_account_undelete_rule)
 
     @staticmethod
-    def name():
+    def name() -> CloudName:
         return 'azure'
 
     def get_project(self):
         return self.resource_group
 
-    def get_project_id(self):
+    def get_project_id(self) -> str:
         return self.project.name
 
     @staticmethod
-    def fix_azure_alphanum_names(name):
+    def fix_azure_alphanum_names(name: str) -> str:
         return re.sub('[^a-z]', '', name.lower())
 
     @staticmethod
@@ -236,12 +239,13 @@ class AzureInfra(CloudInfraBase):
     def _undelete(self, days=UNDELETE_PERIOD_IN_DAYS):
         az.storage.BlobServiceProperties(
             self.get_pulumi_name(
-                f'{self._storage_account_name}-{days}day-undelete-rule'
+                f'{self._storage_account_name}-{days}day-undelete-rule',
             ),
             account_name=self.storage_account.name,
             blob_services_name='default',
             delete_retention_policy=az.storage.DeleteRetentionPolicyArgs(
-                days=days, enabled=True
+                days=days,
+                enabled=True,
             ),
             resource_group_name=self.resource_group.name,
         )
@@ -266,8 +270,8 @@ class AzureInfra(CloudInfraBase):
                     base_blob=az.storage.ManagementPolicyBaseBlobArgs(
                         tier_to_archive=az.storage.DateAfterModificationArgs(
                             days_after_modification_greater_than=days,
-                        )
-                    )
+                        ),
+                    ),
                 ),
             ),
         )
@@ -282,8 +286,8 @@ class AzureInfra(CloudInfraBase):
                         delete=az.storage.DateAfterModificationArgs(
                             days_after_modification_greater_than=days,
                         ),
-                    )
-                )
+                    ),
+                ),
             ),
         )
 
@@ -295,7 +299,7 @@ class AzureInfra(CloudInfraBase):
         requester_pays: bool = False,
         versioning: bool = True,
         autoclass: bool = False,
-        project: str = None,
+        project: Optional[str] = None,
     ) -> Any:
         # Policies are set at the storage account level
         # the rules are generated using other function calls
@@ -305,7 +309,8 @@ class AzureInfra(CloudInfraBase):
         # So first we modify to filter the rule to apply only to the
         # new bucket
         bucket_filter = az.storage.ManagementPolicyFilterArgs(
-            prefix_match=[name], blob_types=['blockBlob']
+            prefix_match=[name],
+            blob_types=['blockBlob'],
         )
 
         def apply_filter(rule):
@@ -355,7 +360,11 @@ class AzureInfra(CloudInfraBase):
         raise ValueError(f'Unrecognised bucket membership type {membership}')
 
     def add_member_to_bucket(
-        self, resource_key: str, bucket, member, membership
+        self,
+        resource_key: str,
+        bucket,
+        member,
+        membership,
     ) -> Any:
         return az.authorization.RoleAssignment(
             self.get_pulumi_name(resource_key),
@@ -386,10 +395,14 @@ class AzureInfra(CloudInfraBase):
         raise NotImplementedError
 
     def create_machine_account(
-        self, name: str, project: str = None, *, resource_key: str = None
+        self,
+        name: str,
+        project: Optional[str] = None,
+        *,
+        resource_key: Optional[str] = None,
     ) -> Any:
         return az.managedidentity.UserAssignedIdentity(
-            self.get_pulumi_name((resource_key or f'service-account-{name}')),
+            self.get_pulumi_name(resource_key or f'service-account-{name}'),
             resource_name_=name,
             location=self.region,
             resource_group_name=self.resource_group.name,
@@ -401,11 +414,11 @@ class AzureInfra(CloudInfraBase):
         machine_account,
         member,
         role: MachineAccountRole,
-        project: str = None,
+        project: Optional[str] = None,
     ) -> Any:
         logging.warning(
             f'{self.get_pulumi_name(resource_key)} :: Adding members to machine '
-            f'accounts has not been implemented'
+            f'accounts has not been implemented',
         )
 
     def get_credentials_for_machine_account(self, resource_key, account):
@@ -445,7 +458,11 @@ class AzureInfra(CloudInfraBase):
         raise ValueError(f'Unrecognised object: {obj} ({type(obj)})')
 
     def add_group_member(
-        self, resource_key: str, group, member, unique_resource_key: bool = False
+        self,
+        resource_key: str,
+        group,
+        member,
+        unique_resource_key: bool = False,
     ) -> Any:
         if not unique_resource_key:
             resource_key = self.get_pulumi_name(resource_key)
@@ -470,7 +487,7 @@ class AzureInfra(CloudInfraBase):
             ),
         )
 
-    def create_secret(self, name: str, project: str = None) -> Any:
+    def create_secret(self, name: str, project: Optional[str] = None) -> Any:
         return az.keyvault.Secret(
             self.get_pulumi_name('secret-' + name),
             secret_name=name,
@@ -503,7 +520,7 @@ class AzureInfra(CloudInfraBase):
         secret,
         member,
         membership: SecretMembership,
-        project: str = None,
+        project: Optional[str] = None,
     ) -> Any:
         pass
 
@@ -522,7 +539,12 @@ class AzureInfra(CloudInfraBase):
         raise ValueError(f'Unknown container membership: {membership}')
 
     def add_member_to_container_registry(
-        self, resource_key: str, registry, member, membership, project=None
+        self,
+        resource_key: str,
+        registry,
+        member,
+        membership,
+        project=None,
     ) -> list[Any]:
         roles = []
         for role_type, role in self._container_membership_to_roles(membership).items():
@@ -534,13 +556,16 @@ class AzureInfra(CloudInfraBase):
                     role_assignment_name=None,
                     role_definition_id=role,
                     scope=self._get_object_id(registry),
-                )
+                ),
             )
 
         return roles
 
     def give_member_ability_to_list_buckets(
-        self, resource_key: str, member, project: str = None
+        self,
+        resource_key: str,
+        member,
+        project: Optional[str] = None,
     ):
         return az.authorization.RoleAssignment(
             self.get_pulumi_name(resource_key),
@@ -556,7 +581,7 @@ class AzureInfra(CloudInfraBase):
             admin_user_enabled=True,
             location=self.region,
             registry_name=self.fix_azure_alphanum_names(
-                self.config.azure.dataset_storage_prefix + self.dataset + name
+                self.config.azure.dataset_storage_prefix + self.dataset + name,
             ),
             resource_group_name=self.resource_group.name,
             sku=az.containerregistry.SkuArgs(

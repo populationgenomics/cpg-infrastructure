@@ -1,4 +1,4 @@
-# pylint: disable=logging-format-interpolation,import-error
+# flake8: noqa: ARG001,ANN001,ANN002,ANN401,ERA001,PGH003,DTZ001,C901
 """
 A cloud function that synchronises HAIL billing data to BigQuery
 
@@ -26,18 +26,18 @@ import logging
 import os
 import shutil
 from datetime import datetime
-from typing import Dict, List
+from typing import Any, Dict, List
 
 import functions_framework
+from flask import Request
+
 from cpg_utils.cloud import read_secret
 from cpg_utils.config import AR_GUID_NAME
-from flask import Request
 
 try:
     from . import utils
 except ImportError:
     import utils  # type: ignore
-
 
 SERVICE_ID = 'hail'
 EXCLUDED_BATCH_PROJECTS = {'hail', 'seqr'}
@@ -55,11 +55,12 @@ def get_billing_projects():
 
     server_config = json.loads(
         read_secret(
-            utils.ANALYSIS_RUNNER_PROJECT_ID, 'server-config', fail_gracefully=False
-        )
+            utils.ANALYSIS_RUNNER_PROJECT_ID,
+            'server-config',
+            fail_gracefully=False,
+        ),
     )
-    ds = list(set(server_config.keys()) - EXCLUDED_BATCH_PROJECTS)
-    return ds
+    return list(set(server_config.keys()) - EXCLUDED_BATCH_PROJECTS)
 
 
 def get_finalised_entries_for_batch(batch: dict) -> List[Dict]:
@@ -106,13 +107,14 @@ def get_finalised_entries_for_batch(batch: dict) -> List[Dict]:
             labels.update(attributes)
             labels.update(job.get('attributes', {}))
             if labels.get('name'):
-                labels.pop('name')
+                labels['job_name'] = labels.pop('name')
 
             # Remove any labels with falsey values e.g. None, '', 0
             labels = dict(filter(lambda lbl: lbl[1], labels.items()))
 
             cost = utils.get_total_hail_cost(
-                currency_conversion_rate, raw_cost=raw_cost
+                currency_conversion_rate,
+                raw_cost=raw_cost,
             )
             usage = job['resources'].get(batch_resource, 0)
 
@@ -158,13 +160,15 @@ def get_finalised_entries_for_batch(batch: dict) -> List[Dict]:
                     start_time=start_time,
                     end_time=end_time,
                     labels=labels,
-                )
+                ),
             )
 
     entries.extend(
         utils.get_credits(
-            entries=entries, topic='hail', project=utils.HAIL_PROJECT_FIELD
-        )
+            entries=entries,
+            topic='hail',
+            project=utils.HAIL_PROJECT_FIELD,
+        ),
     )
 
     return entries
@@ -194,11 +198,11 @@ def from_pubsub(data=None, _=None):
 
 
 async def main(
-    start: datetime = None,
-    end: datetime = None,
+    start: datetime | None = None,
+    end: datetime | None = None,
     mode: str = 'prod',
-    output_path: str = None,
-) -> dict:
+    output_path: str | None = None,
+) -> dict[str, Any]:
     """Main body function"""
     logger.info(f'Running Hail Billing Aggregation for [{start}, {end}]')
     start, end = utils.process_default_start_and_end(start, end)
@@ -234,5 +238,5 @@ if __name__ == '__main__':
             end=test_end,
             mode='prod',
             # output_path=os.path.join(os.getcwd(), 'hail'),
-        )
+        ),
     )

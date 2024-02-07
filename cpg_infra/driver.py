@@ -1,21 +1,21 @@
-# pylint: disable=import-error,too-many-public-methods,missing-function-docstring
+# flake8: noqa: PGH003,ANN204,C901,ERA001,ANN401,SIM102
 """
 CPG Dataset infrastructure
 """
 import graphlib
 import os.path
 import re
-from collections import defaultdict, namedtuple
+from collections import defaultdict
 from functools import cached_property
-from typing import Any, Iterable, Iterator, Type
+from typing import Any, Callable, Iterable, Iterator, NamedTuple, Type
 
-import cpg_utils.config
 import pulumi
 import pulumi_gcp as gcp
 import toml
 import xxhash
 from toml_sort import TomlSort
 
+import cpg_utils.config
 from cpg_infra.abstraction.azure import AzureInfra
 from cpg_infra.abstraction.base import (
     BucketMembership,
@@ -32,6 +32,7 @@ from cpg_infra.abstraction.hailbatch import (
 )
 from cpg_infra.abstraction.metamist import MetamistProject, MetamistProjectMembers
 from cpg_infra.config import (
+    CloudName,
     CPGDatasetComponents,
     CPGDatasetConfig,
     CPGInfrastructureConfig,
@@ -40,10 +41,12 @@ from cpg_infra.config import (
 )
 from cpg_infra.plugin import get_plugins
 
-SampleMetadataAccessorMembership = namedtuple(
-    'SampleMetadataAccessorMembership',
-    ['name', 'member', 'permissions'],
-)
+
+class SampleMetadataAccessorMembership(NamedTuple):
+    name: str
+    member: Any
+    permissions: Iterable[str]
+
 
 SM_TEST_READ = 'test-read'
 SM_TEST_WRITE = 'test-write'
@@ -74,7 +77,7 @@ NAME_TO_INFRA_CLASS: dict[str, Type[CloudInfraBase]] = {
 }
 
 
-def dict_to_toml(d):
+def dict_to_toml(d: dict) -> str:
     """
     Convert dictionary to a sorted (and stable) TOML
     """
@@ -101,15 +104,20 @@ class CPGInfrastructure:
                 """
 
                 def __init__(
-                    self, cloud_id: str, user: CPGInfrastructureUser.Cloud | None
-                ):
+                    self,
+                    cloud_id: str,
+                    user: CPGInfrastructureUser.Cloud | None,
+                ) -> None:
                     self.cloud_id = cloud_id
                     self.user = user
 
-                def __lt__(self, other):
+                def __lt__(
+                    self,
+                    other: 'CPGInfrastructure.GroupProvider.Group.GroupMember',
+                ):
                     return self.cloud_id < other.cloud_id
 
-                def __repr__(self):
+                def __repr__(self) -> str:
                     members = [
                         f'cloud_id={self.cloud_id!r}',
                     ]
@@ -121,9 +129,15 @@ class CPGInfrastructure:
             # useful for checking isinstance without isinstance
             is_group = True
 
-            def __init__(self, name: str, group, members: dict, cache_members: bool):
+            def __init__(
+                self,
+                name: str,
+                group: 'CPGInfrastructure.GroupProvider.Group',
+                members: dict,
+                cache_members: bool,
+            ) -> None:
                 self.name: str = name
-                self.group = group
+                self.group: CPGInfrastructure.GroupProvider.Group = group
                 self.cache_members: bool = cache_members
                 self.members: dict[
                     str,
@@ -133,13 +147,12 @@ class CPGInfrastructure:
 
             def add_member(
                 self,
-                resource_key,
-                member,
+                resource_key: str,
+                member: 'str | CPGInfrastructure.GroupProvider.Group',
                 user: CPGInfrastructureUser.Cloud | None = None,
             ):
-                if isinstance(member, type(self)):
-                    if member.name == self.name:
-                        raise ValueError(f'Cannot add self to group {self.name}')
+                if isinstance(member, type(self)) and member.name == self.name:
+                    raise ValueError(f'Cannot add self to group {self.name}')
 
                 if isinstance(member, CPGInfrastructure.GroupProvider.Group):
                     self.members[resource_key] = member
@@ -149,16 +162,17 @@ class CPGInfrastructure:
                     if user:
                         raise ValueError(
                             f'Invalid user type {type(user)} ({user}) for member '
-                            f'{member} for {resource_key}'
+                            f'{member} for {resource_key}',
                         )
                     self.members[resource_key] = self.GroupMember(member, None)
 
-            def __repr__(self):
+            def __repr__(self) -> str:
                 return f'Group({self.name!r})'
 
-        def __init__(self, group_prefix: str | None = None):
+        def __init__(self, group_prefix: str | None = None) -> None:
             self.groups: dict[
-                str, dict[str, CPGInfrastructure.GroupProvider.Group]
+                str,
+                dict[str, CPGInfrastructure.GroupProvider.Group],
             ] = defaultdict()
 
             self.group_prefix = group_prefix or ''
@@ -172,7 +186,7 @@ class CPGInfrastructure:
             infra: CloudInfraBase,
             name: str,
             cache_members: bool,
-            members: dict = None,
+            members: dict | None = None,
         ) -> Group:
             if infra.name() not in self.groups:
                 self.groups[infra.name()] = {}
@@ -189,7 +203,7 @@ class CPGInfrastructure:
 
             return group
 
-        def static_group_order(self, cloud) -> list[Group]:
+        def static_group_order(self, cloud: CloudName) -> list[Group]:
             """
             not that it super matters because we do recursively look it up and
             cache the result, but it's nice to grab the groups in an order that
@@ -209,7 +223,8 @@ class CPGInfrastructure:
             return [groups[n] for n in graphlib.TopologicalSorter(deps).static_order()]
 
         def resolve_group_members(
-            self, group: 'Group'
+            self,
+            group: 'Group',
         ) -> list['CPGInfrastructure.GroupProvider.Group.GroupMember']:
             if group.name in self._cached_resolved_members:
                 return self._cached_resolved_members[group.name]
@@ -227,19 +242,22 @@ class CPGInfrastructure:
             return resolved_members
 
     def __init__(
-        self, config: CPGInfrastructureConfig, dataset_configs: list[CPGDatasetConfig]
-    ):
+        self,
+        config: CPGInfrastructureConfig,
+        dataset_configs: list[CPGDatasetConfig],
+    ) -> None:
         self.config = config
         self.dataset_configs: dict[str, CPGDatasetConfig] = {
             d.dataset: d for d in dataset_configs
         }
 
         self.group_provider = CPGInfrastructure.GroupProvider(
-            group_prefix=self.config.group_prefix
+            group_prefix=self.config.group_prefix,
         )
 
         self.dataset_infrastructures: dict[
-            str, CPGDatasetInfrastructure
+            str,
+            CPGDatasetInfrastructure,
         ] = defaultdict()
 
     @cached_property
@@ -325,7 +343,7 @@ class CPGInfrastructure:
                 if self.config.billing.hail_aggregator_username:
                     HailBatchBillingProjectMembership(
                         infra.get_pulumi_name(
-                            'batch-billing-member-billing-aggregator'
+                            'batch-billing-member-billing-aggregator',
                         ),
                         billing_project=dataset_cloud_infra.hail_batch_billing_project,
                         user=self.config.billing.hail_aggregator_username,
@@ -342,7 +360,7 @@ class CPGInfrastructure:
                     )
 
                 _group_members = self.group_provider.resolve_group_members(
-                    dataset_cloud_infra.analysis_group
+                    dataset_cloud_infra.analysis_group,
                 )
                 hail_batch_usernames = {
                     m.user.hail_batch_username
@@ -360,11 +378,13 @@ class CPGInfrastructure:
                 def _make_add_member_function(
                     _data_provider: 'CPGDatasetCloudInfrastructure',
                     _infra: CloudInfraBase,
-                ):
+                ) -> Callable[[list[str]], None]:
                     # bind loop variables so they're available in
                     # the functional context below
 
-                    def _add_member_to_billing_project(_analysis_members):
+                    def _add_member_to_billing_project(
+                        _analysis_members: list[str],
+                    ) -> None:
                         for hail_id in sorted(set(_analysis_members)):
                             if not isinstance(hail_id, str):
                                 continue
@@ -387,25 +407,26 @@ class CPGInfrastructure:
                     return _add_member_to_billing_project
 
                 pulumi.Output.all(*hail_batch_usernames).apply(
-                    _make_add_member_function(dataset_cloud_infra, infra)
+                    _make_add_member_function(dataset_cloud_infra, infra),
                 )
 
     @staticmethod
-    def _email_key(m_):
+    def _email_key(m_: str) -> tuple[str, str]:
         """Sort on domain, then on name"""
         s = m_.split('@')
         return s[1], s[0]
 
     @staticmethod
-    def sort_members(members: list[str]):
+    def sort_members(members: list[str]) -> list[str]:
         """Sort members on domain, then on name"""
         return sorted(
-            set(str(m).lower() for m in members), key=CPGInfrastructure._email_key
+            {str(m).lower() for m in members},
+            key=CPGInfrastructure._email_key,
         )
 
     def finalize_groups(self):
         # capture these variables so they don't change during the resolution period
-        def _process_members(members):
+        def _process_members(members: list[str]) -> str:
             distinct_users = CPGInfrastructure.sort_members(members)
             return '\n'.join(distinct_users)
 
@@ -421,7 +442,8 @@ class CPGInfrastructure:
                         group=group.group,
                         member=member.cloud_id
                         if isinstance(
-                            member, CPGInfrastructure.GroupProvider.Group.GroupMember
+                            member,
+                            CPGInfrastructure.GroupProvider.Group.GroupMember,
                         )
                         else member.group,
                         unique_resource_key=True,
@@ -453,7 +475,10 @@ class CPGInfrastructure:
     def update_metamist_members(self):
         """Send a request to metamist to update group members"""
 
-        def prepare_group_members(dataset_infra: CPGDatasetInfrastructure, group_name):
+        def prepare_group_members(
+            dataset_infra: CPGDatasetInfrastructure,
+            group_name: str,
+        ) -> pulumi.Output[str]:
             # only add GCP accounts for now
             clouds = [GcpInfrastructure.name()]
             members: list[str | pulumi.Output[str]] = []
@@ -466,11 +491,11 @@ class CPGInfrastructure:
                 if group_name not in sm_groups:
                     pulumi.warn(
                         f'{dataset_infra.dataset} :: metamist-group {group_name!r} '
-                        'not in sm-groups'
+                        'not in sm-groups',
                     )
                     continue
                 cloud_members = self.group_provider.resolve_group_members(
-                    sm_groups[group_name]
+                    sm_groups[group_name],
                 )
                 members.extend(
                     cloud_infra.infra.member_id(member.cloud_id)
@@ -500,10 +525,11 @@ class CPGInfrastructure:
 
     # dataset agnostic infrastructure
 
-    def build_infrastructure_config_output(self) -> dict:
+    def build_infrastructure_config_output(self) -> dict[str, pulumi.Output[str] | str]:
+        assert self.config.hail
         return {
             'members_cache_location': self.common_gcp_infra.bucket_output_path(
-                self.gcp_members_cache_bucket
+                self.gcp_members_cache_bucket,
             ),
             'git_credentials_secret_name': self.config.hail.gcp.git_credentials_secret_name,
             'git_credentials_secret_project': self.config.hail.gcp.git_credentials_secret_project,
@@ -514,7 +540,7 @@ class CPGInfrastructure:
 
         items = self.build_infrastructure_config_output().items()
 
-        def _build_config(values):
+        def _build_config(values: list) -> str:
             """Build config from pulumi awaited values"""
             keys = [v[0] for v in items]
             # nest in .infrastructure
@@ -524,7 +550,7 @@ class CPGInfrastructure:
 
         infra_config = pulumi.Output.all(*[v[1] for v in items]).apply(_build_config)
         bucket_name, suffix = self.config.config_destination.removeprefix(
-            'gs://'
+            'gs://',
         ).split('/', maxsplit=1)
         self.common_gcp_infra.add_blob_to_bucket(
             'infrastructure-config',
@@ -537,13 +563,20 @@ class CPGInfrastructure:
 
     @cached_property
     def gcp_members_cache_bucket(self):
-        return self.common_gcp_infra.create_bucket(
+        bucket = self.common_gcp_infra.create_bucket(
             f'{self.config.gcp.dataset_storage_prefix}members-group-cache',
             unique=True,
             versioning=True,
             autoclass=False,  # Always accessed frequently.
             lifecycle_rules=[],
         )
+
+        # run as a pulumi export, even though it's exported in the config
+        pulumi.export(
+            'members-cache-bucket',
+            self.common_gcp_infra.bucket_output_path(bucket),
+        )
+        return bucket
 
     def setup_gcp_access_cache_bucket(self):
         group_cache_accessors = []
@@ -553,17 +586,17 @@ class CPGInfrastructure:
                 (
                     'analysis-runner',
                     self.config.analysis_runner.gcp.server_machine_account,
-                )
+                ),
             )
 
         if self.config.sample_metadata:
             group_cache_accessors.append(
-                ('sample-metadata', self.config.sample_metadata.gcp.machine_account)
+                ('sample-metadata', self.config.sample_metadata.gcp.machine_account),
             )
 
         if self.config.web_service:
             group_cache_accessors.append(
-                ('web-service', self.config.web_service.gcp.server_machine_account)
+                ('web-service', self.config.web_service.gcp.server_machine_account),
             )
 
         for key, account in group_cache_accessors:
@@ -579,7 +612,9 @@ class CPGInfrastructure:
     @cached_property
     def gcp_sample_metadata_invoker_group(self):
         return self.group_provider.create_group(
-            self.common_gcp_infra, cache_members=False, name='sample-metadata-invokers'
+            self.common_gcp_infra,
+            cache_members=False,
+            name='sample-metadata-invokers',
         )
 
     def setup_gcp_sample_metadata_cloudrun_invoker(self):
@@ -589,7 +624,7 @@ class CPGInfrastructure:
         if not isinstance(infra, GcpInfrastructure):
             raise ValueError(
                 f'Dataset_infrastructure for {self.config.common_dataset!r} was not of '
-                f'type GCPInfrastructure, this is probably a bug'
+                f'type GCPInfrastructure, this is probably a bug',
             )
 
         infra.add_cloudrun_invoker(
@@ -635,7 +670,7 @@ class CPGDatasetInfrastructure:
         root: CPGInfrastructure,
         group_provider: CPGInfrastructure.GroupProvider,
         dataset_config: CPGDatasetConfig,
-    ):
+    ) -> None:
         self.config = config
         self.root = root
         self.group_provider = group_provider
@@ -699,7 +734,7 @@ class CPGDatasetCloudInfrastructure:
         group_provider: CPGInfrastructure.GroupProvider,
         infra: CloudInfraBase,
         dataset_config: CPGDatasetConfig,
-    ):
+    ) -> None:
         self.config = config
         self.root = root
         self.group_provider = group_provider
@@ -732,12 +767,19 @@ class CPGDatasetCloudInfrastructure:
         self.storage_tomls: dict = {}
 
     def create_group(self, name: str, cache_members: bool = False):
+        """
+        Create a group with the dataset name as a prefix.
+
+        :param name: name of the group, without the dataset prefix
+        :param cache_members: whether to cache the members in a bucket
+        """
         group_name = f'{self.dataset_config.dataset}-{name}'
         # group = self.infra.create_group(group_name)
-        group = self.group_provider.create_group(
-            self.infra, cache_members=cache_members, name=group_name
+        return self.group_provider.create_group(
+            self.infra,
+            cache_members=cache_members,
+            name=group_name,
         )
-        return group
 
     def main(self):
         self.setup_access_groups()
@@ -835,6 +877,7 @@ class CPGDatasetCloudInfrastructure:
             self.metadata_access_group,
             self.upload_group,
             self.web_access_group,
+            self.release_access_group,
         ]
 
         for group in groups:
@@ -857,7 +900,7 @@ class CPGDatasetCloudInfrastructure:
                     )
 
     @staticmethod
-    def compute_hash(dataset, member, cloud: str):
+    def compute_hash(dataset: str, member: str, cloud: str) -> str:
         """
         >>> CPGDatasetCloudInfrastructure.compute_hash('dataset', 'hello.world@email.com', '')
         'HW-d51b65ee'
@@ -881,7 +924,7 @@ class CPGDatasetCloudInfrastructure:
         budget = self.dataset_config.budgets.get(self.infra.name())
         if not budget:
             raise ValueError(
-                f'No budget for {self.dataset_config.dataset}.{self.infra.name()}'
+                f'No budget for {self.dataset_config.dataset}.{self.infra.name()}',
             )
 
         self.infra.create_monthly_budget('monthly-budget', budget=budget.monthly_budget)
@@ -905,7 +948,8 @@ class CPGDatasetCloudInfrastructure:
             self.data_manager_group,
         )
         self.metadata_access_group.add_member(
-            self.infra.get_pulumi_name('analysis-in-metadata'), self.analysis_group
+            self.infra.get_pulumi_name('analysis-in-metadata'),
+            self.analysis_group,
         )
         self.web_access_group.add_member(
             self.infra.get_pulumi_name('metadata-in-web-access'),
@@ -923,10 +967,12 @@ class CPGDatasetCloudInfrastructure:
                 self.analysis_group,
             )
             self.test_full_group.add_member(
-                self.infra.get_pulumi_name('full-in-test-full'), self.full_group
+                self.infra.get_pulumi_name('full-in-test-full'),
+                self.full_group,
             )
             self.test_full_group.add_member(
-                self.infra.get_pulumi_name('test-in-test-full'), self.test_group
+                self.infra.get_pulumi_name('test-in-test-full'),
+                self.test_group,
             )
 
         self.main_list_group.add_member(
@@ -942,10 +988,12 @@ class CPGDatasetCloudInfrastructure:
             self.data_manager_group,
         )
         self.main_create_group.add_member(
-            self.infra.get_pulumi_name('standard-in-main-create'), self.standard_group
+            self.infra.get_pulumi_name('standard-in-main-create'),
+            self.standard_group,
         )
         self.main_create_group.add_member(
-            self.infra.get_pulumi_name('full-in-main-create'), self.full_group
+            self.infra.get_pulumi_name('full-in-main-create'),
+            self.full_group,
         )
 
         if isinstance(self.infra, GcpInfrastructure):
@@ -1034,7 +1082,12 @@ class CPGDatasetCloudInfrastructure:
         return accounts
 
     @staticmethod
-    def get_pulumi_output_group_name(*, infra_name: str, dataset: str, kind: str):
+    def get_pulumi_output_group_name(
+        *,
+        infra_name: str,
+        dataset: str,
+        kind: str,
+    ) -> str:
         return f'{infra_name}-{dataset}-{kind}-group-id'
 
     def setup_web_access_group_memberships(self):
@@ -1053,13 +1106,13 @@ class CPGDatasetCloudInfrastructure:
             if group := self.access_level_groups.get(access_level):
                 group.add_member(
                     self.infra.get_pulumi_name(
-                        f'{kind}-{access_level}-access-level-group-membership'
+                        f'{kind}-{access_level}-access-level-group-membership',
                     ),
                     member=machine_account,
                 )
             else:
                 print(
-                    f'No access level group for {access_level} in {self.dataset_config.dataset}'
+                    f'No access level group for {access_level} in {self.dataset_config.dataset}',
                 )
 
     def setup_gcp_monitoring_access(self):
@@ -1093,7 +1146,8 @@ class CPGDatasetCloudInfrastructure:
             return
 
         self.infra.give_member_ability_to_list_buckets(
-            'project-buckets-lister', self.main_list_group
+            'project-buckets-lister',
+            self.main_list_group,
         )
         self.setup_storage_archive_bucket_permissions()
         self.setup_storage_main_bucket_permissions()
@@ -1138,6 +1192,12 @@ class CPGDatasetCloudInfrastructure:
         )
 
     def setup_storage_outputs(self):
+        web_url_template = (
+            self.config.web_service.web_url_template
+            if self.config.web_service
+            else None
+        )
+
         buckets = {
             'main': {
                 'default': self.infra.bucket_output_path(self.main_bucket),
@@ -1145,13 +1205,16 @@ class CPGDatasetCloudInfrastructure:
                 'analysis': self.infra.bucket_output_path(self.main_analysis_bucket),
                 'tmp': self.infra.bucket_output_path(self.main_tmp_bucket),
                 'upload': self.infra.bucket_output_path(
-                    self.main_upload_buckets['main-upload']
-                ),
-                'web_url': self.config.web_url_template.format(
-                    namespace='main', dataset=self.dataset_config.dataset
+                    self.main_upload_buckets['main-upload'],
                 ),
             },
         }
+
+        if web_url_template:
+            buckets['main']['web_url'] = web_url_template.format(
+                namespace='main',
+                dataset=self.dataset_config.dataset,
+            )
 
         if self.dataset_config.setup_test:
             buckets['test'] = {
@@ -1160,10 +1223,13 @@ class CPGDatasetCloudInfrastructure:
                 'analysis': self.infra.bucket_output_path(self.test_analysis_bucket),
                 'tmp': self.infra.bucket_output_path(self.test_tmp_bucket),
                 'upload': self.infra.bucket_output_path(self.test_upload_bucket),
-                'web_url': self.config.web_url_template.format(
-                    namespace='test', dataset=self.dataset_config.dataset
-                ),
             }
+
+            if web_url_template:
+                buckets['test']['web_url'] = web_url_template.format(
+                    namespace='test',
+                    dataset=self.dataset_config.dataset,
+                )
 
         dependent_datasets = {
             *(self.dataset_config.depends_on or []),
@@ -1177,7 +1243,7 @@ class CPGDatasetCloudInfrastructure:
             configs_to_merge = []
             for dependent_dataset in sorted(dependent_datasets):
                 if cloud_infra := stacks_to_reference[dependent_dataset].clouds.get(
-                    self.infra.name()
+                    self.infra.name(),
                 ):
                     if config := cloud_infra.storage_tomls.get(namespace):
                         configs_to_merge.append(config)
@@ -1188,7 +1254,7 @@ class CPGDatasetCloudInfrastructure:
                 # keyword-argument to Pulumi so we can reference it, but Pulumi
                 # won't resolve a List[Output[T]]
                 prepare_config_kwargs['_extra_configs'] = pulumi.Output.all(
-                    *configs_to_merge
+                    *configs_to_merge,
                 ).apply(TOML_CONFIG_JOINER.join)
 
             if namespace == 'main':
@@ -1197,22 +1263,22 @@ class CPGDatasetCloudInfrastructure:
                         f'{ns}-{cat}': _bucket
                         for ns, ns_buckets in buckets.items()
                         for cat, _bucket in ns_buckets.items()
-                    }
+                    },
                 )
 
-                def _pulumi_prepare_function(arg):
+                def _pulumi_prepare_function(arg):  # noqa: ANN001,ANN202
                     """Redefine like this as Pulumi drops the self somehow"""
                     return self._pulumi_prepare_storage_outputs_main_function(arg)
 
             else:
                 prepare_config_kwargs.update(al_buckets)
 
-                def _pulumi_prepare_function(arg):
+                def _pulumi_prepare_function(arg):  # noqa: ANN001,ANN202
                     return self._pulumi_prepare_storage_outputs_test_function(arg)
 
             # This is a pulumi.Output[String]
             dataset_storage_config = pulumi.output.Output.all(
-                **prepare_config_kwargs
+                **prepare_config_kwargs,
             ).apply(_pulumi_prepare_function)
 
             # this export is important, it's how direct dependencies will be able to
@@ -1220,10 +1286,11 @@ class CPGDatasetCloudInfrastructure:
             # on transitive dependencies.
             self.storage_tomls[namespace] = dataset_storage_config
             self.add_config_toml_to_bucket(
-                namespace=namespace, contents=dataset_storage_config
+                namespace=namespace,
+                contents=dataset_storage_config,
             )
 
-    def add_config_toml_to_bucket(self, namespace, contents: pulumi.Output):
+    def add_config_toml_to_bucket(self, namespace: str, contents: pulumi.Output):
         """
         Write the config to a bucket, this function decides the output-path based
         on the current deploy infra, dataset, access_level.
@@ -1240,7 +1307,7 @@ class CPGDatasetCloudInfrastructure:
 
         _infra_to_call_function_on = None
         infra_prefix_map = [GcpInfrastructure, AzureInfra]
-        for Infra in infra_prefix_map:
+        for Infra in infra_prefix_map:  # noqa: N806
             if re.match(Infra.storage_url_regex(), self.config.config_destination):
                 _infra_to_call_function_on = (
                     self.infra
@@ -1251,11 +1318,11 @@ class CPGDatasetCloudInfrastructure:
         else:
             raise ValueError(
                 f'Could not find infra to save blob to for config_destination: '
-                f'{self.config.config_destination}'
+                f'{self.config.config_destination}',
             )
 
         bucket_name, suffix = self.config.config_destination.removeprefix(
-            'gs://'
+            'gs://',
         ).split('/', maxsplit=1)
 
         name = f'{self.infra.name()}-{self.dataset_config.dataset}-{namespace}'
@@ -1272,30 +1339,29 @@ class CPGDatasetCloudInfrastructure:
             contents=contents,
         )
 
-    def _pulumi_prepare_storage_outputs_test_function(self, arg):
+    def _pulumi_prepare_storage_outputs_test_function(self, arg: Any) -> str:
         """
         Don't call this directly from Pulumi, as it strips the self
         """
         kwargs = dict(arg)
-        config_dict = {}
+        config_dict: dict[str, Any] = {}
         if '_extra_configs' in kwargs:
             for config_str in kwargs.pop('_extra_configs').split(TOML_CONFIG_JOINER):
                 cpg_utils.config.update_dict(config_dict, toml.loads(config_str))
 
         storage_dict = {
-            'storage': {'default': kwargs, self.dataset_config.dataset: kwargs}
+            'storage': {'default': kwargs, self.dataset_config.dataset: kwargs},
         }
         if config_dict:
             cpg_utils.config.update_dict(config_dict, storage_dict)
         else:
             config_dict = storage_dict
 
-        d = dict_to_toml(config_dict)
-        return d
+        return dict_to_toml(config_dict)
 
-    def _pulumi_prepare_storage_outputs_main_function(self, arg):
+    def _pulumi_prepare_storage_outputs_main_function(self, arg: Any) -> str:
         kwargs: dict[str, Any] = dict(arg)
-        config_dict = {}
+        config_dict: dict[str, Any] = {}
         if '_extra_configs' in kwargs:
             for config_str in kwargs.pop('_extra_configs').split(TOML_CONFIG_JOINER):
                 cpg_utils.config.update_dict(config_dict, toml.loads(config_str))
@@ -1323,8 +1389,7 @@ class CPGDatasetCloudInfrastructure:
         else:
             config_dict = storage_dict
 
-        d = dict_to_toml(config_dict)
-        return d
+        return dict_to_toml(config_dict)
 
     def setup_storage_gcp_requester_pays_access(self):
         """
@@ -1561,7 +1626,7 @@ class CPGDatasetCloudInfrastructure:
                 'main-upload',
                 lifecycle_rules=[main_upload_undelete],
                 autoclass=self.dataset_config.autoclass,
-            )
+            ),
         }
 
         for additional_upload_bucket in self.dataset_config.additional_upload_buckets:
@@ -1715,7 +1780,7 @@ class CPGDatasetCloudInfrastructure:
         else:
             raise ValueError(
                 f'Unknown infra type {type(self.infra)} for '
-                'building hail_batch_billing_project'
+                'building hail_batch_billing_project',
             )
 
         return HailBatchBillingProject(
@@ -1809,8 +1874,7 @@ class CPGDatasetCloudInfrastructure:
         else:
             return {}
 
-        accounts = {cat: ac for cat, ac in accounts.items() if ac}
-        return accounts
+        return {cat: ac for cat, ac in accounts.items() if ac}
 
     @cached_property
     def hail_bucket(self):
@@ -1868,7 +1932,8 @@ class CPGDatasetCloudInfrastructure:
             )
 
             credentials = self.infra.get_credentials_for_machine_account(
-                f'cromwell-service-account-{access_level}-key', cromwell_account
+                f'cromwell-service-account-{access_level}-key',
+                cromwell_account,
             )
 
             # add credentials to the secret
@@ -1903,16 +1968,16 @@ class CPGDatasetCloudInfrastructure:
         if not self.should_setup_cromwell:
             return {}
 
-        accounts = {
+        return {
             access_level: self.infra.create_machine_account(f'cromwell-{access_level}')
             for access_level in access_levels(
-                include_test=self.dataset_config.setup_test
+                include_test=self.dataset_config.setup_test,
             )
         }
-        return accounts
 
-    def _gcp_setup_cromwell(self):
+    def _gcp_setup_cromwell(self) -> None:
         assert isinstance(self.infra, GcpInfrastructure)
+        assert self.config.cromwell
 
         # Add Hail service accounts to (premade) Cromwell access group.
         for access_level, hail_account in self.hail_accounts_by_access_level.items():
@@ -1989,13 +2054,12 @@ class CPGDatasetCloudInfrastructure:
         if not self.should_setup_spark:
             return {}
 
-        accounts = {
+        return {
             access_level: self.infra.create_machine_account(f'dataproc-{access_level}')
             for access_level in access_levels(
-                include_test=self.dataset_config.setup_test
+                include_test=self.dataset_config.setup_test,
             )
         }
-        return accounts
 
     # endregion SPARK
     # region SAMPLE METADATA
@@ -2020,12 +2084,10 @@ class CPGDatasetCloudInfrastructure:
         if not self.should_setup_sample_metadata:
             return {}
 
-        sm_groups = {
+        return {
             key: self.create_group(f'sample-metadata-{key}', cache_members=True)
             for key in SAMPLE_METADATA_PERMISSIONS
         }
-
-        return sm_groups
 
     def setup_sample_metadata_cloudrun_permissions(self):
         # now we give the sample_metadata_access_group access to cloud-run instance
@@ -2037,7 +2099,8 @@ class CPGDatasetCloudInfrastructure:
         )
         for sm_type, group in self.sample_metadata_groups.items():
             self.root.gcp_sample_metadata_invoker_group.add_member(
-                self.infra.get_pulumi_name(f'sample-metadata-{sm_type}-invoker'), group
+                self.infra.get_pulumi_name(f'sample-metadata-{sm_type}-invoker'),
+                group,
             )
 
     def setup_sample_metadata_access_permissions(self):
@@ -2048,7 +2111,7 @@ class CPGDatasetCloudInfrastructure:
             # make sure billing_coordinator can access sample metadata
             self.sample_metadata_groups[SM_MAIN_READ].add_member(
                 self.infra.get_pulumi_name(
-                    'sample-metadata-main-read-billing-coordinator'
+                    'sample-metadata-main-read-billing-coordinator',
                 ),
                 self.config.billing.coordinator_machine_account,
             )
@@ -2112,7 +2175,7 @@ class CPGDatasetCloudInfrastructure:
                     name=self._get_name_from_external_sa(sa),
                     member=sa,
                     permissions=(SM_MAIN_READ,),
-                )
+                ),
             )
         for sa in extra_sm_write_sas:
             sm_access_levels.append(
@@ -2120,14 +2183,14 @@ class CPGDatasetCloudInfrastructure:
                     name=self._get_name_from_external_sa(sa),
                     member=sa,
                     permissions=(SM_MAIN_READ, SM_MAIN_WRITE),
-                )
+                ),
             )
 
         for name, member, permission in sm_access_levels:
             for kind in permission:
                 self.sample_metadata_groups[kind].add_member(
                     self.infra.get_pulumi_name(
-                        f'sample-metadata-{kind}-{name}-group-membership'
+                        f'sample-metadata-{kind}-{name}-group-membership',
                     ),
                     member=member,
                 )
@@ -2251,7 +2314,7 @@ class CPGDatasetCloudInfrastructure:
         else:
             # TODO: How to abstract compute.admin on project
             raise NotImplementedError(
-                f'No implementation for compute.admin for notebook account on {self.infra.name()}'
+                f'No implementation for compute.admin for notebook account on {self.infra.name()}',
             )
 
     @cached_property
@@ -2289,7 +2352,7 @@ class CPGDatasetCloudInfrastructure:
                 bucket = self.config.azure.config_bucket_name
             else:
                 raise ValueError(
-                    f'Bucket could not be determined for {self.infra.name()}'
+                    f'Bucket could not be determined for {self.infra.name()}',
                 )
 
             self.infra.add_member_to_bucket(
@@ -2309,18 +2372,18 @@ class CPGDatasetCloudInfrastructure:
 
         if not self.dataset_config.enable_release:
             raise ValueError(
-                'Requested shared project, but no bucket is available to share.'
+                'Requested shared project, but no bucket is available to share.',
             )
         budget = self.dataset_config.budgets.get(self.infra.name())
         if not budget:
             raise ValueError(
-                f'No budget was available for {self.dataset_config.dataset}.{self.infra.name()}'
+                f'No budget was available for {self.dataset_config.dataset}.{self.infra.name()}',
             )
         if not budget.shared_total_budget:
             raise ValueError(
                 'Requested shared project, but the dataset configuration option '
                 f'"{self.dataset_config.dataset}.budgets.{self.infra.name()}'
-                '.shared_total_budget" was not specified.'
+                '.shared_total_budget" was not specified.',
             )
 
         shared_buckets = {'release': self.release_bucket}
@@ -2411,17 +2474,18 @@ class CPGDatasetCloudInfrastructure:
                         self.test_read_group,
                         self.test_read_group,
                         self.test_full_group,
-                    )
+                    ),
                 )
 
             for group in transitive_groups:
                 group_name = group.name.removeprefix(self.dataset_config.dataset + '-')
                 transitive_group = self.group_provider.get_group(
-                    self.infra.name(), f'{dependency}-{group_name}'
+                    self.infra.name(),
+                    f'{dependency}-{group_name}',
                 )
                 transitive_group.add_member(
                     self.infra.get_pulumi_name(
-                        f'transitive-{group_name}-in-{dependency}-{group_name}'
+                        f'transitive-{group_name}-in-{dependency}-{group_name}',
                     ),
                     group,
                 )
@@ -2443,12 +2507,13 @@ class CPGDatasetCloudInfrastructure:
                 ]
             for target_group, groups in group_map.items():
                 transitive_group = self.group_provider.get_group(
-                    self.infra.name(), f'{dependency}-{target_group}'
+                    self.infra.name(),
+                    f'{dependency}-{target_group}',
                 )
                 for group in groups:
                     transitive_group.add_member(
                         self.infra.get_pulumi_name(
-                            f'transitive-{group.name}-in-{dependency}-{target_group}'
+                            f'transitive-{group.name}-in-{dependency}-{target_group}',
                         ),
                         group,
                     )
@@ -2458,7 +2523,10 @@ class CPGDatasetCloudInfrastructure:
     # region UTILS
 
     @staticmethod
-    def _get_name_from_external_sa(email: str, suffix='.iam.gserviceaccount.com'):
+    def _get_name_from_external_sa(
+        email: str,
+        suffix: str = '.iam.gserviceaccount.com',
+    ) -> str:
         """
         Convert service account email to name + some filtering.
 
@@ -2471,10 +2539,7 @@ class CPGDatasetCloudInfrastructure:
         >>> CPGDatasetCloudInfrastructure._get_name_from_external_sa('my.service-account+extra@domain.com')
         'my-service-account-extra'
         """
-        if email.endswith(suffix):
-            base = email[: -len(suffix)]
-        else:
-            base = email.split('@')[0]
+        base = email[: -len(suffix)] if email.endswith(suffix) else email.split('@')[0]
 
         return NON_NAME_REGEX.sub('-', base).replace('--', '-')
 
@@ -2506,7 +2571,7 @@ def test():
                 ),
             ),
             budgets={'dry-run': CPGDatasetConfig.Budget(monthly_budget=100)},
-        )
+        ),
     ]
     infra = CPGInfrastructure(infra_config, configs)
     infra.main()

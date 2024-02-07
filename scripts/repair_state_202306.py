@@ -1,3 +1,4 @@
+# flake8: noqa: A003,DTZ005
 """
 If Pulumi suddenly loses a bunch of resources but they still exist in the cloud,
 this script can be used to generate statements to import them back into state.
@@ -15,12 +16,14 @@ It will generate a bunch of statements like:
 import dataclasses
 import functools
 import json
-from datetime import date
+from datetime import datetime
 
 import click
 import google.auth
 import googleapiclient.discovery
 from google.auth.transport.requests import Request
+
+today = datetime.now().strftime('%Y-%m-%d')
 
 
 @dataclasses.dataclass
@@ -96,7 +99,9 @@ def get_groups_credentials():
 def get_groups_members_service():
     """Returns the Google Groups settings service."""
     resource = googleapiclient.discovery.build(
-        'cloudidentity', 'v1', credentials=get_groups_credentials()
+        'cloudidentity',
+        'v1',
+        credentials=get_groups_credentials(),
     )
     return resource.groups().memberships()
 
@@ -111,7 +116,7 @@ def get_email_to_membership_id_for_group(group_key: str) -> dict[str, str]:
 
 
 @functools.cache
-def lookup_google_group_members(group_key: str):
+def lookup_google_group_members(group_key: str) -> list[dict]:
     """
     Lookup google group members
     """
@@ -125,7 +130,7 @@ def lookup_google_group_members(group_key: str):
     return members['memberships']
 
 
-def main(pulumi_plan_filename: str, output_filename=f'{date.today()}_imports.sh'):
+def main(pulumi_plan_filename: str, output_filename: str = f'{today}_imports.sh'):
     """
     Driver function for generating import commands
     :return:
@@ -149,7 +154,7 @@ def main(pulumi_plan_filename: str, output_filename=f'{date.today()}_imports.sh'
                     name=step['urn'].split('::')[-1],
                     id=new_id,
                     flags={},
-                )
+                ),
             )
 
     with open(output_filename, 'w', encoding='utf-8') as outfile:
@@ -165,7 +170,7 @@ def main(pulumi_plan_filename: str, output_filename=f'{date.today()}_imports.sh'
 @click.option(
     '--output-filename',
     help='Path to the output file',
-    default=f'{date.today()}_imports.sh',
+    default=f'{today}_imports.sh',
 )
 def from_cli(pulumi_plan_filename: str, output_filename: str):
     """

@@ -1,34 +1,39 @@
-# pylint: disable=missing-function-docstring,missing-class-docstring,invalid-name,too-many-return-statements
+# flake8: noqa: ANN102,ANN204,ANN206,,C901,ANN401,PLR2004mERA001
 """
 This module contains all the configuration objects that are used to
 describe the CPG infrastructure, including what's required from a
 specific dataset.
 """
-
 import dataclasses
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 import toml
 
-from cpg_infra.config.deserializabledataclass import (
-    DeserializableDataclass,
-    try_parse_value_as_type,
-)
+from cpg_infra.config.deserializabledataclass import DeserializableDataclass
 
 MemberKey = str
 GroupType = str
+CloudName = Literal['gcp', 'azure']
+GroupName = Literal[
+    'data-manager',
+    'analysis',
+    'metadata-access',
+    'web-access',
+    'release-access',
+    'upload',
+]
 
 
 @dataclasses.dataclass(frozen=True)
 class CPGInfrastructureUser(DeserializableDataclass):
     @dataclasses.dataclass(frozen=True)
     class Cloud(DeserializableDataclass):
-        id: str
+        id: str  # noqa: A003
         hail_batch_username: str | None = None
 
-    id: MemberKey
-    clouds: dict[str, Cloud]
+    id: MemberKey  # noqa: A003
+    clouds: dict[CloudName, Cloud]
     projects: list[str]
     add_to_internal_hail_batch_projects: bool = False
 
@@ -91,11 +96,18 @@ class CPGInfrastructureConfig(DeserializableDataclass):
 
     @dataclasses.dataclass(frozen=True)
     class WebService(DeserializableDataclass):
+        """
+        This is a CPG-specific configuration that allows a
+        web-server to serve static files from a bucket.
+        """
+
         @dataclasses.dataclass(frozen=True)
         class GCP(DeserializableDataclass):
             server_machine_account: str
 
         gcp: GCP
+        # The template is a string that can be formatted with: namespace, dataset
+        web_url_template: str | None = None
 
     @dataclasses.dataclass(frozen=True)
     class Notebooks(DeserializableDataclass):
@@ -152,6 +164,8 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     class Billing(DeserializableDataclass):
         @dataclasses.dataclass(frozen=True)
         class GCP(DeserializableDataclass):
+            """Details of the BILLING account"""
+
             project_id: str
             account_id: str
 
@@ -171,23 +185,39 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         aggregator: GCPAggregator | None = None
         hail_aggregator_username: str | None = None
 
+    # used in the gcp.organizations.get_organization(domain=self.config.domain) call
     domain: str
+    # Used when constructing budgets, usually AUD, USD, etc
     budget_currency: str
+    # Which dataset should we use to place organisation-wide resources
     common_dataset: str
-    web_url_template: str
 
+    # a gs://<bucket> path to a bucket to write storage, infra config files to
     config_destination: str
 
+    # a map of users know to the system, noting that a CPGDatasetConfig lists the users
+    # within itself, but this is a map of all users known to the system
     users: dict[MemberKey, CPGInfrastructureUser]
 
+    # configuration options for GCP
     gcp: GCP | None = None
+    # configuration options for Azure
     azure: Azure | None = None
+
+    # configuration options for Hail Batch
     hail: Hail | None = None
+    # configuration options for the analysis runner, the guard to analysis at the CPG
     analysis_runner: AnalysisRunner | None = None
+    # configuration options for the web service, a server that serves static files
+    # from a bucket
     web_service: WebService | None = None
+    # configuration options for our notebooks service
     notebooks: Notebooks | None = None
+    # configuration options for our cromwell service
     cromwell: Cromwell | None = None
+    # configuration options for our metamist service
     metamist: Metamist | None = None
+    # configuration options for billing + billing aggregation
     billing: Billing | None = None
 
     # When resources are renamed, it can be useful to explicitly apply changes in two
@@ -199,18 +229,19 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     # under the same organization. This allows you to avoid clashes :)
     group_prefix: str | None = None
 
+    # The default budget notification thresholds
     budget_notification_thresholds: list[float] = dataclasses.field(
-        default_factory=lambda: [0.5, 0.9, 1.0]
+        default_factory=lambda: [0.5, 0.9, 1.0],
     )
 
     @staticmethod
-    def from_toml(path):
+    def from_toml(path: str) -> 'CPGInfrastructureConfig':
         with open(path, encoding='utf-8') as f:
             d = toml.load(f)
         return CPGInfrastructureConfig.from_dict(d)
 
     @staticmethod
-    def from_dict(d):
+    def from_dict(d: dict[str, Any]) -> 'CPGInfrastructureConfig':
         if 'infrastructure' in d:
             d = d['infrastructure']
         return CPGInfrastructureConfig(**d)
@@ -231,7 +262,9 @@ class CPGDatasetComponents(Enum):
     ANALYSIS_RUNNER = 'analysis-runner'
 
     @staticmethod
-    def default_component_for_infrastructure():
+    def default_component_for_infrastructure() -> (
+        dict[str, list['CPGDatasetComponents']]
+    ):
         return {
             'dry-run': list(CPGDatasetComponents),
             'gcp': list(CPGDatasetComponents),
@@ -265,7 +298,7 @@ class CPGDatasetConfig(DeserializableDataclass):
             super().__post_init__()
         except TypeError as e:
             raise TypeError(
-                f'Could not instantiate {self.__class__.__name__} for {self.dataset!r}: {str(e)}'
+                f'Could not instantiate {self.__class__.__name__} for {self.dataset!r}: {e!s}',
             ) from e
 
     @dataclasses.dataclass(frozen=True)
@@ -294,31 +327,47 @@ class CPGDatasetConfig(DeserializableDataclass):
         # if overriding from the default CpgInfrastructure.currency
         currency: str | None = None
 
+    # the name of the dataset
     dataset: str
 
-    budgets: dict[str, Budget]
+    # the budgets of the dataset, keyed by the cloud ID
+    budgets: dict[CloudName, Budget]
 
+    # GCP config options, noting GCP is a required target, so you must provide this
     gcp: Gcp
+    # Azure config options
     azure: Azure | None = None
 
+    # should we setup the test namespace (buckets, accounts, etc)
+    # useful if you don't want to allow debugging for a dataset
     setup_test: bool = True
 
+    # 2024-01-05 mfranklin: these deployment accounts are legacy, and could probably
+    #   be removed, they relate to seqr's access to data, but we generally push.
     deployment_service_account_test: str | None = None
     deployment_service_account_standard: str | None = None
     deployment_service_account_full: str | None = None
 
+    # create a container registry in the dataset's project, recommended for 'common'
     create_container_registry: bool = False
 
-    deploy_locations: list[str] = dataclasses.field(default_factory=lambda: ['gcp'])
+    # which clouds do you want to deploy to?
+    deploy_locations: list[CloudName] = dataclasses.field(
+        default_factory=lambda: ['gcp'],
+    )
 
     is_internal_dataset: bool = False
 
     # creates a release requester-pays bucket
     enable_release: bool = False
+    # creates a shared project + SA to manage egress costs from release bucket
     enable_shared_project: bool = False
+    # creates a metamist project (+ test metamist project if setup_test is True)
     enable_metamist_project: bool = True
-    # give access for this dataset to access any other it depends on
+
+    # give FULL access to these datasets, as this dataset depends_on them
     depends_on: list[str] = dataclasses.field(default_factory=list)
+    # give READONLY access to these datasets, as this dataset needs it
     depends_on_readonly: list[str] = dataclasses.field(default_factory=list)
 
     # extra places that collaborators can upload data too
@@ -335,39 +384,19 @@ class CPGDatasetConfig(DeserializableDataclass):
     # for non-archive buckets. Currently only supported on GCP.
     autoclass: bool = True
 
-    components: dict[str, list[CPGDatasetComponents]] = dataclasses.field(
-        default_factory=dict
+    # which components should this dataset deploy on each cloud
+    components: dict[CloudName, list[CPGDatasetComponents]] = dataclasses.field(
+        default_factory=dict,
     )
 
-    # often set later from a separate repo
-    members: dict[str, list[str]] = dataclasses.field(default_factory=dict)
+    # Which users to do you want to be a part of each group.
+    members: dict[GroupName, list[MemberKey]] = dataclasses.field(default_factory=dict)
 
     @classmethod
-    def instantiate(cls, **kwargs):
+    def instantiate(cls, **kwargs: dict[str, Any]):
         if components := kwargs.get('components'):
             kwargs['components'] = {
                 k: [CPGDatasetComponents(c) for c in comps]
                 for k, comps in components.items()
             }
         return super().instantiate(**kwargs)
-
-    @classmethod
-    def from_pulumi(cls, config, **kwargs):
-        """
-        From a pulumi config, construct this class.
-        This will call specific get_bool, get_object, get methods where appropriate
-        """
-        fields = {field.name: field.type for field in dataclasses.fields(cls)}
-        d = {**kwargs}
-        for fieldname, ftype in fields.items():
-            value = try_parse_value_as_type(config, ftype)
-            if value:
-                d[fieldname] = value
-
-        if 'components' in d:
-            d['components'] = {
-                k: [CPGDatasetComponents(c) for c in comps]
-                for k, comps in d['components'].items()
-            }
-
-        return cls(**d)

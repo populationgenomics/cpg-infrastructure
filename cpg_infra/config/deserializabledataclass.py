@@ -1,4 +1,4 @@
-# pylint: disable=too-many-return-statements,missing-function-docstring
+# flake8: noqa:C901,ANN401,PLR2004,ERA001,ANN206,ANN102,ANN204
 """
 DeserializableDataclass is a dataclass that can be deserialized from a dictionary,
 with some extra functionality for parsing types.
@@ -6,7 +6,7 @@ with some extra functionality for parsing types.
 import dataclasses
 from inspect import isclass
 from types import UnionType
-from typing import get_args, get_origin
+from typing import Any, Literal, get_args, get_origin
 
 
 class DeserializableDataclass:
@@ -20,7 +20,7 @@ class DeserializableDataclass:
     """
 
     @classmethod
-    def instantiate(cls, **kwargs):
+    def instantiate(cls, **kwargs: dict[str, Any]):
         return cls(**kwargs)
 
     def __post_init__(self):
@@ -35,22 +35,22 @@ class DeserializableDataclass:
                 self.__dict__[fieldname] = try_parse_value_as_type(value, ftype)
             except ValueError as e:
                 raise ValueError(
-                    f'Error parsing {self.__class__.__name__}.{fieldname} :: {e!r}'
+                    f'Error parsing {self.__class__.__name__}.{fieldname} :: {e!r}',
                 ) from e
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         args = ', '.join(f'{k}={v!r}' for k, v in vars(self).items())
         return f'{self.__class__.__name__}( {args} )'
 
 
-def get_display_type_from_value(value):
+def get_display_type_from_value(value: Any):
     """Get display string for type of value"""
     if value is None:
         return 'None'
     return get_display_type(type(value))
 
 
-def get_display_type(t):
+def get_display_type(t: Any):
     """Get display string for type, t"""
     if isinstance(t, type(None)):
         return 'NoneType'
@@ -65,7 +65,7 @@ def get_display_type(t):
     return repr(t)
 
 
-def try_parse_value_as_type(value, dtype):
+def try_parse_value_as_type(value: Any, dtype: Any) -> Any:
     """
     Try to parse a value as a specific type.
     Raise a ValueError if it can't be parsed.
@@ -86,13 +86,10 @@ def try_parse_value_as_type(value, dtype):
 
         # union type
         if value is None:
-            if any(
-                isinstance(t, type(None)) or t is type(None)  # noqa: E721
-                for t in dtype
-            ):
+            if any(isinstance(t, type(None)) or t is type(None) for t in dtype):
                 return None
             raise ValueError(
-                f'Expected (non-optional) {get_display_type(dtype)}, got None'
+                f'Expected (non-optional) {get_display_type(dtype)}, got None',
             )
 
         union_parse_errors: list[ValueError] = []
@@ -113,7 +110,7 @@ def try_parse_value_as_type(value, dtype):
             )
             raise ValueError(message) from union_parse_errors[0]
         error_message = ''.join(
-            [f'\n\t{", ".join(e.args)}' for e in union_parse_errors]
+            [f'\n\t{", ".join(e.args)}' for e in union_parse_errors],
         )
         message = (
             f'Could not coerce value of type ({get_display_type_from_value(value)!r}) '
@@ -128,7 +125,7 @@ def try_parse_value_as_type(value, dtype):
     if dtype is list or get_origin(dtype) is list:
         if not isinstance(value, list):
             raise ValueError(
-                f'Expected list, got {get_display_type_from_value(value)} for {value!r}'
+                f'Expected list, got {get_display_type_from_value(value)} for {value!r}',
             )
         list_types = get_args(dtype)
         if len(list_types) != 1:
@@ -137,7 +134,7 @@ def try_parse_value_as_type(value, dtype):
     if dtype is dict or get_origin(dtype) is dict:
         if not isinstance(value, dict):
             raise ValueError(
-                f'Expected dict, got {get_display_type_from_value(value)} for {value!r}'
+                f'Expected dict, got {get_display_type_from_value(value)} for {value!r}',
             )
         dict_types = get_args(dtype)
         if len(dict_types) != 2:
@@ -147,26 +144,32 @@ def try_parse_value_as_type(value, dtype):
     if dtype is set or get_origin(dtype) is set:
         if not isinstance(value, (set, list)):
             raise ValueError(
-                f'Expected set, got {get_display_type_from_value(value)} for {value!r}'
+                f'Expected set, got {get_display_type_from_value(value)} for {value!r}',
             )
         set_types = get_args(dtype)
         if len(set_types) != 1:
             # set[any]
             return set(value)
-        return set(try_parse_value_as_type(v, set_types[0]) for v in value)
+        return {try_parse_value_as_type(v, set_types[0]) for v in value}
     if dtype is tuple or get_origin(dtype) is tuple:
         if not isinstance(value, (tuple, list)):
             raise ValueError(
-                f'Expected tuple, got {get_display_type_from_value(value)} for {value!r}'
+                f'Expected tuple, got {get_display_type_from_value(value)} for {value!r}',
             )
         tuple_types = get_args(dtype)
         if len(tuple_types) == 0:
             return tuple(value)
         if len(tuple_types) != len(value):
             raise ValueError(
-                f'Expected tuple of length {len(tuple_types)}, got {len(value)} for {value!r}'
+                f'Expected tuple of length {len(tuple_types)}, got {len(value)} for {value!r}',
             )
         return tuple(try_parse_value_as_type(v, t) for v, t in zip(value, tuple_types))
+
+    if get_origin(dtype) is Literal:
+        arg_values = get_args(dtype)
+        if value not in arg_values:
+            raise ValueError(f'Expected literal {arg_values}, got {value!r}')
+        return value
 
     if isinstance(value, dtype):
         return value

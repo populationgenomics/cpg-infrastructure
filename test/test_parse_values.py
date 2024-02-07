@@ -1,6 +1,7 @@
 """
 Test module for checking the parsing of values in the config
 """
+from typing import Literal
 from unittest import TestCase
 
 from cpg_infra.config import CPGDatasetConfig, CPGInfrastructureConfig
@@ -58,14 +59,16 @@ class TestParseValues(TestCase):
         """Check we allow a dict without a type"""
         dtype = dict
         self.assertDictEqual(
-            {'hello': 'world'}, try_parse_value_as_type({'hello': 'world'}, dtype)
+            {'hello': 'world'},
+            try_parse_value_as_type({'hello': 'world'}, dtype),
         )
 
     def test_parse_dict_str_type(self):
         """Check we allow a dict with a type"""
         dtype = dict[str, str]
         self.assertDictEqual(
-            {'hello': 'world'}, try_parse_value_as_type({'hello': 'world'}, dtype)
+            {'hello': 'world'},
+            try_parse_value_as_type({'hello': 'world'}, dtype),
         )
 
     def test_parse_dict_str_failure(self):
@@ -92,14 +95,16 @@ class TestParseValues(TestCase):
         """Check we allow a tuple without a type"""
         dtype = tuple
         self.assertTupleEqual(
-            ('hello', 'world'), try_parse_value_as_type(('hello', 'world'), dtype)
+            ('hello', 'world'),
+            try_parse_value_as_type(('hello', 'world'), dtype),
         )
 
     def test_parse_tuple_with_type(self):
         """Check we allow a tuple with a type"""
         dtype = tuple[str, str]
         self.assertTupleEqual(
-            ('hello', 'world'), try_parse_value_as_type(('hello', 'world'), dtype)
+            ('hello', 'world'),
+            try_parse_value_as_type(('hello', 'world'), dtype),
         )
 
     def test_parse_tuple_mismatched_length(self):
@@ -147,3 +152,16 @@ class TestParseValues(TestCase):
             },
         }
         _ = try_parse_value_as_type(dataset_config, CPGDatasetConfig)
+
+    def test_subscripted(self):
+        """
+        Check that we can parse a subscripted type
+        """
+        _ = try_parse_value_as_type('hi', Literal['hi'])
+
+    def test_literal_fail(self):
+        """
+        Check that we fail to parse a value not in the literal
+        """
+        with self.assertRaises(ValueError):
+            _ = try_parse_value_as_type('hi', Literal['hello'])

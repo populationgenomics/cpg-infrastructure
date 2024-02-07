@@ -1,9 +1,12 @@
+# flake8: noqa: ANN001
 """
 Pulumi provider for interacting with metamist
 """
 import functools
+from typing import Any
 
 import pulumi
+
 from metamist.apis import ProjectApi
 
 
@@ -29,7 +32,7 @@ def get_project_by_name(name: str) -> dict | None:
 class MetamistProjectProvider(pulumi.dynamic.ResourceProvider):
     """Pulumi provider for creating a metamist project"""
 
-    def create(self, props) -> pulumi.dynamic.CreateResult:
+    def create(self, props: dict[str, Any]) -> pulumi.dynamic.CreateResult:
         name = props['project_name']
 
         if project := get_project_by_name(name):
@@ -87,7 +90,7 @@ class MetamistProject(pulumi.dynamic.Resource):
         name: str,
         project_name: str,
         opts: pulumi.ResourceOptions | None = None,
-    ):
+    ) -> None:
         args = {
             'project_name': project_name,
         }
@@ -147,11 +150,11 @@ class MetamistProjectMembers(pulumi.dynamic.Resource):
     def __init__(
         self,
         name: str,
-        metamist_project_name: str,
-        read_members: list[str],
-        write_members: list[str],
+        metamist_project_name: str | pulumi.Output[str],
+        read_members: list[str] | pulumi.Output[list[str]],
+        write_members: list[str] | pulumi.Output[list[str]],
         opts: pulumi.ResourceOptions | None = None,
-    ):
+    ) -> None:
         args = {
             'project_name': metamist_project_name,
             'read_members': read_members,

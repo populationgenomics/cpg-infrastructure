@@ -1,4 +1,4 @@
-# pylint: disable=import-error,no-name-in-module,unused-argument
+# flake8: noqa: ANN401,ARG001
 """A Cloud Function to collect budget information from projects billing
 and store it in the bq table.
 """
@@ -7,6 +7,7 @@ import json
 import logging
 import os
 from functools import cache
+from typing import Any, Sequence
 
 import functions_framework
 import google.cloud.bigquery as bq
@@ -33,7 +34,7 @@ def get_budget_client() -> budget.BudgetServiceClient:
     return budget.BudgetServiceClient()
 
 
-def try_cast_int(i):
+def try_cast_int(i: Any) -> int | None:
     """Cast i to int, else return None if ValueError"""
     try:
         return int(i)
@@ -41,9 +42,15 @@ def try_cast_int(i):
         return None
 
 
-def insert_new_budget(bg_table, bq_client, gcp_projet, budget, currency):
+def insert_new_budget(
+    bg_table: str,
+    bq_client: bq.Client,
+    gcp_project: str,
+    budget: int | str,
+    currency: str,
+) -> Sequence[dict] | None:
     new_budget_obj = {
-        'gcp_project': gcp_projet,
+        'gcp_project': gcp_project,
         'budget': budget,
         'currency': currency,
     }
@@ -57,7 +64,12 @@ def insert_new_budget(bg_table, bq_client, gcp_projet, budget, currency):
     return None
 
 
-def compare_and_update_stored_budget(bg_table, bq_client, budget_rec, stored_budgets):
+def compare_and_update_stored_budget(
+    bg_table: str,
+    bq_client: bq.Client,
+    budget_rec: Any,
+    stored_budgets: dict[str, Any],
+):
     inner_amount = budget_rec.amount.specified_amount
     if not inner_amount:
         # ignore, project has no set budget
@@ -81,7 +93,11 @@ def compare_and_update_stored_budget(bg_table, bq_client, budget_rec, stored_bud
         # insert required
         logger.info(f'Inserting new budget for {budget_rec.display_name}')
         res = insert_new_budget(
-            bg_table, bq_client, budget_rec.display_name, budget_total, budget_currency
+            bg_table,
+            bq_client,
+            budget_rec.display_name,
+            budget_total,
+            budget_currency,
         )
 
     return res
@@ -91,6 +107,13 @@ def compare_and_update_stored_budget(bg_table, bq_client, budget_rec, stored_bud
 def from_request(request: Request):
     """Entrypoint for cloud functions, run always as default"""
 
+    assert BILLING_MONTHLY_BUDGET_TABLE
+
+    if '`' in BILLING_MONTHLY_BUDGET_TABLE:
+        raise ValueError(
+            f'Table name ({BILLING_MONTHLY_BUDGET_TABLE}) should not contain backticks',
+        )
+
     budget_client = get_budget_client()
     budgets = budget_client.list_budgets(parent=f'billingAccounts/{BILLING_ACCOUNT_ID}')
 
@@ -98,13 +121,16 @@ def from_request(request: Request):
     query = f"""
         SELECT gcp_project, budget, currency
         FROM `{BILLING_MONTHLY_BUDGET_TABLE}`
-    """
+    """  # noqa: S608
     stored_budgets = {b.gcp_project: b for b in list(bq_client.query(query).result())}
     res = []
 
     for b in budgets:
         errors = compare_and_update_stored_budget(
-            BILLING_MONTHLY_BUDGET_TABLE, bq_client, b, stored_budgets
+            BILLING_MONTHLY_BUDGET_TABLE,
+            bq_client,
+            b,
+            stored_budgets,
         )
         if errors:
             res.append({b.display_name: errors})
