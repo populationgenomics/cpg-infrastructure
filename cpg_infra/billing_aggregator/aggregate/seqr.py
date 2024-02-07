@@ -398,7 +398,7 @@ def migrate_entries_from_bq(
         entries = []
         seqr_wide_param_map, current_date = None, None
         for obj in json_objs:
-            labels = obj['labels']
+            labels = utils.reformat_bigqquery_labels(obj['labels'])
 
             usage_start_time = utils.get_date_time_from_value(
                 'usage_start_time',
@@ -425,17 +425,18 @@ def migrate_entries_from_bq(
             _obj_param_map = seqr_wide_param_map
             if 'dataset' in labels:
                 # specific override where 'dataset' is specified in GCP resource
-                # MiloH question: labels seems to have format {'key': 'KEY1, 'value': 'VAL'}
-                # so how does this work?
                 _obj_param_map = {labels['dataset']: (1.0, 1)}
 
             # Data transforms and key changes
             obj['topic'] = 'seqr'
             obj['service']['id'] = SERVICE_ID
 
-            # reformat labels & system lables as JSON string
-            obj['labels'] = utils.format_as_string(labels)
-            obj['system_labels'] = utils.format_as_string(obj['system_labels'])
+            # reformat labels & system lables as string
+            obj['labels'] = rapidjson.dumps(labels, sort_keys=True)
+            obj['system_labels'] = rapidjson.dumps(
+                utils.reformat_bigqquery_labels(obj['system_labels']),
+                sort_keys=True,
+            )
 
             nid = '-'.join([SERVICE_ID, 'seqr', billing_obj_to_key(obj)])
             obj['id'] = nid
@@ -454,14 +455,12 @@ def migrate_entries_from_bq(
                 new_entry = obj.copy()
 
                 new_entry['topic'] = dataset
-                new_labels = utils.format_as_string(
-                    [
-                        *labels,
-                        {'key': 'proportion', 'value': ratio},
-                        {'key': 'dataset_size', 'value': dataset_size},
-                    ],
-                )
-                new_entry['labels'] = new_labels
+
+                new_labels = labels.copy()
+                new_labels['proportion'] = ratio
+                new_labels['dataset_size'] = dataset_size
+
+                new_entry['labels'] = rapidjson.dumps(new_labels, sort_keys=True)
                 new_entry['cost'] *= ratio
 
                 nid = '-'.join([SERVICE_ID, dataset, billing_obj_to_key(new_entry)])

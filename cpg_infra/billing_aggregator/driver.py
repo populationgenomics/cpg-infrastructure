@@ -484,6 +484,9 @@ class BillingAggregator(CpgInfrastructurePlugin):
             project=project_id,
             clusterings=['topic'],
             time_partitioning={'type': 'DAY', 'field': 'usage_end_time'},
+            # This table is significantly large and recreating it takes a long time
+            # so we enable deletion protection in case of accidental deletion
+            # if you want to delete it, you need to disable deletion protection first
             deletion_protection=True,
         )
 

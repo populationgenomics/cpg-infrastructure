@@ -1152,10 +1152,10 @@ def infer_batch_namespace(batch: dict) -> str:
     return default
 
 
-def format_as_string(data: list[dict[str, Any]]) -> str:
+def reformat_bigqquery_labels(data: list[dict[str, Any]]) -> dict[str, Any]:
     """
     Convert from {'key': 'KEY1', 'value': 'VAL1'} to {'KEY1': 'VAL1'}
-    and keep other keys as there are, return as JSON string
+    and keep other keys as there are
     """
     labels = {}
     for kv in data:
@@ -1166,4 +1166,4 @@ def format_as_string(data: list[dict[str, Any]]) -> str:
             for k, v in kv.items():
                 labels[k] = v
 
-    return rapidjson.dumps(labels, sort_keys=True)
+    return labels
