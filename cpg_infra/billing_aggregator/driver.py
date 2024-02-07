@@ -496,7 +496,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
         materialized_views = ['aggregate_daily', 'aggregate_daily_extended']
         for view_name in materialized_views:
             materialized_view_query = get_file_content(
-                f'{PATH_TO_AGGREGATE_SOURCE_CODE}/{view_name}_view.sql',
+                f'{PATH_TO_AGGREGATE_SOURCE_CODE}/{view_name}_view.txt',
             ).replace(
                 '%AGGREGATE_TABLE%',
                 self.config.billing.aggregator.destination_bq_table,
