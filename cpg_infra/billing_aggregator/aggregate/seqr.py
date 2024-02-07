@@ -40,8 +40,9 @@ from typing import Any, Generator, Literal
 import functions_framework
 import google.cloud.bigquery as bq
 import rapidjson
-from cpg_utils.config import AR_GUID_NAME
 from flask import Request
+
+from cpg_utils.config import AR_GUID_NAME
 from metamist.apis import AnalysisApi, ProjectApi, SampleApi
 from metamist.model.body_get_proportionate_map import BodyGetProportionateMap
 from metamist.model.proportional_date_temporal_method import (
