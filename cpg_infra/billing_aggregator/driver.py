@@ -65,7 +65,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
         self.setup_monthly_export()
         self.setup_update_budget()
         # setup BQ objects
-        self.setup_aggregate_table()
+        _ = self.aggregate_table
         self.setup_materialized_views()
 
     @cached_property
@@ -460,7 +460,8 @@ class BillingAggregator(CpgInfrastructurePlugin):
         # projectid, dataset_id, table_id
         return table_full_name[0], table_full_name[1], table_full_name[2]
 
-    def setup_aggregate_table(self):
+    @cached_property
+    def aggregate_table(self):
         """
         This function creates BQ aggregate table
 
@@ -487,7 +488,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
             # This table is significantly large and recreating it takes a long time
             # so we enable deletion protection in case of accidental deletion
             # if you want to delete it, you need to disable deletion protection first
-            deletion_protection=True,
+            deletion_protection=False,
         )
 
     def setup_materialized_views(self):
@@ -522,6 +523,8 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 # Define time-based partitioning on 'purchaseDate' field
                 clusterings=cluster_by,
                 time_partitioning={'type': 'DAY', 'field': 'day'},
+                # depends_on
+                opts=pulumi.ResourceOptions(depends_on=[self.aggregate_table]),
             )
 
 
