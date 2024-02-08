@@ -28,6 +28,7 @@ TO DO :
 - Getting latest cram for sample by sequence type (eg: exome / genome)
 """
 import asyncio
+import copy
 import dataclasses
 import hashlib
 import logging
@@ -398,7 +399,7 @@ def migrate_entries_from_bq(
         entries = []
         seqr_wide_param_map, current_date = None, None
         for obj in json_objs:
-            labels = obj['labels']
+            labels = utils.reformat_bigqquery_labels(obj['labels'])
 
             usage_start_time = utils.get_date_time_from_value(
                 'usage_start_time',
@@ -430,7 +431,13 @@ def migrate_entries_from_bq(
             # Data transforms and key changes
             obj['topic'] = 'seqr'
             obj['service']['id'] = SERVICE_ID
-            obj['labels'] = labels
+
+            # reformat labels & system lables as string
+            obj['labels'] = rapidjson.dumps(labels, sort_keys=True)
+            obj['system_labels'] = rapidjson.dumps(
+                utils.reformat_bigqquery_labels(obj['system_labels']),
+                sort_keys=True,
+            )
 
             nid = '-'.join([SERVICE_ID, 'seqr', billing_obj_to_key(obj)])
             obj['id'] = nid
@@ -446,14 +453,15 @@ def migrate_entries_from_bq(
             )
 
             for dataset, (ratio, dataset_size) in _obj_param_map.items():
-                new_entry = obj.copy()
+                new_entry = copy.deepcopy(obj)
 
                 new_entry['topic'] = dataset
-                new_entry['labels'] = [
-                    *labels,
-                    {'key': 'proportion', 'value': ratio},
-                    {'key': 'dataset_size', 'value': dataset_size},
-                ]
+
+                new_labels = copy.deepcopy(labels)
+                new_labels['proportion'] = ratio
+                new_labels['dataset_size'] = dataset_size
+
+                new_entry['labels'] = rapidjson.dumps(new_labels, sort_keys=True)
                 new_entry['cost'] *= ratio
 
                 nid = '-'.join([SERVICE_ID, dataset, billing_obj_to_key(new_entry)])

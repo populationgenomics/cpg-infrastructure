@@ -43,6 +43,12 @@ PATH_TO_UPDATE_BUDGET_SOURCE_CODE = os.path.join(
 )
 
 
+def get_file_content(filename: str) -> str:
+    """Read content of the file"""
+    with open(filename, encoding='utf-8') as file:
+        return file.read()
+
+
 class BillingAggregator(CpgInfrastructurePlugin):
     """Billing aggregator Infrastructure (as code) for Pulumi"""
 
@@ -58,6 +64,9 @@ class BillingAggregator(CpgInfrastructurePlugin):
         self.setup_aggregator_functions()
         self.setup_monthly_export()
         self.setup_update_budget()
+        # setup BQ objects
+        _ = self.aggregate_table
+        self.setup_materialized_views()
 
     @cached_property
     def functions_service(self):
@@ -249,8 +258,11 @@ class BillingAggregator(CpgInfrastructurePlugin):
             # https://cloud.google.com/functions/docs/configuring/memory
             memory = '1024M'
             cpu = 1
-            if function in ('hail', 'seqr'):
+            if function == 'hail':
                 memory = '2048M'
+            if function == 'seqr':
+                # 2GB is not enough for seqr
+                memory = '2560M'
             # Create the function, the trigger and subscription.
             _ = self.create_cloud_function(
                 resource_name=f'billing-aggregator-{function}-billing-function',
@@ -340,9 +352,14 @@ class BillingAggregator(CpgInfrastructurePlugin):
         # Slack notifications
         filter_string = fxn.name.apply(
             lambda fxn_name: f"""
-                resource.type="cloud_function"
-                AND resource.labels.function_name="{fxn_name}"
-                AND severity >= WARNING
+                ((
+                    resource.type="cloud_function"
+                    AND resource.labels.function_name="{fxn_name}"
+                ) OR (
+                    resource.type="cloud_run_revision"
+                    AND resource.labels.service_name="{fxn_name}"
+                ))
+                AND severity>=WARNING
             """,
         )
 
@@ -424,6 +441,91 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 ),
             },
         )
+
+    def extract_dataset_table(self):
+        expected_table_name_parts = 3
+        table_full_name = self.config.billing.aggregator.destination_bq_table.split('.')
+        if len(table_full_name) != expected_table_name_parts:
+            raise ValueError(
+                'Invalid destination_bq_table, should be in the format: '
+                'project_id.dataset_id.table_id',
+            )
+
+        if table_full_name[0] != self.config.billing.gcp.project_id:
+            raise ValueError(
+                'Invalid destination_bq_table, project_id does not match the '
+                'billing project_id',
+            )
+
+        # projectid, dataset_id, table_id
+        return table_full_name[0], table_full_name[1], table_full_name[2]
+
+    @cached_property
+    def aggregate_table(self):
+        """
+        This function creates BQ aggregate table
+
+        self.config.billing.aggregator.destination_bq_table
+        has format:
+        project_id.dataset_id.table_id
+        """
+        (project_id, dataset_id, table_id) = self.extract_dataset_table()
+
+        # Load schema from a JSON file
+        schema = get_file_content(
+            f'{PATH_TO_AGGREGATE_SOURCE_CODE}/aggregate_schema.json',
+        )
+
+        # Create a BigQuery Table with clustering, time-based partitioning
+        return gcp.bigquery.Table(
+            f'billing-{table_id}-table',
+            dataset_id=dataset_id,
+            table_id=table_id,
+            schema=schema,
+            project=project_id,
+            clusterings=['topic'],
+            time_partitioning={'type': 'DAY', 'field': 'usage_end_time'},
+            # This table is significantly large and recreating it takes a long time
+            # so we enable deletion protection in case of accidental deletion
+            # if you want to delete it, you need to disable deletion protection first
+            deletion_protection=False,
+        )
+
+    def setup_materialized_views(self):
+        """
+        Create materlized views for the aggregate table
+        """
+        (project_id, dataset_id, _table_id) = self.extract_dataset_table()
+
+        materialized_views = ['aggregate_daily', 'aggregate_daily_extended']
+        for view_name in materialized_views:
+            materialized_view_query = get_file_content(
+                f'{PATH_TO_AGGREGATE_SOURCE_CODE}/{view_name}_view.txt',
+            ).replace(
+                '%AGGREGATE_TABLE%',
+                self.config.billing.aggregator.destination_bq_table,
+            )
+
+            cluster_by = ['topic', 'gcp_project']
+            if view_name == 'aggregate_daily_extended':
+                cluster_by = ['ar_guid', 'batch_id']
+
+            _ = gcp.bigquery.Table(
+                f'{view_name}_view',
+                dataset_id=dataset_id,
+                table_id=view_name,
+                project=project_id,
+                materialized_view=gcp.bigquery.TableMaterializedViewArgs(
+                    query=materialized_view_query,
+                    enable_refresh=True,
+                    refresh_interval_ms=1800000,
+                ),
+                # Define time-based partitioning on 'purchaseDate' field
+                clusterings=cluster_by,
+                time_partitioning={'type': 'DAY', 'field': 'day'},
+                # depends_on
+                opts=pulumi.ResourceOptions(depends_on=[self.aggregate_table]),
+            )
 
 
 def b64encode_str(s: str) -> str:
