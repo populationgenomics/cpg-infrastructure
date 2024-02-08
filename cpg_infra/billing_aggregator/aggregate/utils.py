@@ -492,8 +492,9 @@ async def process_entries_from_hail_in_chunks(
     log_prefix: str = '',
     mode: str = 'prod',
     output_path: str = './',
-    func_batches_preprocessor: Callable[[list[dict]], Awaitable[list[dict]]]
-    | None = None,
+    func_batches_preprocessor: (
+        Callable[[list[dict]], Awaitable[list[dict]]] | None
+    ) = None,
 ) -> int:
     """
     Process all the seqr entries from hail batch,
@@ -1072,12 +1073,10 @@ def get_hail_entry(
 
     assert labels is None or isinstance(labels, dict)
 
-    _labels = []
+    _labels = None
     if labels:
-        _labels = [
-            {'key': k, 'value': str(v).encode('ascii', 'ignore').decode()}
-            for k, v in labels.items()
-        ]
+        # convert to string
+        _labels = rapidjson.dumps(labels, sort_keys=True)
     return {
         'id': key,
         'topic': topic,
@@ -1090,7 +1089,7 @@ def get_hail_entry(
         'usage_end_time': to_bq_time(end_time),
         'project': None,
         'labels': _labels,
-        'system_labels': [],
+        'system_labels': None,
         'location': {
             'location': 'australia-southeast1',
             'country': 'Australia',
@@ -1151,3 +1150,20 @@ def infer_batch_namespace(batch: dict) -> str:
             return 'main'
 
     return default
+
+
+def reformat_bigqquery_labels(data: list[dict[str, Any]]) -> dict[str, Any]:
+    """
+    Convert from {'key': 'KEY1', 'value': 'VAL1'} to {'KEY1': 'VAL1'}
+    and keep other keys as there are
+    """
+    labels = {}
+    for kv in data:
+        if 'key' in kv:
+            labels[kv['key']] = kv['value']
+        else:
+            # otherwise keep the original key
+            for k, v in kv.items():
+                labels[k] = v
+
+    return labels
