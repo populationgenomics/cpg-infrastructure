@@ -150,6 +150,11 @@ class CPGInfrastructureConfig(DeserializableDataclass):
 
                 parsers: list[ETLParserConfiguration]
 
+                def to_dict(self):
+                    return {
+                        'parsers': [dataclasses.asdict(p) for p in self.parsers],
+                    }
+
             accessors: dict[str, ETLAccessorConfiguration] | None
             # Metamist environment (DEVELOPMENT / PRODUCTION) for ETL cloud functions
             environment: str | None = 'PRODUCTION'
