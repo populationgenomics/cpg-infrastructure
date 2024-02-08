@@ -142,16 +142,16 @@ class CPGInfrastructureConfig(DeserializableDataclass):
                 class ETLParserConfiguration(DeserializableDataclass):
                     # the type/version of the parser
                     name: str
-                    # effectively, turn the
-                    type_override: str | None
+                    # # effectively, turn the
+                    # type_override: str | None
                     # Default ETL parser configuration, if not specified in ETL payload
                     # e.g.: {'project': 'greek-myth', 'default_sequencing_type': 'genome'}
                     default_parameters: dict[str, Any] | None = None
 
                 parsers: list[ETLParserConfiguration]
 
-            # Metamist environment (DEVELOPMENT / PRODUCTION) for ETL cloud functions
             accessors: dict[str, ETLAccessorConfiguration] | None
+            # Metamist environment (DEVELOPMENT / PRODUCTION) for ETL cloud functions
             environment: str | None = 'PRODUCTION'
             # Collection of private packages to be appended to requirements.txt
             private_repo_packages: list[str] | None = None
@@ -257,7 +257,7 @@ class CPGDatasetComponents(Enum):
     CROMWELL = 'cromwell'
     NOTEBOOKS = 'notebooks'
     HAIL_ACCOUNTS = 'hail-accounts'
-    SAMPLE_METADATA = 'sample_metadata'
+    METAMIST = 'metamist'
     CONTAINER_REGISTRY = 'container-registry'
     ANALYSIS_RUNNER = 'analysis-runner'
 
@@ -273,7 +273,7 @@ class CPGDatasetComponents(Enum):
                 CPGDatasetComponents.HAIL_ACCOUNTS,
                 CPGDatasetComponents.ANALYSIS_RUNNER,
                 CPGDatasetComponents.CONTAINER_REGISTRY,
-                # CPGDatasetComponents.SAMPLE_METADATA,
+                # CPGDatasetComponents.METAMIST,
             ],
         }
 

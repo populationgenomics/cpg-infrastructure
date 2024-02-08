@@ -78,6 +78,9 @@ def try_parse_value_as_type(value: Any, dtype: Any) -> Any:
     if isinstance(dtype, UnionType):
         dtype = get_args(dtype)
 
+    if dtype is Any:
+        return value
+
     if isinstance(dtype, tuple):
         # union type
         if len(dtype) == 0:
