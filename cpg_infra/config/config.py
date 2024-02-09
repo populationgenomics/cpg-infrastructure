@@ -142,8 +142,9 @@ class CPGInfrastructureConfig(DeserializableDataclass):
                 class ETLParserConfiguration(DeserializableDataclass):
                     # the type/version of the parser
                     name: str
-                    # # effectively, turn the
-                    # type_override: str | None
+                    # override the parser to use for this dataset, otherwise
+                    # will use the 'name' to find it.
+                    parser_name: str | None
                     # Default ETL parser configuration, if not specified in ETL payload
                     # e.g.: {'project': 'greek-myth', 'default_sequencing_type': 'genome'}
                     default_parameters: dict[str, Any] | None = None
