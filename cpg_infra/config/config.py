@@ -127,23 +127,44 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         gcp: GCP
 
     @dataclasses.dataclass(frozen=True)
-    class SampleMetadata(DeserializableDataclass):
+    class Metamist(DeserializableDataclass):
         @dataclasses.dataclass(frozen=True)
         class GCP(DeserializableDataclass):
             project: str
             service_name: str
             machine_account: str
 
+        @dataclasses.dataclass(frozen=True)
+        class ETLConfiguration(DeserializableDataclass):
+            @dataclasses.dataclass(frozen=True)
+            class ETLAccessorConfiguration(DeserializableDataclass):
+                @dataclasses.dataclass(frozen=True)
+                class ETLParserConfiguration(DeserializableDataclass):
+                    # the type/version of the parser
+                    name: str
+                    # override the parser to use for this dataset, otherwise
+                    # will use the 'name' to find it.
+                    parser_name: str | None = None
+                    # Default ETL parser configuration, if not specified in ETL payload
+                    # e.g.: {'project': 'greek-myth', 'default_sequencing_type': 'genome'}
+                    default_parameters: dict[str, Any] | None = None
+
+                parsers: list[ETLParserConfiguration]
+
+                def to_dict(self):
+                    return {
+                        'parsers': [dataclasses.asdict(p) for p in self.parsers],
+                    }
+
+            accessors: dict[str, ETLAccessorConfiguration] | None
+            # Metamist environment (DEVELOPMENT / PRODUCTION) for ETL cloud functions
+            environment: str | None = 'PRODUCTION'
+            # Collection of private packages to be appended to requirements.txt
+            private_repo_packages: list[str] | None = None
+
         gcp: GCP
+        etl: ETLConfiguration | None = None
         slack_channel: str | None = None
-        etl_accessors: list[str] = dataclasses.field(default_factory=list)
-        # Metamist environment (DEVELOPMENT / PRODUCTION) for ETL cloud functions
-        etl_environment: str | None = 'PRODUCTION'
-        # Default ETL parser configuration, if not specified in ETL payload
-        # e.g.: {'project': 'greek-myth', 'default_sequencing_type': 'genome'}
-        etl_parser_default_config: dict[str, str] | None = None
-        # Collection of private packages for ETL functions appended to requirements.txt
-        etl_private_repo_packages: list[str] | None = None
 
     @dataclasses.dataclass(frozen=True)
     class Billing(DeserializableDataclass):
@@ -201,7 +222,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     # configuration options for our cromwell service
     cromwell: Cromwell | None = None
     # configuration options for our metamist service
-    sample_metadata: SampleMetadata | None = None
+    metamist: Metamist | None = None
     # configuration options for billing + billing aggregation
     billing: Billing | None = None
 
@@ -242,7 +263,7 @@ class CPGDatasetComponents(Enum):
     CROMWELL = 'cromwell'
     NOTEBOOKS = 'notebooks'
     HAIL_ACCOUNTS = 'hail-accounts'
-    SAMPLE_METADATA = 'sample_metadata'
+    METAMIST = 'metamist'
     CONTAINER_REGISTRY = 'container-registry'
     ANALYSIS_RUNNER = 'analysis-runner'
 
@@ -258,7 +279,7 @@ class CPGDatasetComponents(Enum):
                 CPGDatasetComponents.HAIL_ACCOUNTS,
                 CPGDatasetComponents.ANALYSIS_RUNNER,
                 CPGDatasetComponents.CONTAINER_REGISTRY,
-                # CPGDatasetComponents.SAMPLE_METADATA,
+                # CPGDatasetComponents.METAMIST,
             ],
         }
 

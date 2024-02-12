@@ -1,7 +1,8 @@
 """
 Test module for checking the parsing of values in the config
 """
-from typing import Literal
+
+from typing import Any, Literal
 from unittest import TestCase
 
 from cpg_infra.config import CPGDatasetConfig, CPGInfrastructureConfig
@@ -165,3 +166,12 @@ class TestParseValues(TestCase):
         """
         with self.assertRaises(ValueError):
             _ = try_parse_value_as_type('hi', Literal['hello'])
+
+    def test_any_pass(self):
+        """
+        Check that we can parse typing.Any
+        """
+        self.assertEqual(True, try_parse_value_as_type(True, Any))
+        self.assertEqual(1, try_parse_value_as_type(1, Any))
+        self.assertEqual('hi', try_parse_value_as_type('hi', Any))
+        self.assertEqual({'hi': 'world'}, try_parse_value_as_type({'hi': 'world'}, Any))

@@ -52,7 +52,7 @@ SM_TEST_READ = 'test-read'
 SM_TEST_WRITE = 'test-write'
 SM_MAIN_READ = 'main-read'
 SM_MAIN_WRITE = 'main-write'
-SAMPLE_METADATA_PERMISSIONS = [
+METAMIST_PERMISSIONS = [
     SM_TEST_READ,
     SM_TEST_WRITE,
     SM_MAIN_READ,
@@ -297,7 +297,7 @@ class CPGInfrastructure:
     def main(self):
         self.setup_datasets()
         self.setup_gcp_access_cache_bucket()
-        self.setup_gcp_sample_metadata_cloudrun_invoker()
+        self.setup_gcp_metamist_cloudrun_invoker()
         self.setup_python_registry()
 
         self.deploy_datasets()
@@ -440,12 +440,14 @@ class CPGInfrastructure:
                     infra.add_group_member(
                         resource_key=resource_key,
                         group=group.group,
-                        member=member.cloud_id
-                        if isinstance(
-                            member,
-                            CPGInfrastructure.GroupProvider.Group.GroupMember,
-                        )
-                        else member.group,
+                        member=(
+                            member.cloud_id
+                            if isinstance(
+                                member,
+                                CPGInfrastructure.GroupProvider.Group.GroupMember,
+                            )
+                            else member.group
+                        ),
                         unique_resource_key=True,
                     )
 
@@ -487,7 +489,7 @@ class CPGInfrastructure:
                     continue
                 cloud_infra = dataset_infra.clouds[cloud_name]
 
-                sm_groups = cloud_infra.sample_metadata_groups
+                sm_groups = cloud_infra.metamist_groups
                 if group_name not in sm_groups:
                     pulumi.warn(
                         f'{dataset_infra.dataset} :: metamist-group {group_name!r} '
@@ -589,9 +591,9 @@ class CPGInfrastructure:
                 ),
             )
 
-        if self.config.sample_metadata:
+        if self.config.metamist:
             group_cache_accessors.append(
-                ('sample-metadata', self.config.sample_metadata.gcp.machine_account),
+                ('sample-metadata', self.config.metamist.gcp.machine_account),
             )
 
         if self.config.web_service:
@@ -610,14 +612,14 @@ class CPGInfrastructure:
     # endregion ACCESS_CACHE
 
     @cached_property
-    def gcp_sample_metadata_invoker_group(self):
+    def gcp_metamist_invoker_group(self):
         return self.group_provider.create_group(
             self.common_gcp_infra,
             cache_members=False,
             name='sample-metadata-invokers',
         )
 
-    def setup_gcp_sample_metadata_cloudrun_invoker(self):
+    def setup_gcp_metamist_cloudrun_invoker(self):
         # pylint: disable
         infra = self.common_gcp_infra
 
@@ -627,11 +629,13 @@ class CPGInfrastructure:
                 f'type GCPInfrastructure, this is probably a bug',
             )
 
+        assert self.config.metamist
+
         infra.add_cloudrun_invoker(
             'sample-metadata-cloudrun-invokers',
-            service=self.config.sample_metadata.gcp.service_name,
-            project=self.config.sample_metadata.gcp.project,
-            member=self.gcp_sample_metadata_invoker_group,
+            service=self.config.metamist.gcp.service_name,
+            project=self.config.metamist.gcp.project,
+            member=self.gcp_metamist_invoker_group,
         )
 
     @cached_property
@@ -641,6 +645,9 @@ class CPGInfrastructure:
         andt there's no equivalent for Azure.
 
         """
+        assert self.config.gcp
+        assert self.common_gcp_infra.project
+
         return gcp.artifactregistry.Repository(
             'python-artifact-registry',
             repository_id='python-registry',
@@ -752,9 +759,7 @@ class CPGDatasetCloudInfrastructure:
         self.should_setup_spark = CPGDatasetComponents.SPARK in self.components
         self.should_setup_cromwell = CPGDatasetComponents.CROMWELL in self.components
         self.should_setup_notebooks = CPGDatasetComponents.NOTEBOOKS in self.components
-        self.should_setup_sample_metadata = (
-            CPGDatasetComponents.SAMPLE_METADATA in self.components
-        )
+        self.should_setup_metamist = CPGDatasetComponents.METAMIST in self.components
         self.should_setup_hail = CPGDatasetComponents.HAIL_ACCOUNTS in self.components
         self.should_setup_container_registry = (
             CPGDatasetComponents.CONTAINER_REGISTRY in self.components
@@ -789,8 +794,8 @@ class CPGDatasetCloudInfrastructure:
         # optional components
         if self.should_setup_storage:
             self.setup_storage()
-        if self.should_setup_sample_metadata:
-            self.setup_sample_metadata()
+        if self.should_setup_metamist:
+            self.setup_metamist()
         if self.should_setup_hail:
             self.setup_hail()
         if self.should_setup_cromwell:
@@ -1673,6 +1678,8 @@ class CPGDatasetCloudInfrastructure:
 
         # give web-server access to test-bucket
         if isinstance(self.infra, GcpInfrastructure):
+            assert self.config.web_service
+
             self.infra.add_member_to_bucket(
                 'web-server-test-web-bucket-viewer',
                 bucket=self.test_web_bucket,
@@ -1767,6 +1774,8 @@ class CPGDatasetCloudInfrastructure:
 
     @cached_property
     def hail_batch_billing_project(self):
+        assert self.config.hail
+
         if isinstance(self.infra, GcpInfrastructure):
             if not self.config.hail.gcp:
                 raise ValueError('config.hail.gcp was not set to find hail_batch_url')
@@ -1796,6 +1805,7 @@ class CPGDatasetCloudInfrastructure:
     def setup_git_checkout_token_permissions(self):
         if (
             isinstance(self.infra, GcpInfrastructure)
+            and self.config.hail
             and self.config.hail.gcp.git_credentials_secret_name
         ):
             for name, access_group in self.access_level_groups.items():
@@ -1836,6 +1846,7 @@ class CPGDatasetCloudInfrastructure:
 
         bucket = None
         if isinstance(self.infra, GcpInfrastructure):
+            assert self.config.hail
             bucket = self.config.hail.gcp.wheel_bucket_name
 
         if not bucket:
@@ -1910,6 +1921,7 @@ class CPGDatasetCloudInfrastructure:
 
             # TODO: test if this is necessary, I don't think it should be :suss:
             # Allow the Cromwell SERVER to run worker VMs using the Cromwell SAs
+            assert self.config.cromwell
             self.infra.add_member_to_machine_account_role(
                 f'cromwell-runner-{access_level}-service-account-user',
                 machine_account,
@@ -1922,6 +1934,7 @@ class CPGDatasetCloudInfrastructure:
             self._gcp_setup_cromwell()
 
     def setup_cromwell_credentials(self):
+        assert self.config.analysis_runner
         for (
             access_level,
             cromwell_account,
@@ -2064,52 +2077,52 @@ class CPGDatasetCloudInfrastructure:
     # endregion SPARK
     # region SAMPLE METADATA
 
-    def setup_sample_metadata(self):
-        if not self.should_setup_sample_metadata:
+    def setup_metamist(self):
+        if not self.should_setup_metamist:
             return
 
-        self.setup_sample_metadata_access_permissions()
+        self.setup_metamist_access_permissions()
 
         if isinstance(self.infra, GcpInfrastructure):
             # do some cloudrun stuff
-            self.setup_sample_metadata_cloudrun_permissions()
+            self.setup_metamist_cloudrun_permissions()
         elif isinstance(self.infra, AzureInfra):
             # we'll do some custom stuff here :)
             raise NotImplementedError
 
     @cached_property
-    def sample_metadata_groups(
+    def metamist_groups(
         self,
     ) -> dict[str, CPGInfrastructure.GroupProvider.Group]:
-        if not self.should_setup_sample_metadata:
+        if not self.should_setup_metamist:
             return {}
 
         return {
             key: self.create_group(f'sample-metadata-{key}', cache_members=True)
-            for key in SAMPLE_METADATA_PERMISSIONS
+            for key in METAMIST_PERMISSIONS
         }
 
-    def setup_sample_metadata_cloudrun_permissions(self):
-        # now we give the sample_metadata_access_group access to cloud-run instance
+    def setup_metamist_cloudrun_permissions(self):
+        # now we give the metamist_access_group access to cloud-run instance
         assert isinstance(self.infra, GcpInfrastructure)
 
-        self.root.gcp_sample_metadata_invoker_group.add_member(
+        self.root.gcp_metamist_invoker_group.add_member(
             self.infra.get_pulumi_name('sample-metadata-analysis-invoker'),
             self.analysis_group,
         )
-        for sm_type, group in self.sample_metadata_groups.items():
-            self.root.gcp_sample_metadata_invoker_group.add_member(
+        for sm_type, group in self.metamist_groups.items():
+            self.root.gcp_metamist_invoker_group.add_member(
                 self.infra.get_pulumi_name(f'sample-metadata-{sm_type}-invoker'),
                 group,
             )
 
-    def setup_sample_metadata_access_permissions(self):
-        if not self.should_setup_sample_metadata:
+    def setup_metamist_access_permissions(self):
+        if not self.should_setup_metamist:
             return
 
         if self.config.billing and self.config.billing.coordinator_machine_account:
             # make sure billing_coordinator can access sample metadata
-            self.sample_metadata_groups[SM_MAIN_READ].add_member(
+            self.metamist_groups[SM_MAIN_READ].add_member(
                 self.infra.get_pulumi_name(
                     'sample-metadata-main-read-billing-coordinator',
                 ),
@@ -2125,7 +2138,7 @@ class CPGDatasetCloudInfrastructure:
             SampleMetadataAccessorMembership(
                 name='data-manager-group',
                 member=self.data_manager_group,
-                permissions=SAMPLE_METADATA_PERMISSIONS,
+                permissions=METAMIST_PERMISSIONS,
             ),
             SampleMetadataAccessorMembership(
                 name='metadata-group',
@@ -2155,15 +2168,19 @@ class CPGDatasetCloudInfrastructure:
             SampleMetadataAccessorMembership(
                 name='full',
                 member=self.full_group,
-                permissions=SAMPLE_METADATA_PERMISSIONS,
-            ),
-            # allow the analysis-runner logging cloud function to update the sample-metadata project
-            SampleMetadataAccessorMembership(
-                name='analysis-runner-logger',
-                member=self.config.analysis_runner.gcp.logger_machine_account,
-                permissions=SAMPLE_METADATA_PERMISSIONS,
+                permissions=METAMIST_PERMISSIONS,
             ),
         ]
+
+        if self.config.analysis_runner:
+            # allow the analysis-runner logging cloud function to update the sample-metadata project
+            sm_access_levels.append(
+                SampleMetadataAccessorMembership(
+                    name='analysis-runner-logger',
+                    member=self.config.analysis_runner.gcp.logger_machine_account,
+                    permissions=METAMIST_PERMISSIONS,
+                ),
+            )
 
         # extra custom SAs
         extra_sm_read_sas = self.dataset_config.sm_read_only_sas
@@ -2188,7 +2205,7 @@ class CPGDatasetCloudInfrastructure:
 
         for name, member, permission in sm_access_levels:
             for kind in permission:
-                self.sample_metadata_groups[kind].add_member(
+                self.metamist_groups[kind].add_member(
                     self.infra.get_pulumi_name(
                         f'sample-metadata-{kind}-{name}-group-membership',
                     ),
@@ -2214,6 +2231,8 @@ class CPGDatasetCloudInfrastructure:
 
         if self.dataset_config.dataset != self.config.common_dataset:
             return
+
+        assert self.config.analysis_runner
 
         self.infra.add_member_to_container_registry(
             'images-reader-in-analysis-runner',
@@ -2303,6 +2322,8 @@ class CPGDatasetCloudInfrastructure:
         )
 
         if isinstance(self.infra, GcpInfrastructure):
+            assert self.config.notebooks
+
             self.infra.add_project_role(
                 'notebook-account-compute-admin',
                 project=self.config.notebooks.gcp.project,  # NOTEBOOKS_PROJECT,
@@ -2319,6 +2340,7 @@ class CPGDatasetCloudInfrastructure:
 
     @cached_property
     def notebook_account(self):
+        assert self.config.notebooks
         return self.infra.create_machine_account(
             f'notebook-{self.dataset_config.dataset}',
             project=self.config.notebooks.gcp.project,
@@ -2335,6 +2357,7 @@ class CPGDatasetCloudInfrastructure:
 
     def setup_analysis_runner_access(self):
         assert isinstance(self.infra, GcpInfrastructure)
+        assert self.config.analysis_runner
         self.infra.add_cloudrun_invoker(
             'analysis-runner-analysis-invoker',
             project=self.config.analysis_runner.gcp.project,  # ANALYSIS_RUNNER_PROJECT,
@@ -2347,8 +2370,10 @@ class CPGDatasetCloudInfrastructure:
 
         for key, group in keys.items():
             if isinstance(self.infra, GcpInfrastructure):
+                assert self.config.gcp
                 bucket = self.config.gcp.config_bucket_name
             elif isinstance(self.infra, AzureInfra):
+                assert self.config.azure
                 bucket = self.config.azure.config_bucket_name
             else:
                 raise ValueError(

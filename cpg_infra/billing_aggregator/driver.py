@@ -57,7 +57,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
         Setup the billing aggregator cloud functions,
         these are designed to only work on GCP, so no abstraction
         """
-        if not self.config.billing.aggregator:
+        if not self.config.billing or not self.config.billing.aggregator:
             print('Skipping billing aggregator config was not present')
             return
 
@@ -194,6 +194,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
             pubsub_topic=pubsub,
             source_archive_object=source_archive_object,
             notification_channel=self.slack_channel,
+            project=self.config.billing.gcp.project_id,
             env={
                 # 'SETUP_GCP_LOGGING': 'true',
                 'OUTPUT_BILLING_SHEET': self.config.billing.aggregator.billing_sheet_id,
@@ -203,6 +204,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
 
     def setup_aggregator_functions(self):
         """Setup hourly aggregator functions"""
+        assert self.config.billing
         if not 0 < self.config.billing.aggregator.interval_hours <= 24:  # noqa: PLR2004
             raise ValueError(
                 f'Invalid aggregator interval, {self.config.billing.aggregator.interval_hours} '
@@ -274,6 +276,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 notification_channel=self.slack_channel,
                 memory=memory,
                 cpu=cpu,
+                project=self.config.billing.gcp.project_id,
                 env={
                     # 'SETUP_GCP_LOGGING': 'true',
                     'GCP_AGGREGATE_DEST_TABLE': self.config.billing.aggregator.destination_bq_table,
@@ -297,12 +300,16 @@ class BillingAggregator(CpgInfrastructurePlugin):
         notification_channel: gcp.monitoring.NotificationChannel,
         env: dict,
         source_file: str | None = None,
+        project: str | None = None,
         memory: str = '512M',
         cpu: int | None = None,
     ):
         """
         Create a single Cloud Function. Include the pubsub trigger and event alerts
         """
+
+        assert self.config.billing
+
         # Trigger for the function, subscribe to the pubusub topic
         trigger = gcp.cloudfunctionsv2.FunctionEventTriggerArgs(
             event_type='google.cloud.pubsub.topic.v1.messagePublished',
@@ -324,6 +331,9 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 runtime='python311',
                 entry_point='from_request',
                 environment_variables=build_environment_variables,
+                # this one is set on an output, so specifying it keeps the function
+                # from being updated, or appearing to update
+                docker_repository=f'projects/{project}/locations/australia-southeast1/repositories/gcf-artifacts',
                 source=gcp.cloudfunctionsv2.FunctionBuildConfigSourceArgs(
                     storage_source=gcp.cloudfunctionsv2.FunctionBuildConfigSourceStorageSourceArgs(
                         bucket=self.source_bucket.name,
@@ -391,6 +401,9 @@ class BillingAggregator(CpgInfrastructurePlugin):
         return fxn, trigger, alert_policy
 
     def setup_update_budget(self):
+        assert self.config.billing
+        assert self.config.gcp
+
         # The Cloud Function source code itself needs to be zipped up into an
         # archive, which we create using the pulumi.AssetArchive primitive.
         archive = archive_folder(PATH_TO_UPDATE_BUDGET_SOURCE_CODE)
@@ -433,6 +446,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
             pubsub_topic=pubsub,
             source_archive_object=source_archive_object,
             notification_channel=self.slack_channel,
+            project=self.config.billing.gcp.project_id,
             env={
                 'BILLING_ACCOUNT_ID': self.config.billing.gcp.account_id,
                 # TODO create new config property for this
