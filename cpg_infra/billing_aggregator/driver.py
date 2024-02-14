@@ -260,10 +260,8 @@ class BillingAggregator(CpgInfrastructurePlugin):
             # https://cloud.google.com/functions/docs/configuring/memory
             memory = '1024M'
             cpu = 1
-            if function == 'hail':
-                memory = '2048M'
-            if function == 'seqr':
-                # 2GB is not enough for seqr
+            if function in ('hail', 'seqr'):
+                # 2GB is not enough for seqr & hail
                 memory = '2560M'
             # Create the function, the trigger and subscription.
             _ = self.create_cloud_function(
