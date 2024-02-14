@@ -22,7 +22,7 @@ DOCKER_IMAGE = (
 )
 
 
-def prepare_job(job: hb.batches.job.Job, clone_repo: bool):
+def prepare_job(job: hb.batch.job.Job, clone_repo: bool):
     """Sets up the given job to run scripts in the same repository."""
     job.image(DOCKER_IMAGE)
     copy_common_env(job)
