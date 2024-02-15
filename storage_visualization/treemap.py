@@ -78,13 +78,13 @@ def form_row(name: str, parent: str, values: dict[str, Any]) -> tuple:
     )
 
 
-def main():
+def main() -> None:
     """Main entrypoint."""
 
     logging.getLogger().setLevel(logging.INFO)
     args = get_parser().parse_args()
 
-    rows: dict[tuple] = []
+    rows: list[tuple] = []
 
     root_values = defaultdict(int)
     group_by_dataset = args.group_by_dataset
