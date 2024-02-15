@@ -984,6 +984,7 @@ class CPGDatasetCloudInfrastructure:
             self.infra.get_pulumi_name('analysis-group-in-main-list'),
             self.analysis_group,
         )
+
         self.main_read_group.add_member(
             self.infra.get_pulumi_name('main-create-in-main-read'),
             self.main_create_group,
@@ -2086,6 +2087,8 @@ class CPGDatasetCloudInfrastructure:
         if isinstance(self.infra, GcpInfrastructure):
             # do some cloudrun stuff
             self.setup_metamist_cloudrun_permissions()
+            # setup list access for metamist to dataset bucket objects
+            self.setup_metamist_dataset_storage_permissions()
         elif isinstance(self.infra, AzureInfra):
             # we'll do some custom stuff here :)
             raise NotImplementedError
@@ -2101,6 +2104,17 @@ class CPGDatasetCloudInfrastructure:
             key: self.create_group(f'sample-metadata-{key}', cache_members=True)
             for key in METAMIST_PERMISSIONS
         }
+
+    def setup_metamist_dataset_storage_permissions(self):
+        assert isinstance(self.infra, GcpInfrastructure)
+
+        # add metamist machine account to the `main-list` group for the dataset.
+        # this group gives list access to the dataset buckets but grants no ability
+        # to read the actual contents of objects
+        self.main_list_group.add_member(
+            self.infra.get_pulumi_name('metamist-service-account-in-main-list'),
+            self.infra.config.metamist.gcp.machine_account,
+        )
 
     def setup_metamist_cloudrun_permissions(self):
         # now we give the metamist_access_group access to cloud-run instance
