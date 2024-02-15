@@ -86,7 +86,7 @@ def main() -> None:
 
     rows: list[tuple] = []
 
-    root_values = defaultdict(int)
+    root_values: dict[str, int] = defaultdict(int)
     group_by_dataset = args.group_by_dataset
     datasets: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for input_path in args.input:
