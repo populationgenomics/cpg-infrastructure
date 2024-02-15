@@ -83,7 +83,7 @@ aapi = AnalysisApi()
 def get_finalised_entries_for_batch(
     batch,
     proportion_map: ProportionateMapType,
-) -> list[dict[str, Any]]:
+) -> Generator[dict[str, Any], None, None]:
     """
     Take a batch dictionary, and the full proportion map
     and return a list of entries for the Hail batch.
@@ -108,7 +108,6 @@ def get_finalised_entries_for_batch(
     currency_conversion_rate = utils.get_currency_conversion_rate_for_time(start_time)
 
     jobs_with_no_dataset: list[dict[str, Any]] = []
-    entries: list[dict[str, Any]] = []
 
     for job in batch['jobs']:
         dataset = job['attributes'].get('dataset', '').replace('-test', '')
@@ -116,19 +115,23 @@ def get_finalised_entries_for_batch(
             jobs_with_no_dataset.append(job)
             continue
 
-        entries.extend(
-            get_finalised_entries_for_dataset_batch_and_job(
-                dataset=dataset,
-                batch_id=batch_id,
-                batch_name=batch_name,
-                batch_start_time=start_time,
-                batch_end_time=end_time,
-                namespace=namespace,
-                job=job,
-                ar_guid=ar_guid,
-                currency_conversion_rate=currency_conversion_rate,
-            ),
-        )
+        for entry in get_finalised_entries_for_dataset_batch_and_job(
+            dataset=dataset,
+            batch_id=batch_id,
+            batch_name=batch_name,
+            batch_start_time=start_time,
+            batch_end_time=end_time,
+            namespace=namespace,
+            job=job,
+            ar_guid=ar_guid,
+            currency_conversion_rate=currency_conversion_rate,
+        ):
+            yield entry
+            yield utils.get_credit(
+                entry=entry,
+                topic='seqr',
+                project=utils.SEQR_PROJECT_FIELD,
+            )
 
     # Now go through each job within the batch withOUT a dataset
     # and proportion a fraction of them to each relevant dataset.
@@ -212,37 +215,31 @@ def get_finalised_entries_for_batch(
                         batch_resource,
                     )
                 key = '-'.join(key_components).replace('/', '-')
-                entries.append(
-                    utils.get_hail_entry(
-                        key=key,
-                        topic=dataset,
-                        service_id=SERVICE_ID,
-                        description='Seqr compute (distributed)',
-                        cost=gross_cost * fraction,
-                        currency_conversion_rate=currency_conversion_rate,
-                        usage=round(raw_usage * fraction),
-                        batch_resource=batch_resource,
-                        start_time=start_time,
-                        end_time=end_time,
-                        labels={
-                            **labels,
-                            'dataset': dataset,
-                            # awkward way to round to 2 decimal places in Python
-                            'fraction': str(round(100 * fraction) / 100),
-                            'dataset_size': str(dataset_size),
-                        },
-                    ),
+                entry = utils.get_hail_entry(
+                    key=key,
+                    topic=dataset,
+                    service_id=SERVICE_ID,
+                    description='Seqr compute (distributed)',
+                    cost=gross_cost * fraction,
+                    currency_conversion_rate=currency_conversion_rate,
+                    usage=round(raw_usage * fraction),
+                    batch_resource=batch_resource,
+                    start_time=start_time,
+                    end_time=end_time,
+                    labels={
+                        **labels,
+                        'dataset': dataset,
+                        # awkward way to round to 2 decimal places in Python
+                        'fraction': str(round(100 * fraction) / 100),
+                        'dataset_size': str(dataset_size),
+                    },
                 )
-
-    entries.extend(
-        utils.get_credits(
-            entries=entries,
-            topic='hail',
-            project=utils.HAIL_PROJECT_FIELD,
-        ),
-    )
-
-    return entries
+                yield entry
+                yield utils.get_credit(
+                    entry=entry,
+                    topic='seqr',
+                    project=utils.SEQR_PROJECT_FIELD,
+                )
 
 
 def get_finalised_entries_for_dataset_batch_and_job(
@@ -255,12 +252,11 @@ def get_finalised_entries_for_dataset_batch_and_job(
     job: dict[str, Any],
     currency_conversion_rate: float,
     ar_guid: str | None,
-):
+) -> Generator[dict[str, Any], None, None]:
     """
     Get the list of entries for a dataset attributed job
 
     """
-    entries = []
 
     job_id = job['job_id']
     job_name = job['attributes'].get('name')
@@ -312,23 +308,19 @@ def get_finalised_entries_for_dataset_batch_and_job(
                 str(job_id),
             ),
         )
-        entries.append(
-            utils.get_hail_entry(
-                key=key,
-                topic=dataset,
-                service_id=SERVICE_ID,
-                description='Seqr compute',
-                cost=cost,
-                currency_conversion_rate=currency_conversion_rate,
-                usage=job['resources'].get(batch_resource, 0),
-                batch_resource=batch_resource,
-                start_time=batch_start_time,
-                end_time=batch_end_time,
-                labels=labels,
-            ),
+        yield utils.get_hail_entry(
+            key=key,
+            topic=dataset,
+            service_id=SERVICE_ID,
+            description='Seqr compute',
+            cost=cost,
+            currency_conversion_rate=currency_conversion_rate,
+            usage=job['resources'].get(batch_resource, 0),
+            batch_resource=batch_resource,
+            start_time=batch_start_time,
+            end_time=batch_end_time,
+            labels=labels,
         )
-
-    return entries
 
 
 def migrate_entries_from_bq(
@@ -444,9 +436,9 @@ def migrate_entries_from_bq(
 
             # For every seqr billing entry migrate it over
             entries.append(obj)
-            entries.extend(
-                utils.get_credits(
-                    entries=[obj],
+            entries.append(
+                utils.get_credit(
+                    entry=obj,
                     topic='seqr',
                     project=utils.SEQR_PROJECT_FIELD,
                 ),
@@ -684,10 +676,10 @@ async def main(
 
         return batches
 
-    def func_get_finalised_entries(batch) -> list[dict[str, Any]]:
+    def func_get_finalised_entries(batch) -> Generator[dict[str, Any], None, None]:
         return get_finalised_entries_for_batch(
-            batch,
-            prop_maps.shared_computation_prop_map,
+            batch=batch,
+            proportion_map=prop_maps.shared_computation_prop_map,
         )
 
     result += await utils.process_entries_from_hail_in_chunks(
@@ -703,7 +695,7 @@ async def main(
     result += migrate_entries_from_bq(
         start,
         end,
-        prop_maps.seqr_hosting_prop_map,
+        prop_map=prop_maps.seqr_hosting_prop_map,
         mode=mode,
         output_path=bq_output_path,
     )

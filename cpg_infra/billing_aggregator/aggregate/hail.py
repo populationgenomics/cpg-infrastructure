@@ -26,7 +26,7 @@ import logging
 import os
 import shutil
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Generator
 
 import functions_framework
 from flask import Request
@@ -52,29 +52,35 @@ def get_billing_projects():
     """
     Get Hail billing projects, same names as dataset names
     """
-
-    server_config = json.loads(
-        read_secret(
-            utils.ANALYSIS_RUNNER_PROJECT_ID,
-            'server-config',
-            fail_gracefully=False,
-        ),
+    server_config = read_secret(
+        utils.ANALYSIS_RUNNER_PROJECT_ID,
+        'server-config',
+        fail_gracefully=False,
     )
+
+    if not server_config:
+        return []
+
+    server_config = json.loads(server_config)
+
     return list(set(server_config.keys()) - EXCLUDED_BATCH_PROJECTS)
 
 
-def get_finalised_entries_for_batch(batch: dict) -> List[Dict]:
+def get_finalised_entries_for_batch(
+    batch: dict,
+) -> Generator[dict[str, Any], None, None]:
     """
     Take a batch, and generate the actual cost of all the jobs,
     and return a list of BigQuery rows - one per resource type.
     """
 
     if batch['billing_project'] in EXCLUDED_BATCH_PROJECTS:
-        return []
-
-    entries = []
+        return None
 
     start_time = utils.parse_hail_time(batch['time_created'])
+    if not start_time:
+        raise ValueError(f'No start time for batch {batch["id"]}')
+
     end_time = utils.parse_hail_time(batch['time_completed'])
     batch_id = batch['id']
     namespace = utils.infer_batch_namespace(batch)
@@ -147,31 +153,25 @@ def get_finalised_entries_for_batch(batch: dict) -> List[Dict]:
                     batch_resource,
                 )
             key = '-'.join(key_components).replace('/', '-')
-            entries.append(
-                utils.get_hail_entry(
-                    key=key,
-                    topic=dataset,
-                    service_id=SERVICE_ID,
-                    description='Hail compute',
-                    cost=cost,
-                    currency_conversion_rate=currency_conversion_rate,
-                    usage=usage,
-                    batch_resource=batch_resource,
-                    start_time=start_time,
-                    end_time=end_time,
-                    labels=labels,
-                ),
+            entry = utils.get_hail_entry(
+                key=key,
+                topic=dataset,
+                service_id=SERVICE_ID,
+                description='Hail compute',
+                cost=cost,
+                currency_conversion_rate=currency_conversion_rate,
+                usage=usage,
+                batch_resource=batch_resource,
+                start_time=start_time,
+                end_time=end_time,
+                labels=labels,
             )
-
-    entries.extend(
-        utils.get_credits(
-            entries=entries,
-            topic='hail',
-            project=utils.HAIL_PROJECT_FIELD,
-        ),
-    )
-
-    return entries
+            yield entry
+            yield utils.get_credit(
+                entry=entry,
+                topic='hail',
+                project=utils.HAIL_PROJECT_FIELD,
+            )
 
 
 @functions_framework.http
