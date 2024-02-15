@@ -8,6 +8,7 @@ import logging
 import sys
 from collections import defaultdict
 
+import google.api_core.exceptions
 from cloudpathlib import AnyPath
 from google.cloud import storage
 
@@ -76,6 +77,28 @@ def main():
             continue  # Skip main buckets when testing.
 
         bucket_name = f'cpg-{dataset}-{bucket_suffix}'
+        count_stats_for_bucket(
+            storage_client=storage_client,
+            aggregate_stats_container=aggregate_stats,
+            bucket_name=bucket_name,
+        )
+
+    output = sys.argv[2]
+    logging.info(f'Writing results to {output}...')
+    with AnyPath(output).open('wb') as f, gzip.open(f, 'wt') as gzf:
+        json.dump(aggregate_stats, gzf)
+
+
+def count_stats_for_bucket(
+    storage_client: storage.Client,
+    aggregate_stats_container: defaultdict,
+    bucket_name: str,
+):
+    """
+    Calculate blob statistics for the given bucket and
+    put them in the aggregate_stats_container.
+    """
+    try:
         logging.info(f'Listing blobs in {bucket_name}...')
         blobs = storage_client.list_blobs(bucket_name)
         count = 0
@@ -86,7 +109,7 @@ def main():
             folder = f'/{aggregate_level(blob.name)}'
             while True:
                 path = f'gs://{bucket_name}{folder}'
-                stats = aggregate_stats[path]
+                stats = aggregate_stats_container[path]
                 stats['size'] += blob.size
                 stats[f'{blob.storage_class}_bytes'] += blob.size
                 stats['num_blobs'] += 1
@@ -100,10 +123,9 @@ def main():
 
         logging.info(f'{bucket_name} contains {count} blobs.')
 
-    output = sys.argv[2]
-    logging.info(f'Writing results to {output}...')
-    with AnyPath(output).open('wb') as f, gzip.open(f, 'wt') as gzf:
-        json.dump(aggregate_stats, gzf)
+    except google.api_core.exceptions.NotFound:
+        logging.warning(f'Bucket {bucket_name} not found.')
+        return
 
 
 if __name__ == '__main__':
