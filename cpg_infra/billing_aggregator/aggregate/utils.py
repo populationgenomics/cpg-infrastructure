@@ -637,8 +637,8 @@ async def process_entries_from_hail_in_chunks(
         max_batch = max(times)
 
         logger.info(
-            f'{lp}Processing {len(batches)} batches for chunk {chunk_counter}/{nchnks} '
-            f'[{min_batch}, {max_batch}]',
+            f'{lp}Processing {len(batch_group)} batches in chunk '
+            f'{chunk_counter}/{nchnks} [{min_batch}, {max_batch}]',
         )
 
         # kick off all the "gets" of the jobs. Note that each "get_jobs" happens
@@ -719,8 +719,8 @@ def upsert_rows_into_bigquery(
             f'adjusting the chunk size to {chunk_size}',
         )
 
-    logger.info(
-        f'Will insert {len(objs)} rows ({total_size_mb:.4f}MB) in {n_chunks} chunks',
+    logger.debug(
+        f'May insert {len(objs)} rows ({total_size_mb:.4f}MB) in {n_chunks} chunks',
     )
 
     inserts = 0
@@ -766,7 +766,7 @@ def upsert_rows_into_bigquery(
         nrows = len(filtered_obj)
 
         if nrows == 0:
-            logger.info(
+            logger.debug(
                 f'Not inserting any rows 0/{len(chunked_objs)} '
                 f'({chunk_idx+1}/{n_chunks} chunk)',
             )
@@ -802,7 +802,8 @@ def upsert_rows_into_bigquery(
         inserts += nrows
         inserted_ids = inserted_ids.union(ids)
 
-    logger.info(f'Inserted {inserts} rows in {n_chunks} chunks')
+    _is_s = '' if inserts == 1 else 's'
+    logger.info(f'Inserted {inserts} rows in {n_chunks} chunk{_is_s}')
     return inserts
 
 
