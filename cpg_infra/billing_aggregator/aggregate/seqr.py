@@ -34,7 +34,7 @@ import hashlib
 import logging
 import os
 import shutil
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Any, Generator, Literal
 
 import functions_framework
@@ -194,7 +194,7 @@ def get_finalised_entries_for_batch(
                 # from 2023-01-01 onwards. We've migrated that data, so we're good to go.
 
                 key_components: tuple[str, ...]
-                if start_time < datetime(2023, 1, 1):
+                if start_time < datetime(2023, 1, 1).astimezone(timezone.utc):
                     key_components = (
                         SERVICE_ID,
                         'distributed',
