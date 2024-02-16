@@ -10,7 +10,7 @@ import os
 import re
 import sys
 from base64 import b64decode
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from io import StringIO
 from pathlib import Path
 from typing import (
@@ -70,6 +70,9 @@ DEFAULT_TOPIC = 'admin'
 INVOICE_DAY_DIFF = 3
 
 GCP_PROJECT = os.getenv('BILLING_PROJECT_ID')
+if GCP_PROJECT:
+    os.environ['GOOGLE_CLOUD_PROJECT'] = GCP_PROJECT
+
 GCP_BILLING_BQ_TABLE = os.getenv('GCP_BILLING_SOURCE_TABLE')
 GCP_AGGREGATE_DEST_TABLE = os.getenv('GCP_AGGREGATE_DEST_TABLE')
 
@@ -77,6 +80,9 @@ assert GCP_AGGREGATE_DEST_TABLE
 logger.info(f'GCP_AGGREGATE_DEST_TABLE: {GCP_AGGREGATE_DEST_TABLE}')
 
 IS_PRODUCTION = os.getenv('PRODUCTION') in ('1', 'true', 'yes')
+
+BatchType = dict[str, Any]
+JobType = dict[str, Any]
 
 # mfranklin 2022-07-25: dropping to 0% service-fee.
 HAIL_SERVICE_FEE = 0.0
@@ -138,7 +144,8 @@ def get_bigquery_client():
     """Get instantiated cached bq client"""
     global _BQ_CLIENT
     if not _BQ_CLIENT:
-        _BQ_CLIENT = bq.Client()
+        assert GCP_PROJECT
+        _BQ_CLIENT = bq.Client(project=GCP_PROJECT)
     return _BQ_CLIENT
 
 
@@ -156,6 +163,7 @@ async def async_retry_transient_get_json_request(
     """
 
     async def inner_block(_session: aiohttp.ClientSession) -> T:
+        last_exception = None
         for attempt in range(1, attempts + 1):
             try:
                 async with _session.get(
@@ -168,13 +176,14 @@ async def async_retry_transient_get_json_request(
                     return await resp.json()
             # pylint: disable=broad-except
             except Exception as e:  # noqa: BLE001
+                last_exception = e
                 if not isinstance(e, errors):
                     raise
                 if attempt == attempts:
                     raise
 
             t = 2 ** (attempt + 1)
-            logger.warning(f'Backing off {t} seconds for {url}')
+            logger.warning(f'Backing off {t} seconds due to {last_exception} for {url}')
             await asyncio.sleep(t)
 
         raise Exception(f'No attempt suceeded for {url}, and no exception was raised')
@@ -264,13 +273,24 @@ def parse_hail_time(time_str: str) -> datetime:
     if not time_str:
         raise ValueError(f'Could not convert date, time_str has no value: {time_str!r}')
 
-    for fmt in ('%Y-%m-%dT%H:%M:%S', '%Y-%m-%dT%H:%M:%SZ'):
+    exceptions = []
+    if time_str.endswith('Z'):
+        # the fromisoformat method doesn't like the Z at the end
+        # so we remove it and add the offset to make a offset-aware datetime
+        time_str = time_str[:-1]
+        _time_str = time_str + '+00:00'
         try:
-            return datetime.strptime(time_str, fmt)
-        except ValueError:
-            pass
+            return datetime.fromisoformat(_time_str)
+        except ValueError as e:
+            exceptions.append(e)
 
-    raise ValueError(f'Could not convert date {time_str}')
+    try:
+        fmt = "%Y-%m-%dT%H:%M:%S"
+        return datetime.strptime(time_str, fmt).replace(tzinfo=timezone.utc)
+    except ValueError as e:
+        exceptions.append(e)
+
+    raise ValueError(f'Could not convert date {time_str}: {exceptions}')
 
 
 def to_bq_time(time: datetime):
@@ -343,7 +363,7 @@ def get_credit(entry: dict[str, Any], topic: str, project: dict[str, Any]):
     return _entry
 
 
-async def get_completed_batches(
+async def get_completed_batches_hail_api(
     token: str,
     last_completed_timestamp: Any | None = None,
     limit: int | None = None,
@@ -383,7 +403,7 @@ async def get_finished_batches_for_date(
     end: datetime,
     token: str,
     billing_project: str | None = None,
-) -> list[dict[str, Any]]:
+) -> list[BatchType]:
     """
     Get all the batches that started on {date} and are complete.
     We assume that batches are ordered by start time, so we can stop
@@ -398,7 +418,7 @@ async def get_finished_batches_for_date(
 
     while True:
         n_requests += 1
-        jresponse = await get_completed_batches(
+        jresponse = await get_completed_batches_hail_api(
             last_completed_timestamp=last_completed_timestamp,
             token=token,
         )
@@ -444,7 +464,7 @@ async def get_finished_batches_for_date(
 async def get_jobs_for_batch(
     batch_id: int,
     token: str,
-) -> AsyncGenerator[dict[str, Any], None]:
+) -> AsyncGenerator[list[JobType], None]:
     """
     For a single batch, fill in the 'jobs' field.
     """
@@ -469,7 +489,7 @@ async def get_jobs_for_batch(
                 Any,
             ] = await async_retry_transient_get_json_request(
                 url,
-                aiohttp.ClientError,
+                (aiohttp.ClientError, asyncio.TimeoutError),
                 session=session,
                 headers={'Authorization': 'Bearer ' + token},
             )
@@ -480,19 +500,18 @@ async def get_jobs_for_batch(
                 assert new_last_job_id > last_job_id
             last_job_id = new_last_job_id
 
-            for job in jresponse['jobs']:
-                yield job
+            yield jresponse['jobs']
 
 
 async def process_entries_from_hail_in_chunks(
     start: datetime,
     end: datetime,
     func_get_finalised_entries_for_batch: Callable[
-        [dict[str, Any]],
+        [BatchType, list[JobType]],
         Generator[dict[str, Any], None, None],
     ],
     billing_project: Optional[str] = None,
-    batch_group_chunk_size: int = 30,
+    batch_group_chunk_size: int = 10,
     log_prefix: str = '',
     mode: str = 'prod',
     output_path: str | None = './',
@@ -552,42 +571,52 @@ async def process_entries_from_hail_in_chunks(
         return 0
 
     async def _get_jobs_and_add_to_queue(
-        batch_id: int,
+        batch: BatchType,
         token: str,
-        queue: asyncio.Queue,
+        queue: asyncio.Queue[bool | tuple[BatchType, list[JobType]]],
     ) -> None:
         """
         Simpler wrapper to get jobs and adds to queue
         """
-        async for j in get_jobs_for_batch(batch_id, token):
-            await queue.put(j)
+        batch_id = batch['id']
+        len_jobs = 0
+        async for jobs in get_jobs_for_batch(batch_id, token):
+            len_jobs += len(jobs)
+            await queue.put((batch, jobs))
 
-    async def _aggregate_and_insert(queue: asyncio.Queue, task_count: int) -> int:
+    async def _aggregate_and_insert(
+        queue: asyncio.Queue[bool | tuple[BatchType, list[JobType]]],
+    ) -> int:
         """
         Pull jobs from queue, transform using the get_finalised_entries_for_batch
         and then insert into bigquery, being careful to not load too many entries
         """
 
         entries: list[dict] = []
-        completed_tasks = 0
         result = 0
-        while completed_tasks < task_count:
-            job = await queue.get()
-            if job is None:
-                continue
-            if job.get('is_last_job'):
-                completed_tasks += 1
+        while True:
+            queue_item = await queue.get()
+            if queue_item is True or queue_item is False:
+                # this is the signal to stop
+                break
 
-            for entry in func_get_finalised_entries_for_batch(job):
+            (batch, jobs) = queue_item
+
+            if not jobs:
+                continue
+
+            for entry in func_get_finalised_entries_for_batch(batch, jobs):
                 entries.append(entry)
 
-                if len(entries) % 10000 == 0:
-                    s = sum(sys.getsizeof(e) for e in entries) / 1024 / 1024
-                    if s > 10:
-                        logger.info(f'Size of entries: {s} MB, inserting early')
-                        result += insert_entries(entries)
-                        entries.clear()
+                # insert at the DEFAULT_BQ_INSERT chunk size
+                # this has a _small_ risk that there are some entries that are
+                # HUGE, and we might go over the 10MB limit, but it's a small risk
+                # given 2000 rows ~ 0.015 MB
+                if len(entries) >= DEFAULT_BQ_INSERT_CHUNK_SIZE:
+                    result += insert_entries(entries)
+                    entries.clear()
 
+        result += insert_entries(entries)
         return result
 
     # Process chunks of batches to avoid loading too many entries into memory
@@ -596,80 +625,37 @@ async def process_entries_from_hail_in_chunks(
     lp = f'{log_prefix} ::' if log_prefix else ''
 
     for batch_group in chunk(batches, batch_group_chunk_size):
-        # we're going to fire off all the requests for jobs at once, and then
-        # use a task.Queue to synchronise the processing of the results
-        # and allowing us to insert into the database when we reach 10MB of entries,
-        # rather than waiting for all the jobs to be processed, then processing
-        # chunks of jobs to potentially run out of memory.
+        # we're going to fire off all the requests for jobs at once, and then:
+        #   - use a task.Queue to synchronise the processing of the results
+        #   - insert early if we're at 10MB across all the batches we're processing
+        #        (rather than getting all jobs, which could be a lot of data)
+        queue: asyncio.Queue[bool | tuple[BatchType, list[JobType]]] = asyncio.Queue()
+
         chunk_counter += 1
         times = [b['time_created'] for b in batch_group]
         min_batch = min(times)
         max_batch = max(times)
 
-        if len(batches) > 100:
-            logger.debug(
-                f'{lp}Getting jobs for batch chunk {chunk_counter}/{nchnks} '
-                f'[{min_batch}, {max_batch}]',
-            )
+        logger.info(
+            f'{lp}Processing {len(batches)} batches for chunk {chunk_counter}/{nchnks} '
+            f'[{min_batch}, {max_batch}]',
+        )
 
-        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+        # kick off all the "gets" of the jobs. Note that each "get_jobs" happens
+        # in multiple HTTP requests, so each _get_jobs_and_add_to_queue will update
+        # the queue for each "n" jobs it gets, as it gets them
+        tasks = [_get_jobs_and_add_to_queue(b, token, queue) for b in batch_group]
 
-        tasks = [_get_jobs_and_add_to_queue(b['id'], token, queue) for b in batch_group]
+        # kick off the aggregator task
+        aggregator_task = asyncio.create_task(_aggregate_and_insert(queue))
+        await asyncio.gather(*tasks)
 
-        aggregator_task = asyncio.create_task(_aggregate_and_insert(queue, len(tasks)))
-        asyncio.gather(*tasks)
+        # signal the aggregator task to stop
+        await queue.put(True)
 
-        for _ in range(len(tasks)):
-            # do this to signal the end of the queue
-            await queue.put({'is_last_job': True})
+        # the aggregator reports the rows inserted
+        result += await aggregator_task
 
-        await aggregator_task
-
-    # for batch_group in chunk(batches, entry_chunk_size):
-    #     jobs_in_batch = []
-    #     entries: list[dict] = []
-
-    #     # Get jobs for a fraction of each chunked batches
-    #     # to avoid hitting hail batch too much
-    #     for chunked_batch_group in chunk(batch_group, batch_group_chunk_size):
-    #         chunk_counter += 1
-    #         times = [b['time_created'] for b in chunked_batch_group]
-    #         min_batch = min(times)
-    #         max_batch = max(times)
-
-    #         if len(batches) > 100:
-    #             logger.debug(
-    #                 f'{lp}Getting jobs for batch chunk {chunk_counter}/{nchnks} '
-    #                 f'[{min_batch}, {max_batch}]',
-    #             )
-
-    #         # we're going to use a couple of different
-
-    #         promises = [get_jobs_for_batch(b['id'], token) for b in chunked_batch_group]
-    #         jobs_in_batch.extend(await asyncio.gather(*promises))
-
-    #     # insert all entries for each batch
-    #     for batch, jobs in zip(batch_group, jobs_in_batch):
-    #         batch['jobs'] = jobs
-    #         if len(jobs) > 10000 and len(entries) > 1000:
-    #             logger.info(
-    #                 f'Expecting large number of jobs ({len(jobs)}) from '
-    #                 f"batch {batch['id']}, inserting contents early",
-    #             )
-    #             result += insert_entries(entries)
-    #             entries = []
-
-    #         # keep efficiently seeking until we have around 10MB of entries
-    #         for entry in func_get_finalised_entries_for_batch(batch):
-    #             entries.append(entry)
-    #             if len(entries) % 10000 == 0:
-    #                 s = sum(sys.getsizeof(e) for e in entries) / 1024 / 1024
-    #                 if s > 10:
-    #                     logger.info(f'Size of entries: {s} MB, inserting early')
-    #                     result += insert_entries(entries)
-    #                     entries = []
-
-    #     result += insert_entries(entries)
     return result
 
 
@@ -733,8 +719,9 @@ def upsert_rows_into_bigquery(
             f'adjusting the chunk size to {chunk_size}',
         )
 
-    if n_chunks > 1:
-        logger.info(f'Will insert {len(objs)} rows in {n_chunks} chunks')
+    logger.info(
+        f'Will insert {len(objs)} rows ({total_size_mb:.4f}MB) in {n_chunks} chunks',
+    )
 
     inserts = 0
     inserted_ids: set[int] = set()
@@ -793,12 +780,6 @@ def upsert_rows_into_bigquery(
             inserts += nrows
             continue
 
-        # Count number of rows adding
-        logger.info(
-            f'Inserting {nrows}/{len(chunked_objs)} rows '
-            f'({chunk_idx+1}/{n_chunks} chunk)',
-        )
-
         # Insert the new rows
         job_config = bq.LoadJobConfig()
         job_config.source_format = bq.SourceFormat.NEWLINE_DELIMITED_JSON
@@ -814,10 +795,6 @@ def upsert_rows_into_bigquery(
         )
         try:
             result = resp.result()
-            logger.info(
-                f'Inserted {result.output_rows}/{nrows} rows '
-                f'({chunk_idx+1}/{n_chunks} chunk)',
-            )
         except ClientError as e:
             logger.error(resp.errors)
             raise e
@@ -825,6 +802,7 @@ def upsert_rows_into_bigquery(
         inserts += nrows
         inserted_ids = inserted_ids.union(ids)
 
+    logger.info(f'Inserted {inserts} rows in {n_chunks} chunks')
     return inserts
 
 
@@ -1113,14 +1091,11 @@ def process_default_start_and_end(
     Take input start / end values, and apply
     defaults
     """
-    if not end:
-        # start right now
-        end = datetime.utcnow()
-    if not start:
-        start = end - interval
+    _end = end.astimezone(timezone.utc) if end else datetime.now(tz=timezone.utc)
+    _start = start.astimezone(timezone.utc) if start else _end - interval
 
-    assert isinstance(start, datetime) and isinstance(end, datetime)
-    return start, end
+    assert isinstance(_start, datetime) and isinstance(_end, datetime)
+    return _start, _end
 
 
 def get_date_intervals_for(

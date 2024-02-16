@@ -25,7 +25,7 @@ import json
 import logging
 import os
 import shutil
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Generator
 
 import functions_framework
@@ -67,7 +67,8 @@ def get_billing_projects():
 
 
 def get_finalised_entries_for_batch(
-    batch: dict,
+    batch: utils.BatchType,
+    jobs: list[utils.JobType],
 ) -> Generator[dict[str, Any], None, None]:
     """
     Take a batch, and generate the actual cost of all the jobs,
@@ -92,7 +93,7 @@ def get_finalised_entries_for_batch(
         # sneaky rename
         attributes[AR_GUID_NAME] = attributes.pop('ar_guid')
 
-    for job in batch['jobs']:
+    for job in jobs:
         for batch_resource, raw_cost in job['cost'].items():
             if batch_resource.startswith('service-fee'):
                 continue
@@ -133,7 +134,7 @@ def get_finalised_entries_for_batch(
             # from 2023-01-01 onwards. We've migrated that data, so we're good to go.
 
             key_components: tuple[str, ...]
-            if start_time < datetime(2023, 1, 1):
+            if start_time < datetime(2023, 1, 1).astimezone(timezone.utc):
                 key_components = (
                     SERVICE_ID,
                     dataset,
@@ -231,7 +232,7 @@ if __name__ == '__main__':
     logging.getLogger('asyncio').setLevel(logging.ERROR)
     logging.getLogger('urllib3').setLevel(logging.WARNING)
 
-    test_start, test_end = None, None
+    test_start, test_end = datetime(2024, 2, 1), None
     asyncio.new_event_loop().run_until_complete(
         main(
             start=test_start,

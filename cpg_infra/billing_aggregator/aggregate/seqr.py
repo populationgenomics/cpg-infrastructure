@@ -81,7 +81,8 @@ aapi = AnalysisApi()
 
 
 def get_finalised_entries_for_batch(
-    batch,
+    batch: utils.BatchType,
+    jobs: list[utils.JobType],
     proportion_map: ProportionateMapType,
 ) -> Generator[dict[str, Any], None, None]:
     """
@@ -107,9 +108,9 @@ def get_finalised_entries_for_batch(
 
     currency_conversion_rate = utils.get_currency_conversion_rate_for_time(start_time)
 
-    jobs_with_no_dataset: list[dict[str, Any]] = []
+    jobs_with_no_dataset: list[utils.JobType] = []
 
-    for job in batch['jobs']:
+    for job in jobs:
         dataset = job['attributes'].get('dataset', '').replace('-test', '')
         if not dataset:
             jobs_with_no_dataset.append(job)
@@ -249,7 +250,7 @@ def get_finalised_entries_for_dataset_batch_and_job(
     batch_start_time: datetime,
     batch_end_time: datetime,
     namespace: str | None,
-    job: dict[str, Any],
+    job: utils.JobType,
     currency_conversion_rate: float,
     ar_guid: str | None,
 ) -> Generator[dict[str, Any], None, None]:
@@ -676,9 +677,13 @@ async def main(
 
         return batches
 
-    def func_get_finalised_entries(batch) -> Generator[dict[str, Any], None, None]:
+    def func_get_finalised_entries(
+        batch: utils.BatchType,
+        jobs: list[utils.JobType],
+    ) -> Generator[dict[str, Any], None, None]:
         return get_finalised_entries_for_batch(
             batch=batch,
+            jobs=jobs,
             proportion_map=prop_maps.shared_computation_prop_map,
         )
 
