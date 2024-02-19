@@ -1,0 +1,6 @@
+name: cpg-infra-test-stack
+main: group_membership
+runtime:
+  name: python
+
+description: A pulumi setup to use for testing pieces of cpg infrastructure
