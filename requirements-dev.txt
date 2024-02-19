@@ -1,4 +1,4 @@
 pre-commit
 coverage
 -r requirements.txt
-google-api-python-client-stubs==1.24.0
+google-api-python-client-stubs==1.15.0
