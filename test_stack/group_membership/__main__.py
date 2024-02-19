@@ -1,5 +1,3 @@
-import pulumi
-
 from cpg_infra.abstraction.google_group_membership import (
     GoogleGroupMembership,
     GoogleGroupMembershipInputs,

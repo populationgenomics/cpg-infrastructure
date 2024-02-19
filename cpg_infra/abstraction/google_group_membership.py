@@ -12,7 +12,7 @@ from pulumi import Input, ResourceOptions
 
 # These don't work at runtime so only include for typing purposes
 if TYPE_CHECKING:
-    from googleapiclient._apis.cloudidentity.v1 import (  # type: ignore
+    from googleapiclient._apis.cloudidentity.v1.resources import (  # pyright: ignore[reportMissingModuleSource]
         CloudIdentityResource,
     )
 
@@ -20,7 +20,6 @@ MEMBER_LIST_PAGE_SIZE = 100
 
 
 class GroupMember(TypedDict):
-
     member_key: str
     "The email of the group member"
 
@@ -32,11 +31,11 @@ class GroupMember(TypedDict):
     """
 
 
-class GoogleGroupMembershipInputs(object):
+class GoogleGroupMembershipInputs:
     group_id: Input[str]
     member_key: Input[str]
 
-    def __init__(self, group_id: str, member_key: str):
+    def __init__(self, group_id: str, member_key: str) -> None:
         self.group_id = group_id
         self.member_key = member_key
 
@@ -73,7 +72,7 @@ class GoogleGroupMembershipProvider(pulumi.dynamic.ResourceProvider):
         member = find_member_in_group_by_key(group_id, member_key)
 
         # If the group membership already exists, then don't try and create it
-        if member != None:
+        if member is not None:
             return pulumi.dynamic.CreateResult(id_=member['member_name'])
 
         # Otherwise create it here
@@ -81,18 +80,18 @@ class GoogleGroupMembershipProvider(pulumi.dynamic.ResourceProvider):
 
         return pulumi.dynamic.CreateResult(id_=created_member['member_name'])
 
-    def delete(self, id: str, props: Any):
-        name_parts = id.split('/')
+    def delete(self, id_: str, _props: dict[str, Any]):
+        name_parts = id_.split('/')
         group_id = name_parts[1]
-        member = find_member_in_group_by_name(group_id, id)
+        member = find_member_in_group_by_name(group_id, id_)
 
         # If the member has already been removed then no need to remove
-        if member == None:
+        if member is None:
             return
 
-        remove_member_from_group(id)
+        remove_member_from_group(id_)
 
-    def diff(self, id: str, olds: Any, news: Any):
+    def diff(self, _id: str, _olds: dict[str, Any], _news: dict[str, Any]):
         # There isn't anything to change on a group membership, they are either a member
         # or not, so this can always return false
         return pulumi.dynamic.DiffResult(changes=False)
@@ -100,8 +99,9 @@ class GoogleGroupMembershipProvider(pulumi.dynamic.ResourceProvider):
 
 @cache
 def get_groups_service():
-    service: CloudIdentityResource = googleapiclient.discovery.build(  # type: ignore
-        'cloudidentity', 'v1'
+    service: CloudIdentityResource = googleapiclient.discovery.build(  # pyright: ignore[reportUnknownMemberType, reportAssignmentType]
+        serviceName='cloudidentity',
+        version='v1',
     )
     return service
 
@@ -150,10 +150,10 @@ def list_group_members(group_id: str) -> list[GroupMember]:
             # needed when deleting memberships
             member_name = member.get('name')
 
-            if member_key == None:
+            if member_key is None:
                 raise AttributeError('preferredMemberKey not found')
 
-            if member_name == None:
+            if member_name is None:
                 raise AttributeError('member name not found')
 
             members.append({'member_key': member_key, 'member_name': member_name})
@@ -189,7 +189,7 @@ def add_member_to_group(group_id: str, member_key: str) -> GroupMember:
 
     member_name = response.get('response', {}).get('name', None)
 
-    if member_name == None:
+    if member_name is None:
         raise AttributeError('Member creation response missing member name')
 
     return {'member_key': member_key, 'member_name': member_name}
