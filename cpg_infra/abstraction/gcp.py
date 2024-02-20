@@ -22,6 +22,10 @@ from cpg_infra.abstraction.base import (
     MachineAccountRole,
     SecretMembership,
 )
+from cpg_infra.abstraction.google_group_membership import (
+    GoogleGroupMembership,
+    GoogleGroupMembershipInputs,
+)
 from cpg_infra.abstraction.google_group_settings import GoogleGroupSettings
 from cpg_infra.config import CPGDatasetConfig, CPGInfrastructureConfig
 
@@ -384,7 +388,7 @@ class GcpInfrastructure(CloudInfraBase):
 
         raise NotImplementedError(f'Invalid member type {type(member)}')
 
-    def get_preferred_group_membership_key(self, member):
+    def get_preferred_group_membership_key(self, member) -> str | pulumi.Output[str]:
         if hasattr(member, 'is_group') and hasattr(member, 'group'):
             # cheeky catch for internal group
             return self.get_preferred_group_membership_key(member.group)
@@ -399,7 +403,7 @@ class GcpInfrastructure(CloudInfraBase):
             f'Invalid preferred GroupMembership type {type(member)}',
         )
 
-    def get_group_key(self, group):
+    def get_group_key(self, group) -> str | pulumi.Output[str]:
         if isinstance(group, (gcp.serviceaccount.Account, gcp.storage.Bucket)):
             raise ValueError(f'Incorrect type for group key: {type(group)}')
 
@@ -599,13 +603,12 @@ class GcpInfrastructure(CloudInfraBase):
         if not unique_resource_key:
             resource_key = self.get_pulumi_name(resource_key)
 
-        gcp.cloudidentity.GroupMembership(
+        GoogleGroupMembership(
             resource_key,
-            group=self.get_group_key(group),
-            preferred_member_key=gcp.cloudidentity.GroupMembershipPreferredMemberKeyArgs(
-                id=self.get_preferred_group_membership_key(member),
+            props=GoogleGroupMembershipInputs(
+                group_key=self.get_group_key(group),
+                member_key=self.get_preferred_group_membership_key(member),
             ),
-            roles=[gcp.cloudidentity.GroupMembershipRoleArgs(name='MEMBER')],
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
         )
 
