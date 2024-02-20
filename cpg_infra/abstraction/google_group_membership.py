@@ -59,9 +59,9 @@ class GoogleGroupMembershipInputs:
     group_id: Input[str]
     member_key: Input[str]
 
-    def __init__(self, group_id: str, member_key: str) -> None:
-        self.group_id = group_id.lower()
-        self.member_key = member_key.lower()
+    def __init__(self, group_id: Input[str], member_key: Input[str]) -> None:
+        self.group_id = group_id
+        self.member_key = member_key
 
 
 class GoogleGroupMembershipProviderInputs(TypedDict):
@@ -91,7 +91,7 @@ class GoogleGroupMembershipProvider(pulumi.dynamic.ResourceProvider):
 
     def create(self, props: GoogleGroupMembershipProviderInputs):
         group_id = props['group_id']
-        member_key = props['member_key']
+        member_key = props['member_key'].lower()
 
         members = get_group_memberships(group_id)
         member = members.find_member_by_key(member_key)
@@ -148,10 +148,12 @@ def get_credentials():
 
 
 def get_groups_service():
-    service: CloudIdentityResource = googleapiclient.discovery.build(  # pyright: ignore[reportUnknownMemberType, reportAssignmentType]
-        serviceName='cloudidentity',
-        version='v1',
-        credentials=get_credentials(),
+    service: CloudIdentityResource = (
+        googleapiclient.discovery.build(  # pyright: ignore[reportUnknownMemberType, reportAssignmentType]
+            serviceName='cloudidentity',
+            version='v1',
+            credentials=get_credentials(),
+        )
     )
     return service
 
