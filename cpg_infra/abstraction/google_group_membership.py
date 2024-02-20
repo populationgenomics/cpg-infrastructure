@@ -148,12 +148,10 @@ def get_credentials():
 
 
 def get_groups_service():
-    service: CloudIdentityResource = (
-        googleapiclient.discovery.build(  # pyright: ignore[reportUnknownMemberType, reportAssignmentType]
-            serviceName='cloudidentity',
-            version='v1',
-            credentials=get_credentials(),
-        )
+    service: CloudIdentityResource = googleapiclient.discovery.build(  # pyright: ignore[reportUnknownMemberType, reportAssignmentType]
+        serviceName='cloudidentity',
+        version='v1',
+        credentials=get_credentials(),
     )
     return service
 

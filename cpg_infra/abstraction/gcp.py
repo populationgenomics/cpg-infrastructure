@@ -9,7 +9,6 @@ from typing import Any, NamedTuple, Optional
 
 import pulumi
 import pulumi_gcp as gcp
-from google_group_membership import GoogleGroupMembership, GoogleGroupMembershipInputs
 
 from cpg_infra.abstraction.base import (
     ARCHIVE_PERIOD_IN_DAYS,
@@ -22,6 +21,10 @@ from cpg_infra.abstraction.base import (
     ContainerRegistryMembership,
     MachineAccountRole,
     SecretMembership,
+)
+from cpg_infra.abstraction.google_group_membership import (
+    GoogleGroupMembership,
+    GoogleGroupMembershipInputs,
 )
 from cpg_infra.abstraction.google_group_settings import GoogleGroupSettings
 from cpg_infra.config import CPGDatasetConfig, CPGInfrastructureConfig
@@ -417,7 +420,7 @@ class GcpInfrastructure(CloudInfraBase):
             return group
 
         if isinstance(group, pulumi.Output):
-            return group  # type: ignore
+            return group
 
         raise NotImplementedError(f'Not valid for type {type(group)}')
 
