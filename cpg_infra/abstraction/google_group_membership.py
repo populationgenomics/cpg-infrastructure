@@ -27,16 +27,14 @@ MEMBERSHIP_DELETE_ALREADY_DELETED_STATUS_CODE = 404
 class GroupMember(TypedDict):
     member_name: str
     """
-    a path in the format groups/<group_id>/memberships/<member_id
+    a path in the format groups/<group_key>/memberships/<member_id
     where member_id is the gcloud id of the member, not the email.
     This is needed when deleting memberships
     """
     member_key: str
     "The group member's email"
-    group_id: str
+    group_key: str
     "alphanumeric group id"
-    membership_id: str
-    "numeric membership id"
 
 
 class GroupMemberships:
@@ -56,16 +54,16 @@ class GroupMemberships:
 
 
 class GoogleGroupMembershipInputs:
-    group_id: Input[str]
+    group_key: Input[str]
     member_key: Input[str]
 
-    def __init__(self, group_id: Input[str], member_key: Input[str]) -> None:
-        self.group_id = group_id
+    def __init__(self, group_key: Input[str], member_key: Input[str]) -> None:
+        self.group_key = group_key
         self.member_key = member_key
 
 
 class GoogleGroupMembershipProviderInputs(TypedDict):
-    group_id: str
+    group_key: str
     member_key: str
 
 
@@ -90,10 +88,10 @@ class GoogleGroupMembershipProvider(pulumi.dynamic.ResourceProvider):
     """A Pulumi dynamic resource provider for Google Groups settings."""
 
     def create(self, props: GoogleGroupMembershipProviderInputs):
-        group_id = props['group_id']
+        group_key = props['group_key']
         member_key = props['member_key'].lower()
 
-        members = get_group_memberships(group_id)
+        members = get_group_memberships(group_key)
         member = members.find_member_by_key(member_key)
 
         # If the group membership already exists, then don't try and create it
@@ -101,7 +99,7 @@ class GoogleGroupMembershipProvider(pulumi.dynamic.ResourceProvider):
             return pulumi.dynamic.CreateResult(id_=member['member_name'], outs=member)
 
         # Otherwise create it here
-        created_member = add_member_to_group(group_id, member_key)
+        created_member = add_member_to_group(group_key, member_key)
 
         return pulumi.dynamic.CreateResult(
             id_=created_member['member_name'],
@@ -109,9 +107,9 @@ class GoogleGroupMembershipProvider(pulumi.dynamic.ResourceProvider):
         )
 
     def delete(self, id_: str, _props: GroupMember):
-        group_id, _membership_id = member_details_from_name(id_)
+        group_key = get_group_from_membership_name(id_)
 
-        members = get_group_memberships(group_id)
+        members = get_group_memberships(group_key)
         member = members.find_member_by_name(id_)
 
         # If the member has already been removed then no need to remove
@@ -128,11 +126,11 @@ class GoogleGroupMembershipProvider(pulumi.dynamic.ResourceProvider):
     ):
         if (
             olds['member_key'] != news['member_key']
-            or olds['group_id'] != news['group_id']
+            or olds['group_key'] != news['group_key']
         ):
             return pulumi.dynamic.DiffResult(
                 changes=True,
-                replaces=['member_key', 'group_id'],
+                replaces=['member_key', 'group_key'],
             )
         return pulumi.dynamic.DiffResult(changes=False)
 
@@ -156,14 +154,16 @@ def get_groups_service():
     return service
 
 
-def member_details_from_name(name: str):
-    "pull group id and membership id from groups/<group_id>/memberships/<membership_id> str"
-    _g, group_id, _m, membership_id = name.split('/')
-    return (group_id, membership_id)
+def get_group_from_membership_name(name: str) -> str:
+    """
+     Pull group id and membership id from
+    format: groups/<group_key>/memberships/<membership_id> str
+    """
+    return '/'.join(name.split('/')[:2])
 
 
 @cache
-def get_group_memberships(group_id: str) -> GroupMemberships:
+def get_group_memberships(group_key: str) -> GroupMemberships:
     """Returns a set of all members in the given group"""
 
     service = get_groups_service()
@@ -179,9 +179,7 @@ def get_group_memberships(group_id: str) -> GroupMemberships:
                 'page_token': next_page_token,
             },
         )
-        search_members_request = (
-            service.groups().memberships().list(parent=f"groups/{group_id}")
-        )
+        search_members_request = service.groups().memberships().list(parent=group_key)
         param = '&' + search_query
         search_members_request.uri += param
         response = search_members_request.execute()
@@ -191,7 +189,7 @@ def get_group_memberships(group_id: str) -> GroupMemberships:
 
         for member in response['memberships']:
             member_key = member.get('preferredMemberKey', {}).get('id')
-            # The member name is a path in the format groups/<group_id>/memberships/<member_id>
+            # The member name is a path in the format <group_key>/memberships/<member_id>
             # where member_id is the gcloud id of the member, not the email. This is
             # needed when deleting memberships
             member_name = member.get('name')
@@ -202,14 +200,11 @@ def get_group_memberships(group_id: str) -> GroupMemberships:
             if member_name is None:
                 raise AttributeError('member name not found')
 
-            group_id, membership_id = member_details_from_name(member_name)
-
             members.append(
                 {
                     'member_name': member_name,
                     'member_key': member_key,
-                    'group_id': group_id,
-                    'membership_id': membership_id,
+                    'group_key': group_key,
                 },
             )
 
@@ -221,11 +216,11 @@ def get_group_memberships(group_id: str) -> GroupMemberships:
     return GroupMemberships(members)
 
 
-def get_group_memberships_uncached(group_id: str) -> GroupMemberships:
-    return get_group_memberships.__wrapped__(group_id)
+def get_group_memberships_uncached(group_key: str) -> GroupMemberships:
+    return get_group_memberships.__wrapped__(group_key)
 
 
-def add_member_to_group(group_id: str, member_key: str) -> GroupMember:
+def add_member_to_group(group_key: str, member_key: str) -> GroupMember:
     """Adds the specified member to the group"""
     service = get_groups_service()
 
@@ -233,7 +228,7 @@ def add_member_to_group(group_id: str, member_key: str) -> GroupMember:
         service.groups()
         .memberships()
         .create(
-            parent=f"groups/{group_id}",
+            parent=group_key,
             body={
                 "preferredMemberKey": {"id": member_key},
                 "roles": [{'name': 'MEMBER'}],
@@ -250,7 +245,7 @@ def add_member_to_group(group_id: str, member_key: str) -> GroupMember:
         # and return it, if the member doesn't exist when fetching then something
         # has gone rather wrong and we need to raise an exception
         if e.status_code == MEMBERSHIP_CREATE_CONFLICT_STATUS_CODE:
-            members = get_group_memberships_uncached(group_id)
+            members = get_group_memberships_uncached(group_key)
             member = members.find_member_by_key(member_key)
             if member is None:
                 raise Exception(
@@ -268,13 +263,12 @@ def add_member_to_group(group_id: str, member_key: str) -> GroupMember:
     if member_name is None:
         raise AttributeError('Member creation response missing member name')
 
-    group_id, membership_id = member_details_from_name(member_name)
+    group_key = get_group_from_membership_name(member_name)
 
     return {
         'member_name': member_name,
         'member_key': member_key,
-        'group_id': group_id,
-        'membership_id': membership_id,
+        'group_key': group_key,
     }
 
 

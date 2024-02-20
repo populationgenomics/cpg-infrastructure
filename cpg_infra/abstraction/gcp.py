@@ -606,7 +606,7 @@ class GcpInfrastructure(CloudInfraBase):
         GoogleGroupMembership(
             resource_key,
             props=GoogleGroupMembershipInputs(
-                group_id=self.get_group_key(group),
+                group_key=self.get_group_key(group),
                 member_key=self.get_preferred_group_membership_key(member),
             ),
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
