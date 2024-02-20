@@ -2,6 +2,8 @@
 Contains pulumi.dynamic.ResourceProvider implementations for Google Groups Memberships
 """
 
+import textwrap
+import time
 from functools import cache
 from typing import TYPE_CHECKING, Optional, TypedDict
 from urllib.parse import urlencode
@@ -22,6 +24,9 @@ if TYPE_CHECKING:
 MEMBER_LIST_PAGE_SIZE = 100
 MEMBERSHIP_CREATE_CONFLICT_STATUS_CODE = 409
 MEMBERSHIP_DELETE_ALREADY_DELETED_STATUS_CODE = 404
+MEMBERSHIP_DELETE_OPERATION_ABORTED_STATUS_CODE = 409
+MEMBERSHIP_CREATE_MAX_RETRIES = 5
+MEMBERSHIP_DELETE_MAX_RETRIES = 5
 
 
 class GroupMember(TypedDict):
@@ -146,10 +151,12 @@ def get_credentials():
 
 
 def get_groups_service():
-    service: CloudIdentityResource = googleapiclient.discovery.build(  # pyright: ignore[reportUnknownMemberType, reportAssignmentType]
-        serviceName='cloudidentity',
-        version='v1',
-        credentials=get_credentials(),
+    service: CloudIdentityResource = (
+        googleapiclient.discovery.build(  # pyright: ignore[reportUnknownMemberType, reportAssignmentType]
+            serviceName='cloudidentity',
+            version='v1',
+            credentials=get_credentials(),
+        )
     )
     return service
 
@@ -220,7 +227,11 @@ def get_group_memberships_uncached(group_key: str) -> GroupMemberships:
     return get_group_memberships.__wrapped__(group_key)
 
 
-def add_member_to_group(group_key: str, member_key: str) -> GroupMember:
+def add_member_to_group(
+    group_key: str,
+    member_key: str,
+    retry_number: int = 0,
+) -> GroupMember:
     """Adds the specified member to the group"""
     service = get_groups_service()
 
@@ -248,9 +259,23 @@ def add_member_to_group(group_key: str, member_key: str) -> GroupMember:
             members = get_group_memberships_uncached(group_key)
             member = members.find_member_by_key(member_key)
             if member is None:
-                raise Exception(
-                    "Member was already created but didn't exist upon checking",
-                ) from e
+                if retry_number >= MEMBERSHIP_CREATE_MAX_RETRIES:
+                    raise Exception(
+                        f"Max retries exceeded for adding member {member_key} to group {group_key} after receiving 409 error",
+                    ) from e
+
+                time.sleep(3)
+                pulumi.warn(
+                    textwrap.dedent(
+                        f"""\
+                        gcloud api reported conflict when adding member {member_key}
+                        group {group_key} but subsequent check showed that member was
+                        not in group. Retrying ({retry_number + 1})
+                        """,
+                    ),
+                )
+
+                return add_member_to_group(group_key, member_key, retry_number + 1)
             return member
 
         raise e
@@ -272,7 +297,10 @@ def add_member_to_group(group_key: str, member_key: str) -> GroupMember:
     }
 
 
-def remove_member_from_group(member_name: str):
+def remove_member_from_group(
+    member_name: str,
+    retry_number: int = 0,
+) -> None:
     """Removes the specified member from the group"""
 
     service = get_groups_service()
@@ -283,8 +311,29 @@ def remove_member_from_group(member_name: str):
     except HttpError as e:
         # If the status code is a 404 then the membership was already deleted
         if e.status_code == MEMBERSHIP_DELETE_ALREADY_DELETED_STATUS_CODE:
-            return
+            return None
+        # It seems that these requests can sometimes get 409s too, in that case retry
+        if e.status_code == MEMBERSHIP_DELETE_OPERATION_ABORTED_STATUS_CODE:
+            if retry_number >= MEMBERSHIP_DELETE_MAX_RETRIES:
+                raise Exception(
+                    f"Max retries exceeded for removing member {member_name} after receiving 409 error",
+                ) from e
+
+            time.sleep(3)
+            pulumi.warn(
+                textwrap.dedent(
+                    f"""\
+                        gcloud api reported 409 error on delete operation for member
+                        {member_name}. Retrying ({retry_number + 1})
+                    """,
+                ),
+            )
+
+            return remove_member_from_group(member_name, retry_number + 1)
+
         raise e
 
     if not response.get('done'):
         raise Exception(response.get('error', {}).get('message', 'Unknown Error'))
+
+    return None
