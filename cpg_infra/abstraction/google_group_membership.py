@@ -111,6 +111,21 @@ class GoogleGroupMembershipProvider(pulumi.dynamic.ResourceProvider):
             outs=created_member,
         )
 
+    def read(self, _id: str, props: GroupMember):
+        group_key = props['group_key']
+        member_key = props['member_key'].lower()
+        members = get_group_memberships(group_key)
+        member = members.find_member_by_key(member_key)
+
+        # If the member doesn't exist then the group state has got out of sync with
+        # gcloud, and will need to be fixed manually
+        if member is None:
+            raise Exception(
+                f"member {member_key} not found in group {group_key}, manual intervention required",
+            )
+
+        return pulumi.dynamic.ReadResult(id_=member['member_name'], outs=member)
+
     def delete(self, id_: str, _props: GroupMember):
         group_key = get_group_from_membership_name(id_)
 
@@ -151,12 +166,10 @@ def get_credentials():
 
 
 def get_groups_service():
-    service: CloudIdentityResource = (
-        googleapiclient.discovery.build(  # pyright: ignore[reportUnknownMemberType, reportAssignmentType]
-            serviceName='cloudidentity',
-            version='v1',
-            credentials=get_credentials(),
-        )
+    service: CloudIdentityResource = googleapiclient.discovery.build(  # pyright: ignore[reportUnknownMemberType, reportAssignmentType]
+        serviceName='cloudidentity',
+        version='v1',
+        credentials=get_credentials(),
     )
     return service
 
