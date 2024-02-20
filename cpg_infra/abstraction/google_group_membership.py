@@ -48,11 +48,11 @@ class GroupMemberships:
 
     def __init__(self, members: list[GroupMember]) -> None:
         self.members = members
-        self.member_key_map = {m['member_key']: m for m in self.members}
+        self.member_key_map = {m['member_key'].lower(): m for m in self.members}
         self.member_name_map = {m['member_name']: m for m in self.members}
 
     def find_member_by_key(self, member_key: str) -> GroupMember | None:
-        return self.member_key_map.get(member_key, None)
+        return self.member_key_map.get(member_key.lower(), None)
 
     def find_member_by_name(self, member_name: str) -> GroupMember | None:
         return self.member_name_map.get(member_name, None)
@@ -130,7 +130,7 @@ class GoogleGroupMembershipProvider(pulumi.dynamic.ResourceProvider):
         news: GoogleGroupMembershipProviderInputs,
     ):
         if (
-            olds['member_key'] != news['member_key']
+            olds['member_key'].lower() != news['member_key'].lower()
             or olds['group_key'] != news['group_key']
         ):
             return pulumi.dynamic.DiffResult(
@@ -151,12 +151,10 @@ def get_credentials():
 
 
 def get_groups_service():
-    service: CloudIdentityResource = (
-        googleapiclient.discovery.build(  # pyright: ignore[reportUnknownMemberType, reportAssignmentType]
-            serviceName='cloudidentity',
-            version='v1',
-            credentials=get_credentials(),
-        )
+    service: CloudIdentityResource = googleapiclient.discovery.build(  # pyright: ignore[reportUnknownMemberType, reportAssignmentType]
+        serviceName='cloudidentity',
+        version='v1',
+        credentials=get_credentials(),
     )
     return service
 
@@ -210,7 +208,7 @@ def get_group_memberships(group_key: str) -> GroupMemberships:
             members.append(
                 {
                     'member_name': member_name,
-                    'member_key': member_key,
+                    'member_key': member_key.lower(),
                     'group_key': group_key,
                 },
             )
