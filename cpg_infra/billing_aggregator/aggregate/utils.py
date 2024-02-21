@@ -802,7 +802,7 @@ def upsert_rows_into_bigquery(
         inserts += nrows
         inserted_ids = inserted_ids.union(ids)
 
-    _is_s = '' if inserts == 1 else 's'
+    _is_s = '' if n_chunks == 1 else 's'
     logger.info(f'Inserted {inserts} rows in {n_chunks} chunk{_is_s}')
     return inserts
 
