@@ -517,9 +517,17 @@ async def generate_proportionate_maps_of_datasets(
     filtered_projects = list(set(sm_pid_to_dataset.values()).intersection(projects))
     missing_projects = set(projects) - set(sm_pid_to_dataset.values())
     if missing_projects:
-        raise ValueError(
-            f"The datasets {', '.join(missing_projects)} were not found in SM",
+        m = (
+            f"The dataset(s) {', '.join(missing_projects)} were provided as "
+            "'seqr-datasets' from metamist, but this account does not have access "
+            "to read these project(s) ."
         )
+        if any(p.endswith('-test') for p in missing_projects):
+            m += (
+                " Some of these datasets are 'test' projects, and this account does "
+                "not have access to any test account."
+            )
+        raise ValueError(m)
 
     result = await aapi.get_proportionate_map_async(
         start=start.strftime('%Y-%m-%d'),
