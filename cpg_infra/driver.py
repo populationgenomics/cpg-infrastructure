@@ -302,8 +302,9 @@ class CPGInfrastructure:
 
         self.deploy_datasets()
 
-        for plugin in get_plugins().values():
-            plugin(self, self.config).main()
+        for plugin_name, plugin in get_plugins().items():
+            if plugin_name in self.config.plugins_enabled:
+                plugin(self, self.config).main()
 
         self.finalize_groups()
         self.setup_hail_batch_billing_project_members()

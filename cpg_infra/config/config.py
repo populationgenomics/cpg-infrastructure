@@ -205,6 +205,11 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     # within itself, but this is a map of all users known to the system
     users: dict[MemberKey, CPGInfrastructureUser]
 
+    # include list of plugins enabled. This is specified explicitly to control
+    # what plugins are included from dependencies, also to allow exclusion of
+    # plugins for testing purposes
+    plugins_enabled: list[str]
+
     # configuration options for GCP
     gcp: GCP | None = None
     # configuration options for Azure
