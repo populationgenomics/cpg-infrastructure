@@ -295,20 +295,41 @@ class CPGInfrastructure:
         return graphlib.TopologicalSorter(deps).static_order()
 
     def main(self):
+
+        # Go through each dataset and instantiate the CPGDatasetInfrastructure class
+        # for that dataset.
         self.setup_datasets()
+
+        # create a bucket and attach accessor members to it. The bucket itself is
+        # created by accessing the property `self.gcp_members_cache_bucket`
+        # This will also have the side effect of creating a cloud resource manager and
+        # identity service
         self.setup_gcp_access_cache_bucket()
+
+        # creates the group metamist-invokers group and gives it invoker permissions
+        # to the cloud run service specified in infrastructure.sample_metadata.gcp.service_name
         self.setup_gcp_metamist_cloudrun_invoker()
+
+        # Create a python registry for storing private python packages
         self.setup_python_registry()
 
+        # Deploy all the assets required for each dataset. Groups, permissions
+        # storage buckets, metamist and hail users etc.
         self.deploy_datasets()
 
         for plugin_name, plugin in get_plugins().items():
             if plugin_name in self.config.plugins_enabled:
                 plugin(self, self.config).main()
 
+
+        # Up to this point the groups have not actually been created, go through
+        # the groups data structure and create the necessary groups in the correct
+        # order so that group dependencies can be handled
         self.finalize_groups()
-        self.setup_hail_batch_billing_project_members()
+        # Add read and write level members to metamist projects
         self.update_metamist_members()
+
+        # Store the deployed infrastructure config on gcp storage
         self.output_infrastructure_config()
 
     def setup_datasets(self):
