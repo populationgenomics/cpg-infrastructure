@@ -576,7 +576,6 @@ class GcpInfrastructure(CloudInfraBase):
 
         # Dev GCP accounts don't have access to create empty groups, so on dev they are
         # created with the initial owner
-        # @TODO this should maybe be a specific setting
         initial_group_config = (
             'EMPTY' if self.config.gcp.create_empty_groups else 'WITH_INITIAL_OWNER'
         )
