@@ -215,10 +215,10 @@ class CPGInfrastructureConfig(DeserializableDataclass):
 
     # include list of plugins enabled. This is specified explicitly to control
     # what plugins are included from dependencies, also to allow exclusion of
-    # plugins for testing purposes
-    plugins_enabled: list[str] = dataclasses.field(
-        default_factory=lambda: ['metamist', 'billing_aggregator'],
-    )
+    # plugins for testing purposes. Plugins are specified by `entrypoints` value
+    # in setuptools setup, in this package or in any dependencies.
+    # @see https://github.com/populationgenomics/cpg-infrastructure/blob/main/README.md#plugins
+    plugins_enabled: list[str]
 
     # configuration options for GCP
     gcp: GCP | None = None
