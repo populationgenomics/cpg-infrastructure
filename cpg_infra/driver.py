@@ -554,14 +554,22 @@ class CPGInfrastructure:
     # dataset agnostic infrastructure
 
     def build_infrastructure_config_output(self) -> dict[str, pulumi.Output[str] | str]:
-        assert self.config.hail
-        return {
+        output: dict[str, pulumi.Output[str] | str] = {
             'members_cache_location': self.common_gcp_infra.bucket_output_path(
                 self.gcp_members_cache_bucket,
             ),
-            'git_credentials_secret_name': self.config.hail.gcp.git_credentials_secret_name,
-            'git_credentials_secret_project': self.config.hail.gcp.git_credentials_secret_project,
         }
+        if self.config.hail is not None:
+            if self.config.hail.gcp.git_credentials_secret_name is not None:
+                output[
+                    'git_credentials_secret_name'
+                ] = self.config.hail.gcp.git_credentials_secret_name
+            if self.config.hail.gcp.git_credentials_secret_project is not None:
+                output[
+                    'git_credentials_secret_project'
+                ] = self.config.hail.gcp.git_credentials_secret_project
+
+        return output
 
     def output_infrastructure_config(self):
         # we'll only do it on GCP for now

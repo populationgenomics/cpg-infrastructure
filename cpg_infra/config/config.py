@@ -79,8 +79,8 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         @dataclasses.dataclass(frozen=True)
         class GCP(DeserializableDataclass):
             hail_batch_url: str
-            git_credentials_secret_name: str
-            git_credentials_secret_project: str
+            git_credentials_secret_name: str | None = None
+            git_credentials_secret_project: str | None = None
             wheel_bucket_name: str | None = None
 
         @dataclasses.dataclass(frozen=True)
