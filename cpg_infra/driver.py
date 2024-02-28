@@ -316,9 +316,12 @@ class CPGInfrastructure:
         # storage buckets, metamist and hail users etc.
         self.deploy_datasets()
 
-        for plugin_name, plugin in get_plugins().items():
-            if plugin_name in self.config.plugins_enabled:
-                plugin(self, self.config).main()
+        plugins = get_plugins()
+        for plugin_name in self.config.plugins_enabled:
+            if plugin_name not in plugins:
+                raise Exception(f"Plugin `{plugin_name}` is not installed")
+
+            plugins[plugin_name](self, self.config).main()
 
         # Up to this point the groups have not actually been created, go through
         # the groups data structure and create the necessary groups in the correct
