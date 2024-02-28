@@ -78,10 +78,10 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     class Hail(DeserializableDataclass):
         @dataclasses.dataclass(frozen=True)
         class GCP(DeserializableDataclass):
-            wheel_bucket_name: str
             hail_batch_url: str
             git_credentials_secret_name: str
             git_credentials_secret_project: str
+            wheel_bucket_name: str | None = None
 
         @dataclasses.dataclass(frozen=True)
         class Azure(DeserializableDataclass):
@@ -194,8 +194,8 @@ class CPGInfrastructureConfig(DeserializableDataclass):
             monthly_summary_table: str | None = None
             interval_hours: int = 4
 
-        coordinator_machine_account: str
         gcp: GCP
+        coordinator_machine_account: str | None = None
         aggregator: GCPAggregator | None = None
         hail_aggregator_username: str | None = None
 

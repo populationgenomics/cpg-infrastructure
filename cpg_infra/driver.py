@@ -306,7 +306,7 @@ class CPGInfrastructure:
         self.setup_gcp_access_cache_bucket()
 
         # creates the group metamist-invokers group and gives it invoker permissions
-        # to the cloud run service specified in infrastructure.sample_metadata.gcp.service_name
+        # to the cloud run service specified in infrastructure.metamist.gcp.service_name
         self.setup_gcp_metamist_cloudrun_invoker()
 
         # Create a python registry for storing private python packages
@@ -1553,7 +1553,10 @@ class CPGDatasetCloudInfrastructure:
         )
 
         # web-server
-        if isinstance(self.infra, GcpInfrastructure):
+        if (
+            isinstance(self.infra, GcpInfrastructure)
+            and self.config.web_service is not None
+        ):
             self.infra.add_member_to_bucket(
                 'web-server-main-web-bucket-viewer',
                 self.main_web_bucket,
@@ -1704,9 +1707,10 @@ class CPGDatasetCloudInfrastructure:
             )
 
         # give web-server access to test-bucket
-        if isinstance(self.infra, GcpInfrastructure):
-            assert self.config.web_service
-
+        if (
+            isinstance(self.infra, GcpInfrastructure)
+            and self.config.web_service is not None
+        ):
             self.infra.add_member_to_bucket(
                 'web-server-test-web-bucket-viewer',
                 bucket=self.test_web_bucket,
@@ -2266,7 +2270,10 @@ class CPGDatasetCloudInfrastructure:
         self.setup_analysis_runner_container_registry()
 
     def setup_analysis_runner_container_registry(self):
-        if not isinstance(self.infra, GcpInfrastructure):
+        if (
+            not isinstance(self.infra, GcpInfrastructure)
+            or self.config.analysis_runner is None
+        ):
             return
 
         if self.dataset_config.dataset != self.config.common_dataset:
