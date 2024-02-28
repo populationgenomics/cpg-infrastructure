@@ -216,7 +216,9 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     # include list of plugins enabled. This is specified explicitly to control
     # what plugins are included from dependencies, also to allow exclusion of
     # plugins for testing purposes
-    plugins_enabled: list[str]
+    plugins_enabled: list[str] = dataclasses.field(
+        default_factory=lambda: ['metamist', 'billing_aggregator'],
+    )
 
     # configuration options for GCP
     gcp: GCP | None = None
