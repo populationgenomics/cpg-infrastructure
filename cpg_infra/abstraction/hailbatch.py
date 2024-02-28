@@ -146,7 +146,8 @@ class HailBatchBillingProjectProvider(pulumi.dynamic.ResourceProvider):
         """Delete hail batch billing project"""
         batch_uri = props['batch_uri']
         hail_auth_headers = get_hail_batch_auth_headers(
-            props['token_category'], batch_uri
+            props['token_category'],
+            batch_uri,
         )
         url = HAIL_CLOSE_BILLING_PROJECT_PATH.format(
             hail_batch_url=batch_uri,
