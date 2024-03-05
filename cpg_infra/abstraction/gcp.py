@@ -573,21 +573,33 @@ class GcpInfrastructure(CloudInfraBase):
 
     def create_group(self, name: str) -> Any:
         mail = f'{name}@{self.config.gcp.groups_domain}'
+
+        # Dev GCP accounts don't have access to create empty groups, so on dev they are
+        # created with the initial owner
+        initial_group_config = (
+            'EMPTY' if self.config.gcp.create_empty_groups else 'WITH_INITIAL_OWNER'
+        )
+
         group = gcp.cloudidentity.Group(
             self.get_pulumi_name(name + '-group'),
             display_name=name,
+            initial_group_config=initial_group_config,
             group_key=gcp.cloudidentity.GroupGroupKeyArgs(id=mail),
             labels={'cloudidentity.googleapis.com/groups.discussion_forum': ''},
             parent=f'customers/{self.config.gcp.customer_id}',
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
         )
-        # Allow domain-external members in the group.
-        GoogleGroupSettings(
-            self.get_pulumi_name(name + '-group-settings'),
-            group_email=mail,
-            settings={'allowExternalMembers': 'true'},
-            opts=pulumi.resource.ResourceOptions(depends_on=[group]),
-        )
+
+        # Only set allowExternalMembers': 'true' if settings specify it
+        # this defaults to True
+        if self.config.gcp.allow_external_group_members:
+            # Allow domain-external members in the group.
+            GoogleGroupSettings(
+                self.get_pulumi_name(name + '-group-settings'),
+                group_email=mail,
+                settings={'allowExternalMembers': 'true'},
+                opts=pulumi.resource.ResourceOptions(depends_on=[group]),
+            )
         return group
 
     def add_group_member(

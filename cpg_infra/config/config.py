@@ -57,6 +57,14 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         budget_notification_pubsub: str | None
         config_bucket_name: str
         dataset_storage_prefix: str
+        # This is mostly just to allow dev deploys to work, changing the setting to allow
+        # external members on a group requires a high level of access permissions which
+        # we don't want to give to all developers. Setting this to false will stop the
+        # infra code from trying to change that setting
+        allow_external_group_members: bool = True
+        # Creating groups without an initial member requires extra access permissions
+        # so allow this to be turned off to make dev deploys possible
+        create_empty_groups: bool = True
 
     @dataclasses.dataclass(frozen=True)
     class Azure(DeserializableDataclass):
@@ -70,10 +78,10 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     class Hail(DeserializableDataclass):
         @dataclasses.dataclass(frozen=True)
         class GCP(DeserializableDataclass):
-            wheel_bucket_name: str
             hail_batch_url: str
-            git_credentials_secret_name: str
-            git_credentials_secret_project: str
+            git_credentials_secret_name: str | None = None
+            git_credentials_secret_project: str | None = None
+            wheel_bucket_name: str | None = None
 
         @dataclasses.dataclass(frozen=True)
         class Azure(DeserializableDataclass):
@@ -186,8 +194,8 @@ class CPGInfrastructureConfig(DeserializableDataclass):
             monthly_summary_table: str | None = None
             interval_hours: int = 4
 
-        coordinator_machine_account: str
         gcp: GCP
+        coordinator_machine_account: str | None = None
         aggregator: GCPAggregator | None = None
         hail_aggregator_username: str | None = None
 
@@ -204,6 +212,13 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     # a map of users know to the system, noting that a CPGDatasetConfig lists the users
     # within itself, but this is a map of all users known to the system
     users: dict[MemberKey, CPGInfrastructureUser]
+
+    # include list of plugins enabled. This is specified explicitly to control
+    # what plugins are included from dependencies, also to allow exclusion of
+    # plugins for testing purposes. Plugins are specified by `entrypoints` value
+    # in setuptools setup, in this package or in any dependencies.
+    # @see https://github.com/populationgenomics/cpg-infrastructure/blob/main/README.md#plugins
+    plugins_enabled: list[str]
 
     # configuration options for GCP
     gcp: GCP | None = None

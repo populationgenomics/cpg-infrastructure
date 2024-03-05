@@ -31,7 +31,17 @@ HAIL_ADD_USER_TO_BILLING_PROJECT_PATH = (
 )
 
 
-def get_hail_batch_token(token_category) -> str:
+def get_hail_batch_auth_headers(token_category: str, batch_uri: str) -> dict[str, str]:
+    token = get_hail_batch_auth_token(token_category)
+    headers = {'Authorization': f'Bearer {token}'}
+    # If this is a dev service then need an extra header
+    if batch_uri.startswith('https://internal.hail'):
+        headers['X-Hail-Internal-Authorization'] = f'Bearer {token}'
+
+    return headers
+
+
+def get_hail_batch_auth_token(token_category: str) -> str:
     """Get Hail batch token from environment or ~/.hail/tokens.json"""
     key = f'HAIL_TOKEN_{token_category.upper()}'
     if hail_token := os.getenv(key):
@@ -52,14 +62,14 @@ def get_hail_batch_token(token_category) -> str:
 
 def get_hail_batch_billing_project(name: str, token_category: str, batch_uri: str):
     """Get a Hail Batch Billing Project"""
-    hail_auth_token = get_hail_batch_token(token_category)
+    hail_auth_headers = get_hail_batch_auth_headers(token_category, batch_uri)
     url = HAIL_GET_BILLING_PROJECT_PATH.format(
         hail_batch_url=batch_uri,
         billing_project=name,
     )
     resp = requests.get(
         url,
-        headers={'Authorization': f'Bearer {hail_auth_token}'},
+        headers=hail_auth_headers,
         timeout=60,
     )
     if resp.status_code == 404:
@@ -86,7 +96,7 @@ class HailBatchBillingProjectProvider(pulumi.dynamic.ResourceProvider):
             token_category,
             batch_uri,
         )
-        hail_auth_token = get_hail_batch_token(token_category)
+        hail_auth_headers = get_hail_batch_auth_headers(token_category, batch_uri)
 
         if previous_result and previous_result['status'] == 'closed':
             # reopen instead of create
@@ -96,7 +106,7 @@ class HailBatchBillingProjectProvider(pulumi.dynamic.ResourceProvider):
             )
             resp = requests.post(
                 url,
-                headers={'Authorization': f'Bearer {hail_auth_token}'},
+                headers=hail_auth_headers,
                 timeout=60,
             )
             resp.raise_for_status()
@@ -107,7 +117,7 @@ class HailBatchBillingProjectProvider(pulumi.dynamic.ResourceProvider):
             )
             resp = requests.post(
                 url,
-                headers={'Authorization': f'Bearer {hail_auth_token}'},
+                headers=hail_auth_headers,
                 timeout=60,
             )
             resp.raise_for_status()
@@ -134,14 +144,18 @@ class HailBatchBillingProjectProvider(pulumi.dynamic.ResourceProvider):
 
     def delete(self, _id, props):
         """Delete hail batch billing project"""
-        hail_auth_token = get_hail_batch_token(props['token_category'])
+        batch_uri = props['batch_uri']
+        hail_auth_headers = get_hail_batch_auth_headers(
+            props['token_category'],
+            batch_uri,
+        )
         url = HAIL_CLOSE_BILLING_PROJECT_PATH.format(
-            hail_batch_url=props['batch_uri'],
+            hail_batch_url=batch_uri,
             billing_project=props['name'],
         )
         resp = requests.post(
             url,
-            headers={'Authorization': f'Bearer {hail_auth_token}'},
+            headers=hail_auth_headers,
             timeout=60,
         )
 
@@ -186,10 +200,10 @@ class HailBatchBillingProjectMembershipProvider(pulumi.dynamic.ResourceProvider)
             billing_project=billing_project_name,
             user=user,
         )
-        hail_auth_token = get_hail_batch_token(token_category)
+        hail_auth_headers = get_hail_batch_auth_headers(token_category, batch_uri)
         resp = requests.post(
             url,
-            headers={'Authorization': f'Bearer {hail_auth_token}'},
+            headers=hail_auth_headers,
             timeout=60,
         )
         resp.raise_for_status()
@@ -222,10 +236,10 @@ class HailBatchBillingProjectMembershipProvider(pulumi.dynamic.ResourceProvider)
             user=_props['user'],
         )
 
-        hail_auth_token = get_hail_batch_token(token_category)
+        hail_auth_headers = get_hail_batch_auth_headers(token_category, batch_uri)
         resp = requests.post(
             url,
-            headers={'Authorization': f'Bearer {hail_auth_token}'},
+            headers=hail_auth_headers,
             timeout=60,
         )
 
