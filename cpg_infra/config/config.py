@@ -91,7 +91,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
 
         gcp: GCP
         azure: Azure | None = None
-        username_prefix: str | None = ''
+        username_prefix: str | None = None
 
     @dataclasses.dataclass(frozen=True)
     class AnalysisRunner(DeserializableDataclass):

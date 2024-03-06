@@ -1942,9 +1942,12 @@ class CPGDatasetCloudInfrastructure:
 
         # Create hail accounts
         for access_level in account_access_levels:
-            username = (
-                f'{self.config.hail.username_prefix}{dataset_name}-{access_level}'
+            username_prefix = (
+                self.config.hail.username_prefix
+                if self.config.hail.username_prefix is not None
+                else ''
             )
+            username = f'{username_prefix}{dataset_name}-{access_level}'
             accounts[access_level] = HailAccount(
                 username=username,
                 cloud_id=HailBatchUser(
