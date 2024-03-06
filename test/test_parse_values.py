@@ -157,10 +157,6 @@ class TestParseValues(TestCase):
             'dataset': 'DATASET',
             'budgets': {},
             'gcp': {
-                'hail_service_account_full': {
-                    'cloud_id': 'dataset-full-@project.iam.gserviceaccount.com',
-                    'username': 'dataset-full',
-                },
                 'project': 'dataset-1234',
             },
         }
