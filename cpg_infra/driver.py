@@ -29,6 +29,7 @@ from cpg_infra.abstraction.gcp import GcpInfrastructure
 from cpg_infra.abstraction.hailbatch import (
     HailBatchBillingProject,
     HailBatchBillingProjectMembership,
+    HailBatchUser,
 )
 from cpg_infra.abstraction.metamist import MetamistProject, MetamistProjectMembers
 from cpg_infra.config import (
@@ -1812,29 +1813,47 @@ class CPGDatasetCloudInfrastructure:
         self.setup_hail_wheels_bucket_permissions()
 
     @cached_property
-    def hail_batch_billing_project(self):
-        assert self.config.hail
-
+    def hail_batch_url(self):
         if isinstance(self.infra, GcpInfrastructure):
             if not self.config.hail.gcp:
                 raise ValueError('config.hail.gcp was not set to find hail_batch_url')
-            hail_batch_url = self.config.hail.gcp.hail_batch_url
-        elif isinstance(self.infra, AzureInfra):
+            return self.config.hail.gcp.hail_batch_url
+        if isinstance(self.infra, AzureInfra):
             if not self.config.hail.azure:
                 raise ValueError('config.hail.azure was not set to find hail_batch_url')
-            hail_batch_url = self.config.hail.azure.hail_batch_url
-        elif isinstance(self.infra, DryRunInfra):
+            return self.config.hail.azure.hail_batch_url
+        if isinstance(self.infra, DryRunInfra):
             return None
-        else:
-            raise ValueError(
-                f'Unknown infra type {type(self.infra)} for '
-                'building hail_batch_billing_project',
-            )
 
+        raise ValueError(
+            f'Unknown infra type {type(self.infra)} for '
+            'building hail_batch_billing_project',
+        )
+
+    @cached_property
+    def hail_auth_url(self):
+        if isinstance(self.infra, GcpInfrastructure):
+            if not self.config.hail.gcp:
+                raise ValueError('config.hail.gcp was not set to find hail_auth_url')
+            return self.config.hail.gcp.hail_auth_url
+        if isinstance(self.infra, AzureInfra):
+            if not self.config.hail.azure:
+                raise ValueError('config.hail.azure was not set to find hail_auth_url')
+            return self.config.hail.azure.hail_auth_url
+        if isinstance(self.infra, DryRunInfra):
+            return None
+
+        raise ValueError(
+            f'Unknown infra type {type(self.infra)} for '
+            'building hail_batch_billing_project',
+        )
+
+    @cached_property
+    def hail_batch_billing_project(self):
         return HailBatchBillingProject(
             self.infra.get_pulumi_name('batch-billing-project'),
             billing_project_name=self.dataset_config.dataset,
-            batch_uri=hail_batch_url,
+            batch_uri=self.hail_batch_url,
             token_category=self.infra.name(),
         )
 
@@ -1904,27 +1923,39 @@ class CPGDatasetCloudInfrastructure:
         if not self.should_setup_hail:
             return {}
 
-        if isinstance(self.infra, GcpInfrastructure):
-            accounts = {
-                'standard': self.dataset_config.gcp.hail_service_account_standard,
-                'full': self.dataset_config.gcp.hail_service_account_full,
-            }
-            if self.dataset_config.setup_test:
-                accounts['test'] = self.dataset_config.gcp.hail_service_account_test
-        elif isinstance(self.infra, AzureInfra):
-            assert (
-                self.dataset_config.azure is not None
-            ), 'dataset_config.azure is required to be set'
-            accounts = {
-                'test': self.dataset_config.azure.hail_service_account_test,
-                'standard': self.dataset_config.azure.hail_service_account_standard,
-            }
-            if self.dataset_config.setup_test:
-                accounts['test'] = self.dataset_config.azure.hail_service_account_test
-        else:
-            return {}
+        accounts: dict[str, HailAccount] = {}
 
-        return {cat: ac for cat, ac in accounts.items() if ac}
+        account_access_levels: list[str] = ['full', 'standard']
+        if self.dataset_config.setup_test:
+            account_access_levels.append('test')
+
+        dataset_name = self.dataset_config.dataset
+
+        if (
+            isinstance(self.infra, GcpInfrastructure)
+            and self.dataset_config.gcp.hail_service_account_dataset_name_override
+            is not None
+        ):
+            dataset_name = (
+                self.dataset_config.gcp.hail_service_account_dataset_name_override
+            )
+
+        # Create hail accounts
+        for access_level in account_access_levels:
+            username = (
+                f'{self.config.hail.username_prefix}{dataset_name}-{access_level}'
+            )
+            accounts[access_level] = HailAccount(
+                username=username,
+                cloud_id=HailBatchUser(
+                    self.infra.get_pulumi_name(f'hail-batch-user-{access_level}'),
+                    username=username,
+                    batch_uri=self.hail_auth_url,
+                    token_category=self.infra.name(),
+                ).cloud_id,
+            )
+
+        return accounts
 
     @cached_property
     def hail_bucket(self):

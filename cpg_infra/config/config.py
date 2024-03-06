@@ -29,10 +29,10 @@ GroupName = Literal[
 class CPGInfrastructureUser(DeserializableDataclass):
     @dataclasses.dataclass(frozen=True)
     class Cloud(DeserializableDataclass):
-        id: str  # noqa: A003
+        id: str  # noqa: RUF100, A003
         hail_batch_username: str | None = None
 
-    id: MemberKey  # noqa: A003
+    id: MemberKey  # noqa: RUF100, A003
     clouds: dict[CloudName, Cloud]
     projects: list[str]
     add_to_internal_hail_batch_projects: bool = False
@@ -79,6 +79,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         @dataclasses.dataclass(frozen=True)
         class GCP(DeserializableDataclass):
             hail_batch_url: str
+            hail_auth_url: str
             git_credentials_secret_name: str | None = None
             git_credentials_secret_project: str | None = None
             wheel_bucket_name: str | None = None
@@ -86,9 +87,11 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         @dataclasses.dataclass(frozen=True)
         class Azure(DeserializableDataclass):
             hail_batch_url: str
+            hail_auth_url: str
 
         gcp: GCP
         azure: Azure | None = None
+        username_prefix: str | None = ''
 
     @dataclasses.dataclass(frozen=True)
     class AnalysisRunner(DeserializableDataclass):
@@ -304,7 +307,8 @@ class HailAccount(DeserializableDataclass):
     """Represents a hail account on a specific cloud"""
 
     username: str
-    cloud_id: str
+    # give this type: any, because DeserializableDataclass doesn't support checking this type
+    cloud_id: Any  # type str | pulumi.Output[str]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -326,18 +330,13 @@ class CPGDatasetConfig(DeserializableDataclass):
     class Gcp(DeserializableDataclass):
         project: str
         region: str | None = None
-
-        hail_service_account_test: HailAccount | None = None
-        hail_service_account_standard: HailAccount | None = None
-        hail_service_account_full: HailAccount | None = None
+        # Allow for cases where the hail service accounts were created manually
+        # and do not match the dataset name
+        hail_service_account_dataset_name_override: str | None = None
 
     @dataclasses.dataclass(frozen=True)
     class Azure(DeserializableDataclass):
         region: str | None = None
-
-        hail_service_account_test: HailAccount | None = None
-        hail_service_account_standard: HailAccount | None = None
-        hail_service_account_full: HailAccount | None = None
 
     @dataclasses.dataclass(frozen=True)
     class Budget(DeserializableDataclass):

@@ -389,7 +389,6 @@ class GcpInfrastructure(CloudInfraBase):
         raise NotImplementedError(f'Invalid member type {type(member)}')
 
     def get_preferred_group_membership_key(self, member) -> str | pulumi.Output[str]:
-
         if isinstance(member, pulumi.Output):
             return pulumi.Output.apply(
                 member,
