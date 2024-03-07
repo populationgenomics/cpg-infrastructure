@@ -362,6 +362,9 @@ class GcpInfrastructure(CloudInfraBase):
 
     def get_member_key(self, member):  # pylint: disable=too-many-return-statements
         # it's a 'cpg_infra.driver.CPGInfrastructure.GroupProvider.Group'
+        if isinstance(member, pulumi.Output):
+            return pulumi.Output.apply(member, self.get_member_key)
+
         if hasattr(member, 'is_group') and hasattr(member, 'group'):
             # cheeky catch for internal group
             return self.get_member_key(member.group)
@@ -383,12 +386,15 @@ class GcpInfrastructure(CloudInfraBase):
 
             return member
 
-        if isinstance(member, pulumi.Output):
-            return member
-
         raise NotImplementedError(f'Invalid member type {type(member)}')
 
     def get_preferred_group_membership_key(self, member) -> str | pulumi.Output[str]:
+        if isinstance(member, pulumi.Output):
+            return pulumi.Output.apply(
+                member,
+                self.get_preferred_group_membership_key,
+            )
+
         if hasattr(member, 'is_group') and hasattr(member, 'group'):
             # cheeky catch for internal group
             return self.get_preferred_group_membership_key(member.group)

@@ -75,6 +75,9 @@ def try_parse_value_as_type(value: Any, dtype: Any) -> Any:
             return None
         raise ValueError(f'Expected None, got {type(value)} for {value!r}')
 
+    if dtype is Any:
+        return value
+
     if isinstance(dtype, UnionType):
         dtype = get_args(dtype)
 
