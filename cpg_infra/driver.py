@@ -1923,7 +1923,34 @@ class CPGDatasetCloudInfrastructure:
         if not self.should_setup_hail:
             return {}
 
-        accounts: dict[str, HailAccount] = {}
+        if isinstance(self.infra, GcpInfrastructure):
+            accounts = {
+                'standard': self.dataset_config.gcp.hail_service_account_standard,
+                'full': self.dataset_config.gcp.hail_service_account_full,
+            }
+            if self.dataset_config.setup_test:
+                accounts['test'] = self.dataset_config.gcp.hail_service_account_test
+        elif isinstance(self.infra, AzureInfra):
+            assert (
+                self.dataset_config.azure is not None
+            ), 'dataset_config.azure is required to be set'
+            accounts = {
+                'test': self.dataset_config.azure.hail_service_account_test,
+                'standard': self.dataset_config.azure.hail_service_account_standard,
+            }
+            if self.dataset_config.setup_test:
+                accounts['test'] = self.dataset_config.azure.hail_service_account_test
+        else:
+            return {}
+
+        _ = self.hail_accounts_by_access_level_new
+
+        return {cat: ac for cat, ac in accounts.items() if ac}
+
+    @cached_property
+    def hail_accounts_by_access_level_new(self) -> None:
+        if not self.should_setup_hail:
+            return
 
         account_access_levels: list[str] = ['full', 'standard']
         if self.dataset_config.setup_test:
@@ -1948,7 +1975,7 @@ class CPGDatasetCloudInfrastructure:
                 else ''
             )
             username = f'{username_prefix}{dataset_name}-{access_level}'
-            accounts[access_level] = HailAccount(
+            HailAccount(
                 username=username,
                 cloud_id=HailBatchUser(
                     self.infra.get_pulumi_name(f'hail-batch-user-{access_level}'),
@@ -1957,8 +1984,7 @@ class CPGDatasetCloudInfrastructure:
                     token_category=self.infra.name(),
                 ).cloud_id,
             )
-
-        return accounts
+        return
 
     @cached_property
     def hail_bucket(self):

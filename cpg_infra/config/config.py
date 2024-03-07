@@ -333,10 +333,16 @@ class CPGDatasetConfig(DeserializableDataclass):
         # Allow for cases where the hail service accounts were created manually
         # and do not match the dataset name
         hail_service_account_dataset_name_override: str | None = None
+        hail_service_account_test: HailAccount | None = None
+        hail_service_account_standard: HailAccount | None = None
+        hail_service_account_full: HailAccount | None = None
 
     @dataclasses.dataclass(frozen=True)
     class Azure(DeserializableDataclass):
         region: str | None = None
+        hail_service_account_test: HailAccount | None = None
+        hail_service_account_standard: HailAccount | None = None
+        hail_service_account_full: HailAccount | None = None
 
     @dataclasses.dataclass(frozen=True)
     class Budget(DeserializableDataclass):
