@@ -2,13 +2,13 @@
 """
 CPG Dataset infrastructure
 """
-import graphlib
 import os.path
 import re
 from collections import defaultdict
 from functools import cached_property
 from typing import Any, Callable, Iterable, Iterator, NamedTuple, Type
 
+import graphlib
 import pulumi
 import pulumi_gcp as gcp
 import toml
@@ -2014,7 +2014,6 @@ class CPGDatasetCloudInfrastructure:
         ) in self.cromwell_machine_accounts_by_access_level.items():
             secret = self.infra.create_secret(
                 f'{self.dataset_config.dataset}-cromwell-{access_level}-key',
-                project=self.config.analysis_runner.gcp.project,  # ANALYSIS_RUNNER_PROJECT,
             )
 
             credentials = self.infra.get_credentials_for_machine_account(
