@@ -2,34 +2,19 @@
 line-length = 88
 skip-string-normalization = true
 
-[tool.isort]
-py_version = 311
-profile = "black"
-line_length = 88
-sections = ['FUTURE', 'STDLIB', 'THIRDPARTY', "HAIL", 'CPG', 'FIRSTPARTY', 'LOCALFOLDER']
-known_hail = [
-    "hail",
-    "hailctl",
-]
-known_cpg = [
-    "analysis-runner",
-    "cpg_utils",
-    "cpg_infra",
-    "cpg_workflows",
-    "metamist",
-]
-
 [tool.ruff]
 line-length = 88
 
+[tool.ruff.lint]
 # ignore pydocstyle, flake8-boolean-trap (FBT)
-select = ["A", "B", "C",  "E", "F", "G", "I", "N", "Q", "S", "W", "ANN", "ARG", "BLE", "COM", "DJ", "DTZ", "ERA", "EXE", "ICN", "ISC", "NPY", "PD", "PGH", "PIE", "PL", "PT", "PYI", "RET", "RSE", "RUF", "SIM", "SLF", "TCH", "TID", "UP", "YTT"]
+select = ["A", "B", "C",  "E", "F", "G", "I", "N", "Q", "S", "W", "ANN", "ARG", "BLE", "COM", "DJ", "DTZ", "ERA", "EXE", "ICN", "ISC", "NPY", "PD", "PGH", "PIE", "PL", "PYI", "RET", "RSE", "RUF", "SIM", "SLF", "TCH", "TID", "UP", "YTT"]
 
-fixable = ["A", "B", "C", "D", "E", "F", "G", "I", "N", "Q", "S", "T", "W", "ANN", "ARG", "BLE", "COM", "DJ", "DTZ", "ERA", "EXE", "FBT", "ICN", "ISC", "NPY", "PD", "PGH", "PIE", "PL", "PT", "PYI", "RET", "RSE", "RUF", "SIM", "SLF", "TCH", "TID", "UP", "YTT"]
+fixable = ["A", "B", "C", "D", "E", "F", "G", "I", "N", "Q", "S", "T", "W", "ANN", "ARG", "BLE", "COM", "DJ", "DTZ", "ERA", "EXE", "FBT", "ICN", "ISC", "NPY", "PD", "PGH", "PIE", "PL", "PYI", "RET", "RSE", "RUF", "SIM", "SLF", "TCH", "TID", "UP", "YTT"]
 
 ignore = [
     "ANN101",  # Missing type annotation for self in method
     "ANN201",  # Missing return type annotation for public function
+    "ANN401",  # Dynamically typed expressions (typing.Any) are disallowed in `**kwargs`
     "E501",    # Line length too long
     "E731",    # Do not assign a lambda expression, use a def
     "E741",    # Ambiguous variable name
@@ -42,7 +27,27 @@ ignore = [
     "PT018",   # Assertion should be broken down into multiple parts
     "Q000",    # Single quotes found but double quotes preferred
     "S101",    # Use of assert detected
-    "PT009",   # Use a regular `assert` instead of unittest-style `assertDictEqual`
-    "PT027",   # Use `pytest.raises` instead of unittest-style `assertRaises`
-    "I001",    # Import block is un-sorted or un-formatted (using isort instead)
+]
+
+
+[tool.ruff.lint.isort]
+
+section-order = ["future", "standard-library", "third-party", "hail", "cpg", "first-party", "local-folder"]
+
+[tool.ruff.lint.isort.sections]
+hail = [
+    "hail",
+    "hailtop",
+]
+# Adjust these for each repository, e.g., removing those that should be
+# local rather than CPG. Also fill in extend_skip below if there are any
+# subdirectories that should be ignored.
+cpg = [
+    "analysis_runner",
+    "cpg_infra",
+    "cpg_utils",
+    "cpg_workflows",
+    "gnomad",
+    "hail_scripts",
+    "metamist",
 ]
