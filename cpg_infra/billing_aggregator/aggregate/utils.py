@@ -236,8 +236,8 @@ def _format_bq_schema_json(schema: list[dict[str, Any]]) -> list[dict]:
             'mode': row['mode'],
         }
 
-        if 'fields' in row and row['fields']:
-            kwargs['fields'] = _format_bq_schema_json(row['fields'])
+        if fields := row.get('fields'):
+            kwargs['fields'] = _format_bq_schema_json(fields)
         formatted_schema.append(bq.SchemaField(**kwargs))
     return formatted_schema
 
@@ -620,18 +620,16 @@ async def process_entries_from_hail_in_chunks(
         return result
 
     # Process chunks of batches to avoid loading too many entries into memory
-    chunk_counter = 0
     nchnks = math.ceil(len(batches) / batch_group_chunk_size)
     lp = f'{log_prefix} ::' if log_prefix else ''
 
-    for batch_group in chunk(batches, batch_group_chunk_size):
+    for chunk_counter, batch_group in enumerate(chunk(batches, batch_group_chunk_size)):
         # we're going to fire off all the requests for jobs at once, and then:
         #   - use a task.Queue to synchronise the processing of the results
         #   - insert early if we're at 10MB across all the batches we're processing
         #        (rather than getting all jobs, which could be a lot of data)
         queue: asyncio.Queue[bool | tuple[BatchType, list[JobType]]] = asyncio.Queue()
 
-        chunk_counter += 1
         times = [b['time_created'] for b in batch_group]
         min_batch = min(times)
         max_batch = max(times)
