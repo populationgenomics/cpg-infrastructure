@@ -4,9 +4,10 @@
 
 import sys
 
+from cloudpathlib import AnyPath
+
 # See requirements.txt for why we're disabling the linter warnings here.
 import hailtop.batch as hb  # pylint: disable=import-error
-from cloudpathlib import AnyPath
 
 from cpg_utils.git import (
     get_git_commit_ref_of_current_repository,
