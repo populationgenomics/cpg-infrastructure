@@ -32,11 +32,10 @@ import google.cloud.bigquery as bq
 import google.cloud.logging
 import pandas as pd
 import rapidjson
+from cpg_utils.cloud import read_secret
 from flask import Request
 from google.api_core.exceptions import ClientError
 from pandas import Timestamp
-
-from cpg_utils.cloud import read_secret
 
 for lname in (
     'asyncio',
@@ -91,6 +90,11 @@ HAIL_SERVICE_FEE = 0.0
 # https://cloud.google.com/bigquery/quotas#:~:text=up%20to%2010%2C000%20parameters.
 DEFAULT_BQ_INSERT_CHUNK_SIZE = 20000
 ANALYSIS_RUNNER_PROJECT_ID = 'analysis-runner'
+
+# Maximum job count before all jobs gets summarised into one row
+# This is to prevent the bigquery inserts taking too long
+# Most of batches with over 20K jobs are hail query jobs and are not very useful for billing
+DEFAULT_MAX_JOBS_PER_BATCH = 9000
 
 # runs every 4 hours
 DEFAULT_RANGE_INTERVAL = timedelta(hours=int(os.getenv('DEFAULT_INTERVAL_HOURS', '4')))
@@ -464,6 +468,7 @@ async def get_finished_batches_for_date(
 async def get_jobs_for_batch(
     batch_id: int,
     token: str,
+    limit: int | None = None,
 ) -> AsyncGenerator[list[JobType], None]:
     """
     For a single batch, fill in the 'jobs' field.
@@ -479,7 +484,7 @@ async def get_jobs_for_batch(
             if iterations > 1 and iterations % 5 == 0:
                 logger.info(f'On {iterations} iteration to load jobs for {batch_id}')
 
-            q = '?limit=9999'
+            q = f'?limit={limit}' if limit else '?limit=9999'
             if last_job_id:
                 q += f'&last_job_id={last_job_id}'
             url = HAIL_JOBS_API.format(batch_id=batch_id) + q
@@ -493,8 +498,9 @@ async def get_jobs_for_batch(
                 session=session,
                 headers={'Authorization': 'Bearer ' + token},
             )
+            # stop if jobs DEFAULT_MAX_JOBS_PER_BATCH jobs
             new_last_job_id = jresponse.get('last_job_id')
-            if new_last_job_id is None:
+            if new_last_job_id is None or new_last_job_id >= limit:
                 end = True
             elif last_job_id:
                 assert new_last_job_id > last_job_id
@@ -506,6 +512,7 @@ async def get_jobs_for_batch(
 async def process_entries_from_hail_in_chunks(
     start: datetime,
     end: datetime,
+    service_id: str,
     func_get_finalised_entries_for_batch: Callable[
         [BatchType, list[JobType]],
         Generator[dict[str, Any], None, None],
@@ -526,6 +533,12 @@ async def process_entries_from_hail_in_chunks(
     Break them down by dataset, and then proportion the rest of the costs.
     """
 
+    # Get the existing ids from the table for optimisation,
+    # avoiding multiple BQ calls
+    existing_ids = retrieve_stored_ids(
+        start, end, service_id, table=GCP_AGGREGATE_DEST_TABLE
+    )
+
     def insert_entries(_entries: list[dict[str, Any]]) -> int:
         if not _entries:
             return 0
@@ -534,6 +547,7 @@ async def process_entries_from_hail_in_chunks(
             return upsert_rows_into_bigquery(
                 table=GCP_AGGREGATE_DEST_TABLE,
                 objs=_entries,
+                existing_ids=existing_ids,
                 dry_run=mode == 'dry-run',
             )
 
@@ -565,6 +579,7 @@ async def process_entries_from_hail_in_chunks(
         token=token,
         billing_project=billing_project,
     )
+
     if func_batches_preprocessor:
         batches = await func_batches_preprocessor(batches)
     if len(batches) == 0:
@@ -579,10 +594,36 @@ async def process_entries_from_hail_in_chunks(
         Simpler wrapper to get jobs and adds to queue
         """
         batch_id = batch['id']
-        len_jobs = 0
-        async for jobs in get_jobs_for_batch(batch_id, token):
-            len_jobs += len(jobs)
-            await queue.put((batch, jobs))
+        jobs_cnt = batch['n_jobs']
+
+        # only get the first jb if there are more than DEFAULT_MAX_JOBS_PER_BATCH jobs
+        limit = 1 if jobs_cnt > DEFAULT_MAX_JOBS_PER_BATCH else None
+        async for jobs in get_jobs_for_batch(batch_id, token, limit):
+            if jobs_cnt <= DEFAULT_MAX_JOBS_PER_BATCH:
+                await queue.put((batch, jobs))
+            else:
+                # This is most likely Hail Batch Query job, aggregate it as one job
+                # batch contains all the costs as cost_breakdown
+                # we just need to reformat it to match the JobType
+                cost_breakdown = batch.get('cost_breakdown', [])
+
+                total_jobs_cost = {}
+                for rec in cost_breakdown:
+                    total_jobs_cost[rec['resource']] = rec['cost']
+
+                # construct total job record:
+                total_job = {
+                    'batch_id': batch_id,
+                    'job_id': batch.get('n_jobs'),
+                    'state': jobs[0].get('state'),  # pick from 1st jobs
+                    'user': jobs[0].get('user'),  # pick from 1st jobs
+                    'resources': {},  # not used
+                    'cost': total_jobs_cost,
+                    'attributes': {
+                        'name': 'ALL JOBS COMBINED',
+                    },
+                }
+                await queue.put((batch, [total_job]))
 
     async def _aggregate_and_insert(
         queue: asyncio.Queue[bool | tuple[BatchType, list[JobType]]],
@@ -604,6 +645,10 @@ async def process_entries_from_hail_in_chunks(
 
             if not jobs:
                 continue
+
+            logger.info(
+                f'batchid {batch["id"]} _aggregate_and_insert at {datetime.now().isoformat()}]'
+            )
 
             for entry in func_get_finalised_entries_for_batch(batch, jobs):
                 entries.append(entry)
@@ -680,6 +725,7 @@ def billing_row_to_topic(row: dict[str, Any], dataset_to_gcp_map: dict) -> str |
 
 def upsert_rows_into_bigquery(
     objs: list[dict[str, Any]],
+    existing_ids: set[str],
     dry_run: bool,
     table: str = GCP_AGGREGATE_DEST_TABLE,
     chunk_size: int = DEFAULT_BQ_INSERT_CHUNK_SIZE,
@@ -699,9 +745,6 @@ def upsert_rows_into_bigquery(
     if not objs:
         logger.info('Not inserting any rows')
         return 0
-
-    window_start = datetime.fromisoformat(min(o['usage_start_time'] for o in objs))
-    window_end = datetime.fromisoformat(max(o['usage_end_time'] for o in objs))
 
     n_chunks = math.ceil(len(objs) / chunk_size)
     total_size_mb = sys.getsizeof(objs) / (1024 * 1024)
@@ -725,38 +768,10 @@ def upsert_rows_into_bigquery(
     inserted_ids: set[int] = set()
 
     for chunk_idx, chunked_objs in enumerate(chunk(objs, chunk_size)):
-        if '`' in table:
-            raise ValueError('Table name cannot contain backticks')
-
-        _query = f"""
-            SELECT id FROM `{table}`
-            WHERE id IN UNNEST(@ids)
-            AND DATE_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end;
-        """  # noqa: S608
-
         # NOTE: it's possible to have valid duplicate rows
         # allow for adding duplicates on first upload only
         # Protects us against duplicate ids falling across chunks
         ids = {o['id'] for o in chunked_objs} - inserted_ids
-
-        job_config = bq.QueryJobConfig(
-            query_parameters=[
-                bq.ArrayQueryParameter('ids', 'STRING', list(ids)),
-                bq.ScalarQueryParameter(
-                    'window_start',
-                    'STRING',
-                    window_start.strftime('%Y-%m-%d'),
-                ),
-                bq.ScalarQueryParameter(
-                    'window_end',
-                    'STRING',
-                    window_end.strftime('%Y-%m-%d'),
-                ),
-            ],
-        )
-
-        result = get_bigquery_client().query(_query, job_config=job_config).result()
-        existing_ids = set(result.to_dataframe()['id'])
 
         # Filter out any rows that are already in the table
         filtered_obj = [o for o in chunked_objs if o['id'] not in existing_ids]
@@ -1223,3 +1238,54 @@ def reformat_bigqquery_labels(data: list[dict[str, Any]]) -> dict[str, Any]:
                 labels[k] = v
 
     return labels
+
+
+def retrieve_stored_ids(
+    start: datetime,
+    end: datetime,
+    service_id: str,
+    table: str = GCP_AGGREGATE_DEST_TABLE,
+) -> set[str]:
+    """
+    Retrieve all the stored ids using seqr- and hail- prefixes
+    """
+    logger.info(
+        f'Retrieving stored ids for {table} between {start} and {end}',
+    )
+
+    if '`' in table:
+        raise ValueError('Table name cannot contain backticks')
+
+    _query = f"""
+        SELECT id FROM `{table}`
+        WHERE DATE_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end
+        AND id LIKE '{service_id}-%';
+    """
+
+    job_config = bq.QueryJobConfig(
+        query_parameters=[
+            bq.ScalarQueryParameter(
+                'window_start',
+                'STRING',
+                start.strftime('%Y-%m-%d'),
+            ),
+            bq.ScalarQueryParameter(
+                'window_end',
+                'STRING',
+                end.strftime('%Y-%m-%d'),
+            ),
+        ],
+    )
+
+    records = set()
+    try:
+        result = get_bigquery_client().query(_query, job_config=job_config).result()
+        records = set(result.to_dataframe()['id'])
+    except Exception as e:
+        logger.error(e)
+
+    logger.info(
+        f'Retrieved {len(records)} stored ids',
+    )
+
+    return records

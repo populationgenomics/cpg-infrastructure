@@ -25,14 +25,13 @@ import json
 import logging
 import os
 import shutil
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Generator
 
 import functions_framework
-from flask import Request
-
 from cpg_utils.cloud import read_secret
 from cpg_utils.config import AR_GUID_NAME
+from flask import Request
 
 try:
     from . import utils
@@ -216,6 +215,7 @@ async def main(
     result = await utils.process_entries_from_hail_in_chunks(
         start=start,
         end=end,
+        service_id=SERVICE_ID,
         func_get_finalised_entries_for_batch=get_finalised_entries_for_batch,
         mode=mode,
         output_path=output_path,
@@ -224,6 +224,25 @@ async def main(
     logger.info(f'Migrated a total of {result} rows')
 
     return {'entriesInserted': result}
+
+
+def reload_data_example():
+    """Re-loading one month example call"""
+    test_start = datetime.fromisoformat('2024-02-01')
+    test_end = datetime.fromisoformat('2024-02-28')
+
+    current_date = test_start
+    while current_date <= test_end:
+        logger.info(f'Loading {current_date} started at {datetime.now().isoformat()}]')
+        asyncio.run(
+            main(
+                start=current_date,
+                end=(current_date + timedelta(days=1)),
+                mode='prod',
+            )
+        )
+        logger.info(f'Loading {current_date} ended at {datetime.now().isoformat()}]')
+        current_date += timedelta(days=1)
 
 
 if __name__ == '__main__':
@@ -241,3 +260,5 @@ if __name__ == '__main__':
             # output_path=os.path.join(os.getcwd(), 'hail'),
         ),
     )
+
+    # reload_data_example()

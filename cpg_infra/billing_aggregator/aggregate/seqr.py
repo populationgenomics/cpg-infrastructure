@@ -34,15 +34,14 @@ import hashlib
 import logging
 import os
 import shutil
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Generator, Literal
 
 import functions_framework
 import google.cloud.bigquery as bq
 import rapidjson
-from flask import Request
-
 from cpg_utils.config import AR_GUID_NAME
+from flask import Request
 from metamist.apis import AnalysisApi, ProjectApi, SampleApi
 from metamist.model.body_get_proportionate_map import BodyGetProportionateMap
 from metamist.model.proportional_date_temporal_method import (
@@ -360,6 +359,10 @@ def migrate_entries_from_bq(
         ],
     )
 
+    existing_ids = utils.retrieve_stored_ids(
+        start, end, SERVICE_ID, table=utils.GCP_AGGREGATE_DEST_TABLE
+    )
+
     temp_file = f'seqr-query-{istart.isoformat()}-{iend.isoformat()}.json'
 
     json_objs_iter: Generator[dict, None, None] | list[dict]
@@ -468,6 +471,7 @@ def migrate_entries_from_bq(
             result += utils.upsert_rows_into_bigquery(
                 table=utils.GCP_AGGREGATE_DEST_TABLE,
                 objs=entries,
+                existing_ids=existing_ids,
                 dry_run=False,
             )
         elif mode == 'local':
@@ -698,6 +702,7 @@ async def main(
     result += await utils.process_entries_from_hail_in_chunks(
         start=start,
         end=end,
+        service_id=SERVICE_ID,
         billing_project=SEQR_HAIL_BILLING_PROJECT,
         func_get_finalised_entries_for_batch=func_get_finalised_entries,
         func_batches_preprocessor=func_process_batches_to_fetch_prop_map,
@@ -746,6 +751,26 @@ def from_pubsub(data=None, _=None):
     return asyncio.new_event_loop().run_until_complete(main(start, end))
 
 
+def reload_data_example():
+    test_start = datetime.fromisoformat('2024-02-01')
+    test_end = datetime.fromisoformat('2024-02-28')
+
+    current_date = test_start
+    while current_date <= test_end:
+        logger.info(f'Loading {current_date} started at {datetime.now().isoformat()}]')
+        asyncio.run(
+            main(
+                start=current_date,
+                end=(current_date + timedelta(days=1)),
+                mode='prod',
+                # mode='local',
+                output_path=os.path.join(os.getcwd(), 'seqr'),
+            )
+        )
+        logger.info(f'Loading {current_date} ended at {datetime.now().isoformat()}]')
+        current_date += timedelta(days=1)
+
+
 if __name__ == '__main__':
     logger.setLevel(logging.INFO)
     logging.getLogger('google').setLevel(logging.WARNING)
@@ -763,3 +788,5 @@ if __name__ == '__main__':
             # output_path=os.path.join(os.getcwd(), 'seqr'),
         ),
     )
+
+    # reload_data_example()
