@@ -346,7 +346,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 min_instance_count=0,
                 available_memory=memory,
                 available_cpu=cpu,
-                timeout_seconds=540,
+                timeout_seconds=3600,
                 environment_variables=env,
                 ingress_settings='ALLOW_INTERNAL_ONLY',
                 all_traffic_on_latest_revision=True,
