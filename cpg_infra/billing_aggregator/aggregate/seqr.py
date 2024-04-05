@@ -40,8 +40,9 @@ from typing import Any, Generator, Literal
 import functions_framework
 import google.cloud.bigquery as bq
 import rapidjson
-from cpg_utils.config import AR_GUID_NAME
 from flask import Request
+
+from cpg_utils.config import AR_GUID_NAME
 from metamist.apis import AnalysisApi, ProjectApi, SampleApi
 from metamist.model.body_get_proportionate_map import BodyGetProportionateMap
 from metamist.model.proportional_date_temporal_method import (
@@ -360,7 +361,10 @@ def migrate_entries_from_bq(
     )
 
     existing_ids = utils.retrieve_stored_ids(
-        start, end, SERVICE_ID, table=utils.GCP_AGGREGATE_DEST_TABLE
+        start,
+        end,
+        SERVICE_ID,
+        table=utils.GCP_AGGREGATE_DEST_TABLE,
     )
 
     temp_file = f'seqr-query-{istart.isoformat()}-{iend.isoformat()}.json'
@@ -757,7 +761,9 @@ def reload_data_example():
 
     current_date = test_start
     while current_date <= test_end:
-        logger.info(f'Loading {current_date} started at {datetime.now().isoformat()}]')
+        logger.info(
+            f'Loading {current_date} started at {datetime.now(timezone.utc).isoformat()}]',
+        )
         asyncio.run(
             main(
                 start=current_date,
@@ -765,9 +771,11 @@ def reload_data_example():
                 mode='prod',
                 # mode='local',
                 output_path=os.path.join(os.getcwd(), 'seqr'),
-            )
+            ),
         )
-        logger.info(f'Loading {current_date} ended at {datetime.now().isoformat()}]')
+        logger.info(
+            f'Loading {current_date} ended at {datetime.now(timezone.utc).isoformat()}]',
+        )
         current_date += timedelta(days=1)
 
 

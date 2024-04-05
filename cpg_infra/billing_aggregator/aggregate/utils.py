@@ -32,10 +32,11 @@ import google.cloud.bigquery as bq
 import google.cloud.logging
 import pandas as pd
 import rapidjson
-from cpg_utils.cloud import read_secret
 from flask import Request
 from google.api_core.exceptions import ClientError
 from pandas import Timestamp
+
+from cpg_utils.cloud import read_secret
 
 for lname in (
     'asyncio',
@@ -536,7 +537,10 @@ async def process_entries_from_hail_in_chunks(
     # Get the existing ids from the table for optimisation,
     # avoiding multiple BQ calls
     existing_ids = retrieve_stored_ids(
-        start, end, service_id, table=GCP_AGGREGATE_DEST_TABLE
+        start,
+        end,
+        service_id,
+        table=GCP_AGGREGATE_DEST_TABLE,
     )
 
     def insert_entries(_entries: list[dict[str, Any]]) -> int:
@@ -645,10 +649,6 @@ async def process_entries_from_hail_in_chunks(
 
             if not jobs:
                 continue
-
-            logger.info(
-                f'batchid {batch["id"]} _aggregate_and_insert at {datetime.now().isoformat()}]'
-            )
 
             for entry in func_get_finalised_entries_for_batch(batch, jobs):
                 entries.append(entry)
@@ -807,7 +807,7 @@ def upsert_rows_into_bigquery(
             project=GCP_PROJECT,
         )
         try:
-            result = resp.result()
+            _result = resp.result()
         except ClientError as e:
             logger.error(resp.errors)
             raise e
@@ -1256,11 +1256,17 @@ def retrieve_stored_ids(
     if '`' in table:
         raise ValueError('Table name cannot contain backticks')
 
+    if service_id not in ('seqr', 'hail'):
+        raise ValueError(f'Invalid service_id: {service_id}')
+
+    if table not in (GCP_AGGREGATE_DEST_TABLE, GCP_BILLING_BQ_TABLE):
+        raise ValueError(f'Invalid table: {table}')
+
     _query = f"""
         SELECT id FROM `{table}`
         WHERE DATE_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end
         AND id LIKE '{service_id}-%';
-    """
+    """  # noqa: S608 both tables and service_id are checked for validity
 
     job_config = bq.QueryJobConfig(
         query_parameters=[
@@ -1281,7 +1287,7 @@ def retrieve_stored_ids(
     try:
         result = get_bigquery_client().query(_query, job_config=job_config).result()
         records = set(result.to_dataframe()['id'])
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.error(e)
 
     logger.info(

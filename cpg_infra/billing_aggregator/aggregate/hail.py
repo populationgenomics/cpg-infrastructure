@@ -29,9 +29,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Generator
 
 import functions_framework
+from flask import Request
+
 from cpg_utils.cloud import read_secret
 from cpg_utils.config import AR_GUID_NAME
-from flask import Request
 
 try:
     from . import utils
@@ -233,15 +234,19 @@ def reload_data_example():
 
     current_date = test_start
     while current_date <= test_end:
-        logger.info(f'Loading {current_date} started at {datetime.now().isoformat()}]')
+        logger.info(
+            f'Loading {current_date} started at {datetime.now(timezone.utc).isoformat()}',
+        )
         asyncio.run(
             main(
                 start=current_date,
                 end=(current_date + timedelta(days=1)),
                 mode='prod',
-            )
+            ),
         )
-        logger.info(f'Loading {current_date} ended at {datetime.now().isoformat()}]')
+        logger.info(
+            f'Loading {current_date} ended at {datetime.now(timezone.utc).isoformat()}',
+        )
         current_date += timedelta(days=1)
 
 
