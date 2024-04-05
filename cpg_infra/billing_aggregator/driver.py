@@ -27,10 +27,10 @@ from functools import cached_property
 
 import pulumi
 import pulumi_gcp as gcp
+from cpg_utils.cloud import read_secret
 
 from cpg_infra.plugin import CpgInfrastructurePlugin
 from cpg_infra.utils import archive_folder
-from cpg_utils.cloud import read_secret
 
 PATH_TO_AGGREGATE_SOURCE_CODE = os.path.join(os.path.dirname(__file__), 'aggregate')
 PATH_TO_MONTHLY_AGGREGATE_SOURCE_CODE = os.path.join(
@@ -62,7 +62,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
             return
 
         self.setup_aggregator_functions()
-        self.setup_monthly_export()
+        # self.setup_monthly_export() # we do not need this anymore
         self.setup_update_budget()
         # setup BQ objects
         _ = self.aggregate_table
