@@ -32,11 +32,10 @@ import google.cloud.bigquery as bq
 import google.cloud.logging
 import pandas as pd
 import rapidjson
+from cpg_utils.cloud import read_secret
 from flask import Request
 from google.api_core.exceptions import ClientError
 from pandas import Timestamp
-
-from cpg_utils.cloud import read_secret
 
 for lname in (
     'asyncio',
@@ -1284,12 +1283,8 @@ def retrieve_stored_ids(
     )
 
     records = set()
-    try:
-        result = get_bigquery_client().query(_query, job_config=job_config).result()
-        records = set(result.to_dataframe()['id'])
-    except Exception as e:  # noqa: BLE001
-        logger.error(e)
-
+    result = get_bigquery_client().query(_query, job_config=job_config).result()
+    records = set(result.to_dataframe()['id'])
     logger.info(
         f'Retrieved {len(records)} stored ids',
     )
