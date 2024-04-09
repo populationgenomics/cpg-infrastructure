@@ -25,7 +25,7 @@ import json
 import logging
 import os
 import shutil
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, Generator
 
 import functions_framework
@@ -227,29 +227,6 @@ async def main(
     return {'entriesInserted': result}
 
 
-def reload_data_example():
-    """Re-loading one month example call"""
-    test_start = datetime.fromisoformat('2024-02-01')
-    test_end = datetime.fromisoformat('2024-02-28')
-
-    current_date = test_start
-    while current_date <= test_end:
-        logger.info(
-            f'Loading {current_date} started at {datetime.now(timezone.utc).isoformat()}',
-        )
-        asyncio.run(
-            main(
-                start=current_date,
-                end=(current_date + timedelta(days=1)),
-                mode='prod',
-            ),
-        )
-        logger.info(
-            f'Loading {current_date} ended at {datetime.now(timezone.utc).isoformat()}',
-        )
-        current_date += timedelta(days=1)
-
-
 if __name__ == '__main__':
     logger.setLevel(logging.INFO)
     logging.getLogger('google').setLevel(logging.WARNING)
@@ -265,5 +242,3 @@ if __name__ == '__main__':
             # output_path=os.path.join(os.getcwd(), 'hail'),
         ),
     )
-
-    # reload_data_example()

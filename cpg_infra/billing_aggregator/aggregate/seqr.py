@@ -34,7 +34,7 @@ import hashlib
 import logging
 import os
 import shutil
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Generator, Literal
 
 import functions_framework
@@ -755,30 +755,6 @@ def from_pubsub(data=None, _=None):
     return asyncio.new_event_loop().run_until_complete(main(start, end))
 
 
-def reload_data_example():
-    test_start = datetime.fromisoformat('2024-02-01')
-    test_end = datetime.fromisoformat('2024-02-28')
-
-    current_date = test_start
-    while current_date <= test_end:
-        logger.info(
-            f'Loading {current_date} started at {datetime.now(timezone.utc).isoformat()}]',
-        )
-        asyncio.run(
-            main(
-                start=current_date,
-                end=(current_date + timedelta(days=1)),
-                mode='prod',
-                # mode='local',
-                output_path=os.path.join(os.getcwd(), 'seqr'),
-            ),
-        )
-        logger.info(
-            f'Loading {current_date} ended at {datetime.now(timezone.utc).isoformat()}]',
-        )
-        current_date += timedelta(days=1)
-
-
 if __name__ == '__main__':
     logger.setLevel(logging.INFO)
     logging.getLogger('google').setLevel(logging.WARNING)
@@ -796,5 +772,3 @@ if __name__ == '__main__':
             # output_path=os.path.join(os.getcwd(), 'seqr'),
         ),
     )
-
-    # reload_data_example()
