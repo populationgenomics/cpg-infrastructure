@@ -469,7 +469,6 @@ async def get_finished_batches_for_date(
 async def get_jobs_for_batch(
     batch_id: int,
     token: str,
-    limit: int | None = None,
 ) -> AsyncGenerator[list[JobType], None]:
     """
     For a single batch, fill in the 'jobs' field.
@@ -485,7 +484,7 @@ async def get_jobs_for_batch(
             if iterations > 1 and iterations % 5 == 0:
                 logger.info(f'On {iterations} iteration to load jobs for {batch_id}')
 
-            q = f'?limit={limit}' if limit else '?limit=9999'
+            q = '?limit=9999'
             if last_job_id:
                 q += f'&last_job_id={last_job_id}'
             url = HAIL_JOBS_API.format(batch_id=batch_id) + q
@@ -501,7 +500,7 @@ async def get_jobs_for_batch(
             )
             # stop if jobs DEFAULT_MAX_JOBS_PER_BATCH jobs
             new_last_job_id = jresponse.get('last_job_id')
-            if new_last_job_id is None or new_last_job_id >= limit:
+            if new_last_job_id is None:
                 end = True
             elif last_job_id:
                 assert new_last_job_id > last_job_id
@@ -599,35 +598,34 @@ async def process_entries_from_hail_in_chunks(
         """
         batch_id = batch['id']
         jobs_cnt = batch['n_jobs']
+        batch_name = batch.get('attributes', {}).get('name')
 
-        # only get the first jb if there are more than DEFAULT_MAX_JOBS_PER_BATCH jobs
-        limit = 1 if jobs_cnt > DEFAULT_MAX_JOBS_PER_BATCH else None
-        async for jobs in get_jobs_for_batch(batch_id, token, limit):
-            if jobs_cnt <= DEFAULT_MAX_JOBS_PER_BATCH:
+        # check if hail batch query or too many jobs
+        if batch_name is None or jobs_cnt > DEFAULT_MAX_JOBS_PER_BATCH:
+            # This is most likely Hail Batch Query job, aggregate it as one job
+            # batch contains all the costs as cost_breakdown
+            # we just need to reformat it to match the JobType
+            cost_breakdown = batch.get('cost_breakdown', [])
+
+            total_jobs_cost = {}
+            for rec in cost_breakdown:
+                total_jobs_cost[rec['resource']] = rec['cost']
+
+            # construct total job record:
+            total_job = {
+                'batch_id': batch_id,
+                'job_id': batch.get('n_jobs'),
+                'state': batch.get('state'),
+                'resources': {},  # not used
+                'cost': total_jobs_cost,
+                'attributes': {
+                    'name': 'ALL JOBS COMBINED',
+                },
+            }
+            await queue.put((batch, [total_job]))
+        else:
+            async for jobs in get_jobs_for_batch(batch_id, token):
                 await queue.put((batch, jobs))
-            else:
-                # This is most likely Hail Batch Query job, aggregate it as one job
-                # batch contains all the costs as cost_breakdown
-                # we just need to reformat it to match the JobType
-                cost_breakdown = batch.get('cost_breakdown', [])
-
-                total_jobs_cost = {}
-                for rec in cost_breakdown:
-                    total_jobs_cost[rec['resource']] = rec['cost']
-
-                # construct total job record:
-                total_job = {
-                    'batch_id': batch_id,
-                    'job_id': batch.get('n_jobs'),
-                    'state': jobs[0].get('state'),  # pick from 1st jobs
-                    'user': jobs[0].get('user'),  # pick from 1st jobs
-                    'resources': {},  # not used
-                    'cost': total_jobs_cost,
-                    'attributes': {
-                        'name': 'ALL JOBS COMBINED',
-                    },
-                }
-                await queue.put((batch, [total_job]))
 
     async def _aggregate_and_insert(
         queue: asyncio.Queue[bool | tuple[BatchType, list[JobType]]],
