@@ -32,10 +32,11 @@ import google.cloud.bigquery as bq
 import google.cloud.logging
 import pandas as pd
 import rapidjson
-from cpg_utils.cloud import read_secret
 from flask import Request
 from google.api_core.exceptions import ClientError
 from pandas import Timestamp
+
+from cpg_utils.cloud import read_secret
 
 for lname in (
     'asyncio',
