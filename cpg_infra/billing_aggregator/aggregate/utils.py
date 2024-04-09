@@ -107,6 +107,7 @@ HAIL_PROJECT_ID = 'hail-295901'
 HAIL_BASE = 'https://batch.hail.populationgenomics.org.au'
 HAIL_UI_URL = HAIL_BASE + '/batches/{batch_id}'
 HAIL_BATCHES_API = HAIL_BASE + '/api/v1alpha/batches/completed'
+HAIL_BATCH_API = HAIL_BASE + '/api/v1alpha/batches/{batch_id}'
 HAIL_JOBS_API = HAIL_BASE + '/api/v1alpha/batches/{batch_id}/jobs/resources'
 
 HAIL_PROJECT_FIELD = {
@@ -509,6 +510,27 @@ async def get_jobs_for_batch(
             yield jresponse['jobs']
 
 
+async def get_batch_by_id(
+    batch_id: str,
+    token: str,
+) -> BatchType:
+    """
+    Get batch details by batch_id
+    """
+    try:
+        url = HAIL_BATCH_API.replace('{batch_id}', batch_id)
+        logger.info(f'Getting batch: {url}')
+        return await async_retry_transient_get_json_request(
+            url,
+            aiohttp.ClientError,
+            headers={'Authorization': 'Bearer ' + token},
+        )
+    except asyncio.TimeoutError as ex:
+        e = ex
+
+    raise e
+
+
 async def process_entries_from_hail_in_chunks(
     start: datetime,
     end: datetime,
@@ -525,6 +547,7 @@ async def process_entries_from_hail_in_chunks(
     func_batches_preprocessor: (
         Callable[[list[dict]], Awaitable[list[dict]]] | None
     ) = None,
+    batch_ids: list[str] | None = None,
 ) -> int:
     """
     Process all the seqr entries from hail batch,
@@ -576,12 +599,15 @@ async def process_entries_from_hail_in_chunks(
     token = get_hail_token()
     result = 0
 
-    batches = await get_finished_batches_for_date(
-        start=start,
-        end=end,
-        token=token,
-        billing_project=billing_project,
-    )
+    if batch_ids:
+        batches = [await get_batch_by_id(bid, token) for bid in batch_ids]
+    else:
+        batches = await get_finished_batches_for_date(
+            start=start,
+            end=end,
+            token=token,
+            billing_project=billing_project,
+        )
 
     if func_batches_preprocessor:
         batches = await func_batches_preprocessor(batches)
@@ -965,32 +991,38 @@ def get_unit_for_batch_resource_type(batch_resource_type: str) -> str:
     }.get(batch_resource_type, batch_resource_type)
 
 
-def get_start_and_end_from_request(
-    request: Request,
-) -> tuple[datetime | None, datetime | None]:
+def get_request_data_from_request(request: Request) -> dict[str, Any] | None:
     """
-    Get the start and end times from the cloud function request.
+    Get the request data from the cloud function request.
     """
     if not request:
-        return None, None
+        return None
 
     content_type = request.content_type
     if request.method == 'GET':
         logger.info(f'GET request, using args: {request.args}')
-        request_data = request.args
-    elif content_type == 'application/json':
+        return request.args
+    if content_type == 'application/json':
         logger.info('JSON found in request')
-        request_data = request.get_json(silent=True)
-    elif content_type in ('application/octet-stream', 'text/plain'):
+        return request.get_json(silent=True)
+    if content_type in ('application/octet-stream', 'text/plain'):
         logger.info('Text data found')
-        request_data = json.loads(request.data)
-    elif content_type == 'application/x-www-form-urlencoded':
+        return json.loads(request.data)
+    if content_type == 'application/x-www-form-urlencoded':
         logger.info('Encoded Form')
-        request_data = request.form
-    else:
-        logger.warning(f'Unknown content type: {content_type}. Defaulting to None.')
-        raise ValueError(f'Unknown content type: {content_type}')
+        return request.form
 
+    logger.warning(f'Unknown content type: {content_type}. Defaulting to None.')
+    raise ValueError(f'Unknown content type: {content_type}')
+
+
+def get_start_and_end_from_request(
+    request: Request,
+) -> tuple[datetime | None, datetime | None]:
+    """
+    Get the start and end times and batch_id from the cloud function request.
+    """
+    request_data = get_request_data_from_request(request)
     if not request_data:
         logger.warning(f'Attributes could not be found in request: {request_data}')
         return None, None
@@ -1022,6 +1054,33 @@ def get_start_and_end_from_request(
         return None, None
 
     return start, end
+
+
+def get_batch_ids_from_request(
+    request: Request,
+) -> list[str] | None:
+    """Extract batch_id from the request"""
+    request_data = get_request_data_from_request(request)
+    if not request_data:
+        logger.warning(f'Attributes could not be found in request: {request_data}')
+        return None
+
+    if message := request_data.get('message'):
+        if attributes := message.get('attributes'):
+            if 'batch_ids' in attributes:
+                request_data = attributes
+        elif 'data' in message:
+            try:
+                request_data = json.loads(b64decode(message['data']))
+            except Exception as exp:
+                raise exp
+
+    batch_ids = request_data.get('batch_ids')
+    if batch_ids:
+        return [str(batch_id) for batch_id in batch_ids]
+
+    # batch id is not present in the request
+    return None
 
 
 def date_range_iterator(

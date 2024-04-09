@@ -640,6 +640,7 @@ async def main(
     end: datetime | None = None,
     mode: RunMode = 'prod',
     output_path: str | None = None,
+    batch_ids: list[str] | None = None,
 ):
     """Main body function"""
     logger.info(f'Running Seqr Billing Aggregation for [{start}, {end}]')
@@ -712,6 +713,7 @@ async def main(
         func_batches_preprocessor=func_process_batches_to_fetch_prop_map,
         mode=mode,
         output_path=hail_output_path,
+        batch_ids=batch_ids,
     )
 
     result += migrate_entries_from_bq(
@@ -737,6 +739,11 @@ def from_request(request: Request):
     """
     From request object, get start and end time if present
     """
+    batch_ids = utils.get_batch_ids_from_request(request)
+    if batch_ids:
+        # batch id's were provided, so we only process those
+        return asyncio.new_event_loop().run_until_complete(process_batch_ids(batch_ids))
+
     try:
         start, end = utils.get_start_and_end_from_request(request)
     except ValueError as err:
@@ -745,6 +752,25 @@ def from_request(request: Request):
         start, end = None, None
 
     return asyncio.new_event_loop().run_until_complete(main(start, end))
+
+
+async def process_batch_ids(batch_ids: list[str]):
+    """
+    Process batch ids
+    """
+    # locate start and end time as main will need them
+    start = None
+    end = None
+    for batch_id in batch_ids:
+        batch = await utils.get_batch_by_id(batch_id, token=utils.get_hail_token())
+        start_time = utils.parse_hail_time(batch['time_created'])
+        end_time = utils.parse_hail_time(batch['time_completed'])
+        if start is None or start_time < start:
+            start = start_time
+        if end is None or end_time > end:
+            end = end_time
+
+    return await main(start, end, batch_ids=batch_ids)
 
 
 def from_pubsub(data=None, _=None):
