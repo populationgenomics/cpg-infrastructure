@@ -94,7 +94,7 @@ ANALYSIS_RUNNER_PROJECT_ID = 'analysis-runner'
 
 # Maximum job count before all jobs gets summarised into one row
 # This is to prevent the bigquery inserts taking too long
-# Most of batches with over 20K jobs are hail query jobs and are not very useful for billing
+# Jobs over 9K are going to be aggregated into one job.
 DEFAULT_MAX_JOBS_PER_BATCH = 9000
 
 # runs every 4 hours
@@ -499,7 +499,7 @@ async def get_jobs_for_batch(
                 session=session,
                 headers={'Authorization': 'Bearer ' + token},
             )
-            # stop if jobs DEFAULT_MAX_JOBS_PER_BATCH jobs
+            # stop if last_job_id is empty
             new_last_job_id = jresponse.get('last_job_id')
             if new_last_job_id is None:
                 end = True
