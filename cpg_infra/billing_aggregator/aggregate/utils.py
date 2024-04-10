@@ -626,8 +626,8 @@ async def process_entries_from_hail_in_chunks(
         jobs_cnt = batch['n_jobs']
         batch_name = batch.get('attributes', {}).get('name')
 
-        # check if hail batch query or too many jobs
-        if batch_name is None or jobs_cnt > DEFAULT_MAX_JOBS_PER_BATCH:
+        # check if hail batch query and too many jobs
+        if batch_name is None and jobs_cnt > DEFAULT_MAX_JOBS_PER_BATCH:
             # This is most likely Hail Batch Query job, aggregate it as one job
             # batch contains all the costs as cost_breakdown
             # we just need to reformat it to match the JobType
