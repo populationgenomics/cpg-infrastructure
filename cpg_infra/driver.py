@@ -562,13 +562,13 @@ class CPGInfrastructure:
         }
         if self.config.hail is not None:
             if self.config.hail.gcp.git_credentials_secret_name is not None:
-                output['git_credentials_secret_name'] = (
-                    self.config.hail.gcp.git_credentials_secret_name
-                )
+                output[
+                    'git_credentials_secret_name'
+                ] = self.config.hail.gcp.git_credentials_secret_name
             if self.config.hail.gcp.git_credentials_secret_project is not None:
-                output['git_credentials_secret_project'] = (
-                    self.config.hail.gcp.git_credentials_secret_project
-                )
+                output[
+                    'git_credentials_secret_project'
+                ] = self.config.hail.gcp.git_credentials_secret_project
 
         return output
 
