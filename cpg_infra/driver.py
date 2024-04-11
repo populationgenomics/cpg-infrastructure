@@ -562,13 +562,13 @@ class CPGInfrastructure:
         }
         if self.config.hail is not None:
             if self.config.hail.gcp.git_credentials_secret_name is not None:
-                output[
-                    'git_credentials_secret_name'
-                ] = self.config.hail.gcp.git_credentials_secret_name
+                output['git_credentials_secret_name'] = (
+                    self.config.hail.gcp.git_credentials_secret_name
+                )
             if self.config.hail.gcp.git_credentials_secret_project is not None:
-                output[
-                    'git_credentials_secret_project'
-                ] = self.config.hail.gcp.git_credentials_secret_project
+                output['git_credentials_secret_project'] = (
+                    self.config.hail.gcp.git_credentials_secret_project
+                )
 
         return output
 
@@ -2012,26 +2012,61 @@ class CPGDatasetCloudInfrastructure:
             access_level,
             cromwell_account,
         ) in self.cromwell_machine_accounts_by_access_level.items():
-            secret = self.infra.create_secret(
-                f'{self.dataset_config.dataset}-cromwell-{access_level}-key',
-            )
-
             credentials = self.infra.get_credentials_for_machine_account(
                 f'cromwell-service-account-{access_level}-key',
                 cromwell_account,
             )
 
+            secret = self.infra.create_secret(
+                f'{self.dataset_config.dataset}-cromwell-{access_level}-key-2',
+            )
+
             # add credentials to the secret
             self.infra.add_secret_version(
-                f'cromwell-service-account-{access_level}-secret-version',
+                f'cromwell-service-account-{access_level}-secret-version-2',
                 secret=secret,
                 contents=credentials,
             )
 
             # allow the analysis-runner to view the secret
             self.infra.add_secret_member(
-                f'cromwell-service-account-{access_level}-secret-accessor',
+                f'cromwell-service-account-{access_level}-secret-accessor-2',
                 secret=secret,
+                member=self.config.analysis_runner.gcp.server_machine_account,  # ANALYSIS_RUNNER_SERVICE_ACCOUNT,
+                membership=SecretMembership.ACCESSOR,
+                project=self.config.analysis_runner.gcp.project,  # ANALYSIS_RUNNER_PROJECT,
+            )
+
+            # Allow the Hail service account to access its corresponding cromwell key
+            if self.should_setup_hail:
+                if hail_account := self.hail_accounts_by_access_level.get(access_level):
+                    self.infra.add_secret_member(
+                        f'cromwell-service-account-{access_level}-self-accessor-2',
+                        project=self.config.analysis_runner.gcp.project,  # ANALYSIS_RUNNER_PROJECT,
+                        secret=secret,
+                        member=hail_account.cloud_id,
+                        membership=SecretMembership.ACCESSOR,
+                    )
+
+            # 2024-04-11 mfranklin: this is the old one,
+            #       remove when cpg-utils 5.0.0 is fully released
+
+            old_secret = self.infra.create_secret(
+                f'{self.dataset_config.dataset}-cromwell-{access_level}-key',
+                project=self.config.analysis_runner.gcp.project,  # ANALYSIS_RUNNER_PROJECT,
+            )
+
+            # add credentials to the secret
+            self.infra.add_secret_version(
+                f'cromwell-service-account-{access_level}-secret-version',
+                secret=old_secret,
+                contents=credentials,
+            )
+
+            # allow the analysis-runner to view the secret
+            self.infra.add_secret_member(
+                f'cromwell-service-account-{access_level}-secret-accessor',
+                secret=old_secret,
                 member=self.config.analysis_runner.gcp.server_machine_account,  # ANALYSIS_RUNNER_SERVICE_ACCOUNT,
                 membership=SecretMembership.ACCESSOR,
                 project=self.config.analysis_runner.gcp.project,  # ANALYSIS_RUNNER_PROJECT,
@@ -2043,7 +2078,7 @@ class CPGDatasetCloudInfrastructure:
                     self.infra.add_secret_member(
                         f'cromwell-service-account-{access_level}-self-accessor',
                         project=self.config.analysis_runner.gcp.project,  # ANALYSIS_RUNNER_PROJECT,
-                        secret=secret,
+                        secret=old_secret,
                         member=hail_account.cloud_id,
                         membership=SecretMembership.ACCESSOR,
                     )
