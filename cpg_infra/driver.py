@@ -2017,8 +2017,11 @@ class CPGDatasetCloudInfrastructure:
                 cromwell_account,
             )
 
+            secret_name = f'{self.dataset_config.dataset}-cromwell-{access_level}-key'
             secret = self.infra.create_secret(
-                f'{self.dataset_config.dataset}-cromwell-{access_level}-key-2',
+                name=secret_name,
+                # this key was created later, so we need to add a suffix
+                resource_key=self.infra.get_pulumi_name(secret_name) + '-2',
             )
 
             # add credentials to the secret
@@ -2052,7 +2055,7 @@ class CPGDatasetCloudInfrastructure:
             #       remove when cpg-utils 5.0.0 is fully released
 
             old_secret = self.infra.create_secret(
-                f'{self.dataset_config.dataset}-cromwell-{access_level}-key',
+                name=secret_name,
                 project=self.config.analysis_runner.gcp.project,  # ANALYSIS_RUNNER_PROJECT,
             )
 
