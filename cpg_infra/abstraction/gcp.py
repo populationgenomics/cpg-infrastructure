@@ -630,9 +630,14 @@ class GcpInfrastructure(CloudInfraBase):
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
         )
 
-    def create_secret(self, name: str, project: Optional[str] = None) -> Any:
+    def create_secret(
+        self,
+        name: str,
+        project: Optional[str] = None,
+        resource_key: Optional[str] = None,
+    ) -> Any:
         return gcp.secretmanager.Secret(
-            self.get_pulumi_name(name),
+            resource_key or self.get_pulumi_name(name),
             secret_id=name,
             replication=gcp.secretmanager.SecretReplicationArgs(
                 user_managed=gcp.secretmanager.SecretReplicationUserManagedArgs(

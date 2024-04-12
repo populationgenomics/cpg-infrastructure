@@ -487,9 +487,14 @@ class AzureInfra(CloudInfraBase):
             ),
         )
 
-    def create_secret(self, name: str, project: Optional[str] = None) -> Any:
+    def create_secret(
+        self,
+        name: str,
+        project: Optional[str] = None,
+        resource_key: Optional[str] = None,
+    ) -> Any:
         return az.keyvault.Secret(
-            self.get_pulumi_name('secret-' + name),
+            resource_key or self.get_pulumi_name('secret-' + name),
             secret_name=name,
             properties=az.keyvault.SecretPropertiesArgs(
                 value=None,
