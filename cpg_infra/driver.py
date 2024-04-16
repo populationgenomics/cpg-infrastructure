@@ -2058,7 +2058,6 @@ class CPGDatasetCloudInfrastructure:
                 secret=secret,
                 member=self.config.analysis_runner.gcp.server_machine_account,  # ANALYSIS_RUNNER_SERVICE_ACCOUNT,
                 membership=SecretMembership.ACCESSOR,
-                project=self.config.analysis_runner.gcp.project,  # ANALYSIS_RUNNER_PROJECT,
             )
 
             # Allow the Hail service account to access its corresponding cromwell key
@@ -2066,7 +2065,6 @@ class CPGDatasetCloudInfrastructure:
                 if hail_account := self.hail_accounts_by_access_level.get(access_level):
                     self.infra.add_secret_member(
                         f'cromwell-service-account-{access_level}-self-accessor-2',
-                        project=self.config.analysis_runner.gcp.project,  # ANALYSIS_RUNNER_PROJECT,
                         secret=secret,
                         member=hail_account.cloud_id,
                         membership=SecretMembership.ACCESSOR,
