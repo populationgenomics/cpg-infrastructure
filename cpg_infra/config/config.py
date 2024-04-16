@@ -35,7 +35,7 @@ class CPGInfrastructureUser(DeserializableDataclass):
     id: MemberKey  # noqa: RUF100, A003
     clouds: dict[CloudName, Cloud]
     projects: list[str]
-    add_to_internal_hail_batch_projects: bool = False
+    can_access_internal_dataset_logs: bool = False
 
 
 @dataclasses.dataclass(frozen=True)

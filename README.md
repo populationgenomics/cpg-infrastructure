@@ -89,9 +89,11 @@ Currently the [`BillingAggregator`](cpg_infra/billing_aggregator/), and [`Metami
 
 ### Internal datasets
 
-This concept was designed to make it easier to have developers added to _internal_ Hail Batch projects to facilitate debugging. To do this:
+This concept was designed to make it easier to have developers added to _internal_ Hail Batch projects and dataproc logs to facilitate debugging. 
 
-- a user config must have `add_to_internal_hail_batch_projects = True`, and
+To do this:
+
+- a user config must have `can_access_internal_dataset_logs = True`, and
 - the dataset config must have `is_internal_dataset = True`.
 
 ## Infrastructure
