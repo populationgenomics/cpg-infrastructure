@@ -88,6 +88,19 @@ def dict_to_toml(d: dict) -> str:
     return TomlSort(toml.dumps(d)).sorted()
 
 
+def compute_hash(dataset: str, member: str, cloud: str) -> str:
+    """
+    >>> compute_hash('dataset', 'hello.world@email.com', '')
+    'HW-d51b65ee'
+    """
+    initials = ''.join(n[0] for n in member.split('@')[0].split('.')).upper()
+    # I was going to say "add a salt", but we're displaying the initials,
+    # so let's call it something like salt, monosodium glutamate ;)
+    msg = dataset + member + cloud
+    computed_hash = xxhash.xxh32(msg.encode()).hexdigest()
+    return initials + '-' + computed_hash
+
+
 class CPGInfrastructure:
     """Class for managing all CPG infrastructure"""
 
@@ -277,6 +290,27 @@ class CPGInfrastructure:
     def common_azure_infra(self) -> AzureInfra:
         return self.common_dataset.clouds[AzureInfra.name()].infra  # type: ignore
 
+    @cached_property
+    def internal_logs_access_group_gcp(self) -> 'CPGInfrastructure.GroupProvider.Group':
+        g = self.group_provider.create_group(
+            self.common_gcp_infra,
+            name='internal-logs-access',
+            cache_members=True,
+        )
+        for user in self.config.users.values():
+            if (
+                user.can_access_internal_dataset_logs
+                and 'gcp' in user.clouds
+                and user.clouds['gcp'].id
+            ):
+                h = compute_hash('', user.id, 'gcp')
+                g.add_member(
+                    self.common_gcp_infra.get_pulumi_name(f'internal-logs-access-{h}'),
+                    user.clouds[GcpInfrastructure.name()].id,
+                    user=user.clouds[GcpInfrastructure.name()],
+                )
+        return g
+
     def resolve_dataset_order(self):
         """
         This isn't strictly required to deploy as resources aren't dependent,
@@ -357,7 +391,7 @@ class CPGInfrastructure:
         internal_users = [
             user
             for user in self.config.users.values()
-            if user.add_to_internal_hail_batch_projects
+            if user.can_access_internal_dataset_logs
         ]
 
         for dataset_infra in self.dataset_infrastructures.values():
@@ -416,7 +450,7 @@ class CPGInfrastructure:
                             if not isinstance(hail_id, str):
                                 continue
                             try:
-                                h = _data_provider.compute_hash(
+                                h = compute_hash(
                                     dataset=_data_provider.dataset_config.dataset,
                                     member=hail_id,
                                     cloud=_infra.name(),
@@ -927,7 +961,7 @@ class CPGDatasetCloudInfrastructure:
                 if not member:
                     raise ValueError(f'Member {member_id} not found in config')
 
-                h = self.compute_hash(
+                h = compute_hash(
                     dataset=self.dataset_config.dataset,
                     member=member.id,
                     cloud=self.infra.name(),
@@ -938,19 +972,6 @@ class CPGDatasetCloudInfrastructure:
                         member=cloud_user.id,
                         user=cloud_user,
                     )
-
-    @staticmethod
-    def compute_hash(dataset: str, member: str, cloud: str) -> str:
-        """
-        >>> CPGDatasetCloudInfrastructure.compute_hash('dataset', 'hello.world@email.com', '')
-        'HW-d51b65ee'
-        """
-        initials = ''.join(n[0] for n in member.split('@')[0].split('.')).upper()
-        # I was going to say "add a salt", but we're displaying the initials,
-        # so let's call it something like salt, monosodium glutamate ;)
-        msg = dataset + member + cloud
-        computed_hash = xxhash.xxh32(msg.encode()).hexdigest()
-        return initials + '-' + computed_hash
 
     # endregion
 
@@ -2037,7 +2058,6 @@ class CPGDatasetCloudInfrastructure:
                 secret=secret,
                 member=self.config.analysis_runner.gcp.server_machine_account,  # ANALYSIS_RUNNER_SERVICE_ACCOUNT,
                 membership=SecretMembership.ACCESSOR,
-                project=self.config.analysis_runner.gcp.project,  # ANALYSIS_RUNNER_PROJECT,
             )
 
             # Allow the Hail service account to access its corresponding cromwell key
@@ -2045,7 +2065,6 @@ class CPGDatasetCloudInfrastructure:
                 if hail_account := self.hail_accounts_by_access_level.get(access_level):
                     self.infra.add_secret_member(
                         f'cromwell-service-account-{access_level}-self-accessor-2',
-                        project=self.config.analysis_runner.gcp.project,  # ANALYSIS_RUNNER_PROJECT,
                         secret=secret,
                         member=hail_account.cloud_id,
                         membership=SecretMembership.ACCESSOR,
@@ -2171,6 +2190,14 @@ class CPGDatasetCloudInfrastructure:
                 member=self.analysis_group,
                 project=self.infra.project_id,
             )
+            # internal projects only
+            if self.dataset_config.is_internal_dataset:
+                self.infra.add_project_role(
+                    'internal-users-dataproc-viewer',
+                    role='roles/dataproc.viewer',
+                    member=self.root.internal_logs_access_group_gcp,
+                    project=self.infra.project_id,
+                )
 
     @cached_property
     def dataproc_machine_accounts_by_access_level(self) -> dict[AccessLevel, Any]:
