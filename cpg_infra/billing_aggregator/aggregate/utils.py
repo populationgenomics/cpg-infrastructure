@@ -513,22 +513,44 @@ async def get_jobs_for_batch(
 async def get_batch_by_id(
     batch_id: str,
     token: str,
+    attempts: int = 5,
 ) -> BatchType:
     """
     Get batch details by batch_id
     """
     try:
         url = HAIL_BATCH_API.replace('{batch_id}', batch_id)
-        logger.info(f'Getting batch: {url}')
+        # logger.info(f'Getting batch: {url}')
         return await async_retry_transient_get_json_request(
             url,
             aiohttp.ClientError,
             headers={'Authorization': 'Bearer ' + token},
+            attempts=attempts,
         )
     except asyncio.TimeoutError as ex:
         e = ex
 
     raise e
+
+
+async def get_project_batches_by_id(
+    batch_ids: list[str],
+    token: str,
+    billing_project: str | None = None,
+) -> list[BatchType]:
+    """
+    Filter out batches by billing_project,
+    only load batches that match the billing_project
+    """
+    batches: list[dict] = []
+    for bid in batch_ids:
+        b = await get_batch_by_id(bid, token)
+        if billing_project and billing_project != b.get('billing_project'):
+            continue
+
+        batches.append(b)
+
+    return batches
 
 
 async def process_entries_from_hail_in_chunks(
@@ -600,7 +622,11 @@ async def process_entries_from_hail_in_chunks(
     result = 0
 
     if batch_ids:
-        batches = [await get_batch_by_id(bid, token) for bid in batch_ids]
+        batches = await get_project_batches_by_id(
+            batch_ids=batch_ids,
+            token=token,
+            billing_project=billing_project,
+        )
     else:
         batches = await get_finished_batches_for_date(
             start=start,
@@ -624,8 +650,26 @@ async def process_entries_from_hail_in_chunks(
         """
         batch_id = batch['id']
         jobs_cnt = batch['n_jobs']
-        batch_name = batch.get('attributes', {}).get('name')
 
+        if batch['cost'] == 0:
+            # add one arbitrary job to keep the logic consistent
+            # with the rest of the code
+            empty_job = {
+                'batch_id': batch_id,
+                'job_id': jobs_cnt,
+                'state': batch.get('state'),
+                'resources': {},
+                'attributes': {},
+                'cost': {
+                    # we need some entry in the cost, so we can insert it
+                    'ip-fee/1024/1': 0,
+                },
+            }
+            await queue.put((batch, [empty_job]))
+            # exit
+            return
+
+        batch_name = batch.get('attributes', {}).get('name')
         # check if hail batch query and too many jobs
         if batch_name is None and jobs_cnt > DEFAULT_MAX_JOBS_PER_BATCH:
             # This is most likely Hail Batch Query job, aggregate it as one job
@@ -640,7 +684,7 @@ async def process_entries_from_hail_in_chunks(
             # construct total job record:
             total_job = {
                 'batch_id': batch_id,
-                'job_id': batch.get('n_jobs'),
+                'job_id': jobs_cnt,
                 'state': batch.get('state'),
                 'resources': {},  # not used
                 'cost': total_jobs_cost,
@@ -649,9 +693,12 @@ async def process_entries_from_hail_in_chunks(
                 },
             }
             await queue.put((batch, [total_job]))
-        else:
-            async for jobs in get_jobs_for_batch(batch_id, token):
-                await queue.put((batch, jobs))
+            # exit
+            return
+
+        # otherwise, get all the jobs
+        async for jobs in get_jobs_for_batch(batch_id, token):
+            await queue.put((batch, jobs))
 
     async def _aggregate_and_insert(
         queue: asyncio.Queue[bool | tuple[BatchType, list[JobType]]],
@@ -1083,6 +1130,41 @@ def get_batch_ids_from_request(
     return None
 
 
+def get_batch_ids_from_data(
+    data: str | dict | None,
+) -> list[str] | None:
+    """
+    Get batch_id from the cloud function data.
+    """
+    if data is not None:
+        # Convert str to json
+        if isinstance(data, str):
+            try:
+                data = dict(json.loads(data))
+            except ValueError:
+                return None
+
+        # Extract date attributes from dict
+        batches = {}
+        if data.get('attributes'):
+            batches = data.get('attributes', {})
+        elif data.get('batch_ids'):
+            batches = data
+        elif data.get('message'):
+            try:
+                return get_batch_ids_from_data(data['message'])
+            except ValueError:
+                batches = {}
+
+        logger.info(f'data: {data}, batches: {batches}')
+
+        batch_ids = batches.get('batch_ids')
+        if batch_ids:
+            return [str(batch_id) for batch_id in batch_ids]
+
+    return None
+
+
 def date_range_iterator(
     start: datetime,
     end: datetime,
@@ -1348,3 +1430,31 @@ def retrieve_stored_ids(
     )
 
     return records
+
+
+async def get_start_end_date_from_batches(
+    batch_ids: list[str],
+) -> tuple[datetime | None, datetime | None]:
+    """
+    Get min / max date from a list of batch ids to optimise BQ query
+    """
+    start = None
+    end = None
+    for batch_id in batch_ids:
+        try:
+            batch = await get_batch_by_id(batch_id, token=get_hail_token(), attempts=1)
+        except Exception as err:  # noqa: BLE001
+            # skip missing/problematic batches in HB API, this could be a job service account has no access to
+            # only log as warning
+            logger.error(f'Error fetching batch {batch_id}: {err}')
+            continue
+
+        start_time = parse_hail_time(batch['time_created'])
+        end_time = parse_hail_time(batch['time_completed'])
+
+        if start is None or start_time < start:
+            start = start_time
+        if end is None or end_time > end:
+            end = end_time
+
+    return start, end

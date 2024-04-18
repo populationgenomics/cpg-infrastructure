@@ -85,7 +85,11 @@ def get_finalised_entries_for_batch(
     end_time = utils.parse_hail_time(batch['time_completed'])
     batch_id = batch['id']
     namespace = utils.infer_batch_namespace(batch)
-    dataset = batch['billing_project']
+    dataset = str(batch['billing_project'])
+    if dataset.lower() == 'ci':
+        # Keep CI jobs in the hail topic
+        dataset = 'hail'
+
     currency_conversion_rate = utils.get_currency_conversion_rate_for_time(start_time)
     attributes = batch.get('attributes', {})
     batch_url = utils.HAIL_UI_URL.replace('{batch_id}', str(batch_id))
@@ -199,18 +203,8 @@ async def process_batch_ids(batch_ids: list[str]):
     """
     Process batch ids
     """
-    # locate start and end time as main will need them
-    start = None
-    end = None
-    for batch_id in batch_ids:
-        batch = await utils.get_batch_by_id(batch_id, token=utils.get_hail_token())
-        start_time = utils.parse_hail_time(batch['time_created'])
-        end_time = utils.parse_hail_time(batch['time_completed'])
-        if start is None or start_time < start:
-            start = start_time
-        if end is None or end_time > end:
-            end = end_time
-
+    # locate start and end time from batch ids
+    start, end = await utils.get_start_end_date_from_batches(batch_ids)
     return await main(start, end, batch_ids=batch_ids)
 
 

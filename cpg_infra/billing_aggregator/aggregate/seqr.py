@@ -130,7 +130,7 @@ def get_finalised_entries_for_batch(
             yield entry
             yield utils.get_credit(
                 entry=entry,
-                topic='seqr',
+                topic='hail',
                 project=utils.SEQR_PROJECT_FIELD,
             )
 
@@ -238,7 +238,7 @@ def get_finalised_entries_for_batch(
                 yield entry
                 yield utils.get_credit(
                     entry=entry,
-                    topic='seqr',
+                    topic='hail',
                     project=utils.SEQR_PROJECT_FIELD,
                 )
 
@@ -758,18 +758,8 @@ async def process_batch_ids(batch_ids: list[str]):
     """
     Process batch ids
     """
-    # locate start and end time as main will need them
-    start = None
-    end = None
-    for batch_id in batch_ids:
-        batch = await utils.get_batch_by_id(batch_id, token=utils.get_hail_token())
-        start_time = utils.parse_hail_time(batch['time_created'])
-        end_time = utils.parse_hail_time(batch['time_completed'])
-        if start is None or start_time < start:
-            start = start_time
-        if end is None or end_time > end:
-            end = end_time
-
+    # locate start and end time from batch ids
+    start, end = await utils.get_start_end_date_from_batches(batch_ids)
     return await main(start, end, batch_ids=batch_ids)
 
 
