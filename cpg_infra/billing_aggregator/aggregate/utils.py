@@ -520,7 +520,7 @@ async def get_batch_by_id(
     """
     try:
         url = HAIL_BATCH_API.replace('{batch_id}', batch_id)
-        # logger.info(f'Getting batch: {url}')
+        logger.info(f'Getting batch: {url}')
         return await async_retry_transient_get_json_request(
             url,
             aiohttp.ClientError,
@@ -662,7 +662,7 @@ async def process_entries_from_hail_in_chunks(
                 'attributes': {},
                 'cost': {
                     # we need some entry in the cost, so we can insert it
-                    'ip-fee/1024/1': 0,
+                    ' ': 0,
                 },
             }
             await queue.put((batch, [empty_job]))
@@ -1136,31 +1136,33 @@ def get_batch_ids_from_data(
     """
     Get batch_id from the cloud function data.
     """
-    if data is not None:
-        # Convert str to json
-        if isinstance(data, str):
-            try:
-                data = dict(json.loads(data))
-            except ValueError:
-                return None
+    if data is None:
+        return None
 
-        # Extract date attributes from dict
-        batches = {}
-        if data.get('attributes'):
-            batches = data.get('attributes', {})
-        elif data.get('batch_ids'):
-            batches = data
-        elif data.get('message'):
-            try:
-                return get_batch_ids_from_data(data['message'])
-            except ValueError:
-                batches = {}
+    # Convert str to json
+    if isinstance(data, str):
+        try:
+            data = dict(json.loads(data))
+        except ValueError:
+            return None
 
-        logger.info(f'data: {data}, batches: {batches}')
+    # Extract date attributes from dict
+    batches = {}
+    if data.get('attributes'):
+        batches = data.get('attributes', {})
+    elif data.get('batch_ids'):
+        batches = data
+    elif data.get('message'):
+        try:
+            return get_batch_ids_from_data(data['message'])
+        except ValueError:
+            batches = {}
 
-        batch_ids = batches.get('batch_ids')
-        if batch_ids:
-            return [str(batch_id) for batch_id in batch_ids]
+    logger.info(f'data: {data}, batches: {batches}')
+
+    batch_ids = batches.get('batch_ids')
+    if batch_ids:
+        return [str(batch_id) for batch_id in batch_ids]
 
     return None
 
