@@ -1117,10 +1117,13 @@ def get_batch_ids_from_request(
             if 'batch_ids' in attributes:
                 request_data = attributes
         elif 'data' in message:
+            # data field can be rubish, esp. when passed from pubsub
+            # if it fails, than just return None
             try:
                 request_data = json.loads(b64decode(message['data']))
-            except Exception as exp:
-                raise exp
+            except ValueError:
+                logger.warning(f'Data is invalid JSON: {message["data"]}')
+                return None
 
     batch_ids = request_data.get('batch_ids')
     if batch_ids:
