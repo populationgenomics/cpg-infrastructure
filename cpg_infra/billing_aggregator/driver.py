@@ -472,6 +472,9 @@ class BillingAggregator(CpgInfrastructurePlugin):
                     enable_refresh=True,
                     refresh_interval_ms=1800000,
                 ),
+                # to be able update schema we need to disable deletion protection
+                # views can be regenerated, there is not need to protect them
+                deletion_protection=False,
                 # Define time-based partitioning on 'purchaseDate' field
                 clusterings=cluster_by,
                 time_partitioning={'type': 'DAY', 'field': 'day'},
