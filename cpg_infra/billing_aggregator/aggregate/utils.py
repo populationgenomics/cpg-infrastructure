@@ -92,6 +92,11 @@ HAIL_SERVICE_FEE = 0.0
 DEFAULT_BQ_INSERT_CHUNK_SIZE = 20000
 ANALYSIS_RUNNER_PROJECT_ID = 'analysis-runner'
 
+# Maximum job count before all jobs gets summarised into one row
+# This is to prevent the bigquery inserts taking too long
+# Jobs over 9K are going to be aggregated into one job.
+DEFAULT_MAX_JOBS_PER_BATCH = 9000
+
 # runs every 4 hours
 DEFAULT_RANGE_INTERVAL = timedelta(hours=int(os.getenv('DEFAULT_INTERVAL_HOURS', '4')))
 
@@ -102,6 +107,7 @@ HAIL_PROJECT_ID = 'hail-295901'
 HAIL_BASE = 'https://batch.hail.populationgenomics.org.au'
 HAIL_UI_URL = HAIL_BASE + '/batches/{batch_id}'
 HAIL_BATCHES_API = HAIL_BASE + '/api/v1alpha/batches/completed'
+HAIL_BATCH_API = HAIL_BASE + '/api/v1alpha/batches/{batch_id}'
 HAIL_JOBS_API = HAIL_BASE + '/api/v1alpha/batches/{batch_id}/jobs/resources'
 
 HAIL_PROJECT_FIELD = {
@@ -493,6 +499,7 @@ async def get_jobs_for_batch(
                 session=session,
                 headers={'Authorization': 'Bearer ' + token},
             )
+            # stop if last_job_id is empty
             new_last_job_id = jresponse.get('last_job_id')
             if new_last_job_id is None:
                 end = True
@@ -503,9 +510,53 @@ async def get_jobs_for_batch(
             yield jresponse['jobs']
 
 
+async def get_batch_by_id(
+    batch_id: str,
+    token: str,
+    attempts: int = 5,
+) -> BatchType:
+    """
+    Get batch details by batch_id
+    """
+    try:
+        url = HAIL_BATCH_API.replace('{batch_id}', batch_id)
+        logger.info(f'Getting batch: {url}')
+        return await async_retry_transient_get_json_request(
+            url,
+            aiohttp.ClientError,
+            headers={'Authorization': 'Bearer ' + token},
+            attempts=attempts,
+        )
+    except asyncio.TimeoutError as ex:
+        e = ex
+
+    raise e
+
+
+async def get_project_batches_by_id(
+    batch_ids: list[str],
+    token: str,
+    billing_project: str | None = None,
+) -> list[BatchType]:
+    """
+    Filter out batches by billing_project,
+    only load batches that match the billing_project
+    """
+    batches: list[dict] = []
+    for bid in batch_ids:
+        b = await get_batch_by_id(bid, token)
+        if billing_project and billing_project != b.get('billing_project'):
+            continue
+
+        batches.append(b)
+
+    return batches
+
+
 async def process_entries_from_hail_in_chunks(
     start: datetime,
     end: datetime,
+    service_id: str,
     func_get_finalised_entries_for_batch: Callable[
         [BatchType, list[JobType]],
         Generator[dict[str, Any], None, None],
@@ -518,6 +569,7 @@ async def process_entries_from_hail_in_chunks(
     func_batches_preprocessor: (
         Callable[[list[dict]], Awaitable[list[dict]]] | None
     ) = None,
+    batch_ids: list[str] | None = None,
 ) -> int:
     """
     Process all the seqr entries from hail batch,
@@ -525,6 +577,15 @@ async def process_entries_from_hail_in_chunks(
 
     Break them down by dataset, and then proportion the rest of the costs.
     """
+
+    # Get the existing ids from the table for optimisation,
+    # avoiding multiple BQ calls
+    existing_ids = retrieve_stored_ids(
+        start,
+        end,
+        service_id,
+        table=GCP_AGGREGATE_DEST_TABLE,
+    )
 
     def insert_entries(_entries: list[dict[str, Any]]) -> int:
         if not _entries:
@@ -534,6 +595,7 @@ async def process_entries_from_hail_in_chunks(
             return upsert_rows_into_bigquery(
                 table=GCP_AGGREGATE_DEST_TABLE,
                 objs=_entries,
+                existing_ids=existing_ids,
                 dry_run=mode == 'dry-run',
             )
 
@@ -559,12 +621,20 @@ async def process_entries_from_hail_in_chunks(
     token = get_hail_token()
     result = 0
 
-    batches = await get_finished_batches_for_date(
-        start=start,
-        end=end,
-        token=token,
-        billing_project=billing_project,
-    )
+    if batch_ids:
+        batches = await get_project_batches_by_id(
+            batch_ids=batch_ids,
+            token=token,
+            billing_project=billing_project,
+        )
+    else:
+        batches = await get_finished_batches_for_date(
+            start=start,
+            end=end,
+            token=token,
+            billing_project=billing_project,
+        )
+
     if func_batches_preprocessor:
         batches = await func_batches_preprocessor(batches)
     if len(batches) == 0:
@@ -579,9 +649,55 @@ async def process_entries_from_hail_in_chunks(
         Simpler wrapper to get jobs and adds to queue
         """
         batch_id = batch['id']
-        len_jobs = 0
+        jobs_cnt = batch['n_jobs']
+
+        if batch['cost'] == 0:
+            # add one arbitrary job to keep the logic consistent
+            # with the rest of the code
+            empty_job = {
+                'batch_id': batch_id,
+                'job_id': jobs_cnt,
+                'state': batch.get('state'),
+                'resources': {},
+                'attributes': {},
+                'cost': {
+                    # we need some entry in the cost, so we can insert it
+                    ' ': 0,
+                },
+            }
+            await queue.put((batch, [empty_job]))
+            # exit
+            return
+
+        batch_name = batch.get('attributes', {}).get('name')
+        # check if hail batch query and too many jobs
+        if batch_name is None and jobs_cnt > DEFAULT_MAX_JOBS_PER_BATCH:
+            # This is most likely Hail Batch Query job, aggregate it as one job
+            # batch contains all the costs as cost_breakdown
+            # we just need to reformat it to match the JobType
+            cost_breakdown = batch.get('cost_breakdown', [])
+
+            total_jobs_cost = {}
+            for rec in cost_breakdown:
+                total_jobs_cost[rec['resource']] = rec['cost']
+
+            # construct total job record:
+            total_job = {
+                'batch_id': batch_id,
+                'job_id': jobs_cnt,
+                'state': batch.get('state'),
+                'resources': {},  # not used
+                'cost': total_jobs_cost,
+                'attributes': {
+                    'name': 'ALL JOBS COMBINED',
+                },
+            }
+            await queue.put((batch, [total_job]))
+            # exit
+            return
+
+        # otherwise, get all the jobs
         async for jobs in get_jobs_for_batch(batch_id, token):
-            len_jobs += len(jobs)
             await queue.put((batch, jobs))
 
     async def _aggregate_and_insert(
@@ -680,6 +796,7 @@ def billing_row_to_topic(row: dict[str, Any], dataset_to_gcp_map: dict) -> str |
 
 def upsert_rows_into_bigquery(
     objs: list[dict[str, Any]],
+    existing_ids: set[str],
     dry_run: bool,
     table: str = GCP_AGGREGATE_DEST_TABLE,
     chunk_size: int = DEFAULT_BQ_INSERT_CHUNK_SIZE,
@@ -699,9 +816,6 @@ def upsert_rows_into_bigquery(
     if not objs:
         logger.info('Not inserting any rows')
         return 0
-
-    window_start = datetime.fromisoformat(min(o['usage_start_time'] for o in objs))
-    window_end = datetime.fromisoformat(max(o['usage_end_time'] for o in objs))
 
     n_chunks = math.ceil(len(objs) / chunk_size)
     total_size_mb = sys.getsizeof(objs) / (1024 * 1024)
@@ -725,38 +839,10 @@ def upsert_rows_into_bigquery(
     inserted_ids: set[int] = set()
 
     for chunk_idx, chunked_objs in enumerate(chunk(objs, chunk_size)):
-        if '`' in table:
-            raise ValueError('Table name cannot contain backticks')
-
-        _query = f"""
-            SELECT id FROM `{table}`
-            WHERE id IN UNNEST(@ids)
-            AND DATE_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end;
-        """  # noqa: S608
-
         # NOTE: it's possible to have valid duplicate rows
         # allow for adding duplicates on first upload only
         # Protects us against duplicate ids falling across chunks
         ids = {o['id'] for o in chunked_objs} - inserted_ids
-
-        job_config = bq.QueryJobConfig(
-            query_parameters=[
-                bq.ArrayQueryParameter('ids', 'STRING', list(ids)),
-                bq.ScalarQueryParameter(
-                    'window_start',
-                    'STRING',
-                    window_start.strftime('%Y-%m-%d'),
-                ),
-                bq.ScalarQueryParameter(
-                    'window_end',
-                    'STRING',
-                    window_end.strftime('%Y-%m-%d'),
-                ),
-            ],
-        )
-
-        result = get_bigquery_client().query(_query, job_config=job_config).result()
-        existing_ids = set(result.to_dataframe()['id'])
 
         # Filter out any rows that are already in the table
         filtered_obj = [o for o in chunked_objs if o['id'] not in existing_ids]
@@ -792,7 +878,7 @@ def upsert_rows_into_bigquery(
             project=GCP_PROJECT,
         )
         try:
-            result = resp.result()
+            _result = resp.result()
         except ClientError as e:
             logger.error(resp.errors)
             raise e
@@ -952,32 +1038,38 @@ def get_unit_for_batch_resource_type(batch_resource_type: str) -> str:
     }.get(batch_resource_type, batch_resource_type)
 
 
-def get_start_and_end_from_request(
-    request: Request,
-) -> tuple[datetime | None, datetime | None]:
+def get_request_data_from_request(request: Request) -> dict[str, Any] | None:
     """
-    Get the start and end times from the cloud function request.
+    Get the request data from the cloud function request.
     """
     if not request:
-        return None, None
+        return None
 
     content_type = request.content_type
     if request.method == 'GET':
         logger.info(f'GET request, using args: {request.args}')
-        request_data = request.args
-    elif content_type == 'application/json':
+        return request.args
+    if content_type == 'application/json':
         logger.info('JSON found in request')
-        request_data = request.get_json(silent=True)
-    elif content_type in ('application/octet-stream', 'text/plain'):
+        return request.get_json(silent=True)
+    if content_type in ('application/octet-stream', 'text/plain'):
         logger.info('Text data found')
-        request_data = json.loads(request.data)
-    elif content_type == 'application/x-www-form-urlencoded':
+        return json.loads(request.data)
+    if content_type == 'application/x-www-form-urlencoded':
         logger.info('Encoded Form')
-        request_data = request.form
-    else:
-        logger.warning(f'Unknown content type: {content_type}. Defaulting to None.')
-        raise ValueError(f'Unknown content type: {content_type}')
+        return request.form
 
+    logger.warning(f'Unknown content type: {content_type}. Defaulting to None.')
+    raise ValueError(f'Unknown content type: {content_type}')
+
+
+def get_start_and_end_from_request(
+    request: Request,
+) -> tuple[datetime | None, datetime | None]:
+    """
+    Get the start and end times and batch_id from the cloud function request.
+    """
+    request_data = get_request_data_from_request(request)
     if not request_data:
         logger.warning(f'Attributes could not be found in request: {request_data}')
         return None, None
@@ -1009,6 +1101,70 @@ def get_start_and_end_from_request(
         return None, None
 
     return start, end
+
+
+def get_batch_ids_from_request(
+    request: Request,
+) -> list[str] | None:
+    """Extract batch_id from the request"""
+    request_data = get_request_data_from_request(request)
+    if not request_data:
+        logger.warning(f'Attributes could not be found in request: {request_data}')
+        return None
+
+    if message := request_data.get('message'):
+        if attributes := message.get('attributes'):
+            if 'batch_ids' in attributes:
+                request_data = attributes
+        elif 'data' in message:
+            try:
+                request_data = json.loads(b64decode(message['data']))
+            except Exception as exp:
+                raise exp
+
+    batch_ids = request_data.get('batch_ids')
+    if batch_ids:
+        return [str(batch_id) for batch_id in batch_ids]
+
+    # batch id is not present in the request
+    return None
+
+
+def get_batch_ids_from_data(
+    data: str | dict | None,
+) -> list[str] | None:
+    """
+    Get batch_id from the cloud function data.
+    """
+    if data is None:
+        return None
+
+    # Convert str to json
+    if isinstance(data, str):
+        try:
+            data = dict(json.loads(data))
+        except ValueError:
+            return None
+
+    # Extract date attributes from dict
+    batches = {}
+    if data.get('attributes'):
+        batches = data.get('attributes', {})
+    elif data.get('batch_ids'):
+        batches = data
+    elif data.get('message'):
+        try:
+            return get_batch_ids_from_data(data['message'])
+        except ValueError:
+            batches = {}
+
+    logger.info(f'data: {data}, batches: {batches}')
+
+    batch_ids = batches.get('batch_ids')
+    if batch_ids:
+        return [str(batch_id) for batch_id in batch_ids]
+
+    return None
 
 
 def date_range_iterator(
@@ -1223,3 +1379,84 @@ def reformat_bigqquery_labels(data: list[dict[str, Any]]) -> dict[str, Any]:
                 labels[k] = v
 
     return labels
+
+
+def retrieve_stored_ids(
+    start: datetime,
+    end: datetime,
+    service_id: str,
+    table: str = GCP_AGGREGATE_DEST_TABLE,
+) -> set[str]:
+    """
+    Retrieve all the stored ids using seqr- and hail- prefixes
+    """
+    logger.info(
+        f'Retrieving stored ids for {table} between {start} and {end}',
+    )
+
+    if '`' in table:
+        raise ValueError('Table name cannot contain backticks')
+
+    if service_id not in ('seqr', 'hail'):
+        raise ValueError(f'Invalid service_id: {service_id}')
+
+    if table not in (GCP_AGGREGATE_DEST_TABLE, GCP_BILLING_BQ_TABLE):
+        raise ValueError(f'Invalid table: {table}')
+
+    _query = f"""
+        SELECT id FROM `{table}`
+        WHERE DATE_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end
+        AND id LIKE '{service_id}-%';
+    """  # noqa: S608 both tables and service_id are checked for validity
+
+    job_config = bq.QueryJobConfig(
+        query_parameters=[
+            bq.ScalarQueryParameter(
+                'window_start',
+                'STRING',
+                start.strftime('%Y-%m-%d'),
+            ),
+            bq.ScalarQueryParameter(
+                'window_end',
+                'STRING',
+                end.strftime('%Y-%m-%d'),
+            ),
+        ],
+    )
+
+    records = set()
+    result = get_bigquery_client().query(_query, job_config=job_config).result()
+    records = set(result.to_dataframe()['id'])
+    logger.info(
+        f'Retrieved {len(records)} stored ids',
+    )
+
+    return records
+
+
+async def get_start_end_date_from_batches(
+    batch_ids: list[str],
+) -> tuple[datetime | None, datetime | None]:
+    """
+    Get min / max date from a list of batch ids to optimise BQ query
+    """
+    start = None
+    end = None
+    for batch_id in batch_ids:
+        try:
+            batch = await get_batch_by_id(batch_id, token=get_hail_token(), attempts=1)
+        except Exception as err:  # noqa: BLE001
+            # skip missing/problematic batches in HB API, this could be a job service account has no access to
+            # only log as warning
+            logger.error(f'Error fetching batch {batch_id}: {err}')
+            continue
+
+        start_time = parse_hail_time(batch['time_created'])
+        end_time = parse_hail_time(batch['time_completed'])
+
+        if start is None or start_time < start:
+            start = start_time
+        if end is None or end_time > end:
+            end = end_time
+
+    return start, end

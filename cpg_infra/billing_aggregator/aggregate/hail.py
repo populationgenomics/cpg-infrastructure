@@ -85,7 +85,11 @@ def get_finalised_entries_for_batch(
     end_time = utils.parse_hail_time(batch['time_completed'])
     batch_id = batch['id']
     namespace = utils.infer_batch_namespace(batch)
-    dataset = batch['billing_project']
+    dataset = str(batch['billing_project'])
+    if dataset.lower() == 'ci':
+        # Keep CI jobs in the hail topic
+        dataset = 'hail'
+
     currency_conversion_rate = utils.get_currency_conversion_rate_for_time(start_time)
     attributes = batch.get('attributes', {})
     batch_url = utils.HAIL_UI_URL.replace('{batch_id}', str(batch_id))
@@ -180,6 +184,11 @@ def from_request(request: Request):
     """
     From request object, get start and end time if present
     """
+    batch_ids = utils.get_batch_ids_from_request(request)
+    if batch_ids:
+        # batch id's were provided, so we only process those
+        return asyncio.new_event_loop().run_until_complete(process_batch_ids(batch_ids))
+
     try:
         start, end = utils.get_start_and_end_from_request(request)
     except ValueError as err:
@@ -188,6 +197,15 @@ def from_request(request: Request):
         start, end = None, None
 
     return asyncio.new_event_loop().run_until_complete(main(start, end))
+
+
+async def process_batch_ids(batch_ids: list[str]):
+    """
+    Process batch ids
+    """
+    # locate start and end time from batch ids
+    start, end = await utils.get_start_end_date_from_batches(batch_ids)
+    return await main(start, end, batch_ids=batch_ids)
 
 
 def from_pubsub(data=None, _=None):
@@ -203,6 +221,7 @@ async def main(
     end: datetime | None = None,
     mode: str = 'prod',
     output_path: str | None = None,
+    batch_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """Main body function"""
     logger.info(f'Running Hail Billing Aggregation for [{start}, {end}]')
@@ -216,9 +235,11 @@ async def main(
     result = await utils.process_entries_from_hail_in_chunks(
         start=start,
         end=end,
+        service_id=SERVICE_ID,
         func_get_finalised_entries_for_batch=get_finalised_entries_for_batch,
         mode=mode,
         output_path=output_path,
+        batch_ids=batch_ids,
     )
 
     logger.info(f'Migrated a total of {result} rows')

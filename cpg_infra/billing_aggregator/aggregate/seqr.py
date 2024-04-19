@@ -130,7 +130,7 @@ def get_finalised_entries_for_batch(
             yield entry
             yield utils.get_credit(
                 entry=entry,
-                topic='seqr',
+                topic='hail',
                 project=utils.SEQR_PROJECT_FIELD,
             )
 
@@ -238,7 +238,7 @@ def get_finalised_entries_for_batch(
                 yield entry
                 yield utils.get_credit(
                     entry=entry,
-                    topic='seqr',
+                    topic='hail',
                     project=utils.SEQR_PROJECT_FIELD,
                 )
 
@@ -360,6 +360,13 @@ def migrate_entries_from_bq(
         ],
     )
 
+    existing_ids = utils.retrieve_stored_ids(
+        start,
+        end,
+        SERVICE_ID,
+        table=utils.GCP_AGGREGATE_DEST_TABLE,
+    )
+
     temp_file = f'seqr-query-{istart.isoformat()}-{iend.isoformat()}.json'
 
     json_objs_iter: Generator[dict, None, None] | list[dict]
@@ -468,6 +475,7 @@ def migrate_entries_from_bq(
             result += utils.upsert_rows_into_bigquery(
                 table=utils.GCP_AGGREGATE_DEST_TABLE,
                 objs=entries,
+                existing_ids=existing_ids,
                 dry_run=False,
             )
         elif mode == 'local':
@@ -632,6 +640,7 @@ async def main(
     end: datetime | None = None,
     mode: RunMode = 'prod',
     output_path: str | None = None,
+    batch_ids: list[str] | None = None,
 ):
     """Main body function"""
     logger.info(f'Running Seqr Billing Aggregation for [{start}, {end}]')
@@ -698,11 +707,13 @@ async def main(
     result += await utils.process_entries_from_hail_in_chunks(
         start=start,
         end=end,
+        service_id=SERVICE_ID,
         billing_project=SEQR_HAIL_BILLING_PROJECT,
         func_get_finalised_entries_for_batch=func_get_finalised_entries,
         func_batches_preprocessor=func_process_batches_to_fetch_prop_map,
         mode=mode,
         output_path=hail_output_path,
+        batch_ids=batch_ids,
     )
 
     result += migrate_entries_from_bq(
@@ -728,6 +739,11 @@ def from_request(request: Request):
     """
     From request object, get start and end time if present
     """
+    batch_ids = utils.get_batch_ids_from_request(request)
+    if batch_ids:
+        # batch id's were provided, so we only process those
+        return asyncio.new_event_loop().run_until_complete(process_batch_ids(batch_ids))
+
     try:
         start, end = utils.get_start_and_end_from_request(request)
     except ValueError as err:
@@ -736,6 +752,15 @@ def from_request(request: Request):
         start, end = None, None
 
     return asyncio.new_event_loop().run_until_complete(main(start, end))
+
+
+async def process_batch_ids(batch_ids: list[str]):
+    """
+    Process batch ids
+    """
+    # locate start and end time from batch ids
+    start, end = await utils.get_start_end_date_from_batches(batch_ids)
+    return await main(start, end, batch_ids=batch_ids)
 
 
 def from_pubsub(data=None, _=None):
