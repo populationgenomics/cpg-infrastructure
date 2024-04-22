@@ -395,7 +395,7 @@ def migrate_entries_from_bq(
 
             json_objs_iter = generator()
 
-    def _append_if_not_present(entries, obj):
+    def _append_if_not_present(entries: list[dict], obj: dict) -> None:
         """
         Append records if not already in the table
         """
@@ -404,7 +404,7 @@ def migrate_entries_from_bq(
             entries.append(obj)
 
     for json_objs in json_objs_iter:
-        entries = []
+        entries: list[dict] = []
         seqr_wide_param_map, current_date = None, None
         for obj in json_objs:
             labels = utils.reformat_bigqquery_labels(obj['labels'])
