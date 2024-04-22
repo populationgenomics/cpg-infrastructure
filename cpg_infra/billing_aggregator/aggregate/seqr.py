@@ -395,6 +395,14 @@ def migrate_entries_from_bq(
 
             json_objs_iter = generator()
 
+    def _append_if_not_present(entries, obj):
+        """
+        Append records if not already in the table
+        """
+        if obj['id'] not in existing_ids:
+            # only insert if it's not already in the table
+            entries.append(obj)
+
     for json_objs in json_objs_iter:
         entries = []
         seqr_wide_param_map, current_date = None, None
@@ -443,14 +451,15 @@ def migrate_entries_from_bq(
             obj['id'] = nid
 
             # For every seqr billing entry migrate it over
-            entries.append(obj)
-            entries.append(
-                utils.get_credit(
-                    entry=obj,
-                    topic='seqr',
-                    project=utils.SEQR_PROJECT_FIELD,
-                ),
+            _append_if_not_present(entries, obj)
+
+            # For every seqr billing entry, add credit entry
+            obj_credit = utils.get_credit(
+                entry=obj,
+                topic='seqr',
+                project=utils.SEQR_PROJECT_FIELD,
             )
+            _append_if_not_present(entries, obj_credit)
 
             for dataset, (ratio, dataset_size) in _obj_param_map.items():
                 new_entry = copy.deepcopy(obj)
@@ -467,7 +476,7 @@ def migrate_entries_from_bq(
                 nid = '-'.join([SERVICE_ID, dataset, billing_obj_to_key(new_entry)])
                 new_entry['id'] = nid
 
-                entries.append(new_entry)
+                _append_if_not_present(entries, new_entry)
 
         if mode == 'dry-run':
             result += len(entries)
