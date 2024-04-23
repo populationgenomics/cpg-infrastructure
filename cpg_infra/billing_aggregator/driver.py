@@ -450,10 +450,6 @@ class BillingAggregator(CpgInfrastructurePlugin):
         (project_id, dataset_id, _table_id) = self.extract_dataset_table()
 
         materialized_views = ['aggregate_daily', 'aggregate_daily_extended']
-        # There is no way to update the view, we need to drop and recreate it
-        # This is the first step to drop existing one from pulimi as well
-        # Second step would be to add the view back in the code
-        # materialized_views = ['aggregate_daily']
         for view_name in materialized_views:
             materialized_view_query = get_file_content(
                 f'{PATH_TO_AGGREGATE_SOURCE_CODE}/{view_name}_view.txt',
