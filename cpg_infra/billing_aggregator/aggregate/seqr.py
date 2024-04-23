@@ -443,7 +443,8 @@ def migrate_entries_from_bq(
             obj['id'] = nid
 
             # For every seqr billing entry migrate it over
-            entries.append(obj) if obj['id'] not in existing_ids else None
+            if obj['id'] not in existing_ids:
+                entries.append(obj)
 
             # For every seqr billing entry, add credit entry
             obj_credit = utils.get_credit(
@@ -451,7 +452,8 @@ def migrate_entries_from_bq(
                 topic='seqr',
                 project=utils.SEQR_PROJECT_FIELD,
             )
-            entries.append(obj_credit) if obj_credit['id'] not in existing_ids else None
+            if obj_credit['id'] not in existing_ids:
+                entries.append(obj_credit)
 
             for dataset, (ratio, dataset_size) in _obj_param_map.items():
                 new_entry = copy.deepcopy(obj)
