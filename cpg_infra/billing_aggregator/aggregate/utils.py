@@ -94,8 +94,10 @@ ANALYSIS_RUNNER_PROJECT_ID = 'analysis-runner'
 
 # Maximum job count before all jobs gets summarised into one row
 # This is to prevent the bigquery inserts taking too long
-# Jobs over 9K are going to be aggregated into one job.
-DEFAULT_MAX_JOBS_PER_BATCH = 9000
+# Seqr jobs over 9K are going to be aggregated into one job.
+SEQR_MAX_JOBS_PER_BATCH = 9000
+# For hail jobs this limit is 50K
+HAIL_MAX_JOBS_PER_BATCH = 50000
 
 # runs every 4 hours
 DEFAULT_RANGE_INTERVAL = timedelta(hours=int(os.getenv('DEFAULT_INTERVAL_HOURS', '4')))
@@ -671,8 +673,10 @@ async def process_entries_from_hail_in_chunks(
 
         batch_name = batch.get('attributes', {}).get('name')
         # check if hail batch query and too many jobs
-        if batch_name is None and jobs_cnt > DEFAULT_MAX_JOBS_PER_BATCH:
-            # This is most likely Hail Batch Query job, aggregate it as one job
+        if (batch_name is None and jobs_cnt > SEQR_MAX_JOBS_PER_BATCH) or (
+            batch_name is not None and jobs_cnt > HAIL_MAX_JOBS_PER_BATCH
+        ):
+            # This is batch with too many jobs, we need to aggregate them
             # batch contains all the costs as cost_breakdown
             # we just need to reformat it to match the JobType
             cost_breakdown = batch.get('cost_breakdown', [])
