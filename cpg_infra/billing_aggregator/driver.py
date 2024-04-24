@@ -202,7 +202,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 memory = '2048M'
             if function == 'seqr':
                 # 2GB is not enough for seqr
-                memory = '2560M'
+                memory = '4096M'
             # Create the function, the trigger and subscription.
             _ = self.create_cloud_function(
                 resource_name=f'billing-aggregator-{function}-billing-function',
