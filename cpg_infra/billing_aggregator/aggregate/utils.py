@@ -558,7 +558,7 @@ async def get_project_batches_by_id(
 async def process_entries_from_hail_in_chunks(
     start: datetime,
     end: datetime,
-    service_id: str,
+    existing_ids: set[str],
     func_get_finalised_entries_for_batch: Callable[
         [BatchType, list[JobType]],
         Generator[dict[str, Any], None, None],
@@ -579,15 +579,6 @@ async def process_entries_from_hail_in_chunks(
 
     Break them down by dataset, and then proportion the rest of the costs.
     """
-
-    # Get the existing ids from the table for optimisation,
-    # avoiding multiple BQ calls
-    existing_ids = retrieve_stored_ids(
-        start,
-        end,
-        service_id,
-        table=GCP_AGGREGATE_DEST_TABLE,
-    )
 
     def insert_entries(_entries: list[dict[str, Any]]) -> int:
         if not _entries:

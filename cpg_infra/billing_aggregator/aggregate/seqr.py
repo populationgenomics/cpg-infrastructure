@@ -329,6 +329,7 @@ def migrate_entries_from_bq(
     end: datetime,
     prop_map: ProportionateMapType,
     mode: RunMode,
+    existing_ids: set[str],
     output_path: str | None,
 ) -> int:
     """
@@ -358,13 +359,6 @@ def migrate_entries_from_bq(
             bq.ScalarQueryParameter('end', 'STRING', iend.strftime('%Y-%m-%d')),
             bq.ArrayQueryParameter('projects', 'STRING', projects),
         ],
-    )
-
-    existing_ids = utils.retrieve_stored_ids(
-        start,
-        end,
-        SERVICE_ID,
-        table=utils.GCP_AGGREGATE_DEST_TABLE,
     )
 
     temp_file = f'seqr-query-{istart.isoformat()}-{iend.isoformat()}.json'
@@ -707,10 +701,19 @@ async def main(
             proportion_map=prop_maps.shared_computation_prop_map,
         )
 
+    # Get the existing ids from the table for optimisation,
+    # avoiding multiple BQ calls
+    existing_ids = utils.retrieve_stored_ids(
+        start,
+        end,
+        SERVICE_ID,
+        table=utils.GCP_AGGREGATE_DEST_TABLE,
+    )
+
     result += await utils.process_entries_from_hail_in_chunks(
         start=start,
         end=end,
-        service_id=SERVICE_ID,
+        existing_ids=existing_ids,
         billing_project=SEQR_HAIL_BILLING_PROJECT,
         func_get_finalised_entries_for_batch=func_get_finalised_entries,
         func_batches_preprocessor=func_process_batches_to_fetch_prop_map,
@@ -725,6 +728,7 @@ async def main(
         prop_map=prop_maps.seqr_hosting_prop_map,
         mode=mode,
         output_path=bq_output_path,
+        existing_ids=existing_ids,
     )
 
     if mode == 'dry-run':

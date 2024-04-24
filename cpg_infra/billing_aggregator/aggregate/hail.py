@@ -232,10 +232,20 @@ async def main(
         if os.path.exists(output_path):
             shutil.rmtree(output_path)
         os.makedirs(output_path, exist_ok=True)
+
+    # Get the existing ids from the table for optimisation,
+    # avoiding multiple BQ calls
+    existing_ids = utils.retrieve_stored_ids(
+        start,
+        end,
+        SERVICE_ID,
+        table=utils.GCP_AGGREGATE_DEST_TABLE,
+    )
+
     result = await utils.process_entries_from_hail_in_chunks(
         start=start,
         end=end,
-        service_id=SERVICE_ID,
+        existing_ids=existing_ids,
         func_get_finalised_entries_for_batch=get_finalised_entries_for_batch,
         mode=mode,
         output_path=output_path,
@@ -253,7 +263,7 @@ if __name__ == '__main__':
     logging.getLogger('asyncio').setLevel(logging.ERROR)
     logging.getLogger('urllib3').setLevel(logging.WARNING)
 
-    test_start, test_end = datetime(2024, 2, 14), None
+    test_start, test_end = None, None
     asyncio.new_event_loop().run_until_complete(
         main(
             start=test_start,
