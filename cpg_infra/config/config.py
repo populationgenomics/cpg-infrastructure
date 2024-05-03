@@ -172,6 +172,8 @@ class CPGInfrastructureConfig(DeserializableDataclass):
             environment: str | None = 'PRODUCTION'
             # Collection of private packages to be appended to requirements.txt
             private_repo_packages: list[str] | None = None
+            # Custom audience list for the Cloud Run Security
+            custom_audience_list: dict[str, list[str]] | None = None
 
         gcp: GCP
         etl: ETLConfiguration | None = None
