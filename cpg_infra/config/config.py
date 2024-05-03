@@ -29,13 +29,13 @@ GroupName = Literal[
 class CPGInfrastructureUser(DeserializableDataclass):
     @dataclasses.dataclass(frozen=True)
     class Cloud(DeserializableDataclass):
-        id: str  # noqa: A003
+        id: str  # noqa: RUF100, A003
         hail_batch_username: str | None = None
 
-    id: MemberKey  # noqa: A003
+    id: MemberKey  # noqa: RUF100, A003
     clouds: dict[CloudName, Cloud]
     projects: list[str]
-    add_to_internal_hail_batch_projects: bool = False
+    can_access_internal_dataset_logs: bool = False
 
 
 @dataclasses.dataclass(frozen=True)
@@ -57,6 +57,14 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         budget_notification_pubsub: str | None
         config_bucket_name: str
         dataset_storage_prefix: str
+        # This is mostly just to allow dev deploys to work, changing the setting to allow
+        # external members on a group requires a high level of access permissions which
+        # we don't want to give to all developers. Setting this to false will stop the
+        # infra code from trying to change that setting
+        allow_external_group_members: bool = True
+        # Creating groups without an initial member requires extra access permissions
+        # so allow this to be turned off to make dev deploys possible
+        create_empty_groups: bool = True
 
     @dataclasses.dataclass(frozen=True)
     class Azure(DeserializableDataclass):
@@ -70,17 +78,20 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     class Hail(DeserializableDataclass):
         @dataclasses.dataclass(frozen=True)
         class GCP(DeserializableDataclass):
-            wheel_bucket_name: str
             hail_batch_url: str
-            git_credentials_secret_name: str
-            git_credentials_secret_project: str
+            hail_auth_url: str
+            git_credentials_secret_name: str | None = None
+            git_credentials_secret_project: str | None = None
+            wheel_bucket_name: str | None = None
 
         @dataclasses.dataclass(frozen=True)
         class Azure(DeserializableDataclass):
             hail_batch_url: str
+            hail_auth_url: str
 
         gcp: GCP
         azure: Azure | None = None
+        username_prefix: str | None = None
 
     @dataclasses.dataclass(frozen=True)
     class AnalysisRunner(DeserializableDataclass):
@@ -188,8 +199,8 @@ class CPGInfrastructureConfig(DeserializableDataclass):
             monthly_summary_table: str | None = None
             interval_hours: int = 4
 
-        coordinator_machine_account: str
         gcp: GCP
+        coordinator_machine_account: str | None = None
         aggregator: GCPAggregator | None = None
         hail_aggregator_username: str | None = None
 
@@ -206,6 +217,13 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     # a map of users know to the system, noting that a CPGDatasetConfig lists the users
     # within itself, but this is a map of all users known to the system
     users: dict[MemberKey, CPGInfrastructureUser]
+
+    # include list of plugins enabled. This is specified explicitly to control
+    # what plugins are included from dependencies, also to allow exclusion of
+    # plugins for testing purposes. Plugins are specified by `entrypoints` value
+    # in setuptools setup, in this package or in any dependencies.
+    # @see https://github.com/populationgenomics/cpg-infrastructure/blob/main/README.md#plugins
+    plugins_enabled: list[str]
 
     # configuration options for GCP
     gcp: GCP | None = None
@@ -291,7 +309,8 @@ class HailAccount(DeserializableDataclass):
     """Represents a hail account on a specific cloud"""
 
     username: str
-    cloud_id: str
+    # give this type: any, because DeserializableDataclass doesn't support checking this type
+    cloud_id: Any  # type str | pulumi.Output[str]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -313,18 +332,13 @@ class CPGDatasetConfig(DeserializableDataclass):
     class Gcp(DeserializableDataclass):
         project: str
         region: str | None = None
-
-        hail_service_account_test: HailAccount | None = None
-        hail_service_account_standard: HailAccount | None = None
-        hail_service_account_full: HailAccount | None = None
+        # Allow for cases where the hail service accounts were created manually
+        # and do not match the dataset name
+        hail_service_account_dataset_name_override: str | None = None
 
     @dataclasses.dataclass(frozen=True)
     class Azure(DeserializableDataclass):
         region: str | None = None
-
-        hail_service_account_test: HailAccount | None = None
-        hail_service_account_standard: HailAccount | None = None
-        hail_service_account_full: HailAccount | None = None
 
     @dataclasses.dataclass(frozen=True)
     class Budget(DeserializableDataclass):

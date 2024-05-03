@@ -46,4 +46,4 @@ jobs:
 
       - name: "Submit batch"
         # Automatically confirm to run with "full" access level.
-        run: yes | storage_visualization/submit.py cpg-infrastructure-private/production.yaml
+        run: yes | storage_visualization/submit.py cpg-infrastructure-private/config-datasets.yaml

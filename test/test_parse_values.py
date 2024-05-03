@@ -12,6 +12,18 @@ from cpg_infra.config.deserializabledataclass import try_parse_value_as_type
 class TestParseValues(TestCase):
     """Test the try_parse_value_as_type function"""
 
+    def test_parse_any(self):
+        """Check we allow any type"""
+        dtype = Any
+        self.assertEqual(1, try_parse_value_as_type(1, dtype))
+        self.assertEqual('hello', try_parse_value_as_type('hello', dtype))
+        self.assertEqual(None, try_parse_value_as_type(None, dtype))
+        self.assertEqual([1, 2, 3], try_parse_value_as_type([1, 2, 3], dtype))
+        self.assertEqual(
+            {'hello': 'world'},
+            try_parse_value_as_type({'hello': 'world'}, dtype),
+        )
+
     def test_parse_string(self):
         """Basic string type checking"""
         dtype = str
@@ -145,10 +157,6 @@ class TestParseValues(TestCase):
             'dataset': 'DATASET',
             'budgets': {},
             'gcp': {
-                'hail_service_account_full': {
-                    'cloud_id': 'dataset-full-@project.iam.gserviceaccount.com',
-                    'username': 'dataset-full',
-                },
                 'project': 'dataset-1234',
             },
         }

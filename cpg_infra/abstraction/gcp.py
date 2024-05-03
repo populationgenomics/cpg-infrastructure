@@ -362,6 +362,9 @@ class GcpInfrastructure(CloudInfraBase):
 
     def get_member_key(self, member):  # pylint: disable=too-many-return-statements
         # it's a 'cpg_infra.driver.CPGInfrastructure.GroupProvider.Group'
+        if isinstance(member, pulumi.Output):
+            return pulumi.Output.apply(member, self.get_member_key)
+
         if hasattr(member, 'is_group') and hasattr(member, 'group'):
             # cheeky catch for internal group
             return self.get_member_key(member.group)
@@ -383,12 +386,15 @@ class GcpInfrastructure(CloudInfraBase):
 
             return member
 
-        if isinstance(member, pulumi.Output):
-            return member
-
         raise NotImplementedError(f'Invalid member type {type(member)}')
 
     def get_preferred_group_membership_key(self, member) -> str | pulumi.Output[str]:
+        if isinstance(member, pulumi.Output):
+            return pulumi.Output.apply(
+                member,
+                self.get_preferred_group_membership_key,
+            )
+
         if hasattr(member, 'is_group') and hasattr(member, 'group'):
             # cheeky catch for internal group
             return self.get_preferred_group_membership_key(member.group)
@@ -573,21 +579,33 @@ class GcpInfrastructure(CloudInfraBase):
 
     def create_group(self, name: str) -> Any:
         mail = f'{name}@{self.config.gcp.groups_domain}'
+
+        # Dev GCP accounts don't have access to create empty groups, so on dev they are
+        # created with the initial owner
+        initial_group_config = (
+            'EMPTY' if self.config.gcp.create_empty_groups else 'WITH_INITIAL_OWNER'
+        )
+
         group = gcp.cloudidentity.Group(
             self.get_pulumi_name(name + '-group'),
             display_name=name,
+            initial_group_config=initial_group_config,
             group_key=gcp.cloudidentity.GroupGroupKeyArgs(id=mail),
             labels={'cloudidentity.googleapis.com/groups.discussion_forum': ''},
             parent=f'customers/{self.config.gcp.customer_id}',
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
         )
-        # Allow domain-external members in the group.
-        GoogleGroupSettings(
-            self.get_pulumi_name(name + '-group-settings'),
-            group_email=mail,
-            settings={'allowExternalMembers': 'true'},
-            opts=pulumi.resource.ResourceOptions(depends_on=[group]),
-        )
+
+        # Only set allowExternalMembers': 'true' if settings specify it
+        # this defaults to True
+        if self.config.gcp.allow_external_group_members:
+            # Allow domain-external members in the group.
+            GoogleGroupSettings(
+                self.get_pulumi_name(name + '-group-settings'),
+                group_email=mail,
+                settings={'allowExternalMembers': 'true'},
+                opts=pulumi.resource.ResourceOptions(depends_on=[group]),
+            )
         return group
 
     def add_group_member(
@@ -612,9 +630,14 @@ class GcpInfrastructure(CloudInfraBase):
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
         )
 
-    def create_secret(self, name: str, project: Optional[str] = None) -> Any:
+    def create_secret(
+        self,
+        name: str,
+        project: Optional[str] = None,
+        resource_key: Optional[str] = None,
+    ) -> Any:
         return gcp.secretmanager.Secret(
-            self.get_pulumi_name(name),
+            resource_key or self.get_pulumi_name(name),
             secret_id=name,
             replication=gcp.secretmanager.SecretReplicationArgs(
                 user_managed=gcp.secretmanager.SecretReplicationUserManagedArgs(

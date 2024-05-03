@@ -12,7 +12,7 @@ import google.api_core.exceptions
 from cloudpathlib import AnyPath
 from google.cloud import storage
 
-from cpg_utils.hail_batch import get_config
+from cpg_utils.config import get_access_level
 
 # It's important not to list the `archive` bucket here, as Class B operations are very
 # expensive for that storage class.
@@ -69,7 +69,7 @@ def main():
 
     storage_client = storage.Client()
     dataset = sys.argv[1]
-    access_level = get_config()['workflow']['access_level']
+    access_level = get_access_level()
 
     aggregate_stats = defaultdict(lambda: defaultdict(int))
     for bucket_suffix in BUCKET_SUFFIXES:

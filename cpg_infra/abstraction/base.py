@@ -275,7 +275,12 @@ class CloudInfraBase(ABC):
     # SECRETS
 
     @abstractmethod
-    def create_secret(self, name: str, project: Optional[str] = None) -> Any:
+    def create_secret(
+        self,
+        name: str,
+        project: Optional[str] = None,
+        resource_key: Optional[str] = None,
+    ) -> Any:
         pass
 
     @abstractmethod
@@ -425,7 +430,12 @@ class DryRunInfra(CloudInfraBase):
     ) -> Any:
         print(f'{resource_key} :: Add {member} to {group}')
 
-    def create_secret(self, name: str, project: Optional[str] = None) -> Any:
+    def create_secret(
+        self,
+        name: str,
+        project: Optional[str] = None,
+        resource_key: Optional[str] = None,
+    ) -> Any:
         print(f'Creating secret: {name}')
         return f'SECRET:{name}'
 

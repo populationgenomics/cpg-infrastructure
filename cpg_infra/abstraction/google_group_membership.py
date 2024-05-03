@@ -144,6 +144,12 @@ class GoogleGroupMembershipProvider(pulumi.dynamic.ResourceProvider):
         olds: GroupMember,
         news: GoogleGroupMembershipProviderInputs,
     ):
+        if isinstance(news['member_key'], pulumi.output.Unknown):
+            return pulumi.dynamic.DiffResult(
+                changes=True,
+                replaces=['member_key', 'group_key'],
+            )
+
         if (
             olds['member_key'].lower() != news['member_key'].lower()
             or olds['group_key'] != news['group_key']

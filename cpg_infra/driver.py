@@ -2,13 +2,13 @@
 """
 CPG Dataset infrastructure
 """
-import graphlib
 import os.path
 import re
 from collections import defaultdict
 from functools import cached_property
 from typing import Any, Callable, Iterable, Iterator, NamedTuple, Type
 
+import graphlib
 import pulumi
 import pulumi_gcp as gcp
 import toml
@@ -29,6 +29,7 @@ from cpg_infra.abstraction.gcp import GcpInfrastructure
 from cpg_infra.abstraction.hailbatch import (
     HailBatchBillingProject,
     HailBatchBillingProjectMembership,
+    HailBatchUser,
 )
 from cpg_infra.abstraction.metamist import MetamistProject, MetamistProjectMembers
 from cpg_infra.config import (
@@ -85,6 +86,19 @@ def dict_to_toml(d: dict) -> str:
     # internal tomlkit.TOMLDocument, as it has its own parser,
     # so let's just easy dump to string, to use the library from there.
     return TomlSort(toml.dumps(d)).sorted()
+
+
+def compute_hash(dataset: str, member: str, cloud: str) -> str:
+    """
+    >>> compute_hash('dataset', 'hello.world@email.com', '')
+    'HW-d51b65ee'
+    """
+    initials = ''.join(n[0] for n in member.split('@')[0].split('.')).upper()
+    # I was going to say "add a salt", but we're displaying the initials,
+    # so let's call it something like salt, monosodium glutamate ;)
+    msg = dataset + member + cloud
+    computed_hash = xxhash.xxh32(msg.encode()).hexdigest()
+    return initials + '-' + computed_hash
 
 
 class CPGInfrastructure:
@@ -276,6 +290,27 @@ class CPGInfrastructure:
     def common_azure_infra(self) -> AzureInfra:
         return self.common_dataset.clouds[AzureInfra.name()].infra  # type: ignore
 
+    @cached_property
+    def internal_logs_access_group_gcp(self) -> 'CPGInfrastructure.GroupProvider.Group':
+        g = self.group_provider.create_group(
+            self.common_gcp_infra,
+            name='internal-logs-access',
+            cache_members=True,
+        )
+        for user in self.config.users.values():
+            if (
+                user.can_access_internal_dataset_logs
+                and 'gcp' in user.clouds
+                and user.clouds['gcp'].id
+            ):
+                h = compute_hash('', user.id, 'gcp')
+                g.add_member(
+                    self.common_gcp_infra.get_pulumi_name(f'internal-logs-access-{h}'),
+                    user.clouds[GcpInfrastructure.name()].id,
+                    user=user.clouds[GcpInfrastructure.name()],
+                )
+        return g
+
     def resolve_dataset_order(self):
         """
         This isn't strictly required to deploy as resources aren't dependent,
@@ -295,19 +330,45 @@ class CPGInfrastructure:
         return graphlib.TopologicalSorter(deps).static_order()
 
     def main(self):
+        # Go through each dataset and instantiate the CPGDatasetInfrastructure class
+        # for that dataset.
         self.setup_datasets()
+
+        # create a bucket and attach accessor members to it. The bucket itself is
+        # created by accessing the property `self.gcp_members_cache_bucket`
+        # This will also have the side effect of creating a cloud resource manager and
+        # identity service
         self.setup_gcp_access_cache_bucket()
+
+        # creates the group metamist-invokers group and gives it invoker permissions
+        # to the cloud run service specified in infrastructure.metamist.gcp.service_name
         self.setup_gcp_metamist_cloudrun_invoker()
+
+        # Create a python registry for storing private python packages
         self.setup_python_registry()
 
+        # Deploy all the assets required for each dataset. Groups, permissions
+        # storage buckets, metamist and hail users etc.
         self.deploy_datasets()
 
-        for plugin in get_plugins().values():
-            plugin(self, self.config).main()
+        plugins = get_plugins()
+        for plugin_name in self.config.plugins_enabled:
+            if plugin_name not in plugins:
+                raise Exception(f"Plugin `{plugin_name}` is not installed")
 
+            plugins[plugin_name](self, self.config).main()
+
+        # Up to this point the groups have not actually been created, go through
+        # the groups data structure and create the necessary groups in the correct
+        # order so that group dependencies can be handled
         self.finalize_groups()
+
         self.setup_hail_batch_billing_project_members()
+
+        # Add read and write level members to metamist projects
         self.update_metamist_members()
+
+        # Store the deployed infrastructure config on gcp storage
         self.output_infrastructure_config()
 
     def setup_datasets(self):
@@ -330,7 +391,7 @@ class CPGInfrastructure:
         internal_users = [
             user
             for user in self.config.users.values()
-            if user.add_to_internal_hail_batch_projects
+            if user.can_access_internal_dataset_logs
         ]
 
         for dataset_infra in self.dataset_infrastructures.values():
@@ -389,7 +450,7 @@ class CPGInfrastructure:
                             if not isinstance(hail_id, str):
                                 continue
                             try:
-                                h = _data_provider.compute_hash(
+                                h = compute_hash(
                                     dataset=_data_provider.dataset_config.dataset,
                                     member=hail_id,
                                     cloud=_infra.name(),
@@ -528,14 +589,22 @@ class CPGInfrastructure:
     # dataset agnostic infrastructure
 
     def build_infrastructure_config_output(self) -> dict[str, pulumi.Output[str] | str]:
-        assert self.config.hail
-        return {
+        output: dict[str, pulumi.Output[str] | str] = {
             'members_cache_location': self.common_gcp_infra.bucket_output_path(
                 self.gcp_members_cache_bucket,
             ),
-            'git_credentials_secret_name': self.config.hail.gcp.git_credentials_secret_name,
-            'git_credentials_secret_project': self.config.hail.gcp.git_credentials_secret_project,
         }
+        if self.config.hail is not None:
+            if self.config.hail.gcp.git_credentials_secret_name is not None:
+                output[
+                    'git_credentials_secret_name'
+                ] = self.config.hail.gcp.git_credentials_secret_name
+            if self.config.hail.gcp.git_credentials_secret_project is not None:
+                output[
+                    'git_credentials_secret_project'
+                ] = self.config.hail.gcp.git_credentials_secret_project
+
+        return output
 
     def output_infrastructure_config(self):
         # we'll only do it on GCP for now
@@ -892,7 +961,7 @@ class CPGDatasetCloudInfrastructure:
                 if not member:
                     raise ValueError(f'Member {member_id} not found in config')
 
-                h = self.compute_hash(
+                h = compute_hash(
                     dataset=self.dataset_config.dataset,
                     member=member.id,
                     cloud=self.infra.name(),
@@ -903,19 +972,6 @@ class CPGDatasetCloudInfrastructure:
                         member=cloud_user.id,
                         user=cloud_user,
                     )
-
-    @staticmethod
-    def compute_hash(dataset: str, member: str, cloud: str) -> str:
-        """
-        >>> CPGDatasetCloudInfrastructure.compute_hash('dataset', 'hello.world@email.com', '')
-        'HW-d51b65ee'
-        """
-        initials = ''.join(n[0] for n in member.split('@')[0].split('.')).upper()
-        # I was going to say "add a salt", but we're displaying the initials,
-        # so let's call it something like salt, monosodium glutamate ;)
-        msg = dataset + member + cloud
-        computed_hash = xxhash.xxh32(msg.encode()).hexdigest()
-        return initials + '-' + computed_hash
 
     # endregion
 
@@ -1527,7 +1583,10 @@ class CPGDatasetCloudInfrastructure:
         )
 
         # web-server
-        if isinstance(self.infra, GcpInfrastructure):
+        if (
+            isinstance(self.infra, GcpInfrastructure)
+            and self.config.web_service is not None
+        ):
             self.infra.add_member_to_bucket(
                 'web-server-main-web-bucket-viewer',
                 self.main_web_bucket,
@@ -1678,9 +1737,10 @@ class CPGDatasetCloudInfrastructure:
             )
 
         # give web-server access to test-bucket
-        if isinstance(self.infra, GcpInfrastructure):
-            assert self.config.web_service
-
+        if (
+            isinstance(self.infra, GcpInfrastructure)
+            and self.config.web_service is not None
+        ):
             self.infra.add_member_to_bucket(
                 'web-server-test-web-bucket-viewer',
                 bucket=self.test_web_bucket,
@@ -1774,29 +1834,47 @@ class CPGDatasetCloudInfrastructure:
         self.setup_hail_wheels_bucket_permissions()
 
     @cached_property
-    def hail_batch_billing_project(self):
-        assert self.config.hail
-
+    def hail_batch_url(self):
         if isinstance(self.infra, GcpInfrastructure):
             if not self.config.hail.gcp:
                 raise ValueError('config.hail.gcp was not set to find hail_batch_url')
-            hail_batch_url = self.config.hail.gcp.hail_batch_url
-        elif isinstance(self.infra, AzureInfra):
+            return self.config.hail.gcp.hail_batch_url
+        if isinstance(self.infra, AzureInfra):
             if not self.config.hail.azure:
                 raise ValueError('config.hail.azure was not set to find hail_batch_url')
-            hail_batch_url = self.config.hail.azure.hail_batch_url
-        elif isinstance(self.infra, DryRunInfra):
+            return self.config.hail.azure.hail_batch_url
+        if isinstance(self.infra, DryRunInfra):
             return None
-        else:
-            raise ValueError(
-                f'Unknown infra type {type(self.infra)} for '
-                'building hail_batch_billing_project',
-            )
 
+        raise ValueError(
+            f'Unknown infra type {type(self.infra)} for '
+            'building hail_batch_billing_project',
+        )
+
+    @cached_property
+    def hail_auth_url(self):
+        if isinstance(self.infra, GcpInfrastructure):
+            if not self.config.hail.gcp:
+                raise ValueError('config.hail.gcp was not set to find hail_auth_url')
+            return self.config.hail.gcp.hail_auth_url
+        if isinstance(self.infra, AzureInfra):
+            if not self.config.hail.azure:
+                raise ValueError('config.hail.azure was not set to find hail_auth_url')
+            return self.config.hail.azure.hail_auth_url
+        if isinstance(self.infra, DryRunInfra):
+            return None
+
+        raise ValueError(
+            f'Unknown infra type {type(self.infra)} for '
+            'building hail_batch_billing_project',
+        )
+
+    @cached_property
+    def hail_batch_billing_project(self):
         return HailBatchBillingProject(
             self.infra.get_pulumi_name('batch-billing-project'),
             billing_project_name=self.dataset_config.dataset,
-            batch_uri=hail_batch_url,
+            batch_uri=self.hail_batch_url,
             token_category=self.infra.name(),
         )
 
@@ -1866,27 +1944,42 @@ class CPGDatasetCloudInfrastructure:
         if not self.should_setup_hail:
             return {}
 
-        if isinstance(self.infra, GcpInfrastructure):
-            accounts = {
-                'standard': self.dataset_config.gcp.hail_service_account_standard,
-                'full': self.dataset_config.gcp.hail_service_account_full,
-            }
-            if self.dataset_config.setup_test:
-                accounts['test'] = self.dataset_config.gcp.hail_service_account_test
-        elif isinstance(self.infra, AzureInfra):
-            assert (
-                self.dataset_config.azure is not None
-            ), 'dataset_config.azure is required to be set'
-            accounts = {
-                'test': self.dataset_config.azure.hail_service_account_test,
-                'standard': self.dataset_config.azure.hail_service_account_standard,
-            }
-            if self.dataset_config.setup_test:
-                accounts['test'] = self.dataset_config.azure.hail_service_account_test
-        else:
-            return {}
+        accounts: dict[str, HailAccount] = {}
 
-        return {cat: ac for cat, ac in accounts.items() if ac}
+        account_access_levels: list[str] = ['full', 'standard']
+        if self.dataset_config.setup_test:
+            account_access_levels.append('test')
+
+        dataset_name = self.dataset_config.dataset
+
+        if (
+            isinstance(self.infra, GcpInfrastructure)
+            and self.dataset_config.gcp.hail_service_account_dataset_name_override
+            is not None
+        ):
+            dataset_name = (
+                self.dataset_config.gcp.hail_service_account_dataset_name_override
+            )
+
+        # Create hail accounts
+        for access_level in account_access_levels:
+            username_prefix = (
+                self.config.hail.username_prefix
+                if self.config.hail.username_prefix is not None
+                else ''
+            )
+            username = f'{username_prefix}{dataset_name}-{access_level}'
+            accounts[access_level] = HailAccount(
+                username=username,
+                cloud_id=HailBatchUser(
+                    self.infra.get_pulumi_name(f'hail-batch-user-{access_level}'),
+                    username=username,
+                    batch_uri=self.hail_auth_url,
+                    token_category=self.infra.name(),
+                ).cloud_id,
+            )
+
+        return accounts
 
     @cached_property
     def hail_bucket(self):
@@ -1940,27 +2033,62 @@ class CPGDatasetCloudInfrastructure:
             access_level,
             cromwell_account,
         ) in self.cromwell_machine_accounts_by_access_level.items():
-            secret = self.infra.create_secret(
-                f'{self.dataset_config.dataset}-cromwell-{access_level}-key',
-                project=self.config.analysis_runner.gcp.project,  # ANALYSIS_RUNNER_PROJECT,
-            )
-
             credentials = self.infra.get_credentials_for_machine_account(
                 f'cromwell-service-account-{access_level}-key',
                 cromwell_account,
             )
 
+            secret_name = f'{self.dataset_config.dataset}-cromwell-{access_level}-key'
+            secret = self.infra.create_secret(
+                name=secret_name,
+                # this key was created later, so we need to add a suffix
+                resource_key=self.infra.get_pulumi_name(secret_name) + '-2',
+            )
+
             # add credentials to the secret
             self.infra.add_secret_version(
-                f'cromwell-service-account-{access_level}-secret-version',
+                f'cromwell-service-account-{access_level}-secret-version-2',
                 secret=secret,
                 contents=credentials,
             )
 
             # allow the analysis-runner to view the secret
             self.infra.add_secret_member(
-                f'cromwell-service-account-{access_level}-secret-accessor',
+                f'cromwell-service-account-{access_level}-secret-accessor-2',
                 secret=secret,
+                member=self.config.analysis_runner.gcp.server_machine_account,  # ANALYSIS_RUNNER_SERVICE_ACCOUNT,
+                membership=SecretMembership.ACCESSOR,
+            )
+
+            # Allow the Hail service account to access its corresponding cromwell key
+            if self.should_setup_hail:
+                if hail_account := self.hail_accounts_by_access_level.get(access_level):
+                    self.infra.add_secret_member(
+                        f'cromwell-service-account-{access_level}-self-accessor-2',
+                        secret=secret,
+                        member=hail_account.cloud_id,
+                        membership=SecretMembership.ACCESSOR,
+                    )
+
+            # 2024-04-11 mfranklin: this is the old one,
+            #       remove when cpg-utils 5.0.0 is fully released
+
+            old_secret = self.infra.create_secret(
+                name=secret_name,
+                project=self.config.analysis_runner.gcp.project,  # ANALYSIS_RUNNER_PROJECT,
+            )
+
+            # add credentials to the secret
+            self.infra.add_secret_version(
+                f'cromwell-service-account-{access_level}-secret-version',
+                secret=old_secret,
+                contents=credentials,
+            )
+
+            # allow the analysis-runner to view the secret
+            self.infra.add_secret_member(
+                f'cromwell-service-account-{access_level}-secret-accessor',
+                secret=old_secret,
                 member=self.config.analysis_runner.gcp.server_machine_account,  # ANALYSIS_RUNNER_SERVICE_ACCOUNT,
                 membership=SecretMembership.ACCESSOR,
                 project=self.config.analysis_runner.gcp.project,  # ANALYSIS_RUNNER_PROJECT,
@@ -1972,7 +2100,7 @@ class CPGDatasetCloudInfrastructure:
                     self.infra.add_secret_member(
                         f'cromwell-service-account-{access_level}-self-accessor',
                         project=self.config.analysis_runner.gcp.project,  # ANALYSIS_RUNNER_PROJECT,
-                        secret=secret,
+                        secret=old_secret,
                         member=hail_account.cloud_id,
                         membership=SecretMembership.ACCESSOR,
                     )
@@ -2062,6 +2190,14 @@ class CPGDatasetCloudInfrastructure:
                 member=self.analysis_group,
                 project=self.infra.project_id,
             )
+            # internal projects only
+            if self.dataset_config.is_internal_dataset:
+                self.infra.add_project_role(
+                    'internal-users-dataproc-viewer',
+                    role='roles/dataproc.viewer',
+                    member=self.root.internal_logs_access_group_gcp,
+                    project=self.infra.project_id,
+                )
 
     @cached_property
     def dataproc_machine_accounts_by_access_level(self) -> dict[AccessLevel, Any]:
@@ -2240,7 +2376,10 @@ class CPGDatasetCloudInfrastructure:
         self.setup_analysis_runner_container_registry()
 
     def setup_analysis_runner_container_registry(self):
-        if not isinstance(self.infra, GcpInfrastructure):
+        if (
+            not isinstance(self.infra, GcpInfrastructure)
+            or self.config.analysis_runner is None
+        ):
             return
 
         if self.dataset_config.dataset != self.config.common_dataset:

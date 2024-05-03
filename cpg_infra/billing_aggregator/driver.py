@@ -62,7 +62,6 @@ class BillingAggregator(CpgInfrastructurePlugin):
             return
 
         self.setup_aggregator_functions()
-        self.setup_monthly_export()
         self.setup_update_budget()
         # setup BQ objects
         _ = self.aggregate_table
@@ -139,67 +138,6 @@ class BillingAggregator(CpgInfrastructurePlugin):
             ),
             description='Slack notification channel for all cost aggregator functions',
             project=self.config.billing.gcp.project_id,
-        )
-
-    def setup_monthly_export(self):
-        if not (
-            self.config.billing.aggregator.billing_sheet_id
-            and self.config.billing.aggregator.monthly_summary_table
-        ):
-            print(
-                'Skipping monthly export as billing_sheet_id / '
-                'monthly_summary_table were not set',
-            )
-            return
-
-        # The Cloud Function source code itself needs to be zipped up into an
-        # archive, which we create using the pulumi.AssetArchive primitive.
-        archive = archive_folder(PATH_TO_MONTHLY_AGGREGATE_SOURCE_CODE)
-        # Create the single Cloud Storage object, which contains the source code
-        source_archive_object = gcp.storage.BucketObject(
-            'billing-monthly-aggregator-source-code',
-            # updating the source archive object does not trigger the cloud function
-            # to actually updating the source because it's based on the name,
-            # allow Pulumi to create a new name each time it gets updated
-            bucket=self.source_bucket.name,
-            source=archive,
-            opts=pulumi.ResourceOptions(replace_on_changes=['*']),
-        )
-
-        pubsub = gcp.pubsub.Topic(
-            'billing-monthly-aggregator-topic',
-            project=self.config.billing.gcp.project_id,
-            opts=pulumi.ResourceOptions(depends_on=[self.pubsub_service]),
-        )
-
-        # Create a cron job to run the aggregator function on some interval
-        _ = gcp.cloudscheduler.Job(
-            'billing-monthly-aggregator-scheduler-job',
-            pubsub_target=gcp.cloudscheduler.JobPubsubTargetArgs(
-                topic_name=pubsub.id,
-                data=b64encode_str('Run the functions'),
-            ),
-            # 3rd day of the month
-            schedule='0 0 3 * *',
-            project=self.config.billing.gcp.project_id,
-            region=self.config.gcp.region,
-            time_zone='Australia/Sydney',
-            opts=pulumi.ResourceOptions(depends_on=[self.scheduler_service]),
-        )
-
-        _ = self.create_cloud_function(
-            resource_name='billing-monthly-aggregator-function',
-            name='monthly-aggregator',
-            service_account=self.config.billing.coordinator_machine_account,
-            pubsub_topic=pubsub,
-            source_archive_object=source_archive_object,
-            notification_channel=self.slack_channel,
-            project=self.config.billing.gcp.project_id,
-            env={
-                # 'SETUP_GCP_LOGGING': 'true',
-                'OUTPUT_BILLING_SHEET': self.config.billing.aggregator.billing_sheet_id,
-                'BQ_MONTHLY_SUMMARY_TABLE': self.config.billing.aggregator.monthly_summary_table,
-            },
         )
 
     def setup_aggregator_functions(self):
@@ -346,7 +284,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 min_instance_count=0,
                 available_memory=memory,
                 available_cpu=cpu,
-                timeout_seconds=540,
+                timeout_seconds=3600,
                 environment_variables=env,
                 ingress_settings='ALLOW_INTERNAL_ONLY',
                 all_traffic_on_latest_revision=True,
@@ -534,6 +472,9 @@ class BillingAggregator(CpgInfrastructurePlugin):
                     enable_refresh=True,
                     refresh_interval_ms=1800000,
                 ),
+                # to be able update schema we need to disable deletion protection
+                # views can be regenerated, there is not need to protect them
+                deletion_protection=False,
                 # Define time-based partitioning on 'purchaseDate' field
                 clusterings=cluster_by,
                 time_partitioning={'type': 'DAY', 'field': 'day'},
