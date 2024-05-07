@@ -949,6 +949,7 @@ class CPGDatasetCloudInfrastructure:
             self.data_manager_group,
             self.analysis_group,
             self.metadata_access_group,
+            self.metadata_write_group,
             self.upload_group,
             self.web_access_group,
             self.release_access_group,
@@ -1080,6 +1081,10 @@ class CPGDatasetCloudInfrastructure:
     @cached_property
     def metadata_access_group(self):
         return self.create_group('metadata-access')
+
+    @cached_property
+    def metadata_write_group(self):
+        return self.create_group('metadata-write')
 
     @cached_property
     def web_access_group(self):
@@ -2320,6 +2325,11 @@ class CPGDatasetCloudInfrastructure:
                 member=self.full_group,
                 permissions=METAMIST_PERMISSIONS,
             ),
+            SampleMetadataAccessorMembership(
+                name='metadata-write-group',
+                member=self.metadata_write_group,
+                permissions=(SM_MAIN_READ, SM_MAIN_WRITE, SM_TEST_READ, SM_TEST_WRITE),
+            ),
         ]
 
         if self.config.analysis_runner:
@@ -2637,6 +2647,7 @@ class CPGDatasetCloudInfrastructure:
                 self.data_manager_group,
                 self.web_access_group,
                 self.metadata_access_group,
+                self.metadata_write_group,
                 self.upload_group,
                 self.main_list_group,
                 self.main_read_group,
