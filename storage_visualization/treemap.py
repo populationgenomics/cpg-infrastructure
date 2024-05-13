@@ -6,6 +6,7 @@ import argparse
 import gzip
 import json
 import logging
+import os
 import re
 from collections import defaultdict
 from typing import Any
@@ -15,8 +16,30 @@ import pandas as pd
 import plotly.express as px
 from cloudpathlib import AnyPath
 
+from cpg_utils.config import output_path
+from cpg_utils.slack import upload_file
+
 ROOT_NODE = '<root>'
 DATASET_REGEX = re.compile(r'gs:\/\/cpg-([A-z0-9-]+)-(main|test)')
+DOCKER_IMAGE = (
+    'australia-southeast1-docker.pkg.dev/cpg-common/images/storage-visualization:latest'
+)
+
+BATCH_ID = os.getenv('HAIL_BATCH_ID')
+JOB_ID = os.getenv('HAIL_JOB_ID')
+
+
+def _get_hail_batch_url(
+    batch_id: str | None = BATCH_ID,
+    job_id: str | None = JOB_ID,
+) -> str | None:
+    if not batch_id:
+        return None
+    base = f"https://batch.hail.populationgenomics.org.au/batches/{batch_id}"
+    if job_id is None:
+        return base
+
+    return f"{base}/jobs/{job_id}"
 
 
 def get_parser():
@@ -31,11 +54,6 @@ def get_parser():
         action='append',
     )
     parser.add_argument(
-        '--output-prefix',
-        help='The path prefix for HTML report and image outputs; supports cloud paths',
-        required=True,
-    )
-    parser.add_argument(
         '--max-depth',
         help='Maximum folder depth to display',
         default=3,
@@ -44,6 +62,11 @@ def get_parser():
     parser.add_argument(
         '--group-by-dataset',
         help='Group buckets by the dataset',
+        action='store_true',
+    )
+    parser.add_argument(
+        '--post-slack-message',
+        help='Post the generated treemap to Slack',
         action='store_true',
     )
 
@@ -78,53 +101,33 @@ def form_row(name: str, parent: str, values: dict[str, Any]) -> tuple:
     )
 
 
-def main() -> None:
-    """Main entrypoint."""
+def post_to_slack(
+    treemap_png_path: str,
+    treemap_html_web_url: str,
+    missing_datasets: list[str],
+):
+    """Posts the URL of the generated treemap together with a preview image to Slack."""
+    with AnyPath(treemap_png_path).open('rb') as f:
+        content = f.read()
 
-    logging.getLogger().setLevel(logging.INFO)
-    args = get_parser().parse_args()
+    comment = 'Storage visualization: ' + treemap_html_web_url
+    if missing_datasets:
+        comment += '\nMissing datasets: ' + ', '.join(str(e) for e in missing_datasets)
 
-    rows: list[tuple] = []
+        if url := _get_hail_batch_url(job_id=None):
+            comment += f'\n\nSee {url} for more details.'
 
-    root_values: dict[str, int] = defaultdict(int)
-    group_by_dataset = args.group_by_dataset
-    datasets: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
-    for input_path in args.input:
-        logging.info(f'Processing {input_path}')
-        with AnyPath(input_path).open('rb') as f, gzip.open(f, 'rt') as gfz:
-            for name, vals in json.load(gfz).items():
-                depth = name.count('/') - 1  # Don't account for gs:// scheme.
-                if depth > args.max_depth:
-                    continue
-                size = vals['size']
-                if not size:
-                    continue
-                # Strip one folder for the parent name. Map `gs://` to the
-                # predefined treemap root node label.
-                slash_index = name.rfind('/')
-                if slash_index > len('gs://'):
-                    parent = name[:slash_index]
-                else:
-                    for k, v in vals.items():
-                        root_values[k] += v
-                    match = DATASET_REGEX.search(name)
-                    # fall back to ROOT_NODE if can't determine parent
-                    dataset = match.groups()[0] if match else None
-                    if dataset and group_by_dataset:
-                        parent = dataset
-                        for k, v in vals.items():
-                            datasets[dataset][k] += v
-                    else:
-                        parent = ROOT_NODE
+    upload_file(
+        content=content,
+        comment=comment,
+    )
 
-                rows.append(form_row(name, parent, vals))
 
-    for dataset, values in datasets.items():
-        rows.append(form_row(dataset, ROOT_NODE, values))
-
-    # Finally, add the overall root.
-    rows.append(form_row(ROOT_NODE, '', root_values))
-
+def generate_and_write_treemap(
+    rows: list[tuple],
+    output_html: str,
+    output_png: str,
+):
     dataframe = pd.DataFrame(
         # The column name list needs to match the `append_row` implementation.
         rows,
@@ -168,11 +171,124 @@ def main() -> None:
     )
     fig.update_traces(root_color='lightgrey')
 
-    logging.info(f'Writing results to {args.output_prefix}')
-    with AnyPath(f'{args.output_prefix}.html').open('wt') as f:
+    with AnyPath(output_html).open('wt') as f:
         fig.write_html(f)
-    with AnyPath(f'{args.output_prefix}.png').open('wb') as f:
+    with AnyPath(output_png).open('wb') as f:
         fig.write_image(f, width=1920, height=1080)
+
+
+def prepare_rows_from_input_paths(  # noqa: C901
+    input_paths: list[str],
+    max_depth: int,
+    group_by_dataset: bool,
+) -> tuple[list[tuple], list[str]]:
+    """Prepare rows for a dataframe from the given input paths.
+
+    Args:
+        input_paths (list[str]): json.gz files produced from disk_usage.py
+        max_depth (int): Maximum folder depth to display
+        group_by_dataset (bool): Group bucket storage stats by their dataset
+
+    Returns:
+        tuple[list[tuple], list[str]]: (rows, errors)
+    """
+    rows: list[tuple] = []
+
+    root_values: dict[str, int] = defaultdict(int)
+    datasets: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    missing_datasets: list[str] = []
+    for input_path in input_paths:
+        logging.info(f'Processing {input_path}')
+        p = AnyPath(input_path)
+
+        if not p.exists():
+            dataset = os.path.basename(input_path).removesuffix('.json.gz')
+            missing_datasets.append(dataset)
+            continue
+
+        with AnyPath(input_path).open('rb') as f, gzip.open(f, 'rt') as gfz:
+            for name, vals in json.load(gfz).items():
+                depth = name.count('/') - 1  # Don't account for gs:// scheme.
+                if depth > max_depth:
+                    continue
+                size = vals['size']
+                if not size:
+                    continue
+                # Strip one folder for the parent name. Map `gs://` to the
+                # predefined treemap root node label.
+                slash_index = name.rfind('/')
+                if slash_index > len('gs://'):
+                    parent = name[:slash_index]
+                else:
+                    for k, v in vals.items():
+                        root_values[k] += v
+                    match = DATASET_REGEX.search(name)
+                    # fall back to ROOT_NODE if can't determine parent
+                    dataset = match.groups()[0] if match else None
+                    if dataset and group_by_dataset:
+                        parent = dataset
+                        for k, v in vals.items():
+                            datasets[dataset][k] += v
+                    else:
+                        parent = ROOT_NODE
+
+                rows.append(form_row(name, parent, vals))
+
+    for dataset, values in datasets.items():
+        rows.append(form_row(dataset, ROOT_NODE, values))
+
+    # Finally, add the overall root.
+    rows.append(form_row(ROOT_NODE, '', root_values))
+
+    return rows, missing_datasets
+
+
+def main() -> None:
+    """Main entrypoint."""
+
+    logging.getLogger().setLevel(logging.INFO)
+    args = get_parser().parse_args()
+
+    should_post_to_slack = args.post_slack_message
+
+    try:
+        rows, missing_datasets = prepare_rows_from_input_paths(
+            args.input,
+            args.max_depth,
+            args.group_by_dataset,
+        )
+
+        logging.info('Writing results')
+        output_html_path = output_path('treemap.html', category='web', dataset='common')
+
+        web_html_path = output_path(
+            'treemap.html',
+            category='web_url',
+            dataset='common',
+        )
+        generate_and_write_treemap(
+            rows=rows,
+            output_html=output_html_path,
+            # write locally to use in slack message
+            output_png='treemap.png',
+        )
+
+        if should_post_to_slack:
+            post_to_slack(
+                treemap_png_path='treemap.png',
+                treemap_html_web_url=web_html_path,
+                missing_datasets=missing_datasets,
+            )
+    except Exception as e:  # noqa: BLE001
+        comment = f'Failed to generate storage viz treemap: {e}'
+        if url := _get_hail_batch_url():
+            comment += f"\n\nSee {url} for more details."
+        if should_post_to_slack:
+            upload_file(
+                content=b'Failed to generate storage viz treemap',
+                comment=comment,
+            )
+        raise Exception(comment) from e
 
 
 if __name__ == '__main__':

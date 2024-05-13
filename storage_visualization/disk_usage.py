@@ -11,6 +11,7 @@ from collections import defaultdict
 import google.api_core.exceptions
 from cloudpathlib import AnyPath
 from google.cloud import storage
+from humanize import naturalsize
 
 from cpg_utils.config import get_access_level
 
@@ -105,7 +106,8 @@ def count_stats_for_bucket(
         for blob in blobs:
             count += 1
             if count % 10**6 == 0:
-                logging.info(f'{count // 10**6} M blobs...')
+                s = naturalsize(sys.getsizeof(aggregate_stats_container))
+                logging.info(f'{count // 10**6} M blobs... aggregate dict is using {s}')
             folder = f'/{aggregate_level(blob.name)}'
             while True:
                 path = f'gs://{bucket_name}{folder}'
