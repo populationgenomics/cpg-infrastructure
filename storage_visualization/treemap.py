@@ -25,6 +25,22 @@ DOCKER_IMAGE = (
     'australia-southeast1-docker.pkg.dev/cpg-common/images/storage-visualization:latest'
 )
 
+BATCH_ID = os.getenv('HAIL_BATCH_ID')
+JOB_ID = os.getenv('HAIL_JOB_ID')
+
+
+def _get_hail_batch_url(
+    batch_id: str | None = BATCH_ID,
+    job_id: str | None = JOB_ID,
+) -> str | None:
+    if not batch_id:
+        return None
+    base = f"https://batch.hail.populationgenomics.org.au/batches/{batch_id}"
+    if job_id is None:
+        return base
+
+    return f"{base}/jobs/{job_id}"
+
 
 def get_parser():
     """
@@ -96,16 +112,14 @@ def post_to_slack(
 
     comment = 'Storage visualization: ' + treemap_html_web_url
     if missing_datasets:
-        comment += '\n\\Missing datasets:\n' + '\n'.join(
-            str(e) for e in missing_datasets
-        )
+        comment += '\nMissing datasets: ' + ', '.join(str(e) for e in missing_datasets)
 
-        if batch_id := os.getenv('HAIL_BATCH_ID'):
-            comment += f'\n\nSee https://batch.hail.populationgenomicd.org.au/batches/{batch_id} for more details.'
+        if url := _get_hail_batch_url(job_id=None):
+            comment += f'\n\nSee {url} for more details.'
 
     upload_file(
         content=content,
-        comment='Storage visualization: ' + treemap_html_web_url,
+        comment=comment,
     )
 
 
@@ -267,11 +281,7 @@ def main() -> None:
             )
     except Exception as e:  # noqa: BLE001
         comment = f'Failed to generate storage viz treemap: {e}'
-        if batch_id := os.getenv('HAIL_BATCH_ID'):
-            url = f"https://batch.hail.populationgenomicd.org.au/batches/{batch_id}"
-            if job_id := os.getenv('HAIL_JOB_ID'):
-                url += f"/jobs/{job_id}"
-
+        if url := _get_hail_batch_url():
             comment += f"\n\nSee {url} for more details."
         if should_post_to_slack:
             upload_file(
