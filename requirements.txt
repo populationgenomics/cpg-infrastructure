@@ -1,6 +1,6 @@
 # fix boto3/core version to prevent pip downloading all the versions caused by cloudpathlib
-boto3==1.28.56
-botocore==1.31.56
+boto3>=1.28.56
+botocore>=1.31.56
 cpg-utils>=4.15.1
 google-api-python-client==2.*
 google-auth==2.*
