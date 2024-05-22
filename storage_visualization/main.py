@@ -65,6 +65,7 @@ def main():
     # Process the combined output of all jobs to generate a web report.
     treemap_job = batch.new_job(name='treemap')
     prepare_job(treemap_job, clone_repo=True)
+    treemap_job.memory('highmem')
     # just don't show the specific report if it fails
     treemap_job.always_run(True)
     for job in job_output_paths:
