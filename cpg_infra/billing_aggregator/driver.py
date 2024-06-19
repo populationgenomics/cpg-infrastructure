@@ -182,9 +182,9 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 # 2GB is not enough for seqr
                 memory = '2560M'
             # Create the function, the trigger and subscription.
-            _ = self.create_cloud_function(
+            fxn, _ = self.create_cloud_function(
                 resource_name=f'billing-aggregator-{function}-billing-function',
-                name=f'billing-aggregator-{function}-billing-function',
+                name=function,
                 source_file=f'{function}.py',
                 service_account=self.config.billing.coordinator_machine_account,
                 source_archive_object=source_archive_object,
@@ -207,8 +207,17 @@ class BillingAggregator(CpgInfrastructurePlugin):
             _ = gcp.cloudscheduler.Job(
                 f'billing-aggregator-scheduler-job-{function}',
                 http_target=gcp.cloudscheduler.JobHttpTargetArgs(
-                    uri=f'https://{self.config.gcp.region}-{self.config.billing.gcp.project_id}.cloudfunctions.net/billing-aggregator-{function}-billing-function',
+                    uri=fxn.service_config.uri,
                     http_method='POST',
+                    headers={
+                        "Content-Type": "application/x-www-form-urlencoded",
+                    },
+                    oidc_token=gcp.cloudscheduler.JobHttpTargetOidcTokenArgs(
+                        audience=fxn.service_config.apply(
+                            lambda service_config: f"{service_config.uri}/",
+                        ),
+                        service_account_email=self.config.billing.coordinator_machine_account,
+                    ),
                 ),
                 schedule=f'0 */{self.config.billing.aggregator.interval_hours} * * *',
                 project=self.config.billing.gcp.project_id,
@@ -238,11 +247,6 @@ class BillingAggregator(CpgInfrastructurePlugin):
 
         assert self.config.billing
 
-        trigger = gcp.cloudfunctionsv2.FunctionEventTriggerArgs(
-            event_type="google.cloud.functions.v1.Function.TriggerType.HTTP_REQUEST",
-            trigger=None,
-        )
-
         # Create the Cloud Function
 
         build_environment_variables = {}
@@ -251,7 +255,6 @@ class BillingAggregator(CpgInfrastructurePlugin):
 
         fxn = gcp.cloudfunctionsv2.Function(
             resource_name,
-            event_trigger=trigger,
             build_config=gcp.cloudfunctionsv2.FunctionBuildConfigArgs(
                 runtime='python311',
                 entry_point='from_request',
@@ -323,7 +326,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
             opts=pulumi.ResourceOptions(depends_on=[fxn]),
         )
 
-        return fxn, trigger, alert_policy
+        return fxn, alert_policy
 
     def extract_dataset_table(self):
         expected_table_name_parts = 3

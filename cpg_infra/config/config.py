@@ -197,7 +197,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
             functions: list[str]
             billing_sheet_id: str | None = None
             monthly_summary_table: str | None = None
-            interval_hours: int = 2
+            interval_hours: int = 4
 
         gcp: GCP
         coordinator_machine_account: str | None = None
