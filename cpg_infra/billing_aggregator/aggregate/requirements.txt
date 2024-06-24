@@ -5,8 +5,9 @@ metamist
 pyyaml
 python-rapidjson
 google-api-python-client==2.79.0
-google-cloud-bigquery==3.6.0
+google-cloud-bigquery==3.11.4
 google-cloud-secret-manager==2.15.1
 google-cloud-logging==3.5.0
-pandas==1.5.3
-pandas-gbq==0.19.1
+numpy==1.23.2
+pandas==2.0.1
+pandas-gbq==0.23.1
