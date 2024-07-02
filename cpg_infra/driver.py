@@ -51,13 +51,17 @@ class SampleMetadataAccessorMembership(NamedTuple):
 
 SM_TEST_READ = 'test-read'
 SM_TEST_WRITE = 'test-write'
+SM_TEST_CONTRIBUTE = 'test-contribute'
 SM_MAIN_READ = 'main-read'
 SM_MAIN_WRITE = 'main-write'
+SM_MAIN_CONTRIBUTE = 'main-contribute'
 METAMIST_PERMISSIONS = [
     SM_TEST_READ,
     SM_TEST_WRITE,
+    SM_TEST_CONTRIBUTE,
     SM_MAIN_READ,
     SM_MAIN_WRITE,
+    SM_MAIN_CONTRIBUTE,
 ]
 
 
@@ -575,6 +579,7 @@ class CPGInfrastructure:
                 f'{dataset}-metamist-members',
                 metamist_project_name=infra.metamist_project.project_name,
                 read_members=prepare_group_members(infra, SM_MAIN_READ),
+                contribute_members=prepare_group_members(infra, SM_MAIN_CONTRIBUTE),
                 write_members=prepare_group_members(infra, SM_MAIN_WRITE),
             )
 
@@ -583,6 +588,7 @@ class CPGInfrastructure:
                     f'{dataset}-metamist-test-members',
                     metamist_project_name=infra.metamist_test_project.project_name,
                     read_members=prepare_group_members(infra, SM_TEST_READ),
+                    contribute_members=prepare_group_members(infra, SM_TEST_CONTRIBUTE),
                     write_members=prepare_group_members(infra, SM_TEST_WRITE),
                 )
 
@@ -2288,7 +2294,13 @@ class CPGDatasetCloudInfrastructure:
             SampleMetadataAccessorMembership(
                 name='human',
                 member=self.analysis_group,
-                permissions=(SM_MAIN_READ, SM_TEST_READ, SM_TEST_WRITE),
+                permissions=(
+                    SM_MAIN_READ,
+                    SM_MAIN_CONTRIBUTE,
+                    SM_TEST_READ,
+                    SM_TEST_WRITE,
+                    SM_TEST_CONTRIBUTE,
+                ),
             ),
             SampleMetadataAccessorMembership(
                 name='data-manager-group',
