@@ -1954,12 +1954,12 @@ class CPGDatasetCloudInfrastructure:
                 member=group,
             )
 
-        self.infra.add_member_to_bucket(
-            'sm-hail-wheels-viewer',
-            bucket=bucket,
-            member=wheel_group,
-            membership=BucketMembership.READ,
-        )
+        # self.infra.add_member_to_bucket(
+        #     'sm-hail-wheels-viewer',
+        #     bucket=bucket,
+        #     member=wheel_group,
+        #     membership=BucketMembership.READ,
+        # )
 
     @cached_property
     def hail_accounts_by_access_level(self) -> dict[str, HailAccount]:
