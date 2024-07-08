@@ -1942,13 +1942,24 @@ class CPGDatasetCloudInfrastructure:
         if not bucket:
             return
 
+        # There are 250+ members that need access to read the hail wheels, unfortunately
+        # there is a limit of 250 on the amount of principals that can be added to a
+        # storage bucket so we need to first create a group here, and then add that
+        # group as a member to the bucket
+        wheel_group = self.create_group('sm-hail-wheels-viewers', cache_members=False)
+
         for key, group in keys.items():
-            self.infra.add_member_to_bucket(
-                f'{key}-hail-wheels-viewer',
-                bucket=bucket,
+            wheel_group.add_member(
+                self.infra.get_pulumi_name(f'{key}-hail-wheels-viewer'),
                 member=group,
-                membership=BucketMembership.READ,
             )
+
+        self.infra.add_member_to_bucket(
+            'sm-hail-wheels-viewer',
+            bucket=bucket,
+            member=wheel_group,
+            membership=BucketMembership.READ,
+        )
 
     @cached_property
     def hail_accounts_by_access_level(self) -> dict[str, HailAccount]:
