@@ -137,7 +137,7 @@ class MetamistProjectMembersProvider(pulumi.dynamic.ResourceProvider):
     def diff(self, _id: str, _olds, _news) -> pulumi.dynamic.DiffResult:
         replaces = []
 
-        for k in 'read_members', 'write_members':
+        for k in 'read_members', 'write_members', 'contribute_members':
             if _olds.get(k) != _news.get(k):
                 replaces.append(k)
 
