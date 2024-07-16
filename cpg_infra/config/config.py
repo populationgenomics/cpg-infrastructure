@@ -34,7 +34,6 @@ class CPGInfrastructureUser(DeserializableDataclass):
 
     id: MemberKey  # noqa: RUF100, A003
     clouds: dict[CloudName, Cloud]
-    projects: list[str]
     can_access_internal_dataset_logs: bool = False
 
 
