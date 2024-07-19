@@ -183,7 +183,7 @@ async def async_retry_transient_get_json_request(
                     resp.raise_for_status()
                     return await resp.json()
             # pylint: disable=broad-except
-            except Exception as e:
+            except aiohttp.ClientError as e:
                 last_exception = e
                 if not isinstance(e, errors):
                     raise

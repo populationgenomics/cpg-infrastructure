@@ -21,7 +21,6 @@ TODO:
 
     - action monthly billing function
 """
-import base64
 import os
 from base64 import b64encode
 from functools import cached_property
@@ -30,7 +29,7 @@ import pulumi
 import pulumi_gcp as gcp
 
 from cpg_infra.plugin import CpgInfrastructurePlugin
-from cpg_infra.utils import archive_folder, GCP_BILLING_BQ_TABLE
+from cpg_infra.utils import GCP_BILLING_BQ_TABLE, archive_folder
 from cpg_utils.cloud import read_secret
 
 PATH_TO_AGGREGATE_SOURCE_CODE = os.path.join(os.path.dirname(__file__), 'aggregate')
@@ -214,7 +213,6 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 'BILLING_ACCOUNT_ID': billing_account_id,
             },
             service_account=service_account,
-            location=location,
             opts=pulumi.ResourceOptions(
                 depends_on=[job, topic, self.source_archive],
             ),
@@ -223,8 +221,6 @@ class BillingAggregator(CpgInfrastructurePlugin):
         pulumi.export('topic_name', topic.name)
         pulumi.export('scheduler_job_name', job.name)
         pulumi.export('cloud_function_name', function.name)
-
-        return
 
     def setup_aggregator_functions(self):
         """Setup hourly aggregator functions"""

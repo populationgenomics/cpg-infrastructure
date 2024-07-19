@@ -2,14 +2,15 @@
 """A Cloud Function to send a daily GCP cost report to Slack."""
 
 import calendar
-from functools import cached_property
 import json
 import logging
 import os
+import pytz
 from collections import defaultdict
-from datetime import date
+from datetime import datetime, timezone
+from functools import cached_property
 from math import ceil
-from typing import Generator
+from typing import Any, Generator
 
 import google.cloud.billing.budgets_v1.services.budget_service as budget
 import slack
@@ -23,6 +24,7 @@ SLACK_MESSAGE_MAX_CHARS = 2000
 FLAGGED_PROJECT_THRESHOLD = 0.8
 HUNDREDS_ROUNDING_THRESHOLD = 100
 TINY_VALUE_THRESHOLD = 0.01
+TIMEZONE = pytz.timezone('Australia/Sydney')
 
 # Query monthly cost per project and join that with cost over the last day.
 BIGQUERY_QUERY = f"""
@@ -104,7 +106,7 @@ bigquery_client = bigquery.Client()
 budget_client = budget.BudgetServiceClient()
 
 
-def try_cast_int(i):
+def try_cast_int(i: Any) -> int | None:
     """Cast i to int, else return None if ValueError"""
     try:
         return int(i)
@@ -112,7 +114,7 @@ def try_cast_int(i):
         return None
 
 
-def try_cast_float(f):
+def try_cast_float(f: Any) -> float | None:
     """Cast i to float, else return None if ValueError"""
     try:
         return float(f)
@@ -122,15 +124,23 @@ def try_cast_float(f):
 
 def month_progress() -> float:
     """Return the percentage we are through the month"""
-    monthrange = calendar.monthrange(date.today().year, date.today().month)[1]
-    return date.today().day / monthrange
+    today = datetime.now(tz=TIMEZONE).date()
+    monthrange = calendar.monthrange(today.year, today.month)[1]
+    return today.day / monthrange
+
 
 @cached_property
-def budgets_map(self):
+def budgets_map() -> dict[str, budget.Budget]:
     budgets = budget_client.list_budgets(parent=f'billingAccounts/{BILLING_ACCOUNT_ID}')
     return {b.display_name: b for b in budgets}
 
-def format_billing_row(project_id: str | None, fields: dict, currency: str, percent_threshold: float = 0) -> tuple[float, str, str, str]:
+
+def format_billing_row(
+    project_id: str | None,
+    fields: dict,
+    currency: str,
+    percent_threshold: float = 0,
+) -> tuple[float, str, str, str]:
     """
     Formats the billing row for a project.
 
@@ -204,10 +214,12 @@ def format_billing_row(project_id: str | None, fields: dict, currency: str, perc
 
     return sort_key, project_id, row_str_1, row_str_2
 
+
 def num_chars(lst: list[str]) -> int:
     return len(''.join(lst))
 
-def gcp_cost_report(unused_data, unused_context): # noqa: ARG001,ANN001
+
+def gcp_cost_report(unused_data, unused_context):  # noqa: ARG001,ANN001
     """
     Main entry point for the Cloud Function.
 
@@ -223,10 +235,6 @@ def gcp_cost_report(unused_data, unused_context): # noqa: ARG001,ANN001
     percent_threshold = month_progress()
 
     # Slack message header and summary
-    summary_header = [
-        '*Flagged Projects*',
-        '*24h cost/Month cost (% used)*',
-    ]
     project_summary: list[tuple[str, str]] = []
     totals_summary: list[tuple[str, str]] = []
     grouped_rows = defaultdict(
@@ -253,7 +261,10 @@ def gcp_cost_report(unused_data, unused_context): # noqa: ARG001,ANN001
     for project_id, by_currency in grouped_rows.items():
         for currency, row in by_currency.items():
             sort_key, prj_id, row_str_1, row_str_2 = format_billing_row(
-                project_id, row, currency, percent_threshold,
+                project_id,
+                row,
+                currency,
+                percent_threshold,
             )
             project_summary.append(
                 {'sort': sort_key, 'value': (prj_id, row_str_1 + ' / ' + row_str_2)},
@@ -270,6 +281,7 @@ def gcp_cost_report(unused_data, unused_context): # noqa: ARG001,ANN001
         fields = defaultdict(lambda: defaultdict(float))
         day_total = 0
         month_total = 0
+
         for cost_category, vals in by_category.items():
             last_day = vals['day']
             last_month = vals['month']
@@ -287,69 +299,85 @@ def gcp_cost_report(unused_data, unused_context): # noqa: ARG001,ANN001
             ),
         )
 
-        header_message = (
-            'Costs are Compute (C), Storage (S) and Total (T) by the past 24h and then '
-            f'by month. Sorted by percent used (if > {percent_threshold*100:.0f}%) '
-            'followed by sum of daily cost descending. This first message contains all '
-            'flagged projects that are exceeding the budget so far this month. '
-            'For visual breakdowns see the '
-            '<https://lookerstudio.google.com/s/jRJO_N3R9a4 | new cost dashboard '
-            '(by topic)> or our '
-            '<https://lookerstudio.google.com/s/o0SqK6vPhkc | old cost dashboard'
-            ' (gcp direct)> for costs by gcp project directly.'
-        )
-        dashboard_message = {
-            'type': 'mrkdwn',
-            'text': header_message,
-        }
-        flagged_projects = [
-            x['value']
-            for x in sorted(project_summary, key=lambda x: x['sort'], reverse=True)
-            if x['sort'][0]
-        ]
-        sorted_projects = [
-            x['value']
-            for x in sorted(project_summary, key=lambda x: x['sort'], reverse=True)
-            if not x['sort'][0]
-        ]
-
-        all_rows = [*totals_summary, *sorted_projects]
-
-        if len(flagged_projects) < 1:
-            flagged_projects = [('No flagged projects', '-')]
-
-        def chunk_list(lst: list, n: int) -> Generator[list, None, None]:
-            n = max(n, 1)
-            step = ceil(len(lst) / n)
-            for i in range(0, len(lst), step):
-                yield lst[i : i + step]
+        post_slack_message()
 
 
-        if len(all_rows) < 1 and len(flagged_projects) < 1:
-            return
+def post_slack_message(
+    project_summary: list[dict],
+    totals_summary: list[dict],
+    percent_threshold: float = 0,
+):
+    summary_header = [
+        '*Flagged Projects*',
+        '*24h cost/Month cost (% used)*',
+    ]
+    header_message = (
+        'Costs are Compute (C), Storage (S) and Total (T) by the past 24h and then '
+        f'by month. Sorted by percent used (if > {percent_threshold*100:.0f}%) '
+        'followed by sum of daily cost descending. This first message contains all '
+        'flagged projects that are exceeding the budget so far this month. '
+        'For visual breakdowns see the '
+        '<https://lookerstudio.google.com/s/jRJO_N3R9a4 | new cost dashboard '
+        '(by topic)> or our '
+        '<https://lookerstudio.google.com/s/o0SqK6vPhkc | old cost dashboard'
+        ' (gcp direct)> for costs by gcp project directly.'
+    )
+    dashboard_message = {
+        'type': 'mrkdwn',
+        'text': header_message,
+    }
+    flagged_projects = [
+        x['value']
+        for x in sorted(project_summary, key=lambda x: x['sort'], reverse=True)
+        if x['sort'][0]
+    ]
+    sorted_projects = [
+        x['value']
+        for x in sorted(project_summary, key=lambda x: x['sort'], reverse=True)
+        if not x['sort'][0]
+    ]
 
-        # Construct the slack message in multiple posts (due to size)
-        n_chunks = ceil(
-            num_chars(list(sum(all_rows, ()))) / SLACK_MESSAGE_MAX_CHARS,
-        )
-        logging.info(f'Breaking body into {n_chunks}')
-        logging.info(f'Total num rows: {len(all_rows)}')
+    all_rows = [*totals_summary, *sorted_projects]
 
-        # Make first chunk the flagged projects, then chunk by size after
-        chunks = [flagged_projects, *chunk_list(all_rows, n_chunks)]
+    if len(flagged_projects) < 1:
+        flagged_projects = [('No flagged projects', '-')]
 
-        for i, chunk in enumerate(chunks):
-            # Only post dashboard message on first chunk
-            # and switch to 'Projects' not 'Flagged Projects' after first chunk
-            if i != 0:
-                summary_header[0] = '*Projects*'
-                dashboard_message['text'] = ' '
+    def chunk_list(lst: list, n: int) -> Generator[list, None, None]:
+        n = max(n, 1)
+        step = ceil(len(lst) / n)
+        for i in range(0, len(lst), step):
+            yield lst[i : i + step]
 
-            post_single_slack_chunk(summary_header, chunk, dashboard_message, i, n_chunks)
+    if len(all_rows) < 1 and len(flagged_projects) < 1:
+        return
+
+    # Construct the slack message in multiple posts (due to size)
+    n_chunks = ceil(
+        num_chars(list(sum(all_rows, ()))) / SLACK_MESSAGE_MAX_CHARS,
+    )
+    logging.info(f'Breaking body into {n_chunks}')
+    logging.info(f'Total num rows: {len(all_rows)}')
+
+    # Make first chunk the flagged projects, then chunk by size after
+    chunks = [flagged_projects, *chunk_list(all_rows, n_chunks)]
+
+    for i, chunk in enumerate(chunks):
+        # Only post dashboard message on first chunk
+        # and switch to 'Projects' not 'Flagged Projects' after first chunk
+        if i != 0:
+            summary_header[0] = '*Projects*'
+            dashboard_message['text'] = ' '
+
+        post_single_slack_chunk(summary_header, chunk, dashboard_message, i, n_chunks)
 
 
-def post_single_slack_chunk(summary_header, chunk: list[tuple[str, str]], header_message: str):
-    
+def post_single_slack_chunk(
+    summary_header: str,
+    chunk: list[tuple[str, str]],
+    header_message: str,
+):
+    """Post a single chunk of the slack message"""
+
     # Helper functions
     def wrap_in_mrkdwn(a: str) -> str:
         return {'type': 'mrkdwn', 'text': a}
@@ -373,10 +401,14 @@ def post_single_slack_chunk(summary_header, chunk: list[tuple[str, str]], header
     blocks = [
         {'type': 'section', 'text': header_message, 'fields': body},
     ]
-    post_slack_message(blocks=blocks)
+    post_slack_chunk(blocks=blocks)
 
 
-def get_percent_used_from_budget(b: float, last_month_total: float, currency: str) -> float:
+def get_percent_used_from_budget(
+    b: float,
+    last_month_total: float,
+    currency: str,
+) -> float:
     """Get percent_used as a string from GCP billing budget"""
     percent_used = None
     percent_used_str = ''
@@ -409,7 +441,7 @@ def get_percent_used_from_budget(b: float, last_month_total: float, currency: st
     return percent_used, percent_used_str
 
 
-def post_slack_message(blocks: list[dict], thread_ts: str | None=None):
+def post_slack_chunk(blocks: list[dict], thread_ts: str | None = None):
     """Posts the given text as message to Slack."""
     try:
         if thread_ts:
