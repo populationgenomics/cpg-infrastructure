@@ -183,7 +183,7 @@ async def async_retry_transient_get_json_request(
                     resp.raise_for_status()
                     return await resp.json()
             # pylint: disable=broad-except
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 last_exception = e
                 if not isinstance(e, errors):
                     raise
@@ -264,7 +264,7 @@ def parse_date_only_string(d: str | None) -> date | None:
 
     try:
         return datetime.strptime(d, '%Y-%m-%d').date()
-    except Exception as excep:  # noqa: BLE001
+    except Exception as excep:
         raise ValueError(f'Date could not be converted: {d}') from excep
 
 

@@ -279,7 +279,7 @@ def main() -> None:
                 treemap_html_web_url=web_html_path,
                 missing_datasets=missing_datasets,
             )
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         comment = f'Failed to generate storage viz treemap: {e}'
         if url := _get_hail_batch_url():
             comment += f"\n\nSee {url} for more details."

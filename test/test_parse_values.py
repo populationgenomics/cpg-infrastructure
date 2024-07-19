@@ -137,10 +137,17 @@ class TestParseValues(TestCase):
         dtype = CPGInfrastructureConfig.Billing | None
         billing_config = {
             'coordinator_machine_account': 'aggregate-billing@iam.gserviceaccount.com',
+            'billing_account_id': '01D012-20A6A2-CBD343',
             'hail_aggregator_username': 'billing-aggregator',
             'gcp': {
                 'account_id': '<account-id>',
                 'project_id': '<project-id>',
+            },
+            # TODO: adjust final values before committing
+            'slack_bot': {
+                'machine_account': 'gcp-cost-control@billing-admin-290403.iam.gserviceaccount.com',
+                'slack_channel': 'sabrina-dev',
+                'timezone': 'Australia/Sydney',
             },
         }
         _ = try_parse_value_as_type(billing_config, dtype)

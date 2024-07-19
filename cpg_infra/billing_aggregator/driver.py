@@ -21,6 +21,7 @@ TODO:
 
     - action monthly billing function
 """
+import base64
 import os
 from base64 import b64encode
 from functools import cached_property
@@ -29,18 +30,10 @@ import pulumi
 import pulumi_gcp as gcp
 
 from cpg_infra.plugin import CpgInfrastructurePlugin
-from cpg_infra.utils import archive_folder
+from cpg_infra.utils import archive_folder, GCP_BILLING_BQ_TABLE
 from cpg_utils.cloud import read_secret
 
 PATH_TO_AGGREGATE_SOURCE_CODE = os.path.join(os.path.dirname(__file__), 'aggregate')
-PATH_TO_MONTHLY_AGGREGATE_SOURCE_CODE = os.path.join(
-    os.path.dirname(__file__),
-    'monthly_aggregate',
-)
-PATH_TO_UPDATE_BUDGET_SOURCE_CODE = os.path.join(
-    os.path.dirname(__file__),
-    'update_budget',
-)
 
 
 def get_file_content(filename: str) -> str:
@@ -61,6 +54,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
             print('Skipping billing aggregator config was not present')
             return
 
+        self.setup_slack_bot()
         self.setup_aggregator_functions()
         # setup BQ objects
         _ = self.aggregate_table
@@ -139,6 +133,99 @@ class BillingAggregator(CpgInfrastructurePlugin):
             project=self.config.billing.gcp.project_id,
         )
 
+    @cached_property
+    def source_archive(self):
+        # The Cloud Function source code itself needs to be zipped up into an
+        # archive, which we create using the pulumi.AssetArchive primitive.
+        archive = archive_folder(PATH_TO_AGGREGATE_SOURCE_CODE)
+
+        # Create the single Cloud Storage object, which contains the source code
+        return gcp.storage.BucketObject(
+            'billing-aggregator-source-code',
+            # updating the source archive object does not trigger the cloud function
+            # to actually updating the source because it's based on the name,
+            # allow Pulumi to create a new name each time it gets updated
+            # name=f'aggregator-source-code.zip',
+            bucket=self.source_bucket.name,
+            source=archive,
+            opts=pulumi.ResourceOptions(replace_on_changes=['*']),
+        )
+
+    def setup_slack_bot(self):
+        """
+        Create the slack bot gcp-cost-control in the CPG slack
+        to notify us of projects that are approaching their monthly budget
+        as well as monitor the hail billing account
+        """
+
+        project_id = self.config.billing.gcp.project_id
+        bigquery_billing_table = GCP_BILLING_BQ_TABLE
+        billing_account_id = self.config.billing.billing_account_id
+        location = self.config.gcp.region
+
+        time_zone = self.config.billing.slack_bot.timezone
+        service_account = self.config.billing.slack_bot.machine_account
+        slack_channel = self.config.billing.slack_bot.slack_channel
+
+        """
+        1. Create a new Pub/Sub topic in the `billing-admin-290403` project, named
+        `cost-report`.
+        1. Create a Cloud Scheduler job that posts a Pub/Sub message to the
+        `cost-report` topic, e.g. using a daily schedule like `0 9 * * *`.
+        The payload can be abitrary, as it is ignored in the Cloud Function.
+        1. Install the Cloud Function that gets triggered when a message to the
+        `cost-report` Pub/Sub topic is posted. Set `$QUERY_TIME_ZONE` to your local
+        time zone, e.g. `Australia/Sydney`.
+        """
+
+        # Create Pub/Sub topic
+        topic = gcp.pubsub.Topic(resource_name='slack-bot-topic', project=project_id)
+
+        # Create Cloud Scheduler job
+        job = gcp.cloudscheduler.Job(
+            'slack-bot-job',
+            project=project_id,
+            location=location,
+            description='Triggers a daily cost report as a Slack message',
+            schedule='0 9 * * *',
+            time_zone=time_zone,
+            pubsub_target=gcp.cloudscheduler.JobPubsubTargetArgs(
+                topic_name=topic.name,
+            ),
+        )
+
+        # Deploy Cloud Function
+        function = gcp.cloudfunctionsv2.Function(
+            'slack-bot-function',
+            project=project_id,
+            location=location,
+            entry_point='slack_bot.main',
+            runtime='python311',
+            source_archive_bucket=self.source_bucket.name,
+            source_archive_object=self.source_archive.name,
+            event_trigger=gcp.cloudfunctionsv2.FunctionEventTriggerArgs(
+                event_type="google.cloud.pubsub.topic.v1.messagePublished",
+                pubsub_topic=topic.id,
+            ),
+            environment_variables={
+                'QUERY_TIME_ZONE': time_zone,
+                'SLACK_CHANNEL': slack_channel,
+                'BIGQUERY_BILLING_TABLE': bigquery_billing_table,
+                'BILLING_ACCOUNT_ID': billing_account_id,
+            },
+            service_account=service_account,
+            location=location,
+            opts=pulumi.ResourceOptions(
+                depends_on=[job, topic, self.source_archive],
+            ),
+        )
+
+        pulumi.export('topic_name', topic.name)
+        pulumi.export('scheduler_job_name', job.name)
+        pulumi.export('cloud_function_name', function.name)
+
+        return
+
     def setup_aggregator_functions(self):
         """Setup hourly aggregator functions"""
         assert self.config.billing
@@ -154,22 +241,6 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 f'does not cleanly fit into 24 hours, this means there might be '
                 f'two runs within the interval period',
             )
-
-        # The Cloud Function source code itself needs to be zipped up into an
-        # archive, which we create using the pulumi.AssetArchive primitive.
-        archive = archive_folder(PATH_TO_AGGREGATE_SOURCE_CODE)
-
-        # Create the single Cloud Storage object, which contains the source code
-        source_archive_object = gcp.storage.BucketObject(
-            'billing-aggregator-source-code',
-            # updating the source archive object does not trigger the cloud function
-            # to actually updating the source because it's based on the name,
-            # allow Pulumi to create a new name each time it gets updated
-            # name=f'aggregator-source-code.zip',
-            bucket=self.source_bucket.name,
-            source=archive,
-            opts=pulumi.ResourceOptions(replace_on_changes=['*']),
-        )
 
         for function in self.config.billing.aggregator.functions:
             # Balance CPU by this table:
@@ -187,7 +258,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 name=function,
                 source_file=f'{function}.py',
                 service_account=self.config.billing.coordinator_machine_account,
-                source_archive_object=source_archive_object,
+                source_archive_object=self.source_archive,
                 notification_channel=self.slack_channel,
                 memory=memory,
                 cpu=cpu,

@@ -198,9 +198,19 @@ class CPGInfrastructureConfig(DeserializableDataclass):
             monthly_summary_table: str | None = None
             interval_hours: int = 4
 
+        @dataclasses.dataclass(frozen=True)
+        class SlackBot(DeserializableDataclass):
+            """Details of the SLACK BOT account"""
+
+            machine_account: str
+            slack_channel: str
+            timezone: str
+
         gcp: GCP
+        billing_account_id: str | None = None
         coordinator_machine_account: str | None = None
         aggregator: GCPAggregator | None = None
+        slack_bot: SlackBot | None = None
         hail_aggregator_username: str | None = None
 
     # used in the gcp.organizations.get_organization(domain=self.config.domain) call
