@@ -264,7 +264,7 @@ def parse_date_only_string(d: str | None) -> date | None:
 
     try:
         return datetime.strptime(d, '%Y-%m-%d').date()
-    except Exception as excep:
+    except ValueError as excep:
         raise ValueError(f'Date could not be converted: {d}') from excep
 
 

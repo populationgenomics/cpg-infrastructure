@@ -5,17 +5,19 @@ import calendar
 import json
 import logging
 import os
-import pytz
 from collections import defaultdict
-from datetime import datetime, timezone
-from functools import cached_property
+from datetime import datetime
 from math import ceil
-from typing import Any, Generator
+from typing import Any, Generator, Tuple
 
 import google.cloud.billing.budgets_v1.services.budget_service as budget
+import pytz
 import slack
 from google.cloud import bigquery, secretmanager
 from slack.errors import SlackApiError
+
+# Custom types
+SortKey = Tuple[float, float, float]
 
 PROJECT_ID = os.getenv('GCP_PROJECT')
 BIGQUERY_BILLING_TABLE = os.getenv('BIGQUERY_BILLING_TABLE')
@@ -105,6 +107,10 @@ slack_client = slack.WebClient(token=slack_token)
 bigquery_client = bigquery.Client()
 budget_client = budget.BudgetServiceClient()
 
+# Cache the budgets for the billing account.
+BUDGETS = budget_client.list_budgets(parent=f'billingAccounts/{BILLING_ACCOUNT_ID}')
+BUDGETS_MAP = {b.display_name: b for b in BUDGETS}
+
 
 def try_cast_int(i: Any) -> int | None:
     """Cast i to int, else return None if ValueError"""
@@ -129,18 +135,12 @@ def month_progress() -> float:
     return today.day / monthrange
 
 
-@cached_property
-def budgets_map() -> dict[str, budget.Budget]:
-    budgets = budget_client.list_budgets(parent=f'billingAccounts/{BILLING_ACCOUNT_ID}')
-    return {b.display_name: b for b in budgets}
-
-
 def format_billing_row(
     project_id: str | None,
     fields: dict,
     currency: str,
     percent_threshold: float = 0,
-) -> tuple[float, str, str, str]:
+) -> tuple[SortKey, str | None, str, str]:
     """
     Formats the billing row for a project.
 
@@ -176,13 +176,13 @@ def format_billing_row(
         return ' '.join(values) + currency
 
     # Format cost categories for daily and monthly costs
-    row_str_1 = format_cost_categories(fields['day'], currency)
-    row_str_2 = format_cost_categories(fields['month'], currency)
+    row_str_1: str = format_cost_categories(fields['day'], currency)
+    row_str_2: str = format_cost_categories(fields['month'], currency)
 
-    percent_used = 0
-    if project_id in budgets_map:
+    percent_used: float = 0
+    if project_id in BUDGETS_MAP:
         percent_used, percent_used_str = get_percent_used_from_budget(
-            budgets_map[project_id],
+            BUDGETS_MAP[project_id],
             fields['month']['total'],
             currency,
         )
@@ -199,10 +199,10 @@ def format_billing_row(
     else:
         logging.warning(
             f"Couldn't find project_id {project_id} in "
-            f"budgets: {', '.join(budgets_map.keys())}",
+            f"budgets: {', '.join(BUDGETS_MAP.keys())}",
         )
 
-    sort_key = (
+    sort_key: SortKey = (
         percent_used if percent_used >= percent_threshold else 0,
         sum(x for x in fields['day'].values() if x),
         sum(x for x in fields['month'].values() if x),
@@ -368,18 +368,18 @@ def post_slack_message(
             summary_header[0] = '*Projects*'
             dashboard_message['text'] = ' '
 
-        post_single_slack_chunk(summary_header, chunk, dashboard_message, i, n_chunks)
+        post_single_slack_chunk(summary_header, chunk, dashboard_message)
 
 
 def post_single_slack_chunk(
-    summary_header: str,
+    summary_header: list[str],
     chunk: list[tuple[str, str]],
-    header_message: str,
+    header_message: dict[str, str],
 ):
     """Post a single chunk of the slack message"""
 
     # Helper functions
-    def wrap_in_mrkdwn(a: str) -> str:
+    def wrap_in_mrkdwn(a: str) -> dict:
         return {'type': 'mrkdwn', 'text': a}
 
     n_chars = num_chars([''.join(list(a)) for a in chunk])
@@ -405,10 +405,10 @@ def post_single_slack_chunk(
 
 
 def get_percent_used_from_budget(
-    b: float,
+    b: budget.ListBudgetsResponse,
     last_month_total: float,
     currency: str,
-) -> float:
+) -> tuple[float | None, str]:
     """Get percent_used as a string from GCP billing budget"""
     percent_used = None
     percent_used_str = ''

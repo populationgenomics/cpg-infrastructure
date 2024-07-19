@@ -28,8 +28,9 @@ from functools import cached_property
 import pulumi
 import pulumi_gcp as gcp
 
+from cpg_infra.billing_aggregator.aggregate.utils import GCP_BILLING_BQ_TABLE
 from cpg_infra.plugin import CpgInfrastructurePlugin
-from cpg_infra.utils import GCP_BILLING_BQ_TABLE, archive_folder
+from cpg_infra.utils import archive_folder
 from cpg_utils.cloud import read_secret
 
 PATH_TO_AGGREGATE_SOURCE_CODE = os.path.join(os.path.dirname(__file__), 'aggregate')
