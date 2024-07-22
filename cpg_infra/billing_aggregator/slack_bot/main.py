@@ -2,6 +2,7 @@
 """A Cloud Function to send a daily GCP cost report to Slack."""
 
 import calendar
+from functools import lru_cache
 import json
 import logging
 import os
@@ -10,6 +11,8 @@ from datetime import datetime
 from math import ceil
 from typing import Any, Generator, Tuple
 
+import flask
+import functions_framework
 from pytz import timezone
 import slack
 from google.auth import default
@@ -19,6 +22,9 @@ from slack.errors import SlackApiError
 
 # Custom types
 SortKey = Tuple[float, float, float]
+
+# Environment variables
+BILLING_URL = 'https://sample-metadata.populationgenomics.org.au/billing/costByTime?groupBy=gcp_project'
 
 BIGQUERY_BILLING_TABLE = os.getenv('BIGQUERY_BILLING_TABLE')
 QUERY_TIME_ZONE = os.getenv('QUERY_TIME_ZONE') or 'UTC'
@@ -90,14 +96,8 @@ ORDER BY
   day DESC;
 """
 
-# Who and where am I
+# Get credentials
 CREDENTIALS, PROJECT_ID = default()
-service_account_email = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
-if CREDENTIALS:
-    print(f"Authenticated as: {CREDENTIALS.service_account_email, service_account_email}")
-    print(f"Project ID: {PROJECT_ID}")
-else:
-    print("No authentication found.")
 
 # Get slack token from secrets
 SLACK_CHANNEL = os.getenv('SLACK_CHANNEL')
@@ -108,7 +108,6 @@ BILLING_ACCOUNT_ID = os.getenv('BILLING_ACCOUNT_ID')
 
 # Cache the Slack client.
 secret_manager = secretmanager.SecretManagerServiceClient()
-print(f'Getting slack token {SLACK_TOKEN_SECRET_NAME}')
 slack_token_response = secret_manager.access_secret_version(
     request={'name': SLACK_TOKEN_SECRET_NAME},
 )
@@ -119,8 +118,10 @@ bigquery_client = bigquery.Client()
 budget_client = budget.BudgetServiceClient()
 
 # Cache the budgets for the billing account.
-BUDGETS = budget_client.list_budgets(parent=f'billingAccounts/{BILLING_ACCOUNT_ID}')
-BUDGETS_MAP = {b.display_name: b for b in BUDGETS}
+@lru_cache
+def get_budget_map():
+    budgets = budget_client.list_budgets(parent=f'billingAccounts/{BILLING_ACCOUNT_ID}')
+    return {b.display_name: b for b in budgets}
 
 
 def try_cast_int(i: Any) -> int | None:
@@ -144,6 +145,10 @@ def month_progress() -> float:
     today = datetime.now(tz=TIMEZONE).date()
     monthrange = calendar.monthrange(today.year, today.month)[1]
     return today.day / monthrange
+
+
+def billing_link(project_id: str) -> str:
+    return BILLING_URL + f'&selectedData={project_id}'
 
 
 def format_billing_row(
@@ -187,13 +192,20 @@ def format_billing_row(
         return ' '.join(values) + currency
 
     # Format cost categories for daily and monthly costs
+    url = billing_link(project_id)
+    project_link: str = project_id
+    if url:
+        project_link = f'<{url}|{project_id}>'
+
     row_str_1: str = format_cost_categories(fields['day'], currency)
     row_str_2: str = format_cost_categories(fields['month'], currency)
 
     percent_used: float = 0
-    if project_id in BUDGETS_MAP:
+
+    budget_map = get_budget_map()
+    if project_id in budget_map:
         percent_used, percent_used_str = get_percent_used_from_budget(
-            BUDGETS_MAP[project_id],
+            budget_map[project_id],
             fields['month']['total'],
             currency,
         )
@@ -201,17 +213,13 @@ def format_billing_row(
             row_str_2 += f' ({percent_used_str})'
 
         # potential formatting
-        if percent_used is not None and percent_used >= FLAGGED_PROJECT_THRESHOLD:
+        if percent_used is not None and percent_used >= percent_threshold:
             # make fields bold
-            project_id = f'*{project_id}*'
+            project_link = f'*{project_link}*'
+            if url:
+                project_link = f'<{url}|*{project_id}*>'
             row_str_1 = f'*{row_str_1}*'
             row_str_2 = f'*{row_str_2}*'
-
-    else:
-        logging.warning(
-            f"Couldn't find project_id {project_id} in "
-            f"budgets: {', '.join(BUDGETS_MAP.keys())}",
-        )
 
     sort_key: SortKey = (
         percent_used if percent_used >= percent_threshold else 0,
@@ -223,14 +231,15 @@ def format_billing_row(
     row_str_1 = row_str_1 if row_str_1 else 'No daily cost'
     row_str_2 = row_str_2 if row_str_2 else 'No monthly cost'
 
-    return sort_key, project_id, row_str_1, row_str_2
+    return sort_key, project_link, row_str_1, row_str_2
 
 
 def num_chars(lst: list[str]) -> int:
     return len(''.join(lst))
 
 
-def gcp_cost_report(unused_data, unused_context):  # noqa: ARG001,ANN001
+@functions_framework.http
+def slack_bot_cost_report(request: flask.Request):  # noqa: ARG001,ANN001
     """
     Main entry point for the Cloud Function.
 
@@ -285,7 +294,7 @@ def gcp_cost_report(unused_data, unused_context):  # noqa: ARG001,ANN001
         logging.info(
             'No information to log, this function won\'t log anything to slack.',
         )
-        return
+        return 'Nothing to log', 204
 
     # Format the totals and add them to the totals summary
     for currency, by_category in totals.items():
@@ -305,12 +314,14 @@ def gcp_cost_report(unused_data, unused_context):  # noqa: ARG001,ANN001
         _, _, a, b = format_billing_row(None, fields, currency)
         totals_summary.append(
             (
-                '_All projects:_',
+                f'<{BILLING_URL}|*All projects:*>',
                 a + ' / ' + b,
             ),
         )
 
         post_slack_message(project_summary, totals_summary, percent_threshold)
+
+    return 'Success', 200
 
 
 def post_slack_message(
@@ -318,17 +329,21 @@ def post_slack_message(
     totals_summary: list[dict],
     percent_threshold: float = 0,
 ):
-    summary_header = [
+    
+    flagged_projects_header = [
         '*Flagged Projects*',
         '*24h cost/Month cost (% used)*',
     ]
-    header_message = (
-        f'Costs exceed {percent_threshold*100:.0f}%)'
+    normal_header = [
+        '*Projects*',
+        '*24h cost/Month cost (% used)*',
+    ]
+    flagged_projects_header_message = (
+        f'We are {percent_threshold*100:.0f}% through the month. Costs exceeding '
+        'the budget are flagged below:'
     )
-    dashboard_message = {
-        'type': 'mrkdwn',
-        'text': header_message,
-    }
+
+    # Processing the projects summary into flagged and not flagged
     flagged_projects = [
         x['value']
         for x in sorted(project_summary, key=lambda x: x['sort'], reverse=True)
@@ -343,10 +358,10 @@ def post_slack_message(
     all_rows = [*totals_summary, *sorted_projects]
 
     # If there are no flagged projects, exit without posting to slack
-    # flagged_projects = []
-    if len(flagged_projects) < 1:
+    is_monday = datetime.now(tz=TIMEZONE).weekday() == 0
+    if not is_monday and len(flagged_projects) < 1:
         flagged_projects = [('No flagged projects', '-')]
-        return
+        return # Only post on Mondays or when a project gets flagged
 
     def chunk_list(lst: list, n: int) -> Generator[list, None, None]:
         n = max(n, 1)
@@ -365,21 +380,36 @@ def post_slack_message(
     logging.info(f'Total num rows: {len(all_rows)}')
 
     # Make first chunk the flagged projects, then chunk by size after
-    chunks = [flagged_projects]  # , *chunk_list(all_rows, n_chunks)]
+    chunks = [flagged_projects]
+    if is_monday:
+        chunks = [flagged_projects, *chunk_list(all_rows, n_chunks)]
+
+    posted_flagged = True if len(flagged_projects) < 1 else False
+    posted_header = False
 
     for i, chunk in enumerate(chunks):
         # Only post dashboard message on first chunk
         # and switch to 'Projects' not 'Flagged Projects' after first chunk
-        if i != 0:
-            summary_header[0] = '*Projects*'
-            dashboard_message['text'] = ' '
 
-        post_single_slack_chunk(summary_header, chunk, dashboard_message)
+        # Just send the chunk of text if not needing a header
+        slack_message = chunk
+
+        if not posted_flagged:
+            summary_header = flagged_projects_header
+            dashboard_message = flagged_projects_header_message
+            slack_message = [summary_header, *chunk]
+            posted_flagged = True
+        elif posted_flagged and not posted_header:
+            summary_header = normal_header
+            dashboard_message = ' '
+            slack_message = [summary_header, *chunk]
+            posted_header = True
+
+        post_single_slack_chunk(slack_message, dashboard_message)
 
 
 def post_single_slack_chunk(
-    summary_header: list[str],
-    chunk: list[tuple[str, str]],
+    slack_message: list[tuple[str, str]],
     header_message: dict[str, str],
 ):
     """Post a single chunk of the slack message"""
@@ -388,24 +418,21 @@ def post_single_slack_chunk(
     def wrap_in_mrkdwn(a: str) -> dict:
         return {'type': 'mrkdwn', 'text': a}
 
-    n_chars = num_chars([''.join(list(a)) for a in chunk])
-    logging.info(f'Chunk rows: {len(chunk)}')
+    n_chars = num_chars([''.join(list(a)) for a in slack_message])
+    logging.info(f'Chunk rows: {len(slack_message)}')
     logging.info(f'Chunk size: {n_chars}')
 
     # Add header at the start
-    logging.info(f'Chunk: {chunk}')
-
-    # Add header to the top and a blank row at the end
-    modified_chunk = [summary_header, *chunk]
-    modified_chunk.append(['*--------------------*'] * 2)
+    logging.info(f'Chunk: {slack_message}')
 
     body = [
-        wrap_in_mrkdwn('\n'.join(a[0] for a in modified_chunk)),
-        wrap_in_mrkdwn('\n'.join(a[1] for a in modified_chunk)),
+        wrap_in_mrkdwn('\n'.join(a[0] for a in slack_message)),
+        wrap_in_mrkdwn('\n'.join(a[1] for a in slack_message)),
     ]
 
+    mkdown_header_message = wrap_in_mrkdwn(header_message)
     blocks = [
-        {'type': 'section', 'text': header_message, 'fields': body},
+        {'type': 'section', 'text': mkdown_header_message, 'fields': body},
     ]
     post_slack_chunk(blocks=blocks)
 
@@ -470,19 +497,4 @@ def post_slack_chunk(blocks: list[dict], thread_ts: str | None = None):
 
 
 if __name__ == '__main__':
-    gcp_cost_report(None, None)
-
-# import os
-# from flask import Flask
-
-# app = Flask(__name__)
-
-# @app.route('/')
-# def hello_world():
-#     gcp_cost_report(None, None)
-#     return 'Done'
-
-# if __name__ == '__main__':
-#     print('Starting server')
-#     port = int(os.environ.get('PORT', 8080))
-#     app.run(debug=True, host='0.0.0.0', port=port)
+    print(slack_bot_cost_report(None))
