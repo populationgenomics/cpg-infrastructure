@@ -10,23 +10,23 @@ from datetime import datetime
 from math import ceil
 from typing import Any, Generator, Tuple
 
-import google.cloud.billing.budgets_v1.services.budget_service as budget
-import pytz
+from pytz import timezone
 import slack
+from google.auth import default
 from google.cloud import bigquery, secretmanager
+from google.cloud.billing import budgets_v1 as budget
 from slack.errors import SlackApiError
 
 # Custom types
 SortKey = Tuple[float, float, float]
 
-PROJECT_ID = os.getenv('GCP_PROJECT')
 BIGQUERY_BILLING_TABLE = os.getenv('BIGQUERY_BILLING_TABLE')
 QUERY_TIME_ZONE = os.getenv('QUERY_TIME_ZONE') or 'UTC'
 SLACK_MESSAGE_MAX_CHARS = 2000
 FLAGGED_PROJECT_THRESHOLD = 0.8
 HUNDREDS_ROUNDING_THRESHOLD = 100
 TINY_VALUE_THRESHOLD = 0.01
-TIMEZONE = pytz.timezone('Australia/Sydney')
+TIMEZONE = timezone('Australia/Sydney')
 
 # Query monthly cost per project and join that with cost over the last day.
 BIGQUERY_QUERY = f"""
@@ -90,6 +90,16 @@ ORDER BY
   day DESC;
 """
 
+# Who and where am I
+CREDENTIALS, PROJECT_ID = default()
+service_account_email = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+if CREDENTIALS:
+    print(f"Authenticated as: {CREDENTIALS.service_account_email, service_account_email}")
+    print(f"Project ID: {PROJECT_ID}")
+else:
+    print("No authentication found.")
+
+# Get slack token from secrets
 SLACK_CHANNEL = os.getenv('SLACK_CHANNEL')
 SLACK_TOKEN_SECRET_NAME = (
     f'projects/{PROJECT_ID}/secrets/slack-gcp-cost-control/versions/latest'
@@ -98,6 +108,7 @@ BILLING_ACCOUNT_ID = os.getenv('BILLING_ACCOUNT_ID')
 
 # Cache the Slack client.
 secret_manager = secretmanager.SecretManagerServiceClient()
+print(f'Getting slack token {SLACK_TOKEN_SECRET_NAME}')
 slack_token_response = secret_manager.access_secret_version(
     request={'name': SLACK_TOKEN_SECRET_NAME},
 )
@@ -299,7 +310,7 @@ def gcp_cost_report(unused_data, unused_context):  # noqa: ARG001,ANN001
             ),
         )
 
-        post_slack_message()
+        post_slack_message(project_summary, totals_summary, percent_threshold)
 
 
 def post_slack_message(
@@ -312,15 +323,7 @@ def post_slack_message(
         '*24h cost/Month cost (% used)*',
     ]
     header_message = (
-        'Costs are Compute (C), Storage (S) and Total (T) by the past 24h and then '
-        f'by month. Sorted by percent used (if > {percent_threshold*100:.0f}%) '
-        'followed by sum of daily cost descending. This first message contains all '
-        'flagged projects that are exceeding the budget so far this month. '
-        'For visual breakdowns see the '
-        '<https://lookerstudio.google.com/s/jRJO_N3R9a4 | new cost dashboard '
-        '(by topic)> or our '
-        '<https://lookerstudio.google.com/s/o0SqK6vPhkc | old cost dashboard'
-        ' (gcp direct)> for costs by gcp project directly.'
+        f'Costs exceed {percent_threshold*100:.0f}%)'
     )
     dashboard_message = {
         'type': 'mrkdwn',
@@ -339,8 +342,11 @@ def post_slack_message(
 
     all_rows = [*totals_summary, *sorted_projects]
 
+    # If there are no flagged projects, exit without posting to slack
+    # flagged_projects = []
     if len(flagged_projects) < 1:
         flagged_projects = [('No flagged projects', '-')]
+        return
 
     def chunk_list(lst: list, n: int) -> Generator[list, None, None]:
         n = max(n, 1)
@@ -359,7 +365,7 @@ def post_slack_message(
     logging.info(f'Total num rows: {len(all_rows)}')
 
     # Make first chunk the flagged projects, then chunk by size after
-    chunks = [flagged_projects, *chunk_list(all_rows, n_chunks)]
+    chunks = [flagged_projects]  # , *chunk_list(all_rows, n_chunks)]
 
     for i, chunk in enumerate(chunks):
         # Only post dashboard message on first chunk
@@ -465,3 +471,18 @@ def post_slack_chunk(blocks: list[dict], thread_ts: str | None = None):
 
 if __name__ == '__main__':
     gcp_cost_report(None, None)
+
+# import os
+# from flask import Flask
+
+# app = Flask(__name__)
+
+# @app.route('/')
+# def hello_world():
+#     gcp_cost_report(None, None)
+#     return 'Done'
+
+# if __name__ == '__main__':
+#     print('Starting server')
+#     port = int(os.environ.get('PORT', 8080))
+#     app.run(debug=True, host='0.0.0.0', port=port)

@@ -1,5 +1,6 @@
-google-cloud-bigquery==2.3.1
-google-cloud-secret-manager==2.0.0
-google-cloud-billing-budgets==1.1.1
-slackclient==2.9.1
-pytz==2024.1
+google-cloud-bigquery
+google-cloud-secret-manager
+google-cloud-billing-budgets
+slackclient
+pytz
+flask<3.0,>=1.0
