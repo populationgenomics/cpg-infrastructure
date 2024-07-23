@@ -6,7 +6,7 @@ import json
 import logging
 import os
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import lru_cache
 from math import ceil
 from typing import Any, Generator, Tuple
@@ -90,8 +90,10 @@ FROM
       project.id,
       currency,
       cost_category
-  ) day ON month.id = day.id AND month.currency = day.currency
-  AND month.cost_category = day.cost_category
+  ) day
+    ON month.id = day.id
+    AND month.currency = day.currency
+    AND month.cost_category = day.cost_category
 ORDER BY
   day DESC;
 """
@@ -148,16 +150,28 @@ def month_progress() -> float:
     return today.day / monthrange
 
 
+def get_days_in_this_month() -> int:
+    # Assuming TIMEZONE is defined elsewhere and is a timezone-aware object
+    current_date = datetime.now(tz=TIMEZONE)
+    current_year, current_month = current_date.year, current_date.month
+
+    # Get the number of days in the current month
+    _, days_in_this_month = calendar.monthrange(current_year, current_month)
+
+    return days_in_this_month
+
+
 def billing_link(project_id: str) -> str:
-    return BILLING_URL + f'&selectedData={project_id}'
+    yesterday = datetime.now(tz=TIMEZONE).date() - timedelta(days=1)
+    yesterday_string = yesterday.strftime('%Y-%m-%d')
+    return BILLING_URL + f'&selectedData={project_id}&start={yesterday_string}&end={yesterday_string}'
 
 
 def format_billing_row(
-    project_id: str | None,
     fields: dict,
     currency: str,
-    percent_threshold: float = 0,
-) -> tuple[SortKey, str | None, str, str]:
+    project_id: str | None = None,
+) -> tuple[SortKey, str | None, str]:
     """
     Formats the billing row for a project.
 
@@ -168,7 +182,7 @@ def format_billing_row(
         percent_threshold (float, optional): The threshold for percent used. Defaults to 0.
 
     Returns:
-        tuple[float, str, str, str]: The formatted billing row.
+        tuple[float, str, str]: The formatted billing row.
 
     """
 
@@ -177,20 +191,47 @@ def format_billing_row(
         if money is None:
             return None
         if money < TINY_VALUE_THRESHOLD:
-            return '<0.01'
+            return None
         if money > HUNDREDS_ROUNDING_THRESHOLD:
-            return f'{money:.0f}'
-        return f'{money:.2f}'
+            return f'${money:.0f}'
+        return f'${money:.2f}'
 
     # Helper function to format cost categories
-    def format_cost_categories(data: dict, currency: str) -> str:
+    def format_cost_categories(data: dict, currency: str, perc_used: float) -> str:
+        currency = ' ' + currency if 'AUD' not in currency else ''
+
+        # percentage used string
+        perc_used_str = ''
+        if perc_used:
+            perc_used_str = f' ({perc_used:.0%})'
+
+        suffix = currency + perc_used_str
+
+        # Otherwise, sort by cost category and format the values
         values = [
-            f'{k.capitalize()[0]}: {money_format(data[k])}'
+            money_format(data[k])
             for k in sorted(data.keys())
             if money_format(data[k]) is not None
         ]
-        currency = ' ' + currency if 'AUD' not in currency else ''
-        return ' '.join(values) + currency
+
+        if len(values) == 0:
+            return None
+        
+        values = [v if v else '$0' for v in values]
+
+        # Then join with a '+' and return
+        return ' + '.join(values) + suffix
+    
+    # Get the budget for the project if available
+    # Returns 0 and '' if no budget is available
+    budget_map = get_budget_map()
+    day_total = sum([x for x in fields['day'].values() if x])
+    daily_percent_used, monthly_percent_used = get_percent_used_from_budget(
+        budget=budget_map.get(project_id),
+        day_total=day_total,
+        month_total=fields['month'].get('total', 0),
+        currency=currency,
+    )
 
     # Format cost categories for daily and monthly costs
     url = billing_link(project_id)
@@ -198,23 +239,21 @@ def format_billing_row(
     if url:
         project_link = f'<{url}|{project_id}>'
 
-    row_str_1: str = format_cost_categories(fields['day'], currency)
-    row_str_2: str = format_cost_categories(fields['month'], currency)
+    row_str_1: str = format_cost_categories(fields['day'], currency, daily_percent_used)
+    row_str_2: str = format_cost_categories(fields['month'], currency, monthly_percent_used)
 
-    # Get the budget for the project if available
-    # Returns 0 and '' if no budget is available
-    budget_map = get_budget_map()
-    percent_used, percent_used_str = get_percent_used_from_budget(
-        budget_map.get(project_id),
-        fields['month']['total'],
-        currency,
+    # Work out if it's a flagged project or not
+    # To be flagged, the percent used must be above the threshold which is the % through
+    # the month.
+    # That or if the spending in the past days is over 2 days of the budget
+    flagged_project = (
+        monthly_percent_used is not None and monthly_percent_used >= month_progress()
+        ) or (
+        daily_percent_used is not None and daily_percent_used >= (2 / get_days_in_this_month())
     )
 
-    # Add percent used in brackets if available
-    row_str_2 += f' ({percent_used_str})' if percent_used_str else ''
-
     # potential formatting
-    if percent_used >= percent_threshold:
+    if flagged_project:
         # make fields bold
         project_link = f'*{project_link}*'
         if url:
@@ -227,7 +266,7 @@ def format_billing_row(
     # 1: sum of daily costs
     # 2: sum of monthly costs
     sort_key: SortKey = (
-        percent_used if percent_used >= percent_threshold else 0,
+        flagged_project,
         sum(x for x in fields['day'].values() if x),
         sum(x for x in fields['month'].values() if x),
     )
@@ -236,7 +275,7 @@ def format_billing_row(
     row_str_1 = row_str_1 if row_str_1 else 'No daily cost'
     row_str_2 = row_str_2 if row_str_2 else 'No monthly cost'
 
-    return sort_key, project_link, row_str_1, row_str_2
+    return sort_key, project_link, row_str_1 + ' | ' + row_str_2
 
 
 def num_chars(lst: list[str]) -> int:
@@ -258,11 +297,8 @@ def slack_bot_cost_report(request: flask.Request):  # noqa: ARG001
         lambda: defaultdict(lambda: defaultdict(float)),
     )
 
-    # Work out what percentage of the way we are through the month
-    percent_threshold = month_progress()
-
     # Slack message header and summary
-    project_summary: list[dict[str, Any]] = []
+    project_summary: dict[str, dict[str, Any]] = {}
     totals_summary: list[tuple[str, str]] = []
     grouped_rows: dict[str, dict[str, dict[str, dict[str, float]]]] = defaultdict(
         lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(float))),
@@ -276,26 +312,26 @@ def slack_bot_cost_report(request: flask.Request):  # noqa: ARG001
         cost_category = row['cost_category']
         last_month = row['month']
 
-        totals[currency][cost_category]['month'] += row['month']
+        totals[currency][cost_category]['month'] += row.get('month', 0)
 
         if row['day']:
-            totals[currency][cost_category]['day'] += row['day']
+            totals[currency][cost_category]['day'] += row.get('day', 0)
 
-        grouped_rows[project_id][currency]['day'][cost_category] = row['day']
-        grouped_rows[project_id][currency]['month']['total'] += row['month']
+        grouped_rows[project_id][currency]['day']['total'] += row.get('day', 0) or 0
+        grouped_rows[project_id][currency]['month']['total'] += row.get('month', 0)
 
     # Format the billing rows and add them to the project summary
     for project_id, by_currency in grouped_rows.items():
         for currency, row in by_currency.items():
-            sort_key, prj_id, row_str_1, row_str_2 = format_billing_row(
-                project_id,
+            sort_key, prj_link, row_str = format_billing_row(
                 row,
                 currency,
-                percent_threshold,
+                project_id,
             )
-            project_summary.append(
-                {'sort': sort_key, 'value': (prj_id, row_str_1 + ' / ' + row_str_2)},
-            )
+            project_summary[project_id] = {
+                'sort': sort_key,
+                'value': (prj_link, row_str)
+            }
 
     if len(totals) == 0:
         logging.info(
@@ -314,60 +350,72 @@ def slack_bot_cost_report(request: flask.Request):  # noqa: ARG001
             last_month = vals['month']
             day_total += last_day
             month_total += last_month
-            fields['day'][cost_category] = last_day
+            fields['day']['total'] += last_day
             fields['month']['total'] += last_month
 
         # totals don't have percent used
-        _, _, a, b = format_billing_row(None, fields, currency)
+        _, _, row_str = format_billing_row(fields, currency)
         totals_summary.append(
             (
                 f'<{BILLING_URL}|*All projects:*>',
-                a + ' / ' + b,
+                row_str
             ),
         )
 
-        post_slack_message(project_summary, totals_summary, percent_threshold)
+        post_slack_message(project_summary, totals_summary)
 
     return 'Success', 200
 
 
 def post_slack_message(
-    project_summary: list[dict],
+    project_summary: dict[str, dict[str, Any]],
     totals_summary: list[tuple[str, str]],
-    percent_threshold: float = 0,
 ):
+    """Post the slack message with the project summary and totals summary"""
     flagged_projects_header = [
         '*Flagged Projects*',
-        '*24h cost/Month cost (% used)*',
+        '*Previous Day (%) | Month (%)*',
     ]
     normal_header = [
         '*Projects*',
-        '*24h cost/Month cost (% used)*',
+        '*Previous Day (%) | Month (%)*',
     ]
     flagged_projects_header_message = (
-        f'We are {percent_threshold*100:.0f}% through the month. Costs exceeding '
-        'the budget are flagged below:'
+        f'We are {month_progress():.0%} through the month. Costs exceeding '
+        f'the monthly budget or daily limit ({2 * (1 / get_days_in_this_month()):.1%})'
+        ' are flagged below:'
     )
 
     # Processing the projects summary into flagged and not flagged
+    project_summary_keys_sorted = sorted(
+        project_summary.keys(),
+        key=lambda x: project_summary[x]['sort'],
+        reverse=True
+    )
     flagged_projects = [
-        x['value']
-        for x in sorted(project_summary, key=lambda x: x['sort'], reverse=True)
-        if x['sort'][0]
+        project_summary[x]['value']
+        for x in project_summary_keys_sorted
+        if project_summary[x]['sort'][0]
     ]
+
+    # Sort the projects by the sort key
     sorted_projects = [
-        x['value']
-        for x in sorted(project_summary, key=lambda x: x['sort'], reverse=True)
-        if not x['sort'][0]
+        project_summary[x]['value']
+        for x in project_summary_keys_sorted
+        if not project_summary[x]['sort'][0]
     ]
 
-    all_rows = [*totals_summary, *sorted_projects]
-
-    # If there are no flagged projects, exit without posting to slack
     is_monday = datetime.now(tz=TIMEZONE).weekday() == 0
+
+    # Only post on Mondays or when a project gets flagged
     if not is_monday and len(flagged_projects) < 1:
         flagged_projects = [('No flagged projects', '-')]
-        return  # Only post on Mondays or when a project gets flagged
+        return
+    
+    # Next, if we are posting today add hail to the flagged projects at the bottom
+    hail_project = [x for x in project_summary_keys_sorted if 'hail' in x].pop()
+    flagged_projects.append(project_summary[hail_project]['value'])
+    all_rows = [*totals_summary, *sorted_projects]
 
     def chunk_list(lst: list, n: int) -> Generator[list, None, None]:
         n = max(n, 1)
@@ -387,6 +435,8 @@ def post_slack_message(
 
     # Make first chunk the flagged projects, then chunk by size after
     chunks = [flagged_projects]
+
+    # Only add all projects on a Monday
     if is_monday:
         chunks = [flagged_projects, *chunk_list(all_rows, n_chunks)]
 
@@ -444,44 +494,45 @@ def post_single_slack_chunk(
 
 
 def get_percent_used_from_budget(
-    b: budget.ListBudgetsResponse | None,
-    last_month_total: float,
-    currency: str,
-) -> tuple[float | None, str]:
+    budget: budget.ListBudgetsResponse | None = None,
+    day_total: float = None,
+    month_total: float = None,
+    currency: str = None,
+) -> tuple[float | None, float | None]:
     """Get percent_used as a string from GCP billing budget"""
-    percent_used = None
-    percent_used_str = ''
+    if not budget:
+        return None, None
 
-    if not b:
-        return None, ''
-
-    inner_amount = b.amount.specified_amount
+    inner_amount = budget.amount.specified_amount
     if not inner_amount:
-        return None, ''
+        return None, None
     budget_currency = inner_amount.currency_code
+
+    if budget_currency != currency:
+        return None, None
 
     # 'units' is an int64, which is represented as a string in JSON,
     # this can be safely stored in Python3: https://stackoverflow.com/a/46699498
     budget_total = try_cast_int(inner_amount.units)
-    monthly_used_float = try_cast_float(last_month_total)
+    daily_used_float = try_cast_float(day_total)
+    monthly_used_float = try_cast_float(month_total)
 
-    if budget_total and monthly_used_float:
-        percent_used = monthly_used_float / budget_total
-        percent_used_str = f'{round(percent_used * 100)}%'
-        if budget_currency != currency:
-            # there's a currency mismatch
-            percent_used_str += (
-                f' (mismatch currency, budget: {budget_currency} | total: {currency})'
-            )
-
-    else:
+    if None in (budget_total, daily_used_float, monthly_used_float):
         logging.warning(
             'Couldn\'t determine the budget amount from the budget, '
             f'inner_amount.units: {inner_amount.units}, '
+            f'daily_used_float: {daily_used_float}, '
             f'monthly_used_float: {monthly_used_float}',
         )
+        return None, None
 
-    return percent_used, percent_used_str
+    # Inputs valid and converted to float
+    # Now calculate the percent used daily and monthly
+    # days_in_month = get_days_in_this_month()
+    day_percent_used = daily_used_float / budget_total
+    month_percent_used = monthly_used_float / budget_total
+
+    return day_percent_used, month_percent_used
 
 
 def post_slack_chunk(blocks: list[dict], thread_ts: str | None = None):
