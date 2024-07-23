@@ -137,18 +137,26 @@ class TestParseValues(TestCase):
         dtype = CPGInfrastructureConfig.Billing | None
         billing_config = {
             'coordinator_machine_account': 'aggregate-billing@iam.gserviceaccount.com',
-            'billing_account_id': '01D012-20A6A2-CBD343',
             'hail_aggregator_username': 'billing-aggregator',
             'gcp': {
                 'account_id': '<account-id>',
                 'project_id': '<project-id>',
+                'source_bq_table': 'billing.gcp_billing_export_v1_ABCDEF_123456_789ABC',
             },
-            # TODO: adjust final values before committing
-            'slack_bot': {
-                'machine_account': 'gcp-cost-control@billing-admin-290403.iam.gserviceaccount.com',
-                'slack_channel': 'sabrina-dev',
+            'gcp_cost_reporting': {
+                'machine_account': 'gcp-cost-control@billing-project.iam.gserviceaccount.com',
+                'slack_channel': 'test-dev',
                 'timezone': 'Australia/Sydney',
             },
+            'aggregator': {
+                'billing_sheet_id': '1a2b3c4d5e6f7g8h9i0j',
+                'destination_bq_table': 'billing-project.billing_aggregate.aggregate',
+                'functions': ['gcp', 'aws', 'azure'],
+                'interval_hours': 4,
+                'monthly_summary_table': 'billing-project.billing_aggregate.aggregate_monthly_cost',
+                'slack_channel': 'software-alerts',
+                'slack_token_secret_name': 'slack-aggregator-token',
+            }
         }
         _ = try_parse_value_as_type(billing_config, dtype)
 
