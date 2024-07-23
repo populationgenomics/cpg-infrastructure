@@ -35,7 +35,6 @@ from cpg_utils.cloud import read_secret
 
 PATH_TO_AGGREGATE_SOURCE_CODE = os.path.join(os.path.dirname(__file__), 'aggregate')
 
-
 def get_file_content(filename: str) -> str:
     """Read content of the file"""
     with open(filename, encoding='utf-8') as file:
@@ -134,26 +133,8 @@ class BillingAggregator(CpgInfrastructurePlugin):
             description='Slack notification channel for all cost aggregator functions',
             project=self.config.billing.gcp.project_id,
         )
-
-    @cached_property
-    def source_archive(self):
-        # The Cloud Function source code itself needs to be zipped up into an
-        # archive, which we create using the pulumi.AssetArchive primitive.
-        archive = archive_folder(PATH_TO_AGGREGATE_SOURCE_CODE)
-
-        # Create the single Cloud Storage object, which contains the source code
-        return gcp.storage.BucketObject(
-            'billing-aggregator-source-code',
-            # updating the source archive object does not trigger the cloud function
-            # to actually updating the source because it's based on the name,
-            # allow Pulumi to create a new name each time it gets updated
-            # name=f'aggregator-source-code.zip',
-            bucket=self.source_bucket.name,
-            source=archive,
-            opts=pulumi.ResourceOptions(replace_on_changes=['*']),
-        )
-    
-    def create_source_archive(self, resource_name: str, path_to_folder: str, ):
+        
+    def create_source_archive(self, resource_name: str, bucket_name: str, path_to_folder: str, ):
         # The Cloud Function source code itself needs to be zipped up into an
         # archive, which we create using the pulumi.AssetArchive primitive.
         archive = archive_folder(path_to_folder)
@@ -161,7 +142,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
         # Create the single Cloud Storage object, which contains the source code
         return gcp.storage.BucketObject(
             resource_name,
-            bucket=self.source_bucket.name,
+            bucket=bucket_name,
             source=archive,
             opts=pulumi.ResourceOptions(replace_on_changes=['*']),
         )
@@ -176,7 +157,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
         project_id = self.config.billing.gcp.project_id
         bigquery_billing_table = self.config.billing.gcp.source_bq_table
         billing_account_id = self.config.billing.gcp.account_id
-        location = self.config.gcp.region
+        region = self.config.gcp.region
 
         time_zone = self.config.billing.gcp_cost_reporting.timezone
         service_account = self.config.billing.gcp_cost_reporting.machine_account
@@ -193,20 +174,11 @@ class BillingAggregator(CpgInfrastructurePlugin):
         time zone, e.g. `Australia/Sydney`.
         """
 
-        # Create Pub/Sub topic
-        topic = gcp.pubsub.Topic(resource_name='gcp-cost-reporting', project=project_id)
-
-        # Create Cloud Scheduler job
-        job = gcp.cloudscheduler.Job(
-            'gcp-cost-reporting-job',
-            project=project_id,
-            location=location,
-            description='Triggers a daily cost report Cloud Function',
-            schedule='0 9 * * *',
-            time_zone=time_zone,
-            pubsub_target=gcp.cloudscheduler.JobPubsubTargetArgs(
-                topic_name=topic.name,
-            ),
+        # Create source archive
+        source_archive = self.create_source_archive(
+            'billing-aggregator-source-code',
+            self.source_bucket.name,
+            os.path.join(os.path.dirname(__file__), 'gcp_cost_report_slack_bot')
         )
 
         # Deploy Cloud Function
@@ -216,6 +188,10 @@ class BillingAggregator(CpgInfrastructurePlugin):
             project=self.config.billing.gcp.project_id,
             service_account=service_account,
             notification_channel=self.slack_channel,
+            source_bucket=self.source_bucket.name,
+            source_archive_object=source_archive,
+            source_file='main.py',
+            entry_point='slack_bot_cost_report',
             env={
                 'QUERY_TIME_ZONE': time_zone,
                 'SLACK_CHANNEL': slack_channel,
@@ -223,15 +199,36 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 'BILLING_ACCOUNT_ID': billing_account_id,
             },
             memory='256M',
-
-            source_bucket=None,
-            source_archive_object=None,
-            source_file='main.py',
         )
 
-        pulumi.export('topic_name', topic.name)
-        pulumi.export('scheduler_job_name', job.name)
-        pulumi.export('cloud_function_name', function.name)
+        # Create the http target to trigger the cloud function directly
+        http_function_target = gcp.cloudscheduler.JobHttpTargetArgs(
+            uri=function.service_config.uri,
+            http_method='POST',
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            oidc_token=gcp.cloudscheduler.JobHttpTargetOidcTokenArgs(
+                audience=function.service_config.apply(
+                    lambda service_config: f"{service_config.uri}/",
+                ),
+                service_account_email=service_account,
+            ),
+        ),
+
+        # Create Cloud Scheduler job
+        cron_job = gcp.cloudscheduler.Job(
+            'gcp-cost-reporting-job',
+            project=project_id,
+            region=region,
+            time_zone=time_zone,
+            description='Triggers a daily cost report Cloud Function',
+            schedule='0 9 * * *',
+            http_target=http_function_target,
+        )
+
+        pulumi.export('gcp_cost_reporting_cloud_function', function)
+        pulumi.export('gcp_cost_reporting_cloud_scheduler_job', cron_job)
 
     def setup_aggregator_functions(self):
         """Setup hourly aggregator functions"""
@@ -259,6 +256,14 @@ class BillingAggregator(CpgInfrastructurePlugin):
             if function == 'seqr':
                 # 2GB is not enough for seqr
                 memory = '2560M'
+
+            # Create the source archive
+            source_archive = self.create_source_archive(
+                'billing-aggregator-source-code', 
+                self.source_bucket.name,
+                PATH_TO_AGGREGATE_SOURCE_CODE
+            )
+
             # Create the function, the trigger and subscription.
             fxn, _ = self.create_cloud_function(
                 resource_name=f'billing-aggregator-{function}-billing-function',
@@ -266,7 +271,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 source_file=f'{function}.py',
                 service_account=self.config.billing.coordinator_machine_account,
                 soure_bucket=self.source_bucket.name,
-                source_archive_object=self.source_archive,
+                source_archive_object=source_archive,
                 notification_channel=self.slack_channel,
                 memory=memory,
                 cpu=cpu,
@@ -317,6 +322,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
         env: dict,
         source_bucket: str | None = None,
         source_file: str | None = None,
+        entry_point: str | None = 'from_request',
         project: str | None = None,
         memory: str = '512M',
         cpu: int | None = None,
@@ -337,7 +343,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
             resource_name,
             build_config=gcp.cloudfunctionsv2.FunctionBuildConfigArgs(
                 runtime='python311',
-                entry_point='from_request',
+                entry_point=entry_point,
                 environment_variables=build_environment_variables,
                 # this one is set on an output, so specifying it keeps the function
                 # from being updated, or appearing to update
