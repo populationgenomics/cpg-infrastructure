@@ -206,10 +206,6 @@ class CPGInfrastructureConfig(DeserializableDataclass):
             slack_channel: str
             timezone: str
 
-        @dataclasses.dataclass(frozen=True)
-        class GCPCostControl(DeserializableDataclass):
-            """Config required for the GCP cost control"""
-
         gcp: GCP
         coordinator_machine_account: str | None = None
         aggregator: GCPAggregator | None = None

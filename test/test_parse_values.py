@@ -156,7 +156,7 @@ class TestParseValues(TestCase):
                 'monthly_summary_table': 'billing-project.billing_aggregate.aggregate_monthly_cost',
                 'slack_channel': 'software-alerts',
                 'slack_token_secret_name': 'slack-aggregator-token',
-            }
+            },
         }
         _ = try_parse_value_as_type(billing_config, dtype)
 
