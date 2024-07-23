@@ -167,20 +167,9 @@ class BillingAggregator(CpgInfrastructurePlugin):
         service_account = self.config.billing.gcp_cost_reporting.machine_account
         slack_channel = self.config.billing.gcp_cost_reporting.slack_channel
 
-        """
-        1. Create a new Pub/Sub topic in the `billing-admin-290403` project, named
-        `cost-report`.
-        1. Create a Cloud Scheduler job that posts a Pub/Sub message to the
-        `cost-report` topic, e.g. using a daily schedule like `0 9 * * *`.
-        The payload can be abitrary, as it is ignored in the Cloud Function.
-        1. Install the Cloud Function that gets triggered when a message to the
-        `cost-report` Pub/Sub topic is posted. Set `$QUERY_TIME_ZONE` to your local
-        time zone, e.g. `Australia/Sydney`.
-        """
-
         # Create source archive
         source_archive = self.create_source_archive(
-            'billing-aggregator-source-code',
+            'billing-gcp-cost-report-source-code',
             self.source_bucket.name,
             os.path.join(os.path.dirname(__file__), 'gcp_cost_report_slack_bot'),
         )
@@ -276,7 +265,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 name=f'Aggregator {function.capitalize()}',
                 source_file=f'{function}.py',
                 service_account=self.config.billing.coordinator_machine_account,
-                soure_bucket=self.source_bucket.name,
+                source_bucket=self.source_bucket.name,
                 source_archive_object=source_archive,
                 notification_channel=self.slack_channel,
                 memory=memory,
