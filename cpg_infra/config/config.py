@@ -186,31 +186,34 @@ class CPGInfrastructureConfig(DeserializableDataclass):
 
             project_id: str
             account_id: str
+            source_bq_table: str | None = None
 
         @dataclasses.dataclass(frozen=True)
         class GCPAggregator(DeserializableDataclass):
-            source_bq_table: str
             destination_bq_table: str
             slack_channel: str
-            slack_token_secret_name: str  # created in gcp.billing_project_id
+            slack_token_secret_name: str
             functions: list[str]
             billing_sheet_id: str | None = None
             monthly_summary_table: str | None = None
             interval_hours: int = 4
 
         @dataclasses.dataclass(frozen=True)
-        class SlackBot(DeserializableDataclass):
-            """Details of the SLACK BOT account"""
-
+        class GCPCostReporting(DeserializableDataclass):
+            """Config required for the GCP cost reporting"""
             machine_account: str
             slack_channel: str
             timezone: str
 
+        @dataclasses.dataclass(frozen=True)
+        class GCPCostControl(DeserializableDataclass):
+            """Config required for the GCP cost control"""
+            pass
+
         gcp: GCP
-        billing_account_id: str | None = None
         coordinator_machine_account: str | None = None
         aggregator: GCPAggregator | None = None
-        slack_bot: SlackBot | None = None
+        gcp_cost_reporting: GCPCostReporting | None = None
         hail_aggregator_username: str | None = None
 
     # used in the gcp.organizations.get_organization(domain=self.config.domain) call
