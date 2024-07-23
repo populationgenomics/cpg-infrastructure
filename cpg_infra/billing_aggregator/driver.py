@@ -28,12 +28,12 @@ from functools import cached_property
 import pulumi
 import pulumi_gcp as gcp
 
-from cpg_infra.billing_aggregator.aggregate.utils import GCP_BILLING_BQ_TABLE
 from cpg_infra.plugin import CpgInfrastructurePlugin
 from cpg_infra.utils import archive_folder
 from cpg_utils.cloud import read_secret
 
 PATH_TO_AGGREGATE_SOURCE_CODE = os.path.join(os.path.dirname(__file__), 'aggregate')
+
 
 def get_file_content(filename: str) -> str:
     """Read content of the file"""
@@ -59,7 +59,6 @@ class BillingAggregator(CpgInfrastructurePlugin):
         self.setup_materialized_views()
 
         self.setup_gcp_cost_reporting()
-
 
     @cached_property
     def functions_service(self):
@@ -133,8 +132,13 @@ class BillingAggregator(CpgInfrastructurePlugin):
             description='Slack notification channel for all cost aggregator functions',
             project=self.config.billing.gcp.project_id,
         )
-        
-    def create_source_archive(self, resource_name: str, bucket_name: str, path_to_folder: str, ):
+
+    def create_source_archive(
+        self,
+        resource_name: str,
+        bucket_name: str,
+        path_to_folder: str,
+    ):
         # The Cloud Function source code itself needs to be zipped up into an
         # archive, which we create using the pulumi.AssetArchive primitive.
         archive = archive_folder(path_to_folder)
@@ -178,7 +182,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
         source_archive = self.create_source_archive(
             'billing-aggregator-source-code',
             self.source_bucket.name,
-            os.path.join(os.path.dirname(__file__), 'gcp_cost_report_slack_bot')
+            os.path.join(os.path.dirname(__file__), 'gcp_cost_report_slack_bot'),
         )
 
         # Deploy Cloud Function
@@ -202,19 +206,21 @@ class BillingAggregator(CpgInfrastructurePlugin):
         )
 
         # Create the http target to trigger the cloud function directly
-        http_function_target = gcp.cloudscheduler.JobHttpTargetArgs(
-            uri=function.service_config.uri,
-            http_method='POST',
-            headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-            },
-            oidc_token=gcp.cloudscheduler.JobHttpTargetOidcTokenArgs(
-                audience=function.service_config.apply(
-                    lambda service_config: f"{service_config.uri}/",
+        http_function_target = (
+            gcp.cloudscheduler.JobHttpTargetArgs(
+                uri=function.service_config.uri,
+                http_method='POST',
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                oidc_token=gcp.cloudscheduler.JobHttpTargetOidcTokenArgs(
+                    audience=function.service_config.apply(
+                        lambda service_config: f"{service_config.uri}/",
+                    ),
+                    service_account_email=service_account,
                 ),
-                service_account_email=service_account,
             ),
-        ),
+        )
 
         # Create Cloud Scheduler job
         cron_job = gcp.cloudscheduler.Job(
@@ -259,9 +265,9 @@ class BillingAggregator(CpgInfrastructurePlugin):
 
             # Create the source archive
             source_archive = self.create_source_archive(
-                'billing-aggregator-source-code', 
+                'billing-aggregator-source-code',
                 self.source_bucket.name,
-                PATH_TO_AGGREGATE_SOURCE_CODE
+                PATH_TO_AGGREGATE_SOURCE_CODE,
             )
 
             # Create the function, the trigger and subscription.
@@ -397,7 +403,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
             display_name='Function warning/error',
         )
 
-        alert_policy_name = f'billing-{name.lower().replae(' ', '-')}-alert',
+        alert_policy_name = 'billing-' + name.lower().replace(' ', '-') + '-alert'
         alert_policy = gcp.monitoring.AlertPolicy(
             alert_policy_name,
             display_name=f'{name.capitalize()} Billing Function Error Alert',

@@ -2,22 +2,22 @@
 """A Cloud Function to send a daily GCP cost report to Slack."""
 
 import calendar
-from functools import lru_cache
 import json
 import logging
 import os
 from collections import defaultdict
 from datetime import datetime
+from functools import lru_cache
 from math import ceil
 from typing import Any, Generator, Tuple
 
 import flask
 import functions_framework
-from pytz import timezone
 import slack
 from google.auth import default
 from google.cloud import bigquery, secretmanager
 from google.cloud.billing import budgets_v1 as budget
+from pytz import timezone
 from slack.errors import SlackApiError
 
 # Custom types
@@ -117,6 +117,7 @@ slack_client = slack.WebClient(token=slack_token)
 bigquery_client = bigquery.Client()
 budget_client = budget.BudgetServiceClient()
 
+
 # Cache the budgets for the billing account.
 @lru_cache
 def get_budget_map():
@@ -200,27 +201,31 @@ def format_billing_row(
     row_str_1: str = format_cost_categories(fields['day'], currency)
     row_str_2: str = format_cost_categories(fields['month'], currency)
 
-    percent_used: float = 0
-
+    # Get the budget for the project if available
+    # Returns 0 and '' if no budget is available
     budget_map = get_budget_map()
-    if project_id in budget_map:
-        percent_used, percent_used_str = get_percent_used_from_budget(
-            budget_map[project_id],
-            fields['month']['total'],
-            currency,
-        )
-        if percent_used_str:
-            row_str_2 += f' ({percent_used_str})'
+    percent_used, percent_used_str = get_percent_used_from_budget(
+        budget_map.get(project_id),
+        fields['month']['total'],
+        currency,
+    )
 
-        # potential formatting
-        if percent_used is not None and percent_used >= percent_threshold:
-            # make fields bold
-            project_link = f'*{project_link}*'
-            if url:
-                project_link = f'<{url}|*{project_id}*>'
-            row_str_1 = f'*{row_str_1}*'
-            row_str_2 = f'*{row_str_2}*'
+    # Add percent used in brackets if available
+    row_str_2 += f' ({percent_used_str})' if percent_used_str else ''
 
+    # potential formatting
+    if percent_used >= percent_threshold:
+        # make fields bold
+        project_link = f'*{project_link}*'
+        if url:
+            project_link = f'<{url}|*{project_id}*>'
+        row_str_1 = f'*{row_str_1}*'
+        row_str_2 = f'*{row_str_2}*'
+
+    # The sort key is a tuple of the percent used, daily cost, and monthly cost
+    # 0: percent used if above threshold, else 0
+    # 1: sum of daily costs
+    # 2: sum of monthly costs
     sort_key: SortKey = (
         percent_used if percent_used >= percent_threshold else 0,
         sum(x for x in fields['day'].values() if x),
@@ -239,7 +244,7 @@ def num_chars(lst: list[str]) -> int:
 
 
 @functions_framework.http
-def slack_bot_cost_report(request: flask.Request):  # noqa: ARG001,ANN001
+def slack_bot_cost_report(request: flask.Request):  # noqa: ARG001
     """
     Main entry point for the Cloud Function.
 
@@ -249,15 +254,17 @@ def slack_bot_cost_report(request: flask.Request):  # noqa: ARG001,ANN001
     and sends it as a message to Slack.
     """
 
-    totals = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))
+    totals: dict[str, dict[str, dict[str, float]]] = defaultdict(
+        lambda: defaultdict(lambda: defaultdict(float)),
+    )
 
     # Work out what percentage of the way we are through the month
     percent_threshold = month_progress()
 
     # Slack message header and summary
-    project_summary: list[tuple[str, str]] = []
+    project_summary: list[dict[str, Any]] = []
     totals_summary: list[tuple[str, str]] = []
-    grouped_rows = defaultdict(
+    grouped_rows: dict[str, dict[str, dict[str, dict[str, float]]]] = defaultdict(
         lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(float))),
     )
 
@@ -298,9 +305,9 @@ def slack_bot_cost_report(request: flask.Request):  # noqa: ARG001,ANN001
 
     # Format the totals and add them to the totals summary
     for currency, by_category in totals.items():
-        fields = defaultdict(lambda: defaultdict(float))
-        day_total = 0
-        month_total = 0
+        fields: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+        day_total: float = 0
+        month_total: float = 0
 
         for cost_category, vals in by_category.items():
             last_day = vals['day']
@@ -326,10 +333,9 @@ def slack_bot_cost_report(request: flask.Request):  # noqa: ARG001,ANN001
 
 def post_slack_message(
     project_summary: list[dict],
-    totals_summary: list[dict],
+    totals_summary: list[tuple[str, str]],
     percent_threshold: float = 0,
 ):
-    
     flagged_projects_header = [
         '*Flagged Projects*',
         '*24h cost/Month cost (% used)*',
@@ -361,7 +367,7 @@ def post_slack_message(
     is_monday = datetime.now(tz=TIMEZONE).weekday() == 0
     if not is_monday and len(flagged_projects) < 1:
         flagged_projects = [('No flagged projects', '-')]
-        return # Only post on Mondays or when a project gets flagged
+        return  # Only post on Mondays or when a project gets flagged
 
     def chunk_list(lst: list, n: int) -> Generator[list, None, None]:
         n = max(n, 1)
@@ -384,10 +390,10 @@ def post_slack_message(
     if is_monday:
         chunks = [flagged_projects, *chunk_list(all_rows, n_chunks)]
 
-    posted_flagged = True if len(flagged_projects) < 1 else False
+    posted_flagged = len(flagged_projects) < 1
     posted_header = False
 
-    for i, chunk in enumerate(chunks):
+    for chunk in chunks:
         # Only post dashboard message on first chunk
         # and switch to 'Projects' not 'Flagged Projects' after first chunk
 
@@ -410,7 +416,7 @@ def post_slack_message(
 
 def post_single_slack_chunk(
     slack_message: list[tuple[str, str]],
-    header_message: dict[str, str],
+    header_message: str,
 ):
     """Post a single chunk of the slack message"""
 
@@ -438,13 +444,17 @@ def post_single_slack_chunk(
 
 
 def get_percent_used_from_budget(
-    b: budget.ListBudgetsResponse,
+    b: budget.ListBudgetsResponse | None,
     last_month_total: float,
     currency: str,
 ) -> tuple[float | None, str]:
     """Get percent_used as a string from GCP billing budget"""
     percent_used = None
     percent_used_str = ''
+
+    if not b:
+        return None, ''
+
     inner_amount = b.amount.specified_amount
     if not inner_amount:
         return None, ''

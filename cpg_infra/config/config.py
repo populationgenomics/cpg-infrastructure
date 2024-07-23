@@ -201,6 +201,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         @dataclasses.dataclass(frozen=True)
         class GCPCostReporting(DeserializableDataclass):
             """Config required for the GCP cost reporting"""
+
             machine_account: str
             slack_channel: str
             timezone: str
@@ -208,7 +209,6 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         @dataclasses.dataclass(frozen=True)
         class GCPCostControl(DeserializableDataclass):
             """Config required for the GCP cost control"""
-            pass
 
         gcp: GCP
         coordinator_machine_account: str | None = None
