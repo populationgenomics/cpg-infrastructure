@@ -158,9 +158,9 @@ class BillingAggregator(CpgInfrastructurePlugin):
         it exceeds the budget
         """
         region = self.config.gcp.region
-        service_account = self.config.billing.gcp_cost_control.machine_account
-        slack_channel = self.config.billing.gcp_cost_control.slack_channel
-        pubsub_topic_name = self.config.billing.gcp_cost_control.pubsub_topic
+        service_account = self.config.billing.gcp_cost_controls.machine_account
+        slack_channel = self.config.billing.gcp_cost_controls.slack_channel
+        pubsub_topic_name = self.config.billing.gcp_cost_controls.pubsub_topic
 
         # Create source archive
         source_archive = self.create_source_archive(
@@ -203,9 +203,9 @@ class BillingAggregator(CpgInfrastructurePlugin):
         billing_account_id = self.config.billing.gcp.account_id
         region = self.config.gcp.region
 
-        time_zone = self.config.billing.gcp_cost_reporting.timezone
-        service_account = self.config.billing.gcp_cost_reporting.machine_account
-        slack_channel = self.config.billing.gcp_cost_reporting.slack_channel
+        time_zone = self.config.billing.gcp_cost_controls.timezone
+        service_account = self.config.billing.gcp_cost_controls.machine_account
+        slack_channel = self.config.billing.gcp_cost_controls.slack_channel
 
         # Create source archive
         source_archive = self.create_source_archive(

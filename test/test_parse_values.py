@@ -143,12 +143,8 @@ class TestParseValues(TestCase):
                 'project_id': '<project-id>',
                 'source_bq_table': 'billing.gcp_billing_export_v1_ABCDEF_123456_789ABC',
             },
-            'gcp_cost_reporting': {
-                'machine_account': 'gcp-cost-control@billing-project.iam.gserviceaccount.com',
-                'slack_channel': 'test-dev',
+            'gcp_cost_controls': {
                 'timezone': 'Australia/Sydney',
-            },
-            'gcp_cost_control': {
                 'machine_account': 'gcp-cost-control@billing-project.iam.gserviceaccount.com',
                 'slack_channel': 'test-dev',
                 'pubsub_topic': 'topic',

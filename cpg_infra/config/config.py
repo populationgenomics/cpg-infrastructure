@@ -199,26 +199,18 @@ class CPGInfrastructureConfig(DeserializableDataclass):
             interval_hours: int = 4
 
         @dataclasses.dataclass(frozen=True)
-        class GCPCostReporting(DeserializableDataclass):
-            """Config required for the GCP cost reporting"""
-
-            machine_account: str
-            slack_channel: str
-            timezone: str
-
-        @dataclasses.dataclass(frozen=True)
-        class GCPCostControl(DeserializableDataclass):
+        class GCPCostControls(DeserializableDataclass):
             """Config required for the GCP cost control that disables billing"""
 
             machine_account: str
             slack_channel: str
             pubsub_topic: str
+            timezone: str
 
         gcp: GCP
         coordinator_machine_account: str | None = None
         aggregator: GCPAggregator | None = None
-        gcp_cost_reporting: GCPCostReporting | None = None
-        gcp_cost_control: GCPCostControl | None = None
+        gcp_cost_controls: GCPCostControls | None = None
         hail_aggregator_username: str | None = None
 
     # used in the gcp.organizations.get_organization(domain=self.config.domain) call
