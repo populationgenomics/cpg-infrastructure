@@ -58,6 +58,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
         _ = self.aggregate_table
         self.setup_materialized_views()
 
+        self.setup_gcp_cost_control()
         self.setup_gcp_cost_reporting()
 
     @cached_property
@@ -150,6 +151,48 @@ class BillingAggregator(CpgInfrastructurePlugin):
             source=archive,
             opts=pulumi.ResourceOptions(replace_on_changes=['*']),
         )
+    
+    
+    def setup_gcp_cost_control(self):
+        """
+            Create the gcp cost control cloud function to cut off billing when
+            it exceeds the budget
+        """
+        region = self.config.gcp.region
+        service_account = self.config.billing.gcp_cost_control.machine_account
+        slack_channel = self.config.billing.gcp_cost_control.slack_channel
+        pubsub_topic_name = self.config.billing.gcp_cost_control.pubsub_topic
+
+        # Create source archive
+        source_archive = self.create_source_archive(
+            'billing-gcp-cost-report-source-code',
+            self.source_bucket.name,
+            os.path.join(os.path.dirname(__file__), 'gcp_cost_control'),
+        )
+
+        # Deploy Cloud Function
+        function = gcp.cloudfunctionsv2.Function(
+            'gcp-cost-control',
+            service_account_email=service_account,
+            source_archive_bucket=self.source_bucket.name,
+            source_archive_object=source_archive,
+            source_file='main.py',
+            entry_point='gcp_cost_control',
+            runtime='python311',
+            available_memory_mb=256,
+            environment_variables={
+                'SLACK_CHANNEL': slack_channel,
+            },
+            event_trigger=gcp.cloudfunctionsv2.FunctionEventTriggerArgs(
+                event_type='google.pubsub.topic.publish',
+                pubsub_topic=pubsub_topic_name,
+                trigger_region=region,
+            ),
+        )
+
+        pulumi.export('gcp_cost_control_cloud_function', function)
+
+
 
     def setup_gcp_cost_reporting(self):
         """
@@ -224,6 +267,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
 
         pulumi.export('gcp_cost_reporting_cloud_function', function)
         pulumi.export('gcp_cost_reporting_cloud_scheduler_job', cron_job)
+
 
     def setup_aggregator_functions(self):
         """Setup hourly aggregator functions"""

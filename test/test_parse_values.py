@@ -148,6 +148,11 @@ class TestParseValues(TestCase):
                 'slack_channel': 'test-dev',
                 'timezone': 'Australia/Sydney',
             },
+            'gcp_cost_control': {
+                'machine_account': 'gcp-cost-control@billing-project.iam.gserviceaccount.com',
+                'slack_channel': 'test-dev',
+                'pubsub_topic': 'topic',
+            },
             'aggregator': {
                 'billing_sheet_id': '1a2b3c4d5e6f7g8h9i0j',
                 'destination_bq_table': 'billing-project.billing_aggregate.aggregate',
