@@ -151,12 +151,11 @@ class BillingAggregator(CpgInfrastructurePlugin):
             source=archive,
             opts=pulumi.ResourceOptions(replace_on_changes=['*']),
         )
-    
-    
+
     def setup_gcp_cost_control(self):
         """
-            Create the gcp cost control cloud function to cut off billing when
-            it exceeds the budget
+        Create the gcp cost control cloud function to cut off billing when
+        it exceeds the budget
         """
         region = self.config.gcp.region
         service_account = self.config.billing.gcp_cost_control.machine_account
@@ -191,8 +190,6 @@ class BillingAggregator(CpgInfrastructurePlugin):
         )
 
         pulumi.export('gcp_cost_control_cloud_function', function)
-
-
 
     def setup_gcp_cost_reporting(self):
         """
@@ -267,7 +264,6 @@ class BillingAggregator(CpgInfrastructurePlugin):
 
         pulumi.export('gcp_cost_reporting_cloud_function', function)
         pulumi.export('gcp_cost_reporting_cloud_scheduler_job', cron_job)
-
 
     def setup_aggregator_functions(self):
         """Setup hourly aggregator functions"""
