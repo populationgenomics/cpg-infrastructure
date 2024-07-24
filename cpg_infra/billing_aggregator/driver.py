@@ -164,29 +164,37 @@ class BillingAggregator(CpgInfrastructurePlugin):
 
         # Create source archive
         source_archive = self.create_source_archive(
-            'billing-gcp-cost-report-source-code',
+            'billing-gcp-cost-control-source-code',
             self.source_bucket.name,
             os.path.join(os.path.dirname(__file__), 'gcp_cost_control'),
         )
 
         # Deploy Cloud Function
+        build_config = gcp.cloudfunctionsv2.FunctionBuildConfigArgs(
+            entry_point='gcp_cost_control',
+            runtime='python311',
+            environment_variables={
+                'GOOGLE_FUNCTION_SOURCE': 'main.py',
+            },
+            source=gcp.cloudfunctionsv2.FunctionSourceArgs(
+                storage_source=gcp.cloudfunctionsv2.FunctionStorageSourceArgs(
+                    bucket=self.source_bucket.name,
+                    source=source_archive,
+                ),
+            ),
+        )
         function = gcp.cloudfunctionsv2.Function(
             'gcp-cost-control',
             service_account_email=service_account,
-            source_archive_bucket=self.source_bucket.name,
-            source_archive_object=source_archive,
-            source_file='main.py',
-            entry_point='gcp_cost_control',
-            runtime='python311',
-            available_memory_mb=256,
+            build_config=build_config,
             environment_variables={
                 'SLACK_CHANNEL': slack_channel,
             },
             event_trigger=gcp.cloudfunctionsv2.FunctionEventTriggerArgs(
                 event_type='google.pubsub.topic.publish',
                 pubsub_topic=pubsub_topic_name,
-                trigger_region=region,
             ),
+            available_memory_mb=256,
         )
 
         pulumi.export('gcp_cost_control_cloud_function', function)
