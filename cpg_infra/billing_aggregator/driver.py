@@ -241,6 +241,13 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 f'two runs within the interval period',
             )
 
+        # Create the source archive
+        source_archive = self.create_source_archive(
+            'billing-aggregator-functions-source-code',
+            self.source_bucket.name,
+            PATH_TO_AGGREGATE_SOURCE_CODE,
+        )
+
         for function in self.config.billing.aggregator.functions:
             # Balance CPU by this table:
             # https://cloud.google.com/functions/docs/configuring/memory
@@ -251,13 +258,6 @@ class BillingAggregator(CpgInfrastructurePlugin):
             if function == 'seqr':
                 # 2GB is not enough for seqr
                 memory = '2560M'
-
-            # Create the source archive
-            source_archive = self.create_source_archive(
-                'billing-aggregator-source-code',
-                self.source_bucket.name,
-                PATH_TO_AGGREGATE_SOURCE_CODE,
-            )
 
             # Create the function, the trigger and subscription.
             fxn, _ = self.create_cloud_function(
