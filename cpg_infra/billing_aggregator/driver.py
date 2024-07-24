@@ -33,14 +33,6 @@ from cpg_infra.utils import archive_folder
 from cpg_utils.cloud import read_secret
 
 PATH_TO_AGGREGATE_SOURCE_CODE = os.path.join(os.path.dirname(__file__), 'aggregate')
-PATH_TO_MONTHLY_AGGREGATE_SOURCE_CODE = os.path.join(
-    os.path.dirname(__file__),
-    'monthly_aggregate',
-)
-PATH_TO_UPDATE_BUDGET_SOURCE_CODE = os.path.join(
-    os.path.dirname(__file__),
-    'update_budget',
-)
 
 
 def get_file_content(filename: str) -> str:
@@ -65,6 +57,8 @@ class BillingAggregator(CpgInfrastructurePlugin):
         # setup BQ objects
         _ = self.aggregate_table
         self.setup_materialized_views()
+
+        self.setup_gcp_cost_reporting()
 
     @cached_property
     def functions_service(self):
@@ -139,6 +133,98 @@ class BillingAggregator(CpgInfrastructurePlugin):
             project=self.config.billing.gcp.project_id,
         )
 
+    def create_source_archive(
+        self,
+        resource_name: str,
+        bucket_name: str,
+        path_to_folder: str,
+    ):
+        # The Cloud Function source code itself needs to be zipped up into an
+        # archive, which we create using the pulumi.AssetArchive primitive.
+        archive = archive_folder(path_to_folder)
+
+        # Create the single Cloud Storage object, which contains the source code
+        return gcp.storage.BucketObject(
+            resource_name,
+            bucket=bucket_name,
+            source=archive,
+            opts=pulumi.ResourceOptions(replace_on_changes=['*']),
+        )
+
+    def setup_gcp_cost_reporting(self):
+        """
+        Create the slack bot gcp-cost-control in the CPG slack
+        to notify us of projects that are approaching their monthly budget
+        as well as monitor the hail billing account
+        """
+
+        project_id = self.config.billing.gcp.project_id
+        bigquery_billing_table = self.config.billing.gcp.source_bq_table
+        billing_account_id = self.config.billing.gcp.account_id
+        region = self.config.gcp.region
+
+        time_zone = self.config.billing.gcp_cost_reporting.timezone
+        service_account = self.config.billing.gcp_cost_reporting.machine_account
+        slack_channel = self.config.billing.gcp_cost_reporting.slack_channel
+
+        # Create source archive
+        source_archive = self.create_source_archive(
+            'billing-gcp-cost-report-source-code',
+            self.source_bucket.name,
+            os.path.join(os.path.dirname(__file__), 'gcp_cost_report_slack_bot'),
+        )
+
+        # Deploy Cloud Function
+        function = self.create_cloud_function(
+            name='GCP Cost Reporting',
+            resource_name='gcp-cost-reporting-cloud-function',
+            project=self.config.billing.gcp.project_id,
+            service_account=service_account,
+            notification_channel=self.slack_channel,
+            source_bucket=self.source_bucket.name,
+            source_archive_object=source_archive,
+            source_file='main.py',
+            entry_point='slack_bot_cost_report',
+            env={
+                'QUERY_TIME_ZONE': time_zone,
+                'SLACK_CHANNEL': slack_channel,
+                'BIGQUERY_BILLING_TABLE': bigquery_billing_table,
+                'BILLING_ACCOUNT_ID': billing_account_id,
+            },
+            memory='256M',
+        )
+
+        # Create the http target to trigger the cloud function directly
+        http_function_target = (
+            gcp.cloudscheduler.JobHttpTargetArgs(
+                uri=function.service_config.uri,
+                http_method='POST',
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                oidc_token=gcp.cloudscheduler.JobHttpTargetOidcTokenArgs(
+                    audience=function.service_config.apply(
+                        lambda service_config: f"{service_config.uri}/",
+                    ),
+                    service_account_email=service_account,
+                ),
+            ),
+        )
+
+        # Create Cloud Scheduler job
+        cron_job = gcp.cloudscheduler.Job(
+            'gcp-cost-reporting-job',
+            project=project_id,
+            region=region,
+            time_zone=time_zone,
+            description='Triggers a daily cost report Cloud Function',
+            schedule='0 9 * * *',
+            http_target=http_function_target,
+        )
+
+        pulumi.export('gcp_cost_reporting_cloud_function', function)
+        pulumi.export('gcp_cost_reporting_cloud_scheduler_job', cron_job)
+
     def setup_aggregator_functions(self):
         """Setup hourly aggregator functions"""
         assert self.config.billing
@@ -155,22 +241,6 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 f'two runs within the interval period',
             )
 
-        # The Cloud Function source code itself needs to be zipped up into an
-        # archive, which we create using the pulumi.AssetArchive primitive.
-        archive = archive_folder(PATH_TO_AGGREGATE_SOURCE_CODE)
-
-        # Create the single Cloud Storage object, which contains the source code
-        source_archive_object = gcp.storage.BucketObject(
-            'billing-aggregator-source-code',
-            # updating the source archive object does not trigger the cloud function
-            # to actually updating the source because it's based on the name,
-            # allow Pulumi to create a new name each time it gets updated
-            # name=f'aggregator-source-code.zip',
-            bucket=self.source_bucket.name,
-            source=archive,
-            opts=pulumi.ResourceOptions(replace_on_changes=['*']),
-        )
-
         for function in self.config.billing.aggregator.functions:
             # Balance CPU by this table:
             # https://cloud.google.com/functions/docs/configuring/memory
@@ -181,13 +251,22 @@ class BillingAggregator(CpgInfrastructurePlugin):
             if function == 'seqr':
                 # 2GB is not enough for seqr
                 memory = '2560M'
+
+            # Create the source archive
+            source_archive = self.create_source_archive(
+                'billing-aggregator-source-code',
+                self.source_bucket.name,
+                PATH_TO_AGGREGATE_SOURCE_CODE,
+            )
+
             # Create the function, the trigger and subscription.
             fxn, _ = self.create_cloud_function(
                 resource_name=f'billing-aggregator-{function}-billing-function',
-                name=function,
+                name=f'Aggregator {function.capitalize()}',
                 source_file=f'{function}.py',
                 service_account=self.config.billing.coordinator_machine_account,
-                source_archive_object=source_archive_object,
+                source_bucket=self.source_bucket.name,
+                source_archive_object=source_archive,
                 notification_channel=self.slack_channel,
                 memory=memory,
                 cpu=cpu,
@@ -195,7 +274,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 env={
                     # 'SETUP_GCP_LOGGING': 'true',
                     'GCP_AGGREGATE_DEST_TABLE': self.config.billing.aggregator.destination_bq_table,
-                    'GCP_BILLING_SOURCE_TABLE': self.config.billing.aggregator.source_bq_table,
+                    'GCP_BILLING_SOURCE_TABLE': self.config.billing.gcp.source_bq_table,
                     # cover at least the previous period as well
                     'DEFAULT_INTERVAL_HOURS': self.config.billing.aggregator.interval_hours
                     * 2,
@@ -236,7 +315,9 @@ class BillingAggregator(CpgInfrastructurePlugin):
         source_archive_object: gcp.storage.BucketObject,
         notification_channel: gcp.monitoring.NotificationChannel,
         env: dict,
+        source_bucket: str | None = None,
         source_file: str | None = None,
+        entry_point: str | None = 'from_request',
         project: str | None = None,
         memory: str = '512M',
         cpu: int | None = None,
@@ -257,14 +338,14 @@ class BillingAggregator(CpgInfrastructurePlugin):
             resource_name,
             build_config=gcp.cloudfunctionsv2.FunctionBuildConfigArgs(
                 runtime='python311',
-                entry_point='from_request',
+                entry_point=entry_point,
                 environment_variables=build_environment_variables,
                 # this one is set on an output, so specifying it keeps the function
                 # from being updated, or appearing to update
                 docker_repository=f'projects/{project}/locations/australia-southeast1/repositories/gcf-artifacts',
                 source=gcp.cloudfunctionsv2.FunctionBuildConfigSourceArgs(
                     storage_source=gcp.cloudfunctionsv2.FunctionBuildConfigSourceStorageSourceArgs(
-                        bucket=self.source_bucket.name,
+                        bucket=source_bucket,
                         object=source_archive_object.name,
                     ),
                 ),
@@ -310,8 +391,10 @@ class BillingAggregator(CpgInfrastructurePlugin):
             ),
             display_name='Function warning/error',
         )
+
+        alert_policy_name = 'billing-' + name.lower().replace(' ', '-') + '-alert'
         alert_policy = gcp.monitoring.AlertPolicy(
-            f'billing-aggregator-{name}-alert',
+            alert_policy_name,
             display_name=f'{name.capitalize()} Billing Function Error Alert',
             combiner='OR',
             notification_channels=[notification_channel.id],

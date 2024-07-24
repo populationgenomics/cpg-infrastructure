@@ -1,0 +1,7 @@
+google-cloud-bigquery
+google-cloud-secret-manager
+google-cloud-billing-budgets
+flask<3.0,>=1.0
+functions-framework
+slackclient
+pytz

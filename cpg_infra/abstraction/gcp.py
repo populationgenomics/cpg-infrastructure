@@ -751,7 +751,6 @@ class GcpInfrastructure(CloudInfraBase):
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_lifescienceapi]),
         )
 
-    #
     def add_member_to_dataproc_api(self, resource_key: str, account, role: str):
         if role in ('worker', 'admin'):
             role = f'roles/dataproc.{role}'

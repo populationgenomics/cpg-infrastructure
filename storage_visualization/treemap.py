@@ -279,8 +279,8 @@ def main() -> None:
                 treemap_html_web_url=web_html_path,
                 missing_datasets=missing_datasets,
             )
-    except Exception as e:  # noqa: BLE001
-        comment = f'Failed to generate storage viz treemap: {e}'
+    except (ValueError, TypeError) as error:
+        comment = f'Failed to generate storage viz treemap: {error}'
         if url := _get_hail_batch_url():
             comment += f"\n\nSee {url} for more details."
         if should_post_to_slack:
@@ -288,7 +288,7 @@ def main() -> None:
                 content=b'Failed to generate storage viz treemap',
                 comment=comment,
             )
-        raise Exception(comment) from e
+        raise Exception(comment) from error
 
 
 if __name__ == '__main__':
