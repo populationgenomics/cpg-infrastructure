@@ -58,6 +58,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
         _ = self.aggregate_table
         self.setup_materialized_views()
 
+        self.setup_gcp_cost_control()
         self.setup_gcp_cost_reporting()
 
     @cached_property
@@ -151,6 +152,52 @@ class BillingAggregator(CpgInfrastructurePlugin):
             opts=pulumi.ResourceOptions(replace_on_changes=['*']),
         )
 
+    def setup_gcp_cost_control(self):
+        """
+        Create the gcp cost control cloud function to cut off billing when
+        it exceeds the budget
+        """
+        service_account = self.config.billing.gcp_cost_controls.machine_account
+        slack_channel = self.config.billing.gcp_cost_controls.slack_channel
+        pubsub_topic_name = self.config.billing.gcp_cost_controls.pubsub_topic
+
+        # Create source archive
+        source_archive = self.create_source_archive(
+            'billing-gcp-cost-control-source-code',
+            self.source_bucket.name,
+            os.path.join(os.path.dirname(__file__), 'gcp_cost_control'),
+        )
+
+        # Deploy Cloud Function
+        build_config = gcp.cloudfunctionsv2.FunctionBuildConfigArgs(
+            entry_point='gcp_cost_control',
+            runtime='python311',
+            environment_variables={
+                'GOOGLE_FUNCTION_SOURCE': 'main.py',
+            },
+            source=gcp.cloudfunctionsv2.FunctionSourceArgs(
+                storage_source=gcp.cloudfunctionsv2.FunctionStorageSourceArgs(
+                    bucket=self.source_bucket.name,
+                    source=source_archive,
+                ),
+            ),
+        )
+        function = gcp.cloudfunctionsv2.Function(
+            'gcp-cost-control',
+            service_account_email=service_account,
+            build_config=build_config,
+            environment_variables={
+                'SLACK_CHANNEL': slack_channel,
+            },
+            event_trigger=gcp.cloudfunctionsv2.FunctionEventTriggerArgs(
+                event_type='google.pubsub.topic.publish',
+                pubsub_topic=pubsub_topic_name,
+            ),
+            available_memory_mb=256,
+        )
+
+        pulumi.export('gcp_cost_control_cloud_function', function)
+
     def setup_gcp_cost_reporting(self):
         """
         Create the slack bot gcp-cost-control in the CPG slack
@@ -163,9 +210,9 @@ class BillingAggregator(CpgInfrastructurePlugin):
         billing_account_id = self.config.billing.gcp.account_id
         region = self.config.gcp.region
 
-        time_zone = self.config.billing.gcp_cost_reporting.timezone
-        service_account = self.config.billing.gcp_cost_reporting.machine_account
-        slack_channel = self.config.billing.gcp_cost_reporting.slack_channel
+        time_zone = self.config.billing.gcp_cost_controls.timezone
+        service_account = self.config.billing.gcp_cost_controls.machine_account
+        slack_channel = self.config.billing.gcp_cost_controls.slack_channel
 
         # Create source archive
         source_archive = self.create_source_archive(
