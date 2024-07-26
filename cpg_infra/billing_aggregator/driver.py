@@ -157,7 +157,6 @@ class BillingAggregator(CpgInfrastructurePlugin):
         Create the gcp cost control cloud function to cut off billing when
         it exceeds the budget
         """
-        region = self.config.gcp.region
         service_account = self.config.billing.gcp_cost_controls.machine_account
         slack_channel = self.config.billing.gcp_cost_controls.slack_channel
         pubsub_topic_name = self.config.billing.gcp_cost_controls.pubsub_topic
