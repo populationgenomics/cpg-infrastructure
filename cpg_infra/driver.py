@@ -6,14 +6,12 @@ import os.path
 import re
 from collections import defaultdict
 from functools import cached_property
-from typing import Any, Callable, Iterable, Iterator, NamedTuple, Type
+from typing import Any, Callable, Iterable, Iterator, NamedTuple
 
 import graphlib
 import pulumi
 import pulumi_gcp as gcp
 import toml
-import xxhash
-from toml_sort import TomlSort
 
 import cpg_utils.config
 from cpg_infra.abstraction.azure import AzureInfra
@@ -41,6 +39,15 @@ from cpg_infra.config import (
     HailAccount,
 )
 from cpg_infra.plugin import get_plugins
+from cpg_infra.utils import (
+    NAME_TO_INFRA_CLASS,
+    NON_NAME_REGEX,
+    TOML_CONFIG_JOINER,
+    AccessLevel,
+    access_levels,
+    compute_hash,
+    dict_to_toml,
+)
 
 
 class SampleMetadataAccessorMembership(NamedTuple):
@@ -63,46 +70,6 @@ METAMIST_PERMISSIONS = [
     SM_MAIN_WRITE,
     SM_MAIN_CONTRIBUTE,
 ]
-
-
-AccessLevel = str
-
-
-def access_levels(*, include_test: bool) -> Iterable[AccessLevel]:
-    if include_test:
-        return ('test', 'standard', 'full')
-    return ('standard', 'full')
-
-
-NON_NAME_REGEX = re.compile(r'[^A-Za-z\d_-]')
-TOML_CONFIG_JOINER = '\n||||'
-
-NAME_TO_INFRA_CLASS: dict[str, Type[CloudInfraBase]] = {
-    c.name(): c for c in CloudInfraBase.__subclasses__()  # type: ignore
-}
-
-
-def dict_to_toml(d: dict) -> str:
-    """
-    Convert dictionary to a sorted (and stable) TOML
-    """
-    # there's not an easy way to convert dictionary to the
-    # internal tomlkit.TOMLDocument, as it has its own parser,
-    # so let's just easy dump to string, to use the library from there.
-    return TomlSort(toml.dumps(d)).sorted()
-
-
-def compute_hash(dataset: str, member: str, cloud: str) -> str:
-    """
-    >>> compute_hash('dataset', 'hello.world@email.com', '')
-    'HW-d51b65ee'
-    """
-    initials = ''.join(n[0] for n in member.split('@')[0].split('.')).upper()
-    # I was going to say "add a salt", but we're displaying the initials,
-    # so let's call it something like salt, monosodium glutamate ;)
-    msg = dataset + member + cloud
-    computed_hash = xxhash.xxh32(msg.encode()).hexdigest()
-    return initials + '-' + computed_hash
 
 
 class CPGInfrastructure:
@@ -602,13 +569,13 @@ class CPGInfrastructure:
         }
         if self.config.hail is not None:
             if self.config.hail.gcp.git_credentials_secret_name is not None:
-                output[
-                    'git_credentials_secret_name'
-                ] = self.config.hail.gcp.git_credentials_secret_name
+                output['git_credentials_secret_name'] = (
+                    self.config.hail.gcp.git_credentials_secret_name
+                )
             if self.config.hail.gcp.git_credentials_secret_project is not None:
-                output[
-                    'git_credentials_secret_project'
-                ] = self.config.hail.gcp.git_credentials_secret_project
+                output['git_credentials_secret_project'] = (
+                    self.config.hail.gcp.git_credentials_secret_project
+                )
 
         return output
 
