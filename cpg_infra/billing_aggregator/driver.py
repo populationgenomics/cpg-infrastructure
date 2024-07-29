@@ -366,7 +366,6 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 time_zone='Australia/Sydney',
                 opts=pulumi.ResourceOptions(depends_on=[self.scheduler_service]),
             )
-        
 
     # monthly billing aggregator
 
@@ -457,7 +456,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
         )
 
         alert_policy_name = 'billing-' + name.lower().replace(' ', '-') + '-alert'
-        alert_policy = gcp.monitoring.AlertPolicy(
+        _ = gcp.monitoring.AlertPolicy(
             alert_policy_name,
             display_name=f'{name.capitalize()} Billing Function Error Alert',
             combiner='OR',
