@@ -175,13 +175,14 @@ class BillingAggregator(CpgInfrastructurePlugin):
             environment_variables={
                 'GOOGLE_FUNCTION_SOURCE': 'main.py',
             },
-            source=gcp.cloudfunctionsv2.FunctionSourceArgs(
-                storage_source=gcp.cloudfunctionsv2.FunctionStorageSourceArgs(
+            source=gcp.cloudfunctionsv2.FunctionBuildConfigSourceArgs(
+                storage_source=gcp.cloudfunctionsv2.FunctionBuildConfigSourceStorageSourceArgs(
                     bucket=self.source_bucket.name,
                     source=source_archive,
                 ),
             ),
         )
+
         function = gcp.cloudfunctionsv2.Function(
             'gcp-cost-control',
             service_account_email=service_account,
@@ -242,20 +243,8 @@ class BillingAggregator(CpgInfrastructurePlugin):
         )
 
         # Create the http target to trigger the cloud function directly
-        http_function_target = (
-            gcp.cloudscheduler.JobHttpTargetArgs(
-                uri=function.service_config.uri,
-                http_method='POST',
-                headers={
-                    "Content-Type": "application/x-www-form-urlencoded",
-                },
-                oidc_token=gcp.cloudscheduler.JobHttpTargetOidcTokenArgs(
-                    audience=function.service_config.apply(
-                        lambda service_config: f"{service_config.uri}/",
-                    ),
-                    service_account_email=service_account,
-                ),
-            ),
+        uri = function.service_config.apply(
+            lambda service_config: f"{service_config.uri}/",
         )
 
         # Create Cloud Scheduler job
@@ -266,7 +255,17 @@ class BillingAggregator(CpgInfrastructurePlugin):
             time_zone=time_zone,
             description='Triggers a daily cost report Cloud Function',
             schedule='0 9 * * *',
-            http_target=http_function_target,
+            http_target=gcp.cloudscheduler.JobHttpTargetArgs(
+                uri=uri,
+                http_method='POST',
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                oidc_token=gcp.cloudscheduler.JobHttpTargetOidcTokenArgs(
+                    audience=uri,
+                    service_account_email=service_account,
+                ),
+            ),
         )
 
         pulumi.export('gcp_cost_reporting_cloud_function', function)
@@ -307,7 +306,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 memory = '2560M'
 
             # Create the function, the trigger and subscription.
-            fxn, _ = self.create_cloud_function(
+            fxn = self.create_cloud_function(
                 resource_name=f'billing-aggregator-{function}-billing-function',
                 name=f'Aggregator {function.capitalize()}',
                 source_file=f'{function}.py',
@@ -330,18 +329,19 @@ class BillingAggregator(CpgInfrastructurePlugin):
             )
 
             # create cron job to run each function as a separate job
+            uri = fxn.service_config.apply(
+                lambda service_config: f"{service_config.uri}/",
+            )
             _ = gcp.cloudscheduler.Job(
                 f'billing-aggregator-scheduler-job-{function}',
                 http_target=gcp.cloudscheduler.JobHttpTargetArgs(
-                    uri=fxn.service_config.uri,
+                    uri=uri,
                     http_method='POST',
                     headers={
                         "Content-Type": "application/x-www-form-urlencoded",
                     },
                     oidc_token=gcp.cloudscheduler.JobHttpTargetOidcTokenArgs(
-                        audience=fxn.service_config.apply(
-                            lambda service_config: f"{service_config.uri}/",
-                        ),
+                        audience=uri,
                         service_account_email=self.config.billing.coordinator_machine_account,
                     ),
                 ),
@@ -368,7 +368,11 @@ class BillingAggregator(CpgInfrastructurePlugin):
         project: str | None = None,
         memory: str = '512M',
         cpu: int | None = None,
-    ):
+    ) -> tuple[
+        gcp.cloudfunctionsv2.Function,
+        gcp.cloudfunctionsv2.FunctionBuildConfigSourceArgs,
+        gcp.monitoring.AlertPolicy,
+    ]:
         """
         Create a single Cloud Function. Include the http trigger and event alerts
         """
@@ -381,6 +385,17 @@ class BillingAggregator(CpgInfrastructurePlugin):
         if source_file:
             build_environment_variables['GOOGLE_FUNCTION_SOURCE'] = source_file
 
+        service_config = gcp.cloudfunctionsv2.FunctionServiceConfigArgs(
+            max_instance_count=1,
+            min_instance_count=0,
+            available_memory=memory,
+            available_cpu=cpu,
+            timeout_seconds=3600,
+            environment_variables=env,
+            ingress_settings='ALLOW_INTERNAL_ONLY',
+            all_traffic_on_latest_revision=True,
+            service_account_email=service_account,
+        )
         fxn = gcp.cloudfunctionsv2.Function(
             resource_name,
             build_config=gcp.cloudfunctionsv2.FunctionBuildConfigArgs(
@@ -397,17 +412,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
                     ),
                 ),
             ),
-            service_config=gcp.cloudfunctionsv2.FunctionServiceConfigArgs(
-                max_instance_count=1,
-                min_instance_count=0,
-                available_memory=memory,
-                available_cpu=cpu,
-                timeout_seconds=3600,
-                environment_variables=env,
-                ingress_settings='ALLOW_INTERNAL_ONLY',
-                all_traffic_on_latest_revision=True,
-                service_account_email=service_account,
-            ),
+            service_config=service_config,
             project=self.config.billing.gcp.project_id,
             location=self.config.gcp.region,
             opts=pulumi.ResourceOptions(
@@ -456,7 +461,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
             opts=pulumi.ResourceOptions(depends_on=[fxn]),
         )
 
-        return fxn, alert_policy
+        return fxn, service_config, alert_policy
 
     def extract_dataset_table(self):
         expected_table_name_parts = 3
