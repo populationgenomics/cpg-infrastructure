@@ -157,6 +157,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
         Create the gcp cost control cloud function to cut off billing when
         it exceeds the budget
         """
+        location = self.config.gcp.region
         service_account = self.config.billing.gcp_cost_controls.machine_account
         slack_channel = self.config.billing.gcp_cost_controls.slack_channel
         pubsub_topic_name = self.config.billing.gcp_cost_controls.pubsub_topic
@@ -169,6 +170,10 @@ class BillingAggregator(CpgInfrastructurePlugin):
         )
 
         # Deploy Cloud Function
+        env = {'SLACK_CHANNEL': slack_channel}
+        memory = 256
+        cpu = 1
+
         build_config = gcp.cloudfunctionsv2.FunctionBuildConfigArgs(
             entry_point='gcp_cost_control',
             runtime='python311',
@@ -178,23 +183,33 @@ class BillingAggregator(CpgInfrastructurePlugin):
             source=gcp.cloudfunctionsv2.FunctionBuildConfigSourceArgs(
                 storage_source=gcp.cloudfunctionsv2.FunctionBuildConfigSourceStorageSourceArgs(
                     bucket=self.source_bucket.name,
-                    source=source_archive,
+                    object=source_archive,
                 ),
             ),
         )
 
+        service_config = gcp.cloudfunctionsv2.FunctionServiceConfigArgs(
+            max_instance_count=1,
+            min_instance_count=0,
+            available_memory=memory,
+            available_cpu=cpu,
+            timeout_seconds=3600,
+            environment_variables=env,
+            ingress_settings='ALLOW_INTERNAL_ONLY',
+            all_traffic_on_latest_revision=True,
+            service_account_email=service_account,
+        )
+
         function = gcp.cloudfunctionsv2.Function(
             'gcp-cost-control',
-            service_account_email=service_account,
+            location=location,
+            service_config=service_config,
             build_config=build_config,
-            environment_variables={
-                'SLACK_CHANNEL': slack_channel,
-            },
             event_trigger=gcp.cloudfunctionsv2.FunctionEventTriggerArgs(
                 event_type='google.pubsub.topic.publish',
                 pubsub_topic=pubsub_topic_name,
+                service_account_email=service_account,
             ),
-            available_memory_mb=256,
         )
 
         pulumi.export('gcp_cost_control_cloud_function', function)
@@ -458,7 +473,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
             opts=pulumi.ResourceOptions(depends_on=[fxn]),
         )
 
-        return fxn, alert_policy
+        return fxn
 
     def extract_dataset_table(self):
         expected_table_name_parts = 3
