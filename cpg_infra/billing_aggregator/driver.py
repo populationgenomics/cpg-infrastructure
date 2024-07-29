@@ -351,6 +351,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 time_zone='Australia/Sydney',
                 opts=pulumi.ResourceOptions(depends_on=[self.scheduler_service]),
             )
+        
 
     # monthly billing aggregator
 
@@ -368,7 +369,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
         project: str | None = None,
         memory: str = '512M',
         cpu: int | None = None,
-    ) -> tuple[gcp.cloudfunctionsv2.Function, gcp.monitoring.AlertPolicy]:
+    ) -> gcp.cloudfunctionsv2.Function:
         """
         Create a single Cloud Function. Include the http trigger and event alerts
         """
