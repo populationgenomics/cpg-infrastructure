@@ -368,11 +368,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
         project: str | None = None,
         memory: str = '512M',
         cpu: int | None = None,
-    ) -> tuple[
-        gcp.cloudfunctionsv2.Function,
-        gcp.cloudfunctionsv2.FunctionBuildConfigSourceArgs,
-        gcp.monitoring.AlertPolicy,
-    ]:
+    ) -> tuple[gcp.cloudfunctionsv2.Function, gcp.monitoring.AlertPolicy]:
         """
         Create a single Cloud Function. Include the http trigger and event alerts
         """
@@ -461,7 +457,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
             opts=pulumi.ResourceOptions(depends_on=[fxn]),
         )
 
-        return fxn, service_config, alert_policy
+        return fxn, alert_policy
 
     def extract_dataset_table(self):
         expected_table_name_parts = 3
