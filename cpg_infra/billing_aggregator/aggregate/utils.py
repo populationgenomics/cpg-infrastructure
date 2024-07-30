@@ -439,7 +439,7 @@ async def get_finished_batches_for_date(
                 'Something weird is happening with last_completed_timestamp: '
                 f'{last_completed_timestamp}',
             )
-        if n_requests > 0 and n_requests % 100 == 0:
+        if n_requests > 0 and n_requests % 100 == 0 and len(batches) > 0:
             min_time_completed = min(b['time_completed'] for b in batches)
             logger.info(
                 f'At {n_requests} requests ({min_time_completed}) for getting completed batches',
@@ -914,10 +914,16 @@ def upsert_aggregated_dataframe_into_bigquery(
     # https://cloud.google.com/bigquery/docs/parameterized-queries
     if '`' in table:
         raise ValueError(f'Table name ({table}) cannot contain backticks')
+
     _query = f"""
         SELECT id FROM {table}
         WHERE id IN UNNEST(@ids)
-        AND DATE_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end;
+        -- usage_end_time might not be exactly aligned with start/end date
+        -- give a +-60 day buffer
+        AND DATE_TRUNC(usage_end_time, DAY) BETWEEN
+            TIMESTAMP(DATETIME_ADD(@window_start, INTERVAL -60 DAY)) AND
+            TIMESTAMP(DATETIME_ADD(@window_end, INTERVAL 60 DAY))
+        ORDER BY topic
     """  # noqa: S608
     job_config = bq.QueryJobConfig(
         query_parameters=[
@@ -991,6 +997,10 @@ def get_currency_conversion_rate_for_time(time: datetime) -> float:
             FROM `{GCP_BILLING_BQ_TABLE}`
             WHERE invoice.month = @invoice_month
             AND DATE_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end
+            -- The following is to limit full scan to only aprox time period +/- 60 days
+            AND DATE_TRUNC(_PARTITIONTIME, DAY) BETWEEN
+                TIMESTAMP(DATETIME_ADD(@window_start, INTERVAL -60 DAY)) AND
+                TIMESTAMP(DATETIME_ADD(@window_end, INTERVAL 60 DAY))
             LIMIT 1
         """  # noqa: S608
         job_config = bq.QueryJobConfig(
@@ -1412,7 +1422,11 @@ def retrieve_stored_ids(
 
     _query = f"""
         SELECT id FROM `{table}`
-        WHERE DATE_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end
+        -- usage_end_time might not be exactly aligned with start/end date
+        -- give a +- 60 day buffer
+        WHERE DATE_TRUNC(usage_end_time, DAY) BETWEEN
+            TIMESTAMP(DATETIME_ADD(@window_start, INTERVAL -60 DAY)) AND
+            TIMESTAMP(DATETIME_ADD(@window_end, INTERVAL 60 DAY))
         AND id LIKE '{service_id}-%';
     """  # noqa: S608 both tables and service_id are checked for validity
 

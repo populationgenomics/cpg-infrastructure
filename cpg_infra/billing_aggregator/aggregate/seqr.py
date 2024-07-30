@@ -347,7 +347,11 @@ def migrate_entries_from_bq(
             credits, invoice, cost_type, adjustment_info
         FROM `{utils.GCP_BILLING_BQ_TABLE}`
         WHERE DATE_TRUNC(usage_end_time, DAY) BETWEEN @start AND @end
-            AND project.id IN UNNEST(@projects)
+        -- The following is to limit full scan to only aprox time period +/- 60 days
+        AND DATE_TRUNC(_PARTITIONTIME, DAY) BETWEEN
+            TIMESTAMP(DATETIME_ADD(@start, INTERVAL -60 DAY)) AND
+            TIMESTAMP(DATETIME_ADD(@end, INTERVAL 60 DAY))
+        AND project.id IN UNNEST(@projects)
         ORDER BY usage_start_time
     """
 

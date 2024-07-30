@@ -144,6 +144,11 @@ def get_billing_data(start: datetime, end: datetime):
     Return results as a dataframe
     """
 
+    # BQ table GCP_BILLING_BQ_TABLE is partition
+    # by the time records have been exported (_PARTITIONTIME)
+    # We need to limit dataset by _PARTITIONTIME to reduce cost
+    # We need to extend the range to ensure we get all the data
+    # 60 days is a safe buffer and cut the cost significantly comparing to full scan
     _query = f"""
         SELECT
             service, sku, usage_start_time, usage_end_time, project,
@@ -152,7 +157,11 @@ def get_billing_data(start: datetime, end: datetime):
             invoice, cost_type, adjustment_info
         FROM `{utils.GCP_BILLING_BQ_TABLE}`
         WHERE DATE_TRUNC(usage_end_time, DAY) BETWEEN @start AND @end
-            AND project.id NOT IN UNNEST(@exclude)
+        -- The following is to limit full scan to only aprox time period +/- 60 days
+        AND DATE_TRUNC(_PARTITIONTIME, DAY) BETWEEN
+            TIMESTAMP(DATETIME_ADD(@start, INTERVAL -60 DAY)) AND
+            TIMESTAMP(DATETIME_ADD(@end, INTERVAL 60 DAY))
+        AND project.id NOT IN UNNEST(@exclude)
     """
     exclude_projects = [utils.SEQR_PROJECT_ID, utils.ES_INDEX_PROJECT_ID]
     job_config = bq.QueryJobConfig(
