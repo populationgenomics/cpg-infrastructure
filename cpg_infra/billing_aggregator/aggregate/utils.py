@@ -928,7 +928,7 @@ def upsert_aggregated_dataframe_into_bigquery(
         -- give a +-10 day buffer
         AND DATE_TRUNC(usage_end_time, DAY) BETWEEN
             TIMESTAMP(DATETIME_ADD(@window_start, INTERVAL -@days_filter DAY)) AND
-            TIMESTAMP(DATETIME_ADD(@window_end, INTERVAL days_filter DAY))
+            TIMESTAMP(DATETIME_ADD(@window_end, INTERVAL @days_filter DAY))
     """  # noqa: S608
     job_config = bq.QueryJobConfig(
         query_parameters=[
