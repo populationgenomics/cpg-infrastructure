@@ -51,13 +51,17 @@ class SampleMetadataAccessorMembership(NamedTuple):
 
 SM_TEST_READ = 'test-read'
 SM_TEST_WRITE = 'test-write'
+SM_TEST_CONTRIBUTE = 'test-contribute'
 SM_MAIN_READ = 'main-read'
 SM_MAIN_WRITE = 'main-write'
+SM_MAIN_CONTRIBUTE = 'main-contribute'
 METAMIST_PERMISSIONS = [
     SM_TEST_READ,
     SM_TEST_WRITE,
+    SM_TEST_CONTRIBUTE,
     SM_MAIN_READ,
     SM_MAIN_WRITE,
+    SM_MAIN_CONTRIBUTE,
 ]
 
 
@@ -575,6 +579,7 @@ class CPGInfrastructure:
                 f'{dataset}-metamist-members',
                 metamist_project_name=infra.metamist_project.project_name,
                 read_members=prepare_group_members(infra, SM_MAIN_READ),
+                contribute_members=prepare_group_members(infra, SM_MAIN_CONTRIBUTE),
                 write_members=prepare_group_members(infra, SM_MAIN_WRITE),
             )
 
@@ -583,6 +588,7 @@ class CPGInfrastructure:
                     f'{dataset}-metamist-test-members',
                     metamist_project_name=infra.metamist_test_project.project_name,
                     read_members=prepare_group_members(infra, SM_TEST_READ),
+                    contribute_members=prepare_group_members(infra, SM_TEST_CONTRIBUTE),
                     write_members=prepare_group_members(infra, SM_TEST_WRITE),
                 )
 
@@ -1936,13 +1942,24 @@ class CPGDatasetCloudInfrastructure:
         if not bucket:
             return
 
+        # There are 250+ members that need access to read the hail wheels, unfortunately
+        # there is a limit of 250 on the amount of principals that can be added to a
+        # storage bucket so we need to first create a group here, and then add that
+        # group as a member to the bucket
+        wheel_group = self.create_group('sm-hail-wheels-viewers', cache_members=False)
+
         for key, group in keys.items():
-            self.infra.add_member_to_bucket(
-                f'{key}-hail-wheels-viewer',
-                bucket=bucket,
+            wheel_group.add_member(
+                self.infra.get_pulumi_name(f'{key}-hail-wheels-viewer'),
                 member=group,
-                membership=BucketMembership.READ,
             )
+
+        self.infra.add_member_to_bucket(
+            'sm-hail-wheels-viewer',
+            bucket=bucket,
+            member=wheel_group,
+            membership=BucketMembership.READ,
+        )
 
     @cached_property
     def hail_accounts_by_access_level(self) -> dict[str, HailAccount]:
@@ -2288,7 +2305,13 @@ class CPGDatasetCloudInfrastructure:
             SampleMetadataAccessorMembership(
                 name='human',
                 member=self.analysis_group,
-                permissions=(SM_MAIN_READ, SM_TEST_READ, SM_TEST_WRITE),
+                permissions=(
+                    SM_MAIN_READ,
+                    SM_MAIN_CONTRIBUTE,
+                    SM_TEST_READ,
+                    SM_TEST_WRITE,
+                    SM_TEST_CONTRIBUTE,
+                ),
             ),
             SampleMetadataAccessorMembership(
                 name='data-manager-group',

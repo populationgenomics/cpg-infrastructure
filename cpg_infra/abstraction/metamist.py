@@ -3,6 +3,7 @@
 Pulumi provider for interacting with metamist
 """
 import functools
+from collections import defaultdict
 from typing import Any
 
 import pulumi
@@ -104,20 +105,30 @@ class MetamistProjectMembersProvider(pulumi.dynamic.ResourceProvider):
         project_name = props['project_name']
         read_members = props['read_members']
         write_members = props['write_members']
+        contribute_members = props['contribute_members']
+
+        member_roles = [
+            (read_members, 'reader'),
+            (write_members, 'writer'),
+            (contribute_members, 'contributor'),
+        ]
+
+        project_member_dict: defaultdict[str, set[str]] = defaultdict(set)
+
+        for member_list, role in member_roles:
+            for member in member_list:
+                project_member_dict[member].add(role)
+
+        project_member_update = [
+            {'member': member, 'roles': list(roles)}
+            for member, roles in project_member_dict.items()
+        ]
 
         papi = ProjectApi()
         papi.update_project_members(
             project=project_name,
-            request_body=read_members,
-            readonly=True,
+            project_member_update=project_member_update,
         )
-
-        papi.update_project_members(
-            project=project_name,
-            request_body=write_members,
-            readonly=False,
-        )
-
         return pulumi.dynamic.CreateResult(
             id_=f'metamist-project-members::{project_name}',
             outs={**props},
@@ -126,7 +137,7 @@ class MetamistProjectMembersProvider(pulumi.dynamic.ResourceProvider):
     def diff(self, _id: str, _olds, _news) -> pulumi.dynamic.DiffResult:
         replaces = []
 
-        for k in 'read_members', 'write_members':
+        for k in 'read_members', 'write_members', 'contribute_members':
             if _olds.get(k) != _news.get(k):
                 replaces.append(k)
 
@@ -153,11 +164,13 @@ class MetamistProjectMembers(pulumi.dynamic.Resource):
         metamist_project_name: str | pulumi.Output[str],
         read_members: list[str] | pulumi.Output[list[str]],
         write_members: list[str] | pulumi.Output[list[str]],
+        contribute_members: list[str] | pulumi.Output[list[str]],
         opts: pulumi.ResourceOptions | None = None,
     ) -> None:
         args = {
             'project_name': metamist_project_name,
             'read_members': read_members,
             'write_members': write_members,
+            'contribute_members': contribute_members,
         }
         super().__init__(MetamistProjectMembersProvider(), name, args, opts)

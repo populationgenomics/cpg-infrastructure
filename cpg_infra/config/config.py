@@ -34,7 +34,6 @@ class CPGInfrastructureUser(DeserializableDataclass):
 
     id: MemberKey  # noqa: RUF100, A003
     clouds: dict[CloudName, Cloud]
-    projects: list[str]
     can_access_internal_dataset_logs: bool = False
 
 
@@ -187,21 +186,31 @@ class CPGInfrastructureConfig(DeserializableDataclass):
 
             project_id: str
             account_id: str
+            source_bq_table: str | None = None
 
         @dataclasses.dataclass(frozen=True)
         class GCPAggregator(DeserializableDataclass):
-            source_bq_table: str
             destination_bq_table: str
             slack_channel: str
-            slack_token_secret_name: str  # created in gcp.billing_project_id
+            slack_token_secret_name: str
             functions: list[str]
             billing_sheet_id: str | None = None
             monthly_summary_table: str | None = None
             interval_hours: int = 4
 
+        @dataclasses.dataclass(frozen=True)
+        class GCPCostControls(DeserializableDataclass):
+            """Config required for the GCP cost control that disables billing"""
+
+            machine_account: str
+            slack_channel: str
+            pubsub_topic: str
+            timezone: str
+
         gcp: GCP
         coordinator_machine_account: str | None = None
         aggregator: GCPAggregator | None = None
+        gcp_cost_controls: GCPCostControls | None = None
         hail_aggregator_username: str | None = None
 
     # used in the gcp.organizations.get_organization(domain=self.config.domain) call

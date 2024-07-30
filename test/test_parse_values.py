@@ -141,6 +141,22 @@ class TestParseValues(TestCase):
             'gcp': {
                 'account_id': '<account-id>',
                 'project_id': '<project-id>',
+                'source_bq_table': 'billing.gcp_billing_export_v1_ABCDEF_123456_789ABC',
+            },
+            'gcp_cost_controls': {
+                'timezone': 'Australia/Sydney',
+                'machine_account': 'gcp-cost-control@billing-project.iam.gserviceaccount.com',
+                'slack_channel': 'test-dev',
+                'pubsub_topic': 'topic',
+            },
+            'aggregator': {
+                'billing_sheet_id': '1a2b3c4d5e6f7g8h9i0j',
+                'destination_bq_table': 'billing-project.billing_aggregate.aggregate',
+                'functions': ['gcp', 'aws', 'azure'],
+                'interval_hours': 4,
+                'monthly_summary_table': 'billing-project.billing_aggregate.aggregate_monthly_cost',
+                'slack_channel': 'software-alerts',
+                'slack_token_secret_name': 'slack-aggregator-token',
             },
         }
         _ = try_parse_value_as_type(billing_config, dtype)
