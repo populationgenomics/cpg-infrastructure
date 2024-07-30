@@ -171,7 +171,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
 
         # Deploy Cloud Function
         env = {'SLACK_CHANNEL': slack_channel}
-        memory = 256
+        memory = '256M'
         cpu = 1
 
         build_config = gcp.cloudfunctionsv2.FunctionBuildConfigArgs(
