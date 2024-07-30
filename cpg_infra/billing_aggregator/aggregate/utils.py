@@ -914,7 +914,6 @@ def upsert_aggregated_dataframe_into_bigquery(
     # https://cloud.google.com/bigquery/docs/parameterized-queries
     if '`' in table:
         raise ValueError(f'Table name ({table}) cannot contain backticks')
-
     _query = f"""
         SELECT id FROM {table}
         WHERE id IN UNNEST(@ids)
@@ -923,7 +922,6 @@ def upsert_aggregated_dataframe_into_bigquery(
         AND DATE_TRUNC(usage_end_time, DAY) BETWEEN
             TIMESTAMP(DATETIME_ADD(@window_start, INTERVAL -60 DAY)) AND
             TIMESTAMP(DATETIME_ADD(@window_end, INTERVAL 60 DAY))
-        ORDER BY topic
     """  # noqa: S608
     job_config = bq.QueryJobConfig(
         query_parameters=[
