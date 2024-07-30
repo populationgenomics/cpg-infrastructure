@@ -281,6 +281,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
                     service_account_email=service_account,
                 ),
             ),
+            opts=pulumi.ResourceOptions(depends_on=[self.scheduler_service]),
         )
 
         pulumi.export('gcp_cost_reporting_cloud_function', function)
