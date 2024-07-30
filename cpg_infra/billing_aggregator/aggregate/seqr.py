@@ -349,8 +349,8 @@ def migrate_entries_from_bq(
         WHERE DATE_TRUNC(usage_end_time, DAY) BETWEEN @start AND @end
         -- The following is to limit full scan to only aprox time period +/- 60 days
         AND DATE_TRUNC(_PARTITIONTIME, DAY) BETWEEN
-            TIMESTAMP(DATETIME_ADD(@start, INTERVAL -60 DAY)) AND
-            TIMESTAMP(DATETIME_ADD(@end, INTERVAL 60 DAY))
+            TIMESTAMP(DATETIME_ADD(@start, INTERVAL -@days_filter DAY)) AND
+            TIMESTAMP(DATETIME_ADD(@end, INTERVAL @days_filter DAY))
         AND project.id IN UNNEST(@projects)
         ORDER BY usage_start_time
     """
@@ -361,6 +361,11 @@ def migrate_entries_from_bq(
             bq.ScalarQueryParameter('start', 'STRING', istart.strftime('%Y-%m-%d')),
             bq.ScalarQueryParameter('end', 'STRING', iend.strftime('%Y-%m-%d')),
             bq.ArrayQueryParameter('projects', 'STRING', projects),
+            bq.ScalarQueryParameter(
+                'days_filter',
+                'INT64',
+                utils.BQ_LARGE_PERIOD_FILTER,
+            ),
         ],
     )
 

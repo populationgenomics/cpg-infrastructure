@@ -102,6 +102,13 @@ HAIL_NON_QUERY_JOB_PER_BATCH_LIMIT = 50000
 # runs every 4 hours
 DEFAULT_RANGE_INTERVAL = timedelta(hours=int(os.getenv('DEFAULT_INTERVAL_HOURS', '4')))
 
+# Billing BQ tables are paritition by day
+# To avoid full scan, we limit the query to +/- XY days
+# For the queries where we return Ids, small period is good enough
+# For other queries we use large period, to be on safe side to not miss any data
+BQ_SMALL_PERIOD_FILTER = 10
+BQ_LARGE_PERIOD_FILTER = 60
+
 SEQR_PROJECT_ID = 'seqr-308602'
 ES_INDEX_PROJECT_ID = 'pr418c6531826c4cae'
 HAIL_PROJECT_ID = 'hail-295901'
@@ -920,8 +927,8 @@ def upsert_aggregated_dataframe_into_bigquery(
         -- usage_end_time might not be exactly aligned with start/end date
         -- give a +-10 day buffer
         AND DATE_TRUNC(usage_end_time, DAY) BETWEEN
-            TIMESTAMP(DATETIME_ADD(@window_start, INTERVAL -10 DAY)) AND
-            TIMESTAMP(DATETIME_ADD(@window_end, INTERVAL 10 DAY))
+            TIMESTAMP(DATETIME_ADD(@window_start, INTERVAL -@days_filter DAY)) AND
+            TIMESTAMP(DATETIME_ADD(@window_end, INTERVAL days_filter DAY))
     """  # noqa: S608
     job_config = bq.QueryJobConfig(
         query_parameters=[
@@ -935,6 +942,11 @@ def upsert_aggregated_dataframe_into_bigquery(
                 'window_end',
                 'STRING',
                 window_end.strftime('%Y-%m-%d'),
+            ),
+            bq.ScalarQueryParameter(
+                'days_filter',
+                'INT64',
+                BQ_SMALL_PERIOD_FILTER,
             ),
         ],
     )
@@ -997,8 +1009,8 @@ def get_currency_conversion_rate_for_time(time: datetime) -> float:
             AND DATE_TRUNC(usage_end_time, DAY) BETWEEN @window_start AND @window_end
             -- The following is to limit full scan to only aprox time period +/- 60 days
             AND DATE_TRUNC(_PARTITIONTIME, DAY) BETWEEN
-                TIMESTAMP(DATETIME_ADD(@window_start, INTERVAL -60 DAY)) AND
-                TIMESTAMP(DATETIME_ADD(@window_end, INTERVAL 60 DAY))
+                TIMESTAMP(DATETIME_ADD(@window_start, INTERVAL -@days_filter DAY)) AND
+                TIMESTAMP(DATETIME_ADD(@window_end, INTERVAL @days_filter DAY))
             LIMIT 1
         """  # noqa: S608
         job_config = bq.QueryJobConfig(
@@ -1013,6 +1025,11 @@ def get_currency_conversion_rate_for_time(time: datetime) -> float:
                     'window_end',
                     'STRING',
                     window_end.strftime('%Y-%m-%d'),
+                ),
+                bq.ScalarQueryParameter(
+                    'days_filter',
+                    'INT64',
+                    BQ_LARGE_PERIOD_FILTER,
                 ),
             ],
         )
@@ -1423,8 +1440,8 @@ def retrieve_stored_ids(
         -- usage_end_time might not be exactly aligned with start/end date
         -- give a +- 10 day buffer
         WHERE DATE_TRUNC(usage_end_time, DAY) BETWEEN
-            TIMESTAMP(DATETIME_ADD(@window_start, INTERVAL -10 DAY)) AND
-            TIMESTAMP(DATETIME_ADD(@window_end, INTERVAL 10 DAY))
+            TIMESTAMP(DATETIME_ADD(@window_start, INTERVAL -@days_filter DAY)) AND
+            TIMESTAMP(DATETIME_ADD(@window_end, INTERVAL @days_filter DAY))
         AND id LIKE '{service_id}-%';
     """  # noqa: S608 both tables and service_id are checked for validity
 
@@ -1439,6 +1456,11 @@ def retrieve_stored_ids(
                 'window_end',
                 'STRING',
                 end.strftime('%Y-%m-%d'),
+            ),
+            bq.ScalarQueryParameter(
+                'days_filter',
+                'INT64',
+                BQ_SMALL_PERIOD_FILTER,
             ),
         ],
     )

@@ -159,8 +159,8 @@ def get_billing_data(start: datetime, end: datetime):
         WHERE DATE_TRUNC(usage_end_time, DAY) BETWEEN @start AND @end
         -- The following is to limit full scan to only aprox time period +/- 60 days
         AND DATE_TRUNC(_PARTITIONTIME, DAY) BETWEEN
-            TIMESTAMP(DATETIME_ADD(@start, INTERVAL -60 DAY)) AND
-            TIMESTAMP(DATETIME_ADD(@end, INTERVAL 60 DAY))
+            TIMESTAMP(DATETIME_ADD(@start, INTERVAL -@days_filter DAY)) AND
+            TIMESTAMP(DATETIME_ADD(@end, INTERVAL @days_filter DAY))
         AND project.id NOT IN UNNEST(@exclude)
     """
     exclude_projects = [utils.SEQR_PROJECT_ID, utils.ES_INDEX_PROJECT_ID]
@@ -169,6 +169,11 @@ def get_billing_data(start: datetime, end: datetime):
             bq.ScalarQueryParameter('start', 'STRING', start.strftime('%Y-%m-%d')),
             bq.ScalarQueryParameter('end', 'STRING', end.strftime('%Y-%m-%d')),
             bq.ArrayQueryParameter('exclude', 'STRING', exclude_projects),
+            bq.ScalarQueryParameter(
+                'days_filter',
+                'INT64',
+                utils.BQ_LARGE_PERIOD_FILTER,
+            ),
         ],
     )
 
