@@ -287,7 +287,7 @@ def num_chars(lst: list[str]) -> int:
 
 
 @functions_framework.http
-def slack_bot_cost_report(request: flask.Request):  # noqa: ARG001
+def slack_bot_cost_report(request: flask.Request):
     """
     Main entry point for the Cloud Function.
 
@@ -298,7 +298,9 @@ def slack_bot_cost_report(request: flask.Request):  # noqa: ARG001
     """
 
     force_run = False
-    if request.method == 'POST' and 'application/json' in request.headers.get('Content-Type'):
+    if request.method == 'POST' and 'application/json' in request.headers.get(
+        'Content-Type',
+    ):
         request_json = request.get_json()
         force_run = request_json.get('force_run', False)
 
@@ -413,11 +415,6 @@ def post_slack_message(
     ]
 
     is_monday = datetime.now(tz=TIMEZONE).weekday() == 0
-
-    # Only post on Mondays or when a project gets flagged
-    if not force_run and not is_monday and len(flagged_projects) < 1:
-        flagged_projects = [('No flagged projects', '-')]
-        return
 
     # Next, if we are posting today add hail to the flagged projects at the bottom
     hail_project = [x for x in project_summary_keys_sorted if 'hail' in x].pop()
