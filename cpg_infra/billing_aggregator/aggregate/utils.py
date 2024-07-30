@@ -918,10 +918,10 @@ def upsert_aggregated_dataframe_into_bigquery(
         SELECT id FROM {table}
         WHERE id IN UNNEST(@ids)
         -- usage_end_time might not be exactly aligned with start/end date
-        -- give a +-60 day buffer
+        -- give a +-10 day buffer
         AND DATE_TRUNC(usage_end_time, DAY) BETWEEN
-            TIMESTAMP(DATETIME_ADD(@window_start, INTERVAL -60 DAY)) AND
-            TIMESTAMP(DATETIME_ADD(@window_end, INTERVAL 60 DAY))
+            TIMESTAMP(DATETIME_ADD(@window_start, INTERVAL -10 DAY)) AND
+            TIMESTAMP(DATETIME_ADD(@window_end, INTERVAL 10 DAY))
     """  # noqa: S608
     job_config = bq.QueryJobConfig(
         query_parameters=[
@@ -1421,10 +1421,10 @@ def retrieve_stored_ids(
     _query = f"""
         SELECT id FROM `{table}`
         -- usage_end_time might not be exactly aligned with start/end date
-        -- give a +- 60 day buffer
+        -- give a +- 10 day buffer
         WHERE DATE_TRUNC(usage_end_time, DAY) BETWEEN
-            TIMESTAMP(DATETIME_ADD(@window_start, INTERVAL -60 DAY)) AND
-            TIMESTAMP(DATETIME_ADD(@window_end, INTERVAL 60 DAY))
+            TIMESTAMP(DATETIME_ADD(@window_start, INTERVAL -10 DAY)) AND
+            TIMESTAMP(DATETIME_ADD(@window_end, INTERVAL 10 DAY))
         AND id LIKE '{service_id}-%';
     """  # noqa: S608 both tables and service_id are checked for validity
 
