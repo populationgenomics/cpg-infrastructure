@@ -257,11 +257,6 @@ class BillingAggregator(CpgInfrastructurePlugin):
             memory='256M',
         )
 
-        # Create the http target to trigger the cloud function directly
-        uri = function.service_config.apply(
-            lambda service_config: f"{service_config.uri}/",
-        )
-
         # Create Cloud Scheduler job
         cron_job = gcp.cloudscheduler.Job(
             'gcp-cost-reporting-job',
@@ -271,13 +266,13 @@ class BillingAggregator(CpgInfrastructurePlugin):
             description='Triggers a daily cost report Cloud Function',
             schedule='0 9 * * *',
             http_target=gcp.cloudscheduler.JobHttpTargetArgs(
-                uri=uri,
+                uri=function.url,
                 http_method='POST',
                 headers={
                     "Content-Type": "application/x-www-form-urlencoded",
                 },
                 oidc_token=gcp.cloudscheduler.JobHttpTargetOidcTokenArgs(
-                    audience=uri,
+                    audience=function.url,
                     service_account_email=service_account,
                 ),
             ),
@@ -345,19 +340,16 @@ class BillingAggregator(CpgInfrastructurePlugin):
             )
 
             # create cron job to run each function as a separate job
-            uri = fxn.service_config.apply(
-                lambda service_config: f"{service_config.uri}/",
-            )
             _ = gcp.cloudscheduler.Job(
                 f'billing-aggregator-scheduler-job-{function}',
                 http_target=gcp.cloudscheduler.JobHttpTargetArgs(
-                    uri=uri,
+                    uri=fxn.url,
                     http_method='POST',
                     headers={
                         "Content-Type": "application/x-www-form-urlencoded",
                     },
                     oidc_token=gcp.cloudscheduler.JobHttpTargetOidcTokenArgs(
-                        audience=uri,
+                        audience=fxn.url,
                         service_account_email=self.config.billing.coordinator_machine_account,
                     ),
                 ),
@@ -365,7 +357,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 project=self.config.billing.gcp.project_id,
                 region=self.config.gcp.region,
                 time_zone='Australia/Sydney',
-                opts=pulumi.ResourceOptions(depends_on=[self.scheduler_service]),
+                opts=pulumi.ResourceOptions(depends_on=[fxn, self.scheduler_service]),
             )
 
     # monthly billing aggregator
