@@ -287,7 +287,7 @@ def num_chars(lst: list[str]) -> int:
 
 
 @functions_framework.http
-def slack_bot_cost_report(request: flask.Request):  # noqa: ARG001
+def slack_bot_cost_report(request: flask.Request):
     """
     Main entry point for the Cloud Function.
 
@@ -296,6 +296,13 @@ def slack_bot_cost_report(request: flask.Request):  # noqa: ARG001
     broken down by currency and cost category. The function then formats the cost report
     and sends it as a message to Slack.
     """
+
+    force_run = False
+    if request.method == 'POST' and 'application/json' in request.headers.get(
+        'Content-Type',
+    ):
+        request_json = request.get_json()
+        force_run = request_json.get('force_run', False)
 
     totals: dict[str, dict[str, dict[str, float]]] = defaultdict(
         lambda: defaultdict(lambda: defaultdict(float)),
@@ -363,7 +370,7 @@ def slack_bot_cost_report(request: flask.Request):  # noqa: ARG001
             (f'<{BILLING_URL}|*All projects:*>', row_str),
         )
 
-        post_slack_message(project_summary, totals_summary)
+        post_slack_message(project_summary, totals_summary, force_run)
 
     return 'Success', 200
 
@@ -371,6 +378,7 @@ def slack_bot_cost_report(request: flask.Request):  # noqa: ARG001
 def post_slack_message(
     project_summary: dict[str, dict[str, Any]],
     totals_summary: list[tuple[str, str]],
+    force_run: bool = False,
 ):
     """Post the slack message with the project summary and totals summary"""
     flagged_projects_header = [
@@ -408,11 +416,6 @@ def post_slack_message(
 
     is_monday = datetime.now(tz=TIMEZONE).weekday() == 0
 
-    # Only post on Mondays or when a project gets flagged
-    if not is_monday and len(flagged_projects) < 1:
-        flagged_projects = [('No flagged projects', '-')]
-        return
-
     # Next, if we are posting today add hail to the flagged projects at the bottom
     hail_project = [x for x in project_summary_keys_sorted if 'hail' in x].pop()
     flagged_projects.append(project_summary[hail_project]['value'])
@@ -438,7 +441,7 @@ def post_slack_message(
     chunks = [flagged_projects]
 
     # Only add all projects on a Monday
-    if is_monday:
+    if force_run or is_monday:
         chunks = [flagged_projects, *chunk_list(all_rows, n_chunks)]
 
     posted_flagged = len(flagged_projects) < 1
