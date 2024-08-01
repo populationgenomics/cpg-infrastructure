@@ -183,7 +183,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
             source=gcp.cloudfunctionsv2.FunctionBuildConfigSourceArgs(
                 storage_source=gcp.cloudfunctionsv2.FunctionBuildConfigSourceStorageSourceArgs(
                     bucket=self.source_bucket.name,
-                    object=source_archive,
+                    object=source_archive.name,
                 ),
             ),
         )
