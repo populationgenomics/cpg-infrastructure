@@ -104,9 +104,9 @@ DEFAULT_RANGE_INTERVAL = timedelta(hours=int(os.getenv('DEFAULT_INTERVAL_HOURS',
 
 # Billing BQ tables are paritition by day
 # To avoid full scan, we limit the query to +/- XY days
-# For the queries where we return Ids, small period is good enough
+# For the queries where we return Ids, small period used to limit long running jobs (we compare on usage end date)
 # For other queries we use large period, to be on safe side to not miss any data
-BQ_SMALL_PERIOD_FILTER = 10
+BQ_SMALL_PERIOD_FILTER = 5
 BQ_LARGE_PERIOD_FILTER = 60
 
 SEQR_PROJECT_ID = 'seqr-308602'
@@ -170,7 +170,7 @@ async def async_retry_transient_get_json_request(
     *args: list[Any],
     attempts: int = 5,
     session: aiohttp.ClientSession | None = None,
-    timeout_seconds: int = 60,
+    timeout_seconds: int = 90,
     **kwargs: dict[str, Any],
 ) -> T:
     """
