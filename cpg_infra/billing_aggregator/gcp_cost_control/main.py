@@ -1,5 +1,7 @@
 """A Cloud Function to process GCP billing budget notifications."""
 
+import base64
+import binascii
 import json
 import logging
 import os
@@ -46,8 +48,20 @@ def gcp_cost_control(request: flask.Request):
         print(f"error: {msg}")
         return f"Bad Request: {msg}", 400
 
-    pubsub_message_data = envelope["message"]['data']
-    pubsub_budget_notification_data = json.loads(pubsub_message_data)
+    pubsub_message_data = envelope["message"]["data"]
+    if not pubsub_message_data:
+        logging.error('No Pub/Sub message data')
+        return f'No Pub/Sub message data in {envelope}', 400
+    try:
+        decoded_data = base64.b64decode(pubsub_message_data).decode('utf-8')
+        pubsub_budget_notification_data = json.loads(decoded_data)
+    except (
+        json.decoder.JSONDecodeError,
+        binascii.Error,
+    ) as e:
+        raise ValueError(
+            f'Could not decode Pub/Sub message data ({e}): {pubsub_message_data} from {envelope}',
+        ) from e
 
     logging.info(f'Received notification: {pubsub_budget_notification_data}')
 
@@ -56,7 +70,7 @@ def gcp_cost_control(request: flask.Request):
 
     if cost <= budget:
         logging.info('Still under budget')
-        return None
+        return 'ok', 200
 
     # The budget alert name must correspond to the corresponding project ID.
     budget_project_id = pubsub_budget_notification_data['budgetDisplayName']
@@ -67,7 +81,7 @@ def gcp_cost_control(request: flask.Request):
     # If the billing is already disabled, there's nothing to do.
     if not is_billing_enabled(budget_project_id, projects):
         logging.info('Billing is already disabled')
-        return None
+        return 'already disabled', 200
 
     logging.info('Over budget (%f > %f), disabling billing', cost, budget)
     disable_billing_for_project(budget_project_id, projects)
@@ -77,7 +91,7 @@ def gcp_cost_control(request: flask.Request):
         f"*Warning:* disabled billing for GCP project '{budget_project_id}', "
         f'which is over budget ({cost} {currency} > {budget} {currency}).',
     )
-    return None
+    return f'disabled {budget_project_id}', 200
 
 
 def is_billing_enabled(project_id: str, projects: Any) -> bool:
