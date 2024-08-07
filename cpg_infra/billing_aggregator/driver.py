@@ -157,10 +157,15 @@ class BillingAggregator(CpgInfrastructurePlugin):
         Create the gcp cost control cloud function to cut off billing when
         it exceeds the budget
         """
+        assert self.config.gcp
+        assert self.config.billing
+        assert self.config.billing.gcp_cost_controls
+        
         location = self.config.gcp.region
+
         service_account = self.config.billing.gcp_cost_controls.machine_account
         slack_channel = self.config.billing.gcp_cost_controls.slack_channel
-        pubsub_topic_name = self.config.billing.gcp_cost_controls.pubsub_topic
+        pubsub_topic_name = self.config.gcp.budget_notification_pubsub
 
         # Create source archive
         source_archive = self.create_source_archive(
@@ -170,7 +175,10 @@ class BillingAggregator(CpgInfrastructurePlugin):
         )
 
         # Deploy Cloud Function
-        env = {'SLACK_CHANNEL': slack_channel}
+        env = {
+            'SLACK_CHANNEL': slack_channel,
+            'GCP_PROJECT': self.config.billing.gcp.project_id,
+        }
         memory = '256M'
         cpu = 1
 
@@ -193,7 +201,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
             min_instance_count=0,
             available_memory=memory,
             available_cpu=cpu,
-            timeout_seconds=3600,
+            timeout_seconds=540,
             environment_variables=env,
             ingress_settings='ALLOW_INTERNAL_ONLY',
             all_traffic_on_latest_revision=True,
@@ -206,7 +214,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
             service_config=service_config,
             build_config=build_config,
             event_trigger=gcp.cloudfunctionsv2.FunctionEventTriggerArgs(
-                event_type='google.pubsub.topic.publish',
+                event_type='google.cloud.pubsub.topic.v1.messagePublished',
                 pubsub_topic=pubsub_topic_name,
                 service_account_email=service_account,
             ),
@@ -220,6 +228,10 @@ class BillingAggregator(CpgInfrastructurePlugin):
         to notify us of projects that are approaching their monthly budget
         as well as monitor the hail billing account
         """
+
+        assert self.config.billing
+        assert self.config.billing.gcp_cost_controls
+        assert self.config.gcp
 
         project_id = self.config.billing.gcp.project_id
         bigquery_billing_table = self.config.billing.gcp.source_bq_table
@@ -393,8 +405,8 @@ class BillingAggregator(CpgInfrastructurePlugin):
             max_instance_count=1,
             min_instance_count=0,
             available_memory=memory,
-            available_cpu=cpu,
-            timeout_seconds=3600,
+            available_cpu=str(cpu) if cpu else None,
+            timeout_seconds=540,
             environment_variables=env,
             ingress_settings='ALLOW_INTERNAL_ONLY',
             all_traffic_on_latest_revision=True,
