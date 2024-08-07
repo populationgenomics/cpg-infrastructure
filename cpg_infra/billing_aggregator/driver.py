@@ -160,7 +160,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
         assert self.config.gcp
         assert self.config.billing
         assert self.config.billing.gcp_cost_controls
-        
+
         location = self.config.gcp.region
 
         service_account = self.config.billing.gcp_cost_controls.machine_account
