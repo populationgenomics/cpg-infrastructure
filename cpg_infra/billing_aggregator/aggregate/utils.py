@@ -106,7 +106,7 @@ DEFAULT_RANGE_INTERVAL = timedelta(hours=int(os.getenv('DEFAULT_INTERVAL_HOURS',
 # To avoid full scan, we limit the query to +/- XY days
 # For the queries where we return Ids, small period used to limit long running jobs (we compare on usage end date)
 # For other queries we use large period, to be on safe side to not miss any data
-BQ_SMALL_PERIOD_FILTER = 5
+BQ_SMALL_PERIOD_FILTER = 2
 BQ_LARGE_PERIOD_FILTER = 60
 
 SEQR_PROJECT_ID = 'seqr-308602'
