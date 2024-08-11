@@ -5,3 +5,5 @@ flask<3.0,>=1.0
 functions-framework
 slackclient
 pytz
+# https://github.com/grpc/grpc/issues/37222
+grpcio==1.60.1 
