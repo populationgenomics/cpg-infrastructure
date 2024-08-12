@@ -20,6 +20,7 @@ Tasks:
     - Only sync 'settled' jobs within datetimes
         (ie: finished between START + END of previous time period)
 """
+
 import asyncio
 import json
 import logging

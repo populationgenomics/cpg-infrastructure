@@ -39,7 +39,7 @@ class GroupMember(TypedDict):
     member_key: str
     "The group member's email"
     group_key: str
-    "alphanumeric group id"
+    'alphanumeric group id'
 
 
 class GroupMemberships:
@@ -121,7 +121,7 @@ class GoogleGroupMembershipProvider(pulumi.dynamic.ResourceProvider):
         # gcloud, and will need to be fixed manually
         if member is None:
             raise Exception(
-                f"member {member_key} not found in group {group_key}, manual intervention required",
+                f'member {member_key} not found in group {group_key}, manual intervention required',
             )
 
         return pulumi.dynamic.ReadResult(id_=member['member_name'], outs=member)
@@ -260,8 +260,8 @@ def add_member_to_group(
         .create(
             parent=group_key,
             body={
-                "preferredMemberKey": {"id": member_key},
-                "roles": [{'name': 'MEMBER'}],
+                'preferredMemberKey': {'id': member_key},
+                'roles': [{'name': 'MEMBER'}],
             },
         )
     )
@@ -280,7 +280,7 @@ def add_member_to_group(
             if member is None:
                 if retry_number >= MEMBERSHIP_CREATE_MAX_RETRIES:
                     raise Exception(
-                        f"Max retries exceeded for adding member {member_key} to group {group_key} after receiving 409 error",
+                        f'Max retries exceeded for adding member {member_key} to group {group_key} after receiving 409 error',
                     ) from e
 
                 time.sleep(3)
@@ -335,7 +335,7 @@ def remove_member_from_group(
         if e.status_code == MEMBERSHIP_DELETE_OPERATION_ABORTED_STATUS_CODE:
             if retry_number >= MEMBERSHIP_DELETE_MAX_RETRIES:
                 raise Exception(
-                    f"Max retries exceeded for removing member {member_name} after receiving 409 error",
+                    f'Max retries exceeded for removing member {member_name} after receiving 409 error',
                 ) from e
 
             time.sleep(3)

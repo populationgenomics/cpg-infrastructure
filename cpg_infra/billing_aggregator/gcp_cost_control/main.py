@@ -39,16 +39,16 @@ def gcp_cost_control(request: flask.Request):
     # https://github.com/GoogleCloudPlatform/python-docs-samples/blob/f7828705deaeb743828a531d5c25bc2cc6505a06/run/pubsub/main.py#L30-L45
     envelope = request.get_json()
     if not envelope:
-        msg = "no Pub/Sub message received"
-        print(f"error: {msg}")
-        return f"Bad Request: {msg}", 400
+        msg = 'no Pub/Sub message received'
+        print(f'error: {msg}')
+        return f'Bad Request: {msg}', 400
 
-    if not isinstance(envelope, dict) or "message" not in envelope:
-        msg = "invalid Pub/Sub message format"
-        print(f"error: {msg}")
-        return f"Bad Request: {msg}", 400
+    if not isinstance(envelope, dict) or 'message' not in envelope:
+        msg = 'invalid Pub/Sub message format'
+        print(f'error: {msg}')
+        return f'Bad Request: {msg}', 400
 
-    pubsub_message_data = envelope["message"]["data"]
+    pubsub_message_data = envelope['message']['data']
     if not pubsub_message_data:
         logging.error('No Pub/Sub message data')
         return f'No Pub/Sub message data in {envelope}', 400

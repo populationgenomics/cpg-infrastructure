@@ -346,7 +346,7 @@ def slack_bot_cost_report(request: flask.Request):
 
     if len(totals) == 0:
         logging.info(
-            'No information to log, this function won\'t log anything to slack.',
+            "No information to log, this function won't log anything to slack.",
         )
         return 'Nothing to log', 204
 
@@ -523,7 +523,7 @@ def get_percent_used_from_budget(
 
     if None in (budget_total, daily_used_float, monthly_used_float):
         logging.warning(
-            'Couldn\'t determine the budget amount from the budget, '
+            "Couldn't determine the budget amount from the budget, "
             f'inner_amount.units: {inner_amount.units}, '
             f'daily_used_float: {daily_used_float}, '
             f'monthly_used_float: {monthly_used_float}',

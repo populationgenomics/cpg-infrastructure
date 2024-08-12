@@ -3,6 +3,7 @@
 DeserializableDataclass is a dataclass that can be deserialized from a dictionary,
 with some extra functionality for parsing types.
 """
+
 import dataclasses
 from inspect import isclass
 from types import UnionType

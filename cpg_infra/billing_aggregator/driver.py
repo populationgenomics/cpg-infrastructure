@@ -21,6 +21,7 @@ TODO:
 
     - action monthly billing function
 """
+
 import os
 from base64 import b64encode
 from functools import cached_property
@@ -281,7 +282,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 uri=function.url,
                 http_method='POST',
                 headers={
-                    "Content-Type": "application/x-www-form-urlencoded",
+                    'Content-Type': 'application/x-www-form-urlencoded',
                 },
                 oidc_token=gcp.cloudscheduler.JobHttpTargetOidcTokenArgs(
                     audience=function.url,
@@ -358,7 +359,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
                     uri=fxn.url,
                     http_method='POST',
                     headers={
-                        "Content-Type": "application/x-www-form-urlencoded",
+                        'Content-Type': 'application/x-www-form-urlencoded',
                     },
                     oidc_token=gcp.cloudscheduler.JobHttpTargetOidcTokenArgs(
                         audience=fxn.url,

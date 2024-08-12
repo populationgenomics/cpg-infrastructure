@@ -2,6 +2,7 @@
 """
 GCP implementation for abstract infrastructure
 """
+
 import base64
 from datetime import date
 from functools import cached_property

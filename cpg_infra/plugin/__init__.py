@@ -1,4 +1,5 @@
 """Ability to extend CPG infrastructure with plugins"""
+
 import pkg_resources
 
 from cpg_infra.config import CPGInfrastructureConfig

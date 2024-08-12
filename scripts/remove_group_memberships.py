@@ -16,8 +16,8 @@ def update_json():
             data_str = f.read()
     else:
         storage_client = storage.Client()
-        source_bucket = storage_client.bucket("cpg-pulumi-state")
-        source_blob = source_bucket.blob(".pulumi/stacks/production.json")
+        source_bucket = storage_client.bucket('cpg-pulumi-state')
+        source_blob = source_bucket.blob('.pulumi/stacks/production.json')
         data_str = source_blob.download_as_text()
 
         with open('production-old.json', 'w+', encoding='utf-8') as f:
@@ -32,7 +32,7 @@ def update_json():
     ]
 
     len_after = len(data['checkpoint']['latest']['resources'])
-    print(f"Removed {len_before - len_after} group memberships")
+    print(f'Removed {len_before - len_after} group memberships')
 
     result = json.dumps(data, indent=4)
 

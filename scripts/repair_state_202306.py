@@ -13,6 +13,7 @@ It will generate a bunch of statements like:
         $IMPORT_TYPE $NAME $ID $FLAGS
 
 """
+
 import dataclasses
 import functools
 import json

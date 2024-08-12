@@ -6,6 +6,7 @@ DANGER:
     This operates on state directly, you should very carefully check the output
     and keep backups before overwriting the state file.
 """
+
 import json
 
 import click

@@ -2,6 +2,7 @@
 """
 Class of helper functions for billing aggregate functions
 """
+
 import asyncio
 import json
 import logging
@@ -300,7 +301,7 @@ def parse_hail_time(time_str: str) -> datetime:
             exceptions.append(e)
 
     try:
-        fmt = "%Y-%m-%dT%H:%M:%S"
+        fmt = '%Y-%m-%dT%H:%M:%S'
         return datetime.strptime(time_str, fmt).replace(tzinfo=timezone.utc)
     except ValueError as e:
         exceptions.append(e)

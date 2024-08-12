@@ -71,8 +71,8 @@ def main():
     for job in job_output_paths:
         treemap_job.depends_on(job)
 
-    input_commands = " ".join(
-        f"\\\n    --input {path}" for path in job_output_paths.values()
+    input_commands = ' '.join(
+        f'\\\n    --input {path}' for path in job_output_paths.values()
     )
     treemap_job.command(
         f"""
