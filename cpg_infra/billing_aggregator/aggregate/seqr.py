@@ -27,6 +27,7 @@ TO DO :
     or some other metric (exome vs genome)
 - Getting latest cram for sample by sequence type (eg: exome / genome)
 """
+
 import asyncio
 import copy
 import dataclasses
@@ -545,7 +546,7 @@ async def generate_proportionate_maps_of_datasets(
         if any(p.endswith('-test') for p in missing_projects):
             m += (
                 " Some of these datasets are 'test' projects, and this account does "
-                "not have access to any test account."
+                'not have access to any test account.'
             )
         raise ValueError(m)
 

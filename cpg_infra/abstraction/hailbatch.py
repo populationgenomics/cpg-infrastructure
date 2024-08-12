@@ -3,6 +3,7 @@
 Contains pulumi.dyanmic.ResourceProvider implementations
 for Hail Batch Billing Projects and Users.
 """
+
 import json
 import os
 from functools import lru_cache
@@ -145,10 +146,10 @@ class HailBatchUserProvider(pulumi.dynamic.ResourceProvider):
             timeout=60,
             data=json.dumps(
                 {
-                    "user": username,
-                    "login_id": None,
-                    "is_developer": False,
-                    "is_service_account": True,
+                    'user': username,
+                    'login_id': None,
+                    'is_developer': False,
+                    'is_service_account': True,
                 },
             ),
         )
@@ -173,7 +174,7 @@ class HailBatchUserProvider(pulumi.dynamic.ResourceProvider):
                 sleep(5)
 
         if not cloud_id:
-            raise Exception(f"Hail user {username} did not create in time")
+            raise Exception(f'Hail user {username} did not create in time')
 
         return pulumi.dynamic.CreateResult(
             id_=f'{token_category}::{batch_uri}::{username}',

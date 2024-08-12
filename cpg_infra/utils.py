@@ -1,5 +1,6 @@
 # flake8: noqa: ERA001
 """Utility methods that may be useful for multiple projects"""
+
 import contextlib
 import os
 

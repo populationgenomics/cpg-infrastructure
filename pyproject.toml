@@ -1,9 +1,9 @@
-[tool.black]
-line-length = 88
-skip-string-normalization = true
 
 [tool.ruff]
 line-length = 88
+
+[tool.ruff.format]
+quote-style = "single"
 
 [tool.ruff.lint]
 # ignore pydocstyle, flake8-boolean-trap (FBT)
@@ -26,7 +26,13 @@ ignore = [
     "PLW0603", # Using the global statement to update `<VAR>` is discouraged
     "PT018",   # Assertion should be broken down into multiple parts
     "Q000",    # Single quotes found but double quotes preferred
+    "Q003",    #
     "S101",    # Use of assert detected
+    # ruff asked these to be disabled to use the formatter, as it cause some instability
+    #   https://github.com/astral-sh/ruff/issues/8272
+    "COM812",  # missing-trailing-comma
+    "ISC001",  # single-line-implicit-string-concatenation
+
 ]
 
 

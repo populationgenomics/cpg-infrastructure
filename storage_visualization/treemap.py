@@ -35,11 +35,11 @@ def _get_hail_batch_url(
 ) -> str | None:
     if not batch_id:
         return None
-    base = f"https://batch.hail.populationgenomics.org.au/batches/{batch_id}"
+    base = f'https://batch.hail.populationgenomics.org.au/batches/{batch_id}'
     if job_id is None:
         return base
 
-    return f"{base}/jobs/{job_id}"
+    return f'{base}/jobs/{job_id}'
 
 
 def get_parser():
@@ -282,7 +282,7 @@ def main() -> None:
     except (ValueError, TypeError) as error:
         comment = f'Failed to generate storage viz treemap: {error}'
         if url := _get_hail_batch_url():
-            comment += f"\n\nSee {url} for more details."
+            comment += f'\n\nSee {url} for more details.'
         if should_post_to_slack:
             upload_file(
                 content=b'Failed to generate storage viz treemap',

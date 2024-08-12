@@ -2,6 +2,7 @@
 """
 CPG Dataset infrastructure
 """
+
 import os.path
 import re
 from collections import defaultdict
@@ -77,8 +78,10 @@ def access_levels(*, include_test: bool) -> Iterable[AccessLevel]:
 NON_NAME_REGEX = re.compile(r'[^A-Za-z\d_-]')
 TOML_CONFIG_JOINER = '\n||||'
 
+
 NAME_TO_INFRA_CLASS: dict[str, Type[CloudInfraBase]] = {
-    c.name(): c for c in CloudInfraBase.__subclasses__()  # type: ignore
+    c.name(): c  # type: ignore
+    for c in CloudInfraBase.__subclasses__()
 }
 
 
@@ -286,9 +289,7 @@ class CPGInfrastructure:
 
     @cached_property
     def common_gcp_infra(self) -> GcpInfrastructure:
-        return self.common_dataset.clouds[
-            GcpInfrastructure.name()
-        ].infra  # type: ignore
+        return self.common_dataset.clouds[GcpInfrastructure.name()].infra  # type: ignore
 
     @cached_property
     def common_azure_infra(self) -> AzureInfra:
@@ -358,7 +359,7 @@ class CPGInfrastructure:
         plugins = get_plugins()
         for plugin_name in self.config.plugins_enabled:
             if plugin_name not in plugins:
-                raise Exception(f"Plugin `{plugin_name}` is not installed")
+                raise Exception(f'Plugin `{plugin_name}` is not installed')
 
             plugins[plugin_name](self, self.config).main()
 
@@ -603,13 +604,13 @@ class CPGInfrastructure:
         }
         if self.config.hail is not None:
             if self.config.hail.gcp.git_credentials_secret_name is not None:
-                output[
-                    'git_credentials_secret_name'
-                ] = self.config.hail.gcp.git_credentials_secret_name
+                output['git_credentials_secret_name'] = (
+                    self.config.hail.gcp.git_credentials_secret_name
+                )
             if self.config.hail.gcp.git_credentials_secret_project is not None:
-                output[
-                    'git_credentials_secret_project'
-                ] = self.config.hail.gcp.git_credentials_secret_project
+                output['git_credentials_secret_project'] = (
+                    self.config.hail.gcp.git_credentials_secret_project
+                )
 
         return output
 

@@ -4,6 +4,7 @@ This module contains all the configuration objects that are used to
 describe the CPG infrastructure, including what's required from a
 specific dataset.
 """
+
 import dataclasses
 from enum import Enum
 from typing import Any, Literal

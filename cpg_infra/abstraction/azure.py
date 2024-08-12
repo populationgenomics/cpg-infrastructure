@@ -5,6 +5,7 @@ Azure implementation for abstract infrastructure
 If we want custom role / permissions, potentially look at:
     https://www.pulumi.com/registry/packages/azure-native/api-docs/authorization/roledefinition/
 """
+
 import logging
 import re
 from datetime import date
