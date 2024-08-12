@@ -14,7 +14,7 @@ from cpg_infra.config.deserializabledataclass import DeserializableDataclass
 
 MemberKey = str
 GroupType = str
-CloudName = Literal['gcp', 'azure']
+CloudName = Literal['gcp', 'azure', 'dry-run']
 GroupName = Literal[
     'data-manager',
     'analysis',

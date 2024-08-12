@@ -72,7 +72,9 @@ def main():
     dataset = sys.argv[1]
     access_level = get_access_level()
 
-    aggregate_stats = defaultdict(lambda: defaultdict(int))
+    aggregate_stats: defaultdict[str, defaultdict[str, int]] = defaultdict(
+        lambda: defaultdict(int),
+    )
     for bucket_suffix in BUCKET_SUFFIXES:
         if access_level == 'test' and not bucket_suffix.startswith('test'):
             continue  # Skip main buckets when testing.
@@ -87,7 +89,7 @@ def main():
     output = sys.argv[2]
     logging.info(f'Writing results to {output}...')
     with AnyPath(output).open('wb') as f, gzip.open(f, 'wt') as gzf:
-        json.dump(aggregate_stats, gzf)
+        json.dump(aggregate_stats, gzf)  # type: ignore[arg-type, PGH003]
 
 
 def count_stats_for_bucket(

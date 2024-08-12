@@ -8,7 +8,7 @@ def from_pulumi():
     GoogleGroupMembership(
         'test-group-membership',
         props=GoogleGroupMembershipInputs(
-            group_id='abc',
+            group_key='abc',
             member_key='foo@bar.com',
         ),
     )

@@ -189,14 +189,14 @@ class CPGInfrastructure:
 
         def __init__(self, group_prefix: str | None = None) -> None:
             self.groups: dict[
-                str,
+                CloudName,
                 dict[str, CPGInfrastructure.GroupProvider.Group],
             ] = defaultdict()
 
             self.group_prefix = group_prefix or ''
             self._cached_resolved_members: dict[str, list] = {}
 
-        def get_group(self, infra_name: str, group_name: str):
+        def get_group(self, infra_name: CloudName, group_name: str):
             return self.groups[infra_name][group_name]
 
         def create_group(
@@ -433,12 +433,13 @@ class CPGInfrastructure:
                     if m.user and m.user.hail_batch_username
                 }
                 if dataset_infra.dataset_config.is_internal_dataset:
-                    hail_batch_usernames.update(
+                    cloud_names = [
                         user.clouds[cloud].hail_batch_username
                         for user in internal_users
                         if cloud in user.clouds
                         and user.clouds[cloud].hail_batch_username
-                    )
+                    ]
+                    hail_batch_usernames.update(hbu for hbu in cloud_names if hbu)
 
                 def _make_add_member_function(
                     _data_provider: 'CPGDatasetCloudInfrastructure',
@@ -761,7 +762,7 @@ class CPGDatasetInfrastructure:
         self.dataset_config: CPGDatasetConfig = dataset_config
         self.deploy_locations = dataset_config.deploy_locations
 
-        self.clouds: dict[str, CPGDatasetCloudInfrastructure] = {
+        self.clouds: dict[CloudName, CPGDatasetCloudInfrastructure] = {
             deploy_location: CPGDatasetCloudInfrastructure(
                 config=self.config,
                 root=self.root,
@@ -2769,18 +2770,6 @@ def test():
             deploy_locations=['dry-run'],
             gcp=CPGDatasetConfig.Gcp(
                 project='test-project',
-                hail_service_account_test=HailAccount(
-                    cloud_id='fewgenomes-test@service-account',
-                    username='fewgenomes-test',
-                ),
-                hail_service_account_standard=HailAccount(
-                    cloud_id='fewgenomes-standard@service-account',
-                    username='fewgenomes-standard',
-                ),
-                hail_service_account_full=HailAccount(
-                    cloud_id='fewgenomes-full@service-account',
-                    username='fewgenomes-full',
-                ),
             ),
             budgets={'dry-run': CPGDatasetConfig.Budget(monthly_budget=100)},
         ),
