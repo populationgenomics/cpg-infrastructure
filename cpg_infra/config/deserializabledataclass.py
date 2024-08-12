@@ -9,6 +9,7 @@ from types import UnionType
 from typing import Any, Literal, get_args, get_origin
 
 
+@dataclasses.dataclass(frozen=True)
 class DeserializableDataclass:
     """
     DeserializableDataclass is a dataclass that can be deserialized from a dictionary,

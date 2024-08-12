@@ -46,5 +46,6 @@ repos:
             --ignore-missing-imports,
             --install-types,
             --non-interactive,
+            --check-untyped-defs,
           ]
         additional_dependencies: []
