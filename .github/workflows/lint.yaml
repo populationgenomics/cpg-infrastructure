@@ -48,3 +48,9 @@ jobs:
         with:
           script: |
             core.setFailed('Unit tests failed with rc = ${{ steps.runtests.outputs.rc }}')
+
+      - name: Test Summary
+        uses: test-summary/action@v2
+        with:
+          paths: "./coverage.xml"
+        if: always()
