@@ -27,7 +27,7 @@ jobs:
       - name: Run tests using coverage
         id: runtests
         run: |
-          coverage run -m unittest discover -s test/
+          coverage run -m unittest discover -v -s test/
           rc=$?
           coverage xml
 
