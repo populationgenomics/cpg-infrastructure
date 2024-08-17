@@ -27,7 +27,7 @@ jobs:
       - name: Run tests using coverage
         id: runtests
         run: |
-          coverage run -m unittest discover -v -s test/
+          coverage run -m xmlrunner discover -v -s test/
           rc=$?
           coverage xml
 
@@ -52,5 +52,5 @@ jobs:
       - name: Test Summary
         uses: test-summary/action@v2
         with:
-          paths: "./coverage.xml"
+          paths: "TEST-*.xml"
         if: always()
