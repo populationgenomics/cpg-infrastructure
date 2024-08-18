@@ -77,4 +77,4 @@ jobs:
         if: always()
         with:
           files: |
-            paths: "TEST-*.xml"
+            TEST-*.xml
