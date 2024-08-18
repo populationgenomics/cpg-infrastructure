@@ -4,7 +4,7 @@ on:
     types: ["opened", "synchronize"]
 
 jobs:
-  build:
+  lint-and-test:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -23,25 +23,9 @@ jobs:
               -r requirements-dev.txt \
               -r cpg_infra/billing_aggregator/aggregate/requirements.txt \
               -r storage_visualization/requirements.txt
-  lint:
-    needs: build
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash -l {0}
-
-    steps:
       - name: pre-commit
         run: pre-commit run --all-files
 
-  test:
-    needs: build
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash -l {0}
-
-    steps:    
       - name: Run tests using coverage
         id: runtests
         run: |
