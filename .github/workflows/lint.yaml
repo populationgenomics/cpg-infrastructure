@@ -23,6 +23,7 @@ jobs:
               -r requirements-dev.txt \
               -r cpg_infra/billing_aggregator/aggregate/requirements.txt \
               -r storage_visualization/requirements.txt
+
       - name: pre-commit
         run: pre-commit run --all-files
 
@@ -54,7 +55,6 @@ jobs:
         with:
           paths: "TEST-*.xml"
           output: test-summary.md
-        
 
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action/linux@v2
