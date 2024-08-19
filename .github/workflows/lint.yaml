@@ -30,7 +30,7 @@ jobs:
       - name: Run tests using coverage
         id: runtests
         run: |
-          coverage run -m xmlrunner discover -v -s test/
+          coverage run -m pytest test --junitxml=Test-results.xml
           rc=$?
           coverage xml
 
@@ -53,12 +53,12 @@ jobs:
         uses: EnricoMi/publish-unit-test-result-action/linux@v2
         if: always()
         with:
-          files: TEST-*.xml
+          files: Test-results.xml
 
       - name: Test Report
         uses: dorny/test-reporter@v1
         if: always()
         with:
           name: Test Results
-          path: TEST-*.xml
-          reporter: swift-xunit
+          path: Test-results.xml
+          reporter: jest-junit
