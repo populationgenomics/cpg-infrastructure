@@ -53,7 +53,6 @@ jobs:
         uses: EnricoMi/publish-unit-test-result-action/linux@v2
         if: always()
         with:
-          name: Test Summary
           files: TEST-*.xml
 
       - name: Test Report
