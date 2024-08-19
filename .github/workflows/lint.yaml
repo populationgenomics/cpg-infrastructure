@@ -53,6 +53,7 @@ jobs:
         uses: test-summary/action@v2
         if: always()
         with:
+          name: Test Summary
           paths: "TEST-*.xml"
 
       - name: Publish Test Results
@@ -60,8 +61,7 @@ jobs:
         if: always()
         with:
           name: Test Results Summary
-          files: |
-            TEST-*.xml
+          files: TEST-*.xml
 
       - name: Test Report
         uses: dorny/test-reporter@v1
