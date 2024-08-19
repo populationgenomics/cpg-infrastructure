@@ -54,20 +54,19 @@ jobs:
         if: always()
         with:
           paths: "TEST-*.xml"
-          output: test-summary.md
 
-      # - name: Publish Test Results
-      #   uses: EnricoMi/publish-unit-test-result-action/linux@v2
-      #   if: always()
-      #   with:
-      #     name: Unit Test Results
-      #     files: |
-      #       TEST-*.xml
+      - name: Publish Test Results
+        uses: EnricoMi/publish-unit-test-result-action/linux@v2
+        if: always()
+        with:
+          name: Test Results Summary
+          files: |
+            TEST-*.xml
 
-      # - name: Test Report
-      #   uses: dorny/test-reporter@v1
-      #   if: always()                  # run this step even if previous step failed
-      #   with:
-      #     name: Test Results          # Name of the check run which will be created
-      #     path: TEST-*.xml            # Path to test results
-      #     reporter: swift-xunit       # Format of test results
+      - name: Test Report
+        uses: dorny/test-reporter@v1
+        if: always()                  
+        with:
+          name: Test Results     
+          path: TEST-*.xml            
+          reporter: swift-xunit       
