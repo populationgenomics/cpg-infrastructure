@@ -65,8 +65,8 @@ jobs:
 
       - name: Test Report
         uses: dorny/test-reporter@v1
-        if: always()                  
+        if: always()
         with:
-          name: Test Results     
-          path: TEST-*.xml            
-          reporter: swift-xunit       
+          name: Test Results
+          path: TEST-*.xml
+          reporter: swift-xunit
