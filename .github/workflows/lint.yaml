@@ -56,13 +56,13 @@ jobs:
       #     name: Test Results Summary
       #     files: TEST-*.xml
 
-      # - name: Test Report
-      #   uses: dorny/test-reporter@v1
-      #   if: always()
-      #   with:
-      #     name: Test Results
-      #     path: TEST-*.xml
-      #     reporter: swift-xunit
+      - name: Test Report
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Test Results
+          path: TEST-*.xml
+          reporter: swift-xunit
 
       - name: Test Summary
         uses: test-summary/action@v2
