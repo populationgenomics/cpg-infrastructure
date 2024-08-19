@@ -53,7 +53,7 @@ jobs:
         uses: EnricoMi/publish-unit-test-result-action/linux@v2
         if: always()
         with:
-          name: Test Results Summary
+          name: Test Summary
           files: TEST-*.xml
 
       - name: Test Report
@@ -63,10 +63,3 @@ jobs:
           name: Test Results
           path: TEST-*.xml
           reporter: swift-xunit
-
-      # - name: Test Summary
-      #   uses: test-summary/action@v2
-      #   if: always()
-      #   with:
-      #     name: Test Summary
-      #     paths: "TEST-*.xml"
