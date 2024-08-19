@@ -49,12 +49,12 @@ jobs:
           script: |
             core.setFailed('Unit tests failed with rc = ${{ steps.runtests.outputs.rc }}')
 
-      # - name: Publish Test Results
-      #   uses: EnricoMi/publish-unit-test-result-action/linux@v2
-      #   if: always()
-      #   with:
-      #     name: Test Results Summary
-      #     files: TEST-*.xml
+      - name: Publish Test Results
+        uses: EnricoMi/publish-unit-test-result-action/linux@v2
+        if: always()
+        with:
+          name: Test Results Summary
+          files: TEST-*.xml
 
       - name: Test Report
         uses: dorny/test-reporter@v1
@@ -64,9 +64,9 @@ jobs:
           path: TEST-*.xml
           reporter: swift-xunit
 
-      - name: Test Summary
-        uses: test-summary/action@v2
-        if: always()
-        with:
-          name: Test Summary
-          paths: "TEST-*.xml"
+      # - name: Test Summary
+      #   uses: test-summary/action@v2
+      #   if: always()
+      #   with:
+      #     name: Test Summary
+      #     paths: "TEST-*.xml"
