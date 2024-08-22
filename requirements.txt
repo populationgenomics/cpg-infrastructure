@@ -8,6 +8,7 @@ pulumi-azure-native==2.21.2
 pulumi-azuread==5.46.0
 pulumi-gcp==7.2.2
 pulumi==3.96.2
+pytest==8.3.2
 toml-sort
 toml==0.10.2
 xxhash==3.2.0
