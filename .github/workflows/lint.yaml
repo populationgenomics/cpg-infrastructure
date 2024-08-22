@@ -42,13 +42,6 @@ jobs:
           files: ./coverage.xml
           token: ${{ secrets.CODECOV_TOKEN }} # required
 
-      - name: Fail if tests are not passing
-        if: ${{ steps.runtests.outputs.rc != 0 }}
-        uses: actions/github-script@v6
-        with:
-          script: |
-            core.setFailed('Unit tests failed with rc = ${{ steps.runtests.outputs.rc }}')
-
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action/linux@v2
         if: always()
@@ -62,3 +55,10 @@ jobs:
           name: Test Results
           path: Test-results.xml
           reporter: java-junit
+
+      - name: Fail if tests are not passing
+        if: ${{ steps.runtests.outputs.rc != 0 }}
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.setFailed('Unit tests failed with rc = ${{ steps.runtests.outputs.rc }}')
