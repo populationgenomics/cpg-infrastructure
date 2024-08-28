@@ -371,8 +371,8 @@ class CPGInfrastructure:
         # order so that group dependencies can be handled
         self.finalize_groups()
 
-        for plugin_name in initialised_plugins:
-            plugins[plugin_name](self, self.config).on_group_finalisation()
+        for plugin in initialised_plugins:
+            plugin.on_group_finalisation()
 
         self.setup_hail_batch_billing_project_members()
 

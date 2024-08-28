@@ -148,26 +148,20 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         @dataclasses.dataclass(frozen=True)
         class ETLConfiguration(DeserializableDataclass):
             @dataclasses.dataclass(frozen=True)
-            class ETLAccessorConfiguration(DeserializableDataclass):
-                @dataclasses.dataclass(frozen=True)
-                class ETLParserConfiguration(DeserializableDataclass):
-                    # the type/version of the parser
-                    name: str
-                    # override the parser to use for this dataset, otherwise
-                    # will use the 'name' to find it.
-                    parser_name: str | None = None
-                    # Default ETL parser configuration, if not specified in ETL payload
-                    # e.g.: {'project': 'greek-myth', 'default_sequencing_type': 'genome'}
-                    default_parameters: dict[str, Any] | None = None
+            class ETLParserConfiguration(DeserializableDataclass):
+                # the name of the entrypoint (metamist_parser) to look up the parser
+                parser_name: str
+                # the list of etl-accessors defined in the config
+                accessors: list[str]
 
-                parsers: list[ETLParserConfiguration]
+                # allow members of this dataset's analysis group to submit ETL jobs
+                analysis_group_dataset: str | None = None
+                # Default ETL parser configuration, if not specified in ETL payload
+                # e.g.: {'project': 'greek-myth', 'default_sequencing_type': 'genome'}
+                default_parameters: dict[str, Any] | None = None
 
-                def to_dict(self):
-                    return {
-                        'parsers': [dataclasses.asdict(p) for p in self.parsers],
-                    }
-
-            accessors: dict[str, ETLAccessorConfiguration] | None
+            accessors: list[str]
+            by_type: dict[str, ETLParserConfiguration]
             # Metamist environment (DEVELOPMENT / PRODUCTION) for ETL cloud functions
             environment: str | None = 'PRODUCTION'
             # Collection of private packages to be appended to requirements.txt
