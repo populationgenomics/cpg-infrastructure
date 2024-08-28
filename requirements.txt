@@ -13,4 +13,4 @@ toml==0.10.2
 xxhash==3.2.0
 metamist
 # https://tenor.com/en-GB/view/magic-gif-26166638
-metamist-infrastructure @ git+https://github.com/populationgenomics/metamist.git@16e6356543d518c8548228dba1c9029f10a87b7b#subdirectory=metamist_infrastructure
+metamist-infrastructure @ git+https://github.com/populationgenomics/metamist.git@f38bb30818fc6fdd808fbb7ae16738ee48b5fdd6#subdirectory=metamist_infrastructure
