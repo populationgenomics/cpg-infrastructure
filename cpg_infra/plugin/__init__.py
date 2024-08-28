@@ -21,8 +21,11 @@ class CpgInfrastructurePlugin:
     def main(self):
         """Driver for the billing aggregator infrastructure as code plugin"""
 
+    def on_group_finalisation(self):
+        """Called after all group memberships have been finalised"""
 
-def get_plugins() -> dict:
+
+def get_plugins() -> dict[str, type[CpgInfrastructurePlugin]]:
     """
     You can't just import from the submodules because it would cause a circular
     import error. So we manually load the file and then find the class that

@@ -357,16 +357,22 @@ class CPGInfrastructure:
         self.deploy_datasets()
 
         plugins = get_plugins()
+        initialised_plugins = []
         for plugin_name in self.config.plugins_enabled:
             if plugin_name not in plugins:
                 raise Exception(f'Plugin `{plugin_name}` is not installed')
+            plugin = plugins[plugin_name](self, self.config)
+            plugin.main()
 
-            plugins[plugin_name](self, self.config).main()
+            initialised_plugins.append(plugin)
 
         # Up to this point the groups have not actually been created, go through
         # the groups data structure and create the necessary groups in the correct
         # order so that group dependencies can be handled
         self.finalize_groups()
+
+        for plugin in initialised_plugins:
+            plugin.on_group_finalisation()
 
         self.setup_hail_batch_billing_project_members()
 
