@@ -323,11 +323,15 @@ class BillingAggregator(CpgInfrastructurePlugin):
             # https://cloud.google.com/functions/docs/configuring/memory
             memory = '1024M'
             cpu = 1
+            timeout = 540
+
             if function == 'hail':
                 memory = '2048M'
             if function == 'seqr':
                 # seqr needs 3GB of memory, reaching up to 2.7GB
                 memory = '4Gi'
+                # seqr loading takes more than 9 minutes
+                timeout = 900
 
             # Create the function, the trigger and subscription.
             fxn = self.create_cloud_function(
@@ -350,6 +354,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
                     * 2,
                     'BILLING_PROJECT_ID': self.config.billing.gcp.project_id,
                 },
+                timeout=timeout,
             )
 
             # create cron job to run each function as a separate job
@@ -389,6 +394,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
         project: str | None = None,
         memory: str = '512M',
         cpu: int | None = None,
+        timeout: int = 540,
     ) -> gcp.cloudfunctionsv2.Function:
         """
         Create a single Cloud Function. Include the http trigger and event alerts
@@ -407,7 +413,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
             min_instance_count=0,
             available_memory=memory,
             available_cpu=str(cpu) if cpu else None,
-            timeout_seconds=540,
+            timeout_seconds=timeout,
             environment_variables=env,
             ingress_settings='ALLOW_INTERNAL_ONLY',
             all_traffic_on_latest_revision=True,
