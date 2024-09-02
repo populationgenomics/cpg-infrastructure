@@ -327,6 +327,8 @@ class BillingAggregator(CpgInfrastructurePlugin):
 
             if function == 'hail':
                 memory = '2048M'
+                # hail loading might take more than default 9 minutes
+                timeout = 900
             if function == 'seqr':
                 # seqr needs 3GB of memory, reaching up to 2.7GB
                 memory = '4Gi'
