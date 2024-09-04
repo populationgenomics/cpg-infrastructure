@@ -326,14 +326,14 @@ class BillingAggregator(CpgInfrastructurePlugin):
             timeout = 540
 
             if function == 'hail':
-                memory = '2048M'
+                memory = '3Gi'
                 # hail loading might take more than default 9 minutes
                 timeout = 900
             if function == 'seqr':
-                # seqr needs 3GB of memory, reaching up to 2.7GB
+                # seqr needs 4GB of memory
                 memory = '4Gi'
                 # seqr loading takes more than 9 minutes
-                timeout = 900
+                timeout = 1800
 
             # Create the function, the trigger and subscription.
             fxn = self.create_cloud_function(
