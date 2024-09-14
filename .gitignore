@@ -139,3 +139,6 @@ run.sh
 
 # Ignore pulumi test stack files
 test_stack/Pulumi.*.yaml
+
+# Ignore sonar scanner folder
+.scannerwork/
