@@ -2545,11 +2545,7 @@ class CPGDatasetCloudInfrastructure:
 
     @cached_property
     def config_viewer_group(self):
-        return self.group_provider.create_group(
-            self.common_gcp_infra,
-            cache_members=False,
-            name='analysis-runner-config-viewers-group',
-        )
+        return self.create_group('analysis-runner-config-viewers-group')
 
     def setup_analysis_runner(self):
         self.setup_analysis_runner_config_access()
@@ -2568,7 +2564,6 @@ class CPGDatasetCloudInfrastructure:
         )
 
     def setup_analysis_runner_config_access(self):
-        
         if isinstance(self.infra, GcpInfrastructure):
             assert self.config.gcp
             bucket = self.config.gcp.config_bucket_name
@@ -2583,7 +2578,7 @@ class CPGDatasetCloudInfrastructure:
         # create on parent analysis-runner-config-viewer-group
         # and assign bucket READ permissions to it
         self.infra.add_member_to_bucket(
-            f'analysis-runner-config-viewers',
+            'analysis-runner-config-viewers',
             bucket=bucket,  # ANALYSIS_RUNNER_CONFIG_BUCKET_NAME,
             member=self.config_viewer_group,
             membership=BucketMembership.READ,
