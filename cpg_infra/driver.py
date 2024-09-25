@@ -2543,6 +2543,10 @@ class CPGDatasetCloudInfrastructure:
     # endregion NOTEBOOKS
     # region ANALYSIS RUNNER
 
+    @cached_property
+    def config_viewer_group(self):
+        return self.create_group('analysis-runner-config-viewers-group')
+
     def setup_analysis_runner(self):
         self.setup_analysis_runner_config_access()
 
@@ -2560,20 +2564,37 @@ class CPGDatasetCloudInfrastructure:
         )
 
     def setup_analysis_runner_config_access(self):
+        if isinstance(self.infra, GcpInfrastructure):
+            assert self.config.gcp
+            bucket = self.config.gcp.config_bucket_name
+        elif isinstance(self.infra, AzureInfra):
+            assert self.config.azure
+            bucket = self.config.azure.config_bucket_name
+        else:
+            raise ValueError(
+                f'Bucket could not be determined for {self.infra.name()}',
+            )
+
+        # create on parent analysis-runner-config-viewer-group
+        # and assign bucket READ permissions to it
+        self.infra.add_member_to_bucket(
+            'analysis-runner-config-viewers',
+            bucket=bucket,  # ANALYSIS_RUNNER_CONFIG_BUCKET_NAME,
+            member=self.config_viewer_group,
+            membership=BucketMembership.READ,
+        )
+
         keys = {'analysis-group': self.analysis_group, **self.access_level_groups}
 
         for key, group in keys.items():
-            if isinstance(self.infra, GcpInfrastructure):
-                assert self.config.gcp
-                bucket = self.config.gcp.config_bucket_name
-            elif isinstance(self.infra, AzureInfra):
-                assert self.config.azure
-                bucket = self.config.azure.config_bucket_name
-            else:
-                raise ValueError(
-                    f'Bucket could not be determined for {self.infra.name()}',
-                )
+            # each of the analysis-group will be added to the parent analysis-runner-config-viewer-group
+            # instead of directly to bucket, to prevent hitting hard GCP 250 limits for member groups per resource
+            self.config_viewer_group.add_member(
+                f'{key}-analysis-runner-config-viewer-group',
+                group,
+            )
 
+            # TODO - remove once tested with config_viewer_group
             self.infra.add_member_to_bucket(
                 f'{key}-analysis-runner-config-viewer',
                 bucket=bucket,  # ANALYSIS_RUNNER_CONFIG_BUCKET_NAME,
