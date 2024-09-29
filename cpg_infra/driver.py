@@ -67,11 +67,9 @@ METAMIST_PERMISSIONS = [
 NON_NAME_REGEX = re.compile(r"[^A-Za-z\d_-]")
 TOML_CONFIG_JOINER = "\n||||"
 
-
 NAME_TO_INFRA_CLASS: dict[str, Type[CloudInfraBase]] = {
     c.name(): c for c in CloudInfraBase.__subclasses__()  # type: ignore
 }
-
 
 class CPGInfrastructure:
     """Class for managing all CPG infrastructure"""
