@@ -3,18 +3,18 @@
 CPG Dataset infrastructure
 """
 
-import graphlib
 import os.path
 import re
 from collections import defaultdict
 from functools import cached_property
 from typing import Any, Callable, Iterable, Iterator, NamedTuple, Type
 
-import cpg_utils.config
+import graphlib
 import pulumi
 import pulumi_gcp as gcp
 import toml
 
+import cpg_utils.config
 from cpg_infra.abstraction.azure import AzureInfra
 from cpg_infra.abstraction.base import (
     BucketMembership,

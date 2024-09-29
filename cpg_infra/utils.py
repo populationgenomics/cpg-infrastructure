@@ -8,6 +8,7 @@ from typing import Iterable
 import pulumi
 import toml
 import xxhash
+from toml_sort import TomlSort
 
 DEFAULT_ALLOWED_EXTENSIONS = frozenset({".py", ".txt", ".json"})
 
