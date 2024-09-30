@@ -325,12 +325,8 @@ class BillingAggregator(CpgInfrastructurePlugin):
             cpu = 1
             timeout = 540
 
-            if function == 'hail':
-                memory = '3Gi'
-                # max possible timeout is 1H for HTTP function
-                timeout = 3600
-            if function == 'seqr':
-                # seqr needs 4GB of memory
+            if function in ['hail', 'seqr']:
+                # batch specific aggreg functions needs 4GB of memory
                 memory = '4Gi'
                 # max possible timeout is 1H for HTTP function
                 timeout = 3600
