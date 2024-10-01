@@ -34,32 +34,32 @@ BUCKET_DELETE_INCOMPLETE_UPLOAD_PERIOD_IN_DAYS = 7
 class SecretMembership(Enum):
     """Secret membership pattern"""
 
-    ACCESSOR = 'accessor'
-    ADMIN = 'admin'
+    ACCESSOR = "accessor"
+    ADMIN = "admin"
 
 
 class BucketMembership(Enum):
     """Membership type for a bucket"""
 
-    LIST = 'list'
-    READ = 'read'
-    APPEND = 'append'
-    MUTATE = 'mutate'
+    LIST = "list"
+    READ = "read"
+    APPEND = "append"
+    MUTATE = "mutate"
 
 
 class ContainerRegistryMembership(Enum):
     """Container registry membership type"""
 
-    READER = 'reader'
-    WRITER = 'writer'
+    READER = "reader"
+    WRITER = "writer"
 
 
 class MachineAccountRole(Enum):
     """Roles for users to interact with machine-account"""
 
-    ACCESS = 'access'
-    ADMIN = 'admin'
-    CREDENTIALS_ADMIN = 'credentials-admin'
+    ACCESS = "access"
+    ADMIN = "admin"
+    CREDENTIALS_ADMIN = "credentials-admin"
 
 
 class CloudInfraBase(ABC):
@@ -108,9 +108,9 @@ class CloudInfraBase(ABC):
         return self.dataset_config.dataset
 
     def get_pulumi_name(self, key: str):
-        assert self.dataset, 'Dataset config was not set'
-        key = key.removeprefix(self.dataset + '-')
-        return f'{self.dataset}-{self.name()}-' + key
+        assert self.dataset, "Dataset config was not set"
+        key = key.removeprefix(self.dataset + "-")
+        return f"{self.dataset}-{self.name()}-" + key
 
     @abstractmethod
     def finalise(self):
@@ -333,7 +333,7 @@ class DryRunInfra(CloudInfraBase):
 
     @staticmethod
     def name():
-        return 'dry-run'
+        return "dry-run"
 
     def get_dataset_project_id(self):
         return self.dataset
@@ -343,8 +343,8 @@ class DryRunInfra(CloudInfraBase):
         return member
 
     def create_project(self, resource_key: str, name):
-        print(f'{resource_key} :: Creating project: {name}')
-        return f'Project: {name}'
+        print(f"{resource_key} :: Creating project: {name}")
+        return f"Project: {name}"
 
     def create_monthly_budget(
         self,
@@ -354,7 +354,7 @@ class DryRunInfra(CloudInfraBase):
         project=None,
     ):
         print(
-            f'{resource_key} :: Create monthly budget for {project}: ${budget} {self.config.budget_currency}',
+            f"{resource_key} :: Create monthly budget for {project}: ${budget} {self.config.budget_currency}",
         )
 
     def create_fixed_budget(
@@ -366,17 +366,17 @@ class DryRunInfra(CloudInfraBase):
         start_date: date = date(2022, 1, 1),
     ):
         print(
-            f'{resource_key} :: Create fixed budget for {project}: ${budget} {self.config.budget_currency} (from {start_date})',
+            f"{resource_key} :: Create fixed budget for {project}: ${budget} {self.config.budget_currency} (from {start_date})",
         )
 
     def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
-        return f'RULE:undelete={days}d'
+        return f"RULE:undelete={days}d"
 
     def bucket_rule_temporary(self, days=TMP_BUCKET_PERIOD_IN_DAYS) -> Any:
-        return f'RULE:tmp={days}d'
+        return f"RULE:tmp={days}d"
 
     def bucket_rule_archive(self, days=ARCHIVE_PERIOD_IN_DAYS) -> Any:
-        return f'RULE:archive={days}d'
+        return f"RULE:archive={days}d"
 
     def create_bucket(
         self,
@@ -389,10 +389,10 @@ class DryRunInfra(CloudInfraBase):
         project: Optional[str] = None,
     ) -> Any:
         print(f'Create bucket: {name} w/ rules: {", ".join(lifecycle_rules)}')
-        return f'BUCKET://{name}'
+        return f"BUCKET://{name}"
 
     def add_member_to_bucket(self, resource_key: str, bucket, member, membership):
-        print(f'{resource_key} :: Add {member} to {bucket}')
+        print(f"{resource_key} :: Add {member} to {bucket}")
 
     def create_machine_account(
         self,
@@ -401,8 +401,8 @@ class DryRunInfra(CloudInfraBase):
         *,
         resource_key: Optional[str] = None,
     ) -> Any:
-        print(f'Creating SA: {name}')
-        return name + '@generated.service-account'
+        print(f"Creating SA: {name}")
+        return name + "@generated.service-account"
 
     def add_member_to_machine_account_role(
         self,
@@ -412,14 +412,14 @@ class DryRunInfra(CloudInfraBase):
         role: MachineAccountRole,
         project: Optional[str] = None,
     ) -> Any:
-        print(f'Allow {member} to access {machine_account}')
+        print(f"Allow {member} to access {machine_account}")
 
     def get_credentials_for_machine_account(self, resource_key, account):
-        return f'{resource_key} :: {account}.CREDENTIALS'
+        return f"{resource_key} :: {account}.CREDENTIALS"
 
     def create_group(self, name: str) -> Any:
-        print(f'Creating Group: {name}')
-        return f'{name}@{self.config.gcp.groups_domain}'
+        print(f"Creating Group: {name}")
+        return f"{name}@{self.config.gcp.groups_domain}"
 
     def add_group_member(
         self,
@@ -428,7 +428,7 @@ class DryRunInfra(CloudInfraBase):
         member,
         unique_resource_key: bool = False,
     ) -> Any:
-        print(f'{resource_key} :: Add {member} to {group}')
+        print(f"{resource_key} :: Add {member} to {group}")
 
     def create_secret(
         self,
@@ -436,8 +436,8 @@ class DryRunInfra(CloudInfraBase):
         project: Optional[str] = None,
         resource_key: Optional[str] = None,
     ) -> Any:
-        print(f'Creating secret: {name}')
-        return f'SECRET:{name}'
+        print(f"Creating secret: {name}")
+        return f"SECRET:{name}"
 
     def add_secret_member(
         self,
@@ -447,7 +447,7 @@ class DryRunInfra(CloudInfraBase):
         membership,
         project: Optional[str] = None,
     ) -> Any:
-        print(f'{resource_key} :: Allow {member} to read secret {secret}')
+        print(f"{resource_key} :: Allow {member} to read secret {secret}")
 
     def add_secret_version(
         self,
@@ -457,7 +457,7 @@ class DryRunInfra(CloudInfraBase):
         processor: Optional[Callable[[Any], Any]] = None,
     ):
         _processor = processor or (lambda el: el)
-        return f'{resource_key} :: {secret}.add_version({_processor(contents)!r})'
+        return f"{resource_key} :: {secret}.add_version({_processor(contents)!r})"
 
     def add_member_to_container_registry(
         self,
@@ -467,7 +467,7 @@ class DryRunInfra(CloudInfraBase):
         membership,
         project=None,
     ) -> Any:
-        return f'{resource_key} :: Add {member} to CONTAINER registry {registry}'
+        return f"{resource_key} :: Add {member} to CONTAINER registry {registry}"
 
     def give_member_ability_to_list_buckets(
         self,
@@ -475,17 +475,17 @@ class DryRunInfra(CloudInfraBase):
         member,
         project: Optional[str] = None,
     ):
-        return f'{resource_key} :: {member} can list buckets'
+        return f"{resource_key} :: {member} can list buckets"
 
     def bucket_output_path(self, bucket):
-        return f'Fake://{bucket}'
+        return f"Fake://{bucket}"
 
     @classmethod
     def storage_url_regex(cls):
-        return r'^Fake:\/\/'
+        return r"^Fake:\/\/"
 
     def add_blob_to_bucket(self, resource_name, bucket, output_name, contents):
-        return f'Add blob to FAKE://{bucket}/{output_name} < {contents!r}'
+        return f"Add blob to FAKE://{bucket}/{output_name} < {contents!r}"
 
     def create_container_registry(self, name: str):
-        return f'ContainerRegistry: {name}'
+        return f"ContainerRegistry: {name}"
