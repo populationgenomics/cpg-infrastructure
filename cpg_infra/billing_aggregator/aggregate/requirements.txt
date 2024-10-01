@@ -9,5 +9,5 @@ google-cloud-bigquery==3.11.4
 google-cloud-secret-manager==2.15.1
 google-cloud-logging==3.5.0
 numpy>=1.23.2
-pandas==2.0.1
+pandas==2.2.3
 pandas-gbq==0.23.1
