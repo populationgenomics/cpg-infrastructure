@@ -2606,7 +2606,7 @@ class CPGDatasetCloudInfrastructure:
             # each of the analysis-group will be added to the parent analysis-runner-config-viewer-group
             # instead of directly to bucket, to prevent hitting hard GCP 250 limits for member groups per resource
             self.root.config_viewer_group.add_member(
-                f'{key}-analysis-runner-config-viewer-group',
+                f'{group.display_name}-analysis-runner-config-viewer-group',
                 group,
             )
 
