@@ -2589,17 +2589,6 @@ class CPGDatasetCloudInfrastructure:
         )
 
     def setup_analysis_runner_config_access(self):
-        if isinstance(self.infra, GcpInfrastructure):
-            assert self.config.gcp
-            bucket = self.config.gcp.config_bucket_name
-        elif isinstance(self.infra, AzureInfra):
-            assert self.config.azure
-            bucket = self.config.azure.config_bucket_name
-        else:
-            raise ValueError(
-                f'Bucket could not be determined for {self.infra.name()}',
-            )
-
         keys = {'analysis-group': self.analysis_group, **self.access_level_groups}
 
         for key, group in keys.items():
@@ -2610,13 +2599,27 @@ class CPGDatasetCloudInfrastructure:
                 group,
             )
 
-            # TODO - remove once tested with config_viewer_group
-            self.infra.add_member_to_bucket(
-                f'{key}-analysis-runner-config-viewer',
-                bucket=bucket,  # ANALYSIS_RUNNER_CONFIG_BUCKET_NAME,
-                member=group,
-                membership=BucketMembership.READ,
-            )
+            # NOTE - keep this
+            # if we ever get 250 members limit on another bucket,
+            # then rewrite add_member_to_bucket
+            # to create a new group and add members to a group
+            #
+            # if isinstance(self.infra, GcpInfrastructure):
+            #     assert self.config.gcp
+            #     bucket = self.config.gcp.config_bucket_name
+            # elif isinstance(self.infra, AzureInfra):
+            #     assert self.config.azure
+            #     bucket = self.config.azure.config_bucket_name
+            # else:
+            #     raise ValueError(
+            #         f'Bucket could not be determined for {self.infra.name()}',
+            #     )
+            # self.infra.add_member_to_bucket(
+            #     f'{key}-analysis-runner-config-viewer',
+            #     bucket=bucket,  # ANALYSIS_RUNNER_CONFIG_BUCKET_NAME,
+            #     member=group,
+            #     membership=BucketMembership.READ,
+            # )
 
     # endregion ANALYSIS RUNNER
 
