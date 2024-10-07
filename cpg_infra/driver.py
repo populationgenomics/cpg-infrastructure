@@ -2591,7 +2591,7 @@ class CPGDatasetCloudInfrastructure:
     def setup_analysis_runner_config_access(self):
         keys = {'analysis-group': self.analysis_group, **self.access_level_groups}
 
-        for key, group in keys.items():
+        for _key, group in keys.items():
             # each of the analysis-group will be added to the parent analysis-runner-config-viewer-group
             # instead of directly to bucket, to prevent hitting hard GCP 250 limits for member groups per resource
             self.root.config_viewer_group.add_member(
