@@ -191,7 +191,9 @@ async def async_retry_transient_get_json_request(
                     resp.raise_for_status()
                     return await resp.json()
             # pylint: disable=broad-except
-            except aiohttp.ClientError as e:
+            except Exception as e:
+                # reason for generic exception here is
+                # we can control which exception to catch listed in errors
                 last_exception = e
                 if not isinstance(e, errors):
                     raise
