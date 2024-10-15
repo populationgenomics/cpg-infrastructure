@@ -329,9 +329,15 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 # max possible timeout is 1H for HTTP functions
                 timeout = 3600
 
-            if function in ['hail', 'seqr']:
-                # batch specific aggreg functions needs 5GB of memory
-                memory = '5Gi'
+            if function in ['seqr']:
+                # seqr specific aggreg function needs 4GB of memory
+                memory = '4Gi'
+
+            if function in ['hail']:
+                # hail specific aggreg function needs over 4GB of memory
+                # max 4GB per 1 CPU, we need more than 4GB therefore 2 CPUs
+                cpu = 2
+                memory = '8Gi'
 
             # Create the function, the trigger and subscription.
             fxn = self.create_cloud_function(

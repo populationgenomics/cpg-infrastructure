@@ -107,7 +107,7 @@ DEFAULT_RANGE_INTERVAL = timedelta(hours=int(os.getenv('DEFAULT_INTERVAL_HOURS',
 # To avoid full scan, we limit the query to +/- XY days
 # For the queries where we return Ids, small period used to limit long running jobs (we compare on usage end date)
 # For other queries we use large period, to be on safe side to not miss any data
-BQ_SMALL_PERIOD_FILTER = 2
+BQ_SMALL_PERIOD_FILTER = 1
 BQ_LARGE_PERIOD_FILTER = 60
 
 SEQR_PROJECT_ID = 'seqr-308602'
@@ -928,7 +928,7 @@ def upsert_aggregated_dataframe_into_bigquery(
         SELECT id FROM {table}
         WHERE id IN UNNEST(@ids)
         -- usage_end_time might not be exactly aligned with start/end date
-        -- give a +-10 day buffer
+        -- give a +-1 day buffer
         AND DATE_TRUNC(usage_end_time, DAY) BETWEEN
             TIMESTAMP(DATETIME_ADD(@window_start, INTERVAL -@days_filter DAY)) AND
             TIMESTAMP(DATETIME_ADD(@window_end, INTERVAL @days_filter DAY))
@@ -1441,7 +1441,7 @@ def retrieve_stored_ids(
     _query = f"""
         SELECT id FROM `{table}`
         -- usage_end_time might not be exactly aligned with start/end date
-        -- give a +- 10 day buffer
+        -- give a +- 1 day buffer
         WHERE DATE_TRUNC(usage_end_time, DAY) BETWEEN
             TIMESTAMP(DATETIME_ADD(@window_start, INTERVAL -@days_filter DAY)) AND
             TIMESTAMP(DATETIME_ADD(@window_end, INTERVAL @days_filter DAY))
