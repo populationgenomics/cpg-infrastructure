@@ -100,8 +100,10 @@ HAIL_QUERY_JOB_PER_BATCH_LIMIT = 9000
 # For hail non query jobs this limit is 50K
 HAIL_NON_QUERY_JOB_PER_BATCH_LIMIT = 50000
 
-# runs every 4 hours
-DEFAULT_RANGE_INTERVAL = timedelta(hours=int(os.getenv('DEFAULT_INTERVAL_HOURS', '4')))
+# runs every 1 hour, add 5 minutes to overlap with previous period
+DEFAULT_RANGE_INTERVAL = timedelta(
+    hours=int(os.getenv('DEFAULT_INTERVAL_HOURS', '1')), minutes=5
+)
 
 # Billing BQ tables are paritition by day
 # To avoid full scan, we limit the query to +/- XY days
@@ -938,13 +940,13 @@ def upsert_aggregated_dataframe_into_bigquery(
             bq.ArrayQueryParameter('ids', 'STRING', list(set(dataframe['id']))),
             bq.ScalarQueryParameter(
                 'window_start',
-                'STRING',
-                window_start.strftime('%Y-%m-%d'),
+                'DATETIME',
+                window_start,
             ),
             bq.ScalarQueryParameter(
                 'window_end',
-                'STRING',
-                window_end.strftime('%Y-%m-%d'),
+                'DATETIME',
+                window_end,
             ),
             bq.ScalarQueryParameter(
                 'days_filter',
@@ -1021,13 +1023,13 @@ def get_currency_conversion_rate_for_time(time: datetime) -> float:
                 bq.ScalarQueryParameter('invoice_month', 'STRING', key),
                 bq.ScalarQueryParameter(
                     'window_start',
-                    'STRING',
-                    window_start.strftime('%Y-%m-%d'),
+                    'DATETIME',
+                    window_start,
                 ),
                 bq.ScalarQueryParameter(
                     'window_end',
-                    'STRING',
-                    window_end.strftime('%Y-%m-%d'),
+                    'DATETIME',
+                    window_end,
                 ),
                 bq.ScalarQueryParameter(
                     'days_filter',
@@ -1440,25 +1442,32 @@ def retrieve_stored_ids(
 
     _query = f"""
         SELECT id FROM `{table}`
-        -- usage_end_time might not be exactly aligned with start/end date
-        -- give a +- 1 day buffer
+        -- usage_end_time is partition by DAY, keep extra 1 day each side
         WHERE DATE_TRUNC(usage_end_time, DAY) BETWEEN
             TIMESTAMP(DATETIME_ADD(@window_start, INTERVAL -@days_filter DAY)) AND
             TIMESTAMP(DATETIME_ADD(@window_end, INTERVAL @days_filter DAY))
-        AND id LIKE '{service_id}-%';
+
+        -- only pick service specific records
+        AND id LIKE '{service_id}-%'
+
+        -- limit records to min possible, give a +- 5 minute buffer so we do not miss any records
+        AND usage_end_time BETWEEN
+            TIMESTAMP(DATETIME_ADD(@window_start, INTERVAL -5 MINUTE))
+            AND
+            TIMESTAMP(DATETIME_ADD(@window_end, INTERVAL 5 MINUTE));
     """  # noqa: S608 both tables and service_id are checked for validity
 
     job_config = bq.QueryJobConfig(
         query_parameters=[
             bq.ScalarQueryParameter(
                 'window_start',
-                'STRING',
-                start.strftime('%Y-%m-%d'),
+                'DATETIME',
+                start,
             ),
             bq.ScalarQueryParameter(
                 'window_end',
-                'STRING',
-                end.strftime('%Y-%m-%d'),
+                'DATETIME',
+                end,
             ),
             bq.ScalarQueryParameter(
                 'days_filter',
