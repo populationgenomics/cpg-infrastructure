@@ -325,13 +325,15 @@ class BillingAggregator(CpgInfrastructurePlugin):
             cpu = 1
             timeout = 540
 
+            # TODO: We should consider moving function specific cpu/memory/timeout values to config
+
             if function in ['hail', 'seqr', 'gcp']:
                 # max possible timeout is 1H for HTTP functions
                 timeout = 3600
 
-            if function in ['hail', 'seqr']:
-                # batch specific aggreg functions needs 5GB of memory
-                memory = '5Gi'
+            if function in ['seqr', 'hail']:
+                # seqr & hail specific aggreg function needs 4GB of memory
+                memory = '4Gi'
 
             # Create the function, the trigger and subscription.
             fxn = self.create_cloud_function(
@@ -349,9 +351,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
                     # 'SETUP_GCP_LOGGING': 'true',
                     'GCP_AGGREGATE_DEST_TABLE': self.config.billing.aggregator.destination_bq_table,
                     'GCP_BILLING_SOURCE_TABLE': self.config.billing.gcp.source_bq_table,
-                    # cover at least the previous period as well
-                    'DEFAULT_INTERVAL_HOURS': self.config.billing.aggregator.interval_hours
-                    * 2,
+                    'DEFAULT_INTERVAL_HOURS': self.config.billing.aggregator.interval_hours,
                     'BILLING_PROJECT_ID': self.config.billing.gcp.project_id,
                 },
                 timeout=timeout,
