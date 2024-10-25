@@ -1023,12 +1023,12 @@ def get_currency_conversion_rate_for_time(time: datetime) -> float:
                 bq.ScalarQueryParameter('invoice_month', 'STRING', key),
                 bq.ScalarQueryParameter(
                     'window_start',
-                    'DATETIME',
+                    'TIMESTAMP',
                     window_start,
                 ),
                 bq.ScalarQueryParameter(
                     'window_end',
-                    'DATETIME',
+                    'TIMESTAMP',
                     window_end,
                 ),
                 bq.ScalarQueryParameter(
@@ -1038,6 +1038,7 @@ def get_currency_conversion_rate_for_time(time: datetime) -> float:
                 ),
             ],
         )
+
         query_result = (
             get_bigquery_client().query(query, job_config=job_config).result()
         )

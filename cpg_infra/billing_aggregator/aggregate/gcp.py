@@ -126,8 +126,8 @@ async def migrate_billing_data(start, end, dataset_to_topic) -> int:
         )
         result += utils.upsert_aggregated_dataframe_into_bigquery(
             dataframe=chunk,
-            window_start=start.date(),
-            window_end=end.date(),
+            window_start=start,
+            window_end=end,
         )
 
     return result

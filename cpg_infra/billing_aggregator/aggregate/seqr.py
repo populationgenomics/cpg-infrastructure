@@ -347,7 +347,13 @@ def migrate_entries_from_bq(
             location, export_time, cost, currency, currency_conversion_rate, usage,
             credits, invoice, cost_type, adjustment_info
         FROM `{utils.GCP_BILLING_BQ_TABLE}`
-        WHERE DATE_TRUNC(usage_end_time, DAY) BETWEEN @start AND @end
+        WHERE
+        -- limit records to min possible, give a +- 5 minute buffer so we do not miss any records
+        usage_end_time BETWEEN
+            TIMESTAMP(DATETIME_ADD(@start, INTERVAL -5 MINUTE))
+            AND
+            TIMESTAMP(DATETIME_ADD(@end, INTERVAL 5 MINUTE))
+
         -- The following is to limit full scan to only aprox time period +/- 60 days
         AND DATE_TRUNC(_PARTITIONTIME, DAY) BETWEEN
             TIMESTAMP(DATETIME_ADD(@start, INTERVAL -@days_filter DAY)) AND
@@ -359,8 +365,8 @@ def migrate_entries_from_bq(
     projects = [utils.SEQR_PROJECT_ID, utils.ES_INDEX_PROJECT_ID]
     job_config = bq.QueryJobConfig(
         query_parameters=[
-            bq.ScalarQueryParameter('start', 'STRING', istart.strftime('%Y-%m-%d')),
-            bq.ScalarQueryParameter('end', 'STRING', iend.strftime('%Y-%m-%d')),
+            bq.ScalarQueryParameter('start', 'TIMESTAMP', istart),
+            bq.ScalarQueryParameter('end', 'TIMESTAMP', iend),
             bq.ArrayQueryParameter('projects', 'STRING', projects),
             bq.ScalarQueryParameter(
                 'days_filter',
