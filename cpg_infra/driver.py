@@ -2497,6 +2497,7 @@ class CPGDatasetCloudInfrastructure:
         # mostly because this current format requires the project_id
         main_container_registry = self.infra.create_container_registry('images')
         dev_container_registry = self.infra.create_container_registry('images-dev')
+        tmp_container_registry = self.infra.create_container_registry('images-tmp')
 
         self.infra.add_member_to_container_registry(
             'images-reader-in-container-registry',
@@ -2520,6 +2521,18 @@ class CPGDatasetCloudInfrastructure:
             'analysis-writer-in-dev-container-registry',
             registry=dev_container_registry,
             member=self.analysis_group,
+            membership=ContainerRegistryMembership.WRITER,
+        )
+        self.infra.add_member_to_container_registry(
+            'images-reader-in-tmp-container-registry',
+            registry=tmp_container_registry,
+            member=self.images_reader_group,
+            membership=ContainerRegistryMembership.READER,
+        )
+        self.infra.add_member_to_container_registry(
+            'images-writer-in-tmp-container-registry',
+            registry=tmp_container_registry,
+            member=self.images_writer_group,
             membership=ContainerRegistryMembership.WRITER,
         )
 
