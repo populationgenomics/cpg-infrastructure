@@ -2524,15 +2524,15 @@ class CPGDatasetCloudInfrastructure:
             membership=ContainerRegistryMembership.WRITER,
         )
         self.infra.add_member_to_container_registry(
-            'test-full-reader-in-dev-container-registry',
+            'images-reader-in-tmp-container-registry',
             registry=tmp_container_registry,
-            member=self.test_full_group,
+            member=self.images_reader_group,
             membership=ContainerRegistryMembership.READER,
         )
         self.infra.add_member_to_container_registry(
-            'analysis-writer-in-dev-container-registry',
+            'images-writer-in-tmp-container-registry',
             registry=tmp_container_registry,
-            member=self.analysis_group,
+            member=self.images_writer_group,
             membership=ContainerRegistryMembership.WRITER,
         )
 
