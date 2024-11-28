@@ -1,5 +1,5 @@
 -- PARTITION BY DATE_TRUNC(day, DAY)
--- CLUSTER BY ar_guid
+-- CLUSTER BY ar_guid, batch_id
 SELECT DATE_TRUNC(usage_end_time, DAY) as day,
 topic,
 service.description as cost_category,
@@ -11,7 +11,7 @@ JSON_VALUE(PARSE_JSON(labels), '$.batch_id') as batch_id,
 JSON_VALUE(PARSE_JSON(labels), '$.job_id') as job_id,
 JSON_VALUE(PARSE_JSON(labels), '$.sequencing_type') as sequencing_type,
 JSON_VALUE(PARSE_JSON(labels), '$.stage') as stage,
-JSON_VALUE(PARSE_JSON(labels), '$.sequencing-group') as sequencing_group,
+COALESCE(JSON_VALUE(PARSE_JSON(labels), '$.sequencing_group'), JSON_VALUE(PARSE_JSON(labels), '$.sequencing-group')) as sequencing_group,
 JSON_VALUE(PARSE_JSON(labels), '$.compute-category') as compute_category,
 JSON_VALUE(PARSE_JSON(labels), '$.cromwell-sub-workflow-name') as cromwell_sub_workflow_name,
 JSON_VALUE(PARSE_JSON(labels), '$.cromwell-workflow-id') as cromwell_workflow_id,
