@@ -992,6 +992,7 @@ class CPGDatasetCloudInfrastructure:
             self.data_manager_group,
             self.analysis_group,
             self.metadata_access_group,
+            self.metadata_contribute_group,
             self.metadata_write_group,
             self.upload_group,
             self.web_access_group,
@@ -1054,6 +1055,10 @@ class CPGDatasetCloudInfrastructure:
         )
         self.metadata_access_group.add_member(
             self.infra.get_pulumi_name('analysis-in-metadata'),
+            self.analysis_group,
+        )
+        self.metadata_contribute_group.add_member(
+            self.infra.get_pulumi_name('analysis-in-metadata-contribute'),
             self.analysis_group,
         )
         self.web_access_group.add_member(
@@ -1128,6 +1133,10 @@ class CPGDatasetCloudInfrastructure:
     @cached_property
     def metadata_write_group(self):
         return self.create_group('metadata-write')
+
+    @cached_property
+    def metadata_contribute_group(self):
+        return self.create_group('metadata-contribute')
 
     @cached_property
     def web_access_group(self):
@@ -2361,6 +2370,17 @@ class CPGDatasetCloudInfrastructure:
                 permissions=(SM_MAIN_READ, SM_TEST_READ, SM_TEST_WRITE),
             ),
             SampleMetadataAccessorMembership(
+                name='metadata-contribute-group',
+                member=self.metadata_contribute_group,
+                permissions=(
+                    SM_MAIN_READ,
+                    SM_MAIN_CONTRIBUTE,
+                    SM_TEST_READ,
+                    SM_TEST_WRITE,
+                    SM_TEST_CONTRIBUTE,
+                ),
+            ),
+            SampleMetadataAccessorMembership(
                 name='test-read',
                 member=self.test_read_group,
                 permissions=(SM_MAIN_READ, SM_TEST_READ, SM_TEST_WRITE),
@@ -2731,6 +2751,7 @@ class CPGDatasetCloudInfrastructure:
                 self.data_manager_group,
                 self.web_access_group,
                 self.metadata_access_group,
+                self.metadata_contribute_group,
                 self.metadata_write_group,
                 self.upload_group,
                 self.main_list_group,

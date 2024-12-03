@@ -20,6 +20,7 @@ GroupName = Literal[
     'data-manager',
     'analysis',
     'metadata-access',
+    'metadata-contribute',
     'web-access',
     'release-access',
     'upload',
