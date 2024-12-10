@@ -632,9 +632,9 @@ class CPGInfrastructure:
             d = {'infrastructure': dict(zip(keys, values))}
 
             # JohnM 10 Dec 2024: Temporarily override QoB JAR to avoid ballooning hail costs
-            # cc7d0f is 0.2.132 with retry-all-400-errors (SET-261) and no 20million fixes (SET-247)
-            v132_retry_no20million = 'cc7d0fa48bd88b10b8c1c7315d9604ee855693e7'
-            d['workflow'] = {'default_jar_spec_revision': v132_retry_no20million}
+            # a1a628b is 0.2.133 with retry-all-400-errors (SET-261) built via a CI deploy batch
+            v133_retry_via_ci = 'a1a628be97e498b3194259b0d7e6e42f1126eac9'
+            d['workflow'] = {'default_jar_spec_revision': v133_retry_via_ci}
 
             return dict_to_toml(d)
 
