@@ -883,6 +883,10 @@ def upsert_rows_into_bigquery(
         # Insert the new rows
         job_config = bq.LoadJobConfig()
         job_config.source_format = bq.SourceFormat.NEWLINE_DELIMITED_JSON
+
+        # there is at least one new field passed from GCP billing table, not present in metamist schema:
+        # invoice.publisher_type
+        job_config.ignore_unknown_values = True
         job_config.schema = get_formatted_bq_schema()
 
         j = '\n'.join(json.dumps(o) for o in filtered_obj)
