@@ -537,42 +537,49 @@ class BillingAggregator(CpgInfrastructurePlugin):
 
     def setup_materialized_views(self):
         """
-        Create materlized views for the aggregate table
+        Create materialized views for the aggregate table
+        TODO:
+        BQ does not allow views updates, we need to come with better ways of updating the views
+        for time being this function will be commented out
+        all views would be setup/updated manually
         """
-        (project_id, dataset_id, _table_id) = self.extract_dataset_table()
 
-        materialized_views = ['aggregate_daily', 'aggregate_daily_extended']
-        for view_name in materialized_views:
-            materialized_view_query = get_file_content(
-                f'{PATH_TO_AGGREGATE_SOURCE_CODE}/{view_name}_view.txt',
-            ).replace(
-                '%AGGREGATE_TABLE%',
-                self.config.billing.aggregator.destination_bq_table,
-            )
+        # (project_id, dataset_id, _table_id) = self.extract_dataset_table()
 
-            cluster_by = ['topic', 'gcp_project']
-            if view_name == 'aggregate_daily_extended':
-                cluster_by = ['ar_guid', 'batch_id']
+        # materialized_views = ['aggregate_daily', 'aggregate_daily_extended']
+        # for view_name in materialized_views:
+        #     materialized_view_query = get_file_content(
+        #         f'{PATH_TO_AGGREGATE_SOURCE_CODE}/{view_name}_view.txt',
+        #     ).replace(
+        #         '%AGGREGATE_TABLE%',
+        #         self.config.billing.aggregator.destination_bq_table,
+        #     )
 
-            _ = gcp.bigquery.Table(
-                f'{view_name}_view',
-                dataset_id=dataset_id,
-                table_id=view_name,
-                project=project_id,
-                materialized_view=gcp.bigquery.TableMaterializedViewArgs(
-                    query=materialized_view_query,
-                    enable_refresh=True,
-                    refresh_interval_ms=1800000,
-                ),
-                # to be able update schema we need to disable deletion protection
-                # views can be regenerated, there is not need to protect them
-                deletion_protection=False,
-                # Define time-based partitioning on 'purchaseDate' field
-                clusterings=cluster_by,
-                time_partitioning={'type': 'DAY', 'field': 'day'},
-                # depends_on
-                opts=pulumi.ResourceOptions(depends_on=[self.aggregate_table]),
-            )
+        #     cluster_by = ['topic', 'gcp_project']
+        #     if view_name == 'aggregate_daily_extended':
+        #         cluster_by = ['ar_guid', 'batch_id']
+
+        #     _ = gcp.bigquery.Table(
+        #         f'{view_name}_view',
+        #         dataset_id=dataset_id,
+        #         table_id=view_name,
+        #         project=project_id,
+        #         materialized_view=gcp.bigquery.TableMaterializedViewArgs(
+        #             query=materialized_view_query,
+        #             enable_refresh=True,
+        #             refresh_interval_ms=1800000,
+        #         ),
+        #         # to be able update schema we need to disable deletion protection
+        #         # views can be regenerated, there is not need to protect them
+        #         deletion_protection=False,
+        #         # Define time-based partitioning on 'purchaseDate' field
+        #         clusterings=cluster_by,
+        #         time_partitioning={'type': 'DAY', 'field': 'day'},
+        #         # depends_on
+        #         opts=pulumi.ResourceOptions(depends_on=[self.aggregate_table]),
+        #     )
+
+        return
 
 
 def b64encode_str(s: str) -> str:
