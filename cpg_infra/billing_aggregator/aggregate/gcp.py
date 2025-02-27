@@ -156,7 +156,7 @@ def get_billing_data(start: datetime, end: datetime):
             currency, currency_conversion_rate, usage, credits,
             invoice, cost_type, adjustment_info
         FROM `{utils.GCP_BILLING_BQ_TABLE}`
-        WHERE DATE_TRUNC(usage_end_time, DAY) BETWEEN @start AND @end
+        WHERE DATE_TRUNC(export_time, DAY) BETWEEN @start AND @end
         -- The following is to limit full scan to only aprox time period +/- 60 days
         AND DATE_TRUNC(_PARTITIONTIME, DAY) BETWEEN
             TIMESTAMP(DATETIME_ADD(@start, INTERVAL -@days_filter DAY)) AND
@@ -184,7 +184,13 @@ DATE_FORMAT = '%Y-%m-%dT%H:%M:%S'
 
 
 def billing_row_to_key(row) -> str:
-    """Convert a billing row to a hash which will be the row key"""
+    """Convert a billing row to a hash which will be the row key
+    
+    Milo H Comments: NEED TO REVISIT THIS ONE
+    this is troubling way of generating ID, Google does change the schema of underlying export table
+    It makes it hard to reload any missing data as the same records would have different ID over time
+    For instance invoice had a new attribute 'publisher_type'
+    """
     identifier = hashlib.md5()  # noqa: S324
     d = row.to_dict()
     d['usage_end_time'] = d['usage_end_time'].strftime(DATE_FORMAT)
