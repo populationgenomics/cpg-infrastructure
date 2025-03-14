@@ -540,6 +540,7 @@ class GcpInfrastructure(CloudInfraBase):
         return gcp.serviceaccount.Account(
             self.get_pulumi_name(resource_key or f'service-account-{name}'),
             account_id=name,
+            create_ignore_already_exists=True,
             # display_name=name,
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_iam]),
             project=project or self.project.project_id,
