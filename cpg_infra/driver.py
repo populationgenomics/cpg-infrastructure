@@ -1125,8 +1125,16 @@ class CPGDatasetCloudInfrastructure:
         return self.create_group('images-reader')
 
     @cached_property
+    def images_dev_reader_group(self):
+        return self.create_group('images-dev-reader')
+
+    @cached_property
     def images_writer_group(self):
         return self.create_group('images-writer')
+
+    @cached_property
+    def images_dev_writer_group(self):
+        return self.create_group('images-dev-writer')
 
     @cached_property
     def analysis_group(self):
@@ -2504,13 +2512,27 @@ class CPGDatasetCloudInfrastructure:
             self.infra.get_pulumi_name('full-in-images-writer-group-member'),
             self.full_group,
         )
+        self.images_dev_writer_group.add_member(
+            self.infra.get_pulumi_name('dev-images-writer-group-member'),
+            self.test_group,
+        )
 
         accounts = {'analysis': self.analysis_group, **self.access_level_groups}
         for kind, account in accounts.items():
-            self.images_reader_group.add_member(
-                self.infra.get_pulumi_name(f'{kind}-in-images-reader-group-member'),
-                account,
-            )
+            # accounts: production, test, dev
+            if account in ('dev', 'test'):
+                # test/dev accounts get read access to the dev images only
+                self.images_dev_reader_group.add_member(
+                    self.infra.get_pulumi_name(
+                        f'{kind}-in-images-dev-reader-group-member'
+                    ),
+                    account,
+                )
+            else:
+                self.images_reader_group.add_member(
+                    self.infra.get_pulumi_name(f'{kind}-in-images-reader-group-member'),
+                    account,
+                )
 
     def setup_dataset_container_registry(self):
         """
@@ -2550,15 +2572,27 @@ class CPGDatasetCloudInfrastructure:
             membership=ContainerRegistryMembership.WRITER,
         )
         self.infra.add_member_to_container_registry(
-            'images-reader-in-tmp-container-registry',
-            registry=tmp_container_registry,
-            member=self.images_reader_group,
+            'images-dev-reader-in-dev-container-registry',
+            registry=dev_container_registry,
+            member=self.images_dev_reader_group,
             membership=ContainerRegistryMembership.READER,
         )
         self.infra.add_member_to_container_registry(
-            'images-writer-in-tmp-container-registry',
+            'images-dev-writer-in-dev-container-registry',
+            registry=dev_container_registry,
+            member=self.images_dev_writer_group,
+            membership=ContainerRegistryMembership.WRITER,
+        )
+        self.infra.add_member_to_container_registry(
+            'images-dev-reader-in-tmp-container-registry',
             registry=tmp_container_registry,
-            member=self.images_writer_group,
+            member=self.images_dev_reader_group,
+            membership=ContainerRegistryMembership.READER,
+        )
+        self.infra.add_member_to_container_registry(
+            'images-dev-writer-in-tmp-container-registry',
+            registry=tmp_container_registry,
+            member=self.images_dev_writer_group,
             membership=ContainerRegistryMembership.WRITER,
         )
 
@@ -2765,7 +2799,9 @@ class CPGDatasetCloudInfrastructure:
                 self.main_create_group,
                 self.full_group,
                 self.images_reader_group,
+                self.images_dev_reader_group,
                 self.images_writer_group,
+                self.images_dev_writer_group,
             ]
 
             if self.dataset_config.setup_test:
@@ -2799,6 +2835,8 @@ class CPGDatasetCloudInfrastructure:
                 ],
                 'main-list': [self.main_list_group],
                 'images-reader': [self.images_reader_group],
+                'images-dev-reader': [self.images_dev_reader_group],
+                'images-dev-writer': [self.images_dev_writer_group],
             }
             if self.dataset_config.setup_test:
                 group_map['test-read'] = [
