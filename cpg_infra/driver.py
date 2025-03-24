@@ -2520,17 +2520,17 @@ class CPGDatasetCloudInfrastructure:
         accounts = {'analysis': self.analysis_group, **self.access_level_groups}
         for kind, account in accounts.items():
             # accounts: production, test, dev
+            # all accounts get read access to main images
+            self.images_reader_group.add_member(
+                self.infra.get_pulumi_name(f'{kind}-in-images-reader-group-member'),
+                account,
+            )
             if account in ('dev', 'test'):
-                # test/dev accounts get read access to the dev images only
+                # only test/dev accounts have read access to dev images
                 self.images_dev_reader_group.add_member(
                     self.infra.get_pulumi_name(
                         f'{kind}-in-images-dev-reader-group-member'
                     ),
-                    account,
-                )
-            else:
-                self.images_reader_group.add_member(
-                    self.infra.get_pulumi_name(f'{kind}-in-images-reader-group-member'),
                     account,
                 )
 
@@ -2551,6 +2551,20 @@ class CPGDatasetCloudInfrastructure:
             'images-reader-in-container-registry',
             registry=main_container_registry,
             member=self.images_reader_group,
+            membership=ContainerRegistryMembership.READER,
+        )
+        # test accounts can read from main
+        self.infra.add_member_to_container_registry(
+            'test-full-reader-in-container-registry',
+            registry=main_container_registry,
+            member=self.test_full_group,
+            membership=ContainerRegistryMembership.READER,
+        )
+        # dev accounts can read from main
+        self.infra.add_member_to_container_registry(
+            'images-dev-reader-in-container-registry',
+            registry=main_container_registry,
+            member=self.images_dev_reader_group,
             membership=ContainerRegistryMembership.READER,
         )
         self.infra.add_member_to_container_registry(
