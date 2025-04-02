@@ -2513,8 +2513,14 @@ class CPGDatasetCloudInfrastructure:
             self.full_group,
         )
         self.images_dev_writer_group.add_member(
-            self.infra.get_pulumi_name('dev-images-writer-group-member'),
+            # There are only standard, full & test groups, there is not group as dev
+            self.infra.get_pulumi_name('test-in-images-writer-group-member'),
             self.test_group,
+        )
+        self.images_dev_writer_group.add_member(
+            # There are only standard, full & test groups, there is not group as dev
+            self.infra.get_pulumi_name('test-full-in-images-writer-group-member'),
+            self.test_full_group,
         )
 
         accounts = {'analysis': self.analysis_group, **self.access_level_groups}
