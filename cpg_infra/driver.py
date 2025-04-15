@@ -617,6 +617,10 @@ class CPGInfrastructure:
                 output['git_credentials_secret_project'] = (
                     self.config.hail.gcp.git_credentials_secret_project
                 )
+            if self.config.hail.gcp.images_location_format is not None:
+                output['images_location_format'] = (
+                    self.config.hail.gcp.images_location_format
+                )
 
         return output
 

@@ -84,6 +84,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
             git_credentials_secret_name: str | None = None
             git_credentials_secret_project: str | None = None
             wheel_bucket_name: str | None = None
+            images_location_format: str | None = None
 
         @dataclasses.dataclass(frozen=True)
         class Azure(DeserializableDataclass):
