@@ -103,33 +103,27 @@ def count_stats_for_bucket(
     """
     try:
         logging.info(f'Listing blobs in {bucket_name}...')
-        pages = storage_client.list_blobs(bucket_name, page_size=100)
+        blobs = storage_client.list_blobs(bucket_name)
         count = 0
-        for blobs in pages:
-            for blob in blobs:
-                count += 1
-                if count % 10**6 == 0:
-                    s = naturalsize(sys.getsizeof(aggregate_stats_container))
-                    logging.info(
-                        f'{count // 10**6} M blobs... aggregate dict is using {s}'
-                    )
-                folder = f'/{aggregate_level(blob.name)}'
-                while True:
-                    path = f'gs://{bucket_name}{folder}'
-                    stats = aggregate_stats_container[path]
-                    stats['size'] += blob.size
-                    stats[f'{blob.storage_class}_bytes'] += blob.size
-                    stats['num_blobs'] += 1
-                    size_in_gb = blob.size / 2**30
-                    stats[
-                        'monthly_storage_cost'
-                    ] += (  # Assumes the bucket is in Sydney.
-                        size_in_gb
-                        * STORAGE_COST_MONTHLY_PER_GB_SYDNEY[blob.storage_class]
-                    )
-                    if not folder:
-                        break
-                    folder = folder[: folder.rfind('/')]
+        for blob in blobs:
+            count += 1
+            if count % 10**6 == 0:
+                s = naturalsize(sys.getsizeof(aggregate_stats_container))
+                logging.info(f'{count // 10**6} M blobs... aggregate dict is using {s}')
+            folder = f'/{aggregate_level(blob.name)}'
+            while True:
+                path = f'gs://{bucket_name}{folder}'
+                stats = aggregate_stats_container[path]
+                stats['size'] += blob.size
+                stats[f'{blob.storage_class}_bytes'] += blob.size
+                stats['num_blobs'] += 1
+                size_in_gb = blob.size / 2**30
+                stats['monthly_storage_cost'] += (  # Assumes the bucket is in Sydney.
+                    size_in_gb * STORAGE_COST_MONTHLY_PER_GB_SYDNEY[blob.storage_class]
+                )
+                if not folder:
+                    break
+                folder = folder[: folder.rfind('/')]
 
         logging.info(f'{bucket_name} contains {count} blobs.')
 
