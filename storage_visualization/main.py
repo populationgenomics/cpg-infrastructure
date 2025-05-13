@@ -54,7 +54,7 @@ def main():
         # Reading all blob metadata is expensive and can take a long time, so don't risk
         # getting preempted.
         job._preemptible = False  # pylint: disable=protected-access
-        job.cpu(0.5)
+        job.cpu(1)
         job.memory('highmem')
 
         path = output_path(f'{dataset}.json.gz', dataset='common', category='analysis')
