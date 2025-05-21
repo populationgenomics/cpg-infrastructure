@@ -632,10 +632,9 @@ class CPGInfrastructure:
             d = {'infrastructure': dict(zip(keys, values))}
 
             # JohnM 10 Dec 2024: Temporarily override QoB JAR to avoid ballooning hail costs
-            # 07de0a408 is 0.2.133 with a StreamReadConstraints maxStringLength fix cherry-picked
-            # from upcoming upstream and SET-261-log-400-errors, built via a CI deploy batch
-            v133_retry_via_ci = '07de0a408acaba693dd94b115eac6bbacae1a6b9'
-            d['workflow'] = {'default_jar_spec_revision': v133_retry_via_ci}
+            # 2bb197d63 is 0.2.134 with SET-261-log-400-errors, built via a CI deploy batch
+            v134_retry_via_ci = '2bb197d63afd58f9452af306e0eb14d6924d0019'
+            d['workflow'] = {'default_jar_spec_revision': v134_retry_via_ci}
 
             return dict_to_toml(d)
 
