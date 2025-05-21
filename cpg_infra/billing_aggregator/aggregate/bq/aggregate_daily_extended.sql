@@ -26,7 +26,7 @@ MIN(usage_start_time) as usage_start_time,
 MAX(usage_end_time) as usage_end_time,
 SUM(cost) as cost
 FROM `billing-admin-290403.billing_aggregate.aggregate`
-WHERE NOT REGEXP_CONTAINS(LOWER(service.description), r'credit')
+WHERE NOT REGEXP_CONTAINS(LOWER(service.description), r'credit') AND cost_type <> 'tax'
 GROUP BY day, topic, cost_category, sku, invoice_month, ar_guid, dataset, batch_id, job_id, sequencing_type, stage, sequencing_group,
 compute_category,
 cromwell_sub_workflow_name,

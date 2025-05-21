@@ -11,4 +11,5 @@ AS
     currency,
     SUM(cost) as cost
     FROM `billing-admin-290403.billing_aggregate.aggregate`
+    WHERE cost_type <> 'tax'
     GROUP BY day, gcp_project, topic, cost_category, sku, invoice_month, currency
