@@ -28,7 +28,7 @@ AS
         'cromwell-sub-workflow-name', 'cromwell-workflow-id', 'goog-pipelines-worker', 'wdl-task-name', 'namespace'
     )
     AND NOT REGEXP_CONTAINS(LOWER(service.description), r'credit')
-    GROUP BY day, topic, cost_category, sku, invoice_month, ar_guid, dataset, batch_id, sequencing_type, stage, sequencing_group, 
+    GROUP BY day, topic, cost_category, sku, invoice_month, ar_guid, dataset, batch_id, sequencing_type, stage, sequencing_group,
     compute_category,
     cromwell_sub_workflow_name,
     cromwell_workflow_id,
