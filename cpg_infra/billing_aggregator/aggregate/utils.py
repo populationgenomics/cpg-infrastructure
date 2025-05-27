@@ -4,6 +4,7 @@ Class of helper functions for billing aggregate functions
 """
 
 import asyncio
+import gzip
 import json
 import logging
 import math
@@ -12,7 +13,8 @@ import re
 import sys
 from base64 import b64decode
 from datetime import date, datetime, timedelta, timezone
-from io import StringIO
+from io import StringIO, BytesIO
+from pandas_gbq import to_gbq
 from pathlib import Path
 from typing import (
     Any,
@@ -90,7 +92,7 @@ HAIL_SERVICE_FEE = 0.0
 # BQ only allows 10,000 parameters in a query, so given the way we upsert rows,
 # only upsert DEFAULT_BQ_INSERT_CHUNK_SIZE at once:
 # https://cloud.google.com/bigquery/quotas#:~:text=up%20to%2010%2C000%20parameters.
-DEFAULT_BQ_INSERT_CHUNK_SIZE = 20000
+DEFAULT_BQ_INSERT_CHUNK_SIZE = 200000
 ANALYSIS_RUNNER_PROJECT_ID = 'analysis-runner'
 
 # Maximum job count before all jobs gets summarised into one row
@@ -890,9 +892,10 @@ def upsert_rows_into_bigquery(
         job_config.schema = get_formatted_bq_schema()
 
         j = '\n'.join(json.dumps(o) for o in filtered_obj)
+        j_compressed = gzip.compress(bytes(j, 'utf-8'))
 
         resp = get_bigquery_client().load_table_from_file(
-            StringIO(j),
+            BytesIO(j_compressed),
             table,
             job_config=job_config,
             project=GCP_PROJECT,
@@ -973,7 +976,8 @@ def upsert_aggregated_dataframe_into_bigquery(
     project_id = table.split('.')[0]
 
     table_schema = get_bq_schema_json()
-    dataframe.to_gbq(
+    to_gbq(
+        dataframe,
         table,
         project_id=project_id,
         table_schema=table_schema,
