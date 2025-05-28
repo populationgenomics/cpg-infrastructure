@@ -13,8 +13,7 @@ import re
 import sys
 from base64 import b64decode
 from datetime import date, datetime, timedelta, timezone
-from io import StringIO, BytesIO
-from pandas_gbq import to_gbq
+from io import BytesIO
 from pathlib import Path
 from typing import (
     Any,
@@ -38,6 +37,7 @@ import rapidjson
 from flask import Request
 from google.api_core.exceptions import ClientError
 from pandas import Timestamp
+from pandas_gbq import to_gbq
 
 from cpg_utils.cloud import read_secret
 
