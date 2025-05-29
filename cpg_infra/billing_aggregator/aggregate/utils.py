@@ -657,7 +657,7 @@ async def process_entries_from_hail_in_chunks(
         return 0
 
     async def _get_jobs_and_add_to_queue(
-        batch: BatchType,process_entries_from_hail_in_chunks
+        batch: BatchType,
         token: str,
         queue: asyncio.Queue[bool | tuple[BatchType, list[JobType]]],
     ) -> None:
