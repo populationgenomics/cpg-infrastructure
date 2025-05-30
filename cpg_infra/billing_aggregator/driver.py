@@ -340,7 +340,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
             if function == 'seqr':
                 # seqr specific aggreg function needs over 8GB of memory
                 # 4GB per 1x cpu
-                cpu = 3
+                cpu = 4
                 memory = '12Gi'
 
             # Create the function, the trigger and subscription.
