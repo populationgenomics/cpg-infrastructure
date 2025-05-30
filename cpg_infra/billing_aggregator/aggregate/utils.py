@@ -578,7 +578,7 @@ async def process_entries_from_hail_in_chunks(
         Generator[dict[str, Any], None, None],
     ],
     billing_project: Optional[str] = None,
-    batch_group_chunk_size: int = 10,
+    batch_group_chunk_size: int = 5,
     log_prefix: str = '',
     mode: str = 'prod',
     output_path: str | None = './',
