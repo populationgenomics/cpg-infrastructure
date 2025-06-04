@@ -361,6 +361,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
                     'GCP_BILLING_SOURCE_TABLE': self.config.billing.gcp.source_bq_table,
                     'DEFAULT_INTERVAL_HOURS': self.config.billing.aggregator.interval_hours,
                     'BILLING_PROJECT_ID': self.config.billing.gcp.project_id,
+                    'ICA_RAW_TABLE': self.config.billing.aggregator.ica_raw_table,
                 },
                 timeout=timeout,
             )

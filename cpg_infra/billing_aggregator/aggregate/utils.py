@@ -78,6 +78,7 @@ if GCP_PROJECT:
 
 GCP_BILLING_BQ_TABLE = os.getenv('GCP_BILLING_SOURCE_TABLE')
 GCP_AGGREGATE_DEST_TABLE = os.getenv('GCP_AGGREGATE_DEST_TABLE')
+ICA_RAW_TABLE = os.getenv('ICA_RAW_TABLE')
 
 assert GCP_AGGREGATE_DEST_TABLE
 logger.info(f'GCP_AGGREGATE_DEST_TABLE: {GCP_AGGREGATE_DEST_TABLE}')
@@ -169,13 +170,15 @@ def get_bigquery_client():
     return _BQ_CLIENT
 
 
-async def async_retry_transient_get_json_request(
+async def async_retry_transient_get_request(
     url: str,
     errors: Type[Exception] | tuple[Type[Exception], ...],
     *args: list[Any],
     attempts: int = 5,
     session: aiohttp.ClientSession | None = None,
     timeout_seconds: int = 90,
+    # allow to return other than json data
+    as_json: bool = True,
     **kwargs: dict[str, Any],
 ) -> T:
     """
@@ -193,7 +196,67 @@ async def async_retry_transient_get_json_request(
                     **kwargs,
                 ) as resp:
                     resp.raise_for_status()
-                    return await resp.json()
+                    if as_json:
+                        return await resp.json()
+
+                    # otherwise return data as text
+                    return await resp.text()  # PGH003: ignore
+
+            # pylint: disable=broad-except
+            except Exception as e:
+                # reason for generic exception here is
+                # we can control which exception to catch listed in errors
+                last_exception = e
+                if not isinstance(e, errors):
+                    raise
+                if attempt == attempts:
+                    raise
+
+            t = 2 ** (attempt + 1)
+            logger.warning(f'Backing off {t} seconds due to {last_exception} for {url}')
+            await asyncio.sleep(t)
+
+        raise Exception(f'No attempt suceeded for {url}, and no exception was raised')
+
+    if session:
+        return await inner_block(session)
+
+    async with aiohttp.ClientSession() as session2:
+        return await inner_block(session2)
+
+
+async def async_retry_transient_post_request(
+    url: str,
+    errors: Type[Exception] | tuple[Type[Exception], ...],
+    *args: list[Any],
+    attempts: int = 1,
+    session: aiohttp.ClientSession | None = None,
+    timeout_seconds: int = 90,
+    # allow to return other than json data
+    as_json: bool = True,
+    **kwargs: dict[str, Any],
+) -> T:
+    """
+    Retry a function with exponential backoff.
+    """
+
+    async def inner_block(_session: aiohttp.ClientSession) -> T:
+        last_exception = None
+        for attempt in range(1, attempts + 1):
+            try:
+                async with _session.post(
+                    url,
+                    *args,
+                    timeout=aiohttp.ClientTimeout(total=timeout_seconds),
+                    **kwargs,
+                ) as resp:
+                    resp.raise_for_status()
+                    if as_json:
+                        return await resp.json()
+
+                    # otherwise return data as text
+                    return await resp.text()  # PGH003: ignore
+
             # pylint: disable=broad-except
             except Exception as e:
                 # reason for generic exception here is
@@ -247,6 +310,11 @@ def get_bq_schema_json() -> list[dict[str, Any]]:
     return get_schema_json('aggregate_schema.json')
 
 
+def get_ica_schema_json() -> list[dict[str, Any]]:
+    """Get the bq schema (in JSON) for the aggregate table"""
+    return get_schema_json('ica_illumina_schema.json')
+
+
 def _format_bq_schema_json(schema: list[dict[str, Any]]) -> list[dict]:
     """
     Take bq json schema, and convert it to bq.SchemaField objects"""
@@ -264,11 +332,13 @@ def _format_bq_schema_json(schema: list[dict[str, Any]]) -> list[dict]:
     return formatted_schema
 
 
-def get_formatted_bq_schema() -> list[bq.SchemaField]:
+def get_formatted_bq_schema(
+    schema_func: Callable = get_bq_schema_json,
+) -> list[bq.SchemaField]:
     """
     Get schema for bigquery billing table, as a list of bq.SchemaField objects
     """
-    return _format_bq_schema_json(get_bq_schema_json())
+    return _format_bq_schema_json(schema_func())
 
 
 def parse_date_only_string(d: str | None) -> date | None:
@@ -409,7 +479,7 @@ async def get_completed_batches_hail_api(
             q = '?' + '&'.join(f'{k}={v}' for k, v in params.items())
             url = HAIL_BATCHES_API + q
             logger.info(f'Getting batches: {url}')
-            return await async_retry_transient_get_json_request(
+            return await async_retry_transient_get_request(
                 url,
                 aiohttp.ClientError,
                 headers={'Authorization': 'Bearer ' + token},
@@ -509,7 +579,7 @@ async def get_jobs_for_batch(
             jresponse: dict[
                 Literal['last_job_id', 'jobs'],
                 Any,
-            ] = await async_retry_transient_get_json_request(
+            ] = await async_retry_transient_get_request(
                 url,
                 (aiohttp.ClientError, asyncio.TimeoutError),
                 session=session,
@@ -537,7 +607,7 @@ async def get_batch_by_id(
     try:
         url = HAIL_BATCH_API.replace('{batch_id}', batch_id)
         logger.info(f'Getting batch: {url}')
-        return await async_retry_transient_get_json_request(
+        return await async_retry_transient_get_request(
             url,
             aiohttp.ClientError,
             headers={'Authorization': 'Bearer ' + token},
@@ -819,6 +889,7 @@ def upsert_rows_into_bigquery(
     table: str = GCP_AGGREGATE_DEST_TABLE,
     chunk_size: int = DEFAULT_BQ_INSERT_CHUNK_SIZE,
     max_chunk_size_mb: int = 6,
+    schema_func: Callable = get_bq_schema_json,
 ) -> int:
     """
     Upsert JSON rows into the BQ.aggregate table.
@@ -889,7 +960,7 @@ def upsert_rows_into_bigquery(
         # there is at least one new field passed from GCP billing table, not present in metamist schema:
         # invoice.publisher_type
         job_config.ignore_unknown_values = True
-        job_config.schema = get_formatted_bq_schema()
+        job_config.schema = get_formatted_bq_schema(schema_func)
 
         j = '\n'.join(json.dumps(o) for o in filtered_obj)
         j_compressed = gzip.compress(bytes(j, 'utf-8'))
@@ -1432,6 +1503,7 @@ def retrieve_stored_ids(
     end: datetime,
     service_id: str,
     table: str = GCP_AGGREGATE_DEST_TABLE,
+    endtime_col_name: str = 'usage_end_time',
 ) -> set[str]:
     """
     Retrieve all the stored ids using seqr- and hail- prefixes
@@ -1443,16 +1515,16 @@ def retrieve_stored_ids(
     if '`' in table:
         raise ValueError('Table name cannot contain backticks')
 
-    if service_id not in ('seqr', 'hail'):
+    if service_id not in ('seqr', 'hail', 'ica'):
         raise ValueError(f'Invalid service_id: {service_id}')
 
-    if table not in (GCP_AGGREGATE_DEST_TABLE, GCP_BILLING_BQ_TABLE):
+    if table not in (GCP_AGGREGATE_DEST_TABLE, GCP_BILLING_BQ_TABLE, ICA_RAW_TABLE):
         raise ValueError(f'Invalid table: {table}')
 
     _query = f"""
         SELECT id FROM `{table}`
         -- usage_end_time is partition by DAY, keep extra 1 day each side
-        WHERE DATE_TRUNC(usage_end_time, DAY) BETWEEN
+        WHERE DATE_TRUNC({endtime_col_name}, DAY) BETWEEN
             TIMESTAMP(DATETIME_ADD(@window_start, INTERVAL -@days_filter DAY)) AND
             TIMESTAMP(DATETIME_ADD(@window_end, INTERVAL @days_filter DAY))
 
@@ -1460,7 +1532,7 @@ def retrieve_stored_ids(
         AND id LIKE '{service_id}-%'
 
         -- limit records to min possible, give a +- 5 minute buffer so we do not miss any records
-        AND usage_end_time BETWEEN
+        AND {endtime_col_name} BETWEEN
             TIMESTAMP(DATETIME_ADD(@window_start, INTERVAL -5 MINUTE))
             AND
             TIMESTAMP(DATETIME_ADD(@window_end, INTERVAL 5 MINUTE));

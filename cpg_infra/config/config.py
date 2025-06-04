@@ -193,6 +193,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
             billing_sheet_id: str | None = None
             monthly_summary_table: str | None = None
             interval_hours: int = 4
+            ica_raw_table: str | None = None
 
         @dataclasses.dataclass(frozen=True)
         class GCPCostControls(DeserializableDataclass):
