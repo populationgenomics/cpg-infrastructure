@@ -56,7 +56,7 @@ def get_parser():
     parser.add_argument(
         '--max-depth',
         help='Maximum folder depth to display',
-        default=3,
+        default=2,
         type=int,
     )
     parser.add_argument(
