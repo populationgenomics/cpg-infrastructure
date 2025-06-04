@@ -56,7 +56,7 @@ def get_parser():
     parser.add_argument(
         '--max-depth',
         help='Maximum folder depth to display',
-        default=2,
+        default=3,
         type=int,
     )
     parser.add_argument(
@@ -123,31 +123,9 @@ def post_to_slack(
     )
 
 
-def generate_and_write_treemap(
-    rows: list[tuple],
-    output_html: str,
-    output_png: str,
-):
-    dataframe = pd.DataFrame(
-        # The column name list needs to match the `append_row` implementation.
-        rows,
-        columns=(
-            'name',
-            'parent',
-            'value',  # Gets mapped to treemap node size.
-            'total_bytes',
-            'standard_bytes',
-            'nearline_bytes',
-            'coldline_bytes',
-            'archive_bytes',
-            'num_blobs',
-            'monthly_storage_cost',
-            'hotness',  # Gets mapped to treemap node color.
-        ),
-    )
-
+def prepare_chart(df: pd.DataFrame):
     fig = px.treemap(
-        dataframe,
+        df,
         names='name',
         parents='parent',
         values='value',
@@ -170,9 +148,42 @@ def generate_and_write_treemap(
         range_color=(0, 1),
     )
     fig.update_traces(root_color='lightgrey')
+    return fig
 
+
+def generate_and_write_treemap(
+    rows: list[tuple],
+    max_depth: int,
+    output_html: str,
+    output_png: str,
+):
+    dataframe = pd.DataFrame(
+        # The column name list needs to match the `append_row` implementation.
+        rows,
+        columns=(
+            'name',
+            'parent',
+            'value',  # Gets mapped to treemap node size.
+            'total_bytes',
+            'standard_bytes',
+            'nearline_bytes',
+            'coldline_bytes',
+            'archive_bytes',
+            'num_blobs',
+            'monthly_storage_cost',
+            'hotness',  # Gets mapped to treemap node color.
+        ),
+    )
+
+    fig = prepare_chart(dataframe)
     with AnyPath(output_html).open('wt') as f:
         fig.write_html(f)
+
+    # for image show only top (max_depth - 1) levels
+    # name starts with gs:// so add 2)
+    max_slash_count = 2 + (max_depth - 1)
+    dataframe = dataframe[dataframe['name'].str.count('/') < max_slash_count]
+    fig = prepare_chart(dataframe)
     with AnyPath(output_png).open('wb') as f:
         fig.write_image(f, width=1920, height=1080)
 
@@ -268,6 +279,7 @@ def main() -> None:
         )
         generate_and_write_treemap(
             rows=rows,
+            max_depth=args.max_depth,
             output_html=output_html_path,
             # write locally to use in slack message
             output_png='treemap.png',
@@ -280,7 +292,9 @@ def main() -> None:
                 missing_datasets=missing_datasets,
             )
     except (ValueError, TypeError) as error:
-        comment = f'Failed to generate storage viz treemap: {error}'
+        # limit the comment message to prevent overloading slack with large error dumps.
+        # can always check the errors in the Hail output.
+        comment = f'Failed to generate storage viz treemap: {error}'[:250]
         if url := _get_hail_batch_url():
             comment += f'\n\nSee {url} for more details.'
         if should_post_to_slack:
