@@ -362,6 +362,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
                     'DEFAULT_INTERVAL_HOURS': self.config.billing.aggregator.interval_hours,
                     'BILLING_PROJECT_ID': self.config.billing.gcp.project_id,
                     'ICA_RAW_TABLE': self.config.billing.aggregator.ica_raw_table,
+                    'ICA_API_SECRET_NAME': self.config.billing.aggregator.ica_api_secret_name,
                 },
                 timeout=timeout,
             )

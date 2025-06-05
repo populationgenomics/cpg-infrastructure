@@ -33,7 +33,7 @@ try:
 except ImportError:
     import utils  # type: ignore
 
-logger = utils.logger.getChild('gcp')
+logger = utils.logger.getChild('ica')
 logger.setLevel(logging.INFO)
 
 
@@ -41,7 +41,7 @@ ICA_TOKEN_URL = 'https://ica.illumina.com/ica/rest/api/tokens'
 ICA_API_URL = 'https://use1.platform.illumina.com/v1/usage/download'
 DOMAIN = 'populationgenomics'
 
-# TODO this conversion will be semi static, we should be sing conversion rate at the date we top up iCredits
+# TODO this conversion will be semi static, we should be assing conversion rate at the date we top up iCredits
 I_CREDITS_TO_AUD = 1.54
 
 
@@ -115,10 +115,11 @@ async def migrate_billing_data(start, end) -> int:
 
     result = 0
     for chunk in get_ica_raw_data(start, end).to_dataframe_iterable():
-        # Add id and topic to the row
+        # Add new fields to the row
         if len(chunk) == 0:
             continue
 
+        # add required GCP billing fields that are not in ICA data
         chunk.insert(0, 'topic', chunk.apply(get_topic, axis=1))
         chunk.insert(0, 'service', chunk.apply(get_service, axis=1))
         chunk.insert(0, 'labels', chunk.apply(get_labels, axis=1))
@@ -152,8 +153,10 @@ async def migrate_billing_data(start, end) -> int:
             ]
         ]
 
+        # convert to list of dictionaries and insert into BigQuery
         result += utils.upsert_rows_into_bigquery(
             objs=json.loads(
+                # Convert DataFrame to JSON string with ISO date format
                 selected_chunk.to_json(orient='records', date_format='iso')
             ),
             existing_ids=existing_ids,
@@ -168,7 +171,7 @@ async def migrate_billing_data(start, end) -> int:
 #################
 
 
-def get_topic(row: dict) -> str | None:
+def get_topic(row: dict) -> str:
     return 'ica-illumina'
 
 
@@ -220,7 +223,7 @@ def get_api_key() -> str | None:
     """
     api_key_secret = read_secret(
         'cpg-common',
-        'illumina_cpg_workbench_api',
+        utils.ICA_API_SECRET_NAME,
         fail_gracefully=False,
     )
 
