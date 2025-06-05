@@ -2,10 +2,17 @@
 """
 Cloud function that runs once a day that downloads data billing from ICE
 
-Tasks:
+Tasks performed:
+1. Connect to ICA API to get JWT token
+2. Download CSV Billing data for selected dates
+3. Upsert data into ICA_RAW_TABLE
+4. Convert / migrate data into GCP specific billing format
+5. Upsert into GCP_AGGREGATE_DEST_TABLE
 
-
-IMPORTANT:
+TODO:
+- Figure out how we distribute the costs to other topics
+- What to do with conversion rate (iCredit to AUD), how often we update, where we store the used conversions?
+- How to link the ICA to AR GUID
 
 """
 
@@ -294,7 +301,7 @@ async def get_csv_data(
         )
         data = StringIO(resp)
         df = pd.read_csv(data)
-        
+
         # all headers in lower case
         df = df.rename(columns=str.lower)
         df['usage_timestamp'] = pd.to_datetime(
@@ -302,7 +309,7 @@ async def get_csv_data(
         )
         # add unique id
         df['id'] = 'ica-' + df['usage_id'].astype(str)
-        
+
         # make sku and usage_id as strings
         df['sku'] = df['sku'].astype(str)
         df['usage_id'] = df['usage_id'].astype(str)
