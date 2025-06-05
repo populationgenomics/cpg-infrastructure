@@ -327,7 +327,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
 
             # TODO: We should consider moving function specific cpu/memory/timeout values to config
 
-            if function in ['hail', 'seqr', 'gcp']:
+            if function in ['hail', 'seqr', 'seqr24', 'gcp']:
                 # max possible timeout is 1H for HTTP functions
                 timeout = 3600
 
@@ -337,7 +337,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 cpu = 2
                 memory = '8Gi'
 
-            if function == 'seqr':
+            if function in ['seqr', 'seqr24']:
                 # seqr specific aggreg function needs over 8GB of memory
                 # 4GB per 1x cpu
                 cpu = 4
