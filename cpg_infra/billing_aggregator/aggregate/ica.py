@@ -240,7 +240,7 @@ async def get_jwt_token(
     attempts: int = 1,
 ) -> str | None:
     """
-    Get batch details by batch_id
+    Get JWT token from ICA
     """
     if not xkey:
         raise ValueError('No api key provided for ICE API')
@@ -273,7 +273,7 @@ async def get_csv_data(
     attempts: int = 1,
 ) -> list[dict[str, Any]]:
     """
-    Get batch details by batch_id
+    Get CSV billing data from ICA
     """
     if not token:
         raise ValueError('No token provided for ICE API')
@@ -294,16 +294,19 @@ async def get_csv_data(
         )
         data = StringIO(resp)
         df = pd.read_csv(data)
+        
         # all headers in lower case
         df = df.rename(columns=str.lower)
-        # add unique id
         df['usage_timestamp'] = pd.to_datetime(
             df['usage_timestamp'], format='%m/%d/%Y %H:%M:%S'
         )
+        # add unique id
         df['id'] = 'ica-' + df['usage_id'].astype(str)
+        
         # make sku and usage_id as strings
         df['sku'] = df['sku'].astype(str)
         df['usage_id'] = df['usage_id'].astype(str)
+        # export df to JSON string and reload as JSON
         return json.loads(df.to_json(orient='records', date_format='iso'))
 
     except asyncio.TimeoutError as ex:
@@ -335,6 +338,8 @@ async def main(
     api_key = get_api_key()
     token = await get_jwt_token(api_key, DOMAIN)
     entries = await get_csv_data(token, s, e)
+
+    # get existing records, only insert new ones into ICA_RAW_TABLE
     existing_ids = utils.retrieve_stored_ids(
         s - timedelta(days=1),
         e + timedelta(days=1),
@@ -351,17 +356,21 @@ async def main(
     )
     logger.info(f'Inserted {result} rows')
 
-    # migrate to aggregated billing table
+    # migrate data to aggregated billing table
     result = await migrate_billing_data(s, e)
     logger.info(f'Migrated {result} rows')
 
     # TODO redistribute data to topics
-    # most likely by 'sub_tenant_name' ?
+    # most likely by 'sub_tenant_name' ? or by seq groups or by ARGUID
     return {'entriesInserted': result}
 
 
 if __name__ == '__main__':
     # Set logging levels
+    logger.setLevel(logging.INFO)
+    logging.getLogger('google').setLevel(logging.WARNING)
+    logging.getLogger('asyncio').setLevel(logging.ERROR)
+    logging.getLogger('urllib3').setLevel(logging.WARNING)
 
     test_start, test_end = None, None
     asyncio.new_event_loop().run_until_complete(main(start=test_start, end=test_end))
