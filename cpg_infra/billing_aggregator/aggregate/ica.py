@@ -30,6 +30,7 @@ from typing import (
 import aiohttp
 import functions_framework
 import google.cloud.bigquery as bq
+import numpy as np
 import pandas as pd
 from flask import Request
 
@@ -158,7 +159,9 @@ async def migrate_billing_data(start, end) -> int:
                 'invoice',
                 'cost_type',
             ]
-        ]
+        ].replace(
+            'None', np.nan
+        )  # replace all None with np.NaN os it gets converted to null
 
         # convert to list of dictionaries and insert into BigQuery
         result += utils.upsert_rows_into_bigquery(
