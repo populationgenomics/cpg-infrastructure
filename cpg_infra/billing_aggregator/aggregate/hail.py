@@ -22,6 +22,8 @@ Tasks:
 """
 
 import asyncio
+import base64
+import gzip
 import json
 import logging
 import os
@@ -120,6 +122,9 @@ def get_finalised_entries_for_batch(
             labels.update(job.get('attributes', {}))
             if labels.get('name'):
                 labels['job_name'] = labels.pop('name')
+            if compressed_b64 := labels.pop('sequencing_groups_gzip', None):
+                compressed = base64.standard_b64decode(compressed_b64)
+                labels['sequencing_groups'] = gzip.decompress(compressed).decode()
 
             # Remove any labels with falsey values e.g. None, '', 0
             labels = dict(filter(lambda lbl: lbl[1], labels.items()))
