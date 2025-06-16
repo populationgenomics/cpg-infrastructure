@@ -54,6 +54,10 @@ def aggregate_level(name: str) -> str:
         return name[: ht_index + 3]
     if (mt_index := name.find('.mt/')) != -1:
         return name[: mt_index + 3]
+    if (vds_index := name.find('.vds/')) != -1:
+        return name[: vds_index + 4]
+    if (batch_tmp_index := name.rfind('/batch-tmp')) != -1:
+        return name[: batch_tmp_index + 10]
     if (slash_index := name.rfind('/')) != -1:
         return name[:slash_index]
     return ''  # Root level
