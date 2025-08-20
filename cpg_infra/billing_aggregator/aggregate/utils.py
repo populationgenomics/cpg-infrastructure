@@ -109,6 +109,9 @@ DEFAULT_RANGE_INTERVAL = timedelta(
     hours=int(os.getenv('DEFAULT_INTERVAL_HOURS', '1')), minutes=5
 )
 
+# Labels with JSON string values that should be expanded into lists etc
+JSON_LABELS = {'cohorts', 'datasets', 'sequencing_groups'}
+
 # Billing BQ tables are paritition by day
 # To avoid full scan, we limit the query to +/- XY days
 # For the queries where we return Ids, small period used to limit long running jobs (we compare on usage end date)
@@ -1405,8 +1408,21 @@ def get_hail_entry(
 
     _labels = None
     if labels:
+        # expand JSON string values for keys listed in JSON_LABELS
+        expanded = {}
+        for k, v in labels.items():
+            if k in JSON_LABELS:
+                try:
+                    expanded[k] = rapidjson.loads(v)
+                except rapidjson.JSONDecodeError:
+                    # Leave expanded[k] absent and log the error
+                    logger.exception(f'Error parsing {k!r} JSON for {key!r}')
+            else:
+                expanded[k] = v
+
         # convert to string
-        _labels = rapidjson.dumps(labels, sort_keys=True)
+        _labels = rapidjson.dumps(expanded, sort_keys=True)
+
     return {
         'id': key,
         'topic': topic,
