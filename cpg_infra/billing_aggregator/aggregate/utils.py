@@ -110,7 +110,7 @@ DEFAULT_RANGE_INTERVAL = timedelta(
 )
 
 # Labels with JSON string values that should be expanded into lists etc
-JSON_LABELS = {'sequencing_groups'}
+JSON_LABELS = {'cohorts', 'datasets', 'sequencing_groups'}
 
 # Billing BQ tables are paritition by day
 # To avoid full scan, we limit the query to +/- XY days
