@@ -3,6 +3,7 @@
 Class of helper functions for billing aggregate functions
 """
 
+import ast
 import asyncio
 import gzip
 import json
@@ -109,8 +110,8 @@ DEFAULT_RANGE_INTERVAL = timedelta(
     hours=int(os.getenv('DEFAULT_INTERVAL_HOURS', '1')), minutes=5
 )
 
-# Labels with JSON string values that should be expanded into lists etc
-JSON_LABELS = {'cohorts', 'datasets', 'sequencing_groups'}
+# Labels with Python literal string values that should be expanded into list objects etc
+OBJECT_LABELS = {'cohorts', 'datasets', 'sequencing_groups'}
 
 # Billing BQ tables are paritition by day
 # To avoid full scan, we limit the query to +/- XY days
@@ -1408,15 +1409,15 @@ def get_hail_entry(
 
     _labels = None
     if labels:
-        # expand JSON string values for keys listed in JSON_LABELS
+        # expand Python literal string values for keys listed in OBJECT_LABELS
         expanded = {}
         for k, v in labels.items():
-            if k in JSON_LABELS:
+            if k in OBJECT_LABELS:
                 try:
-                    expanded[k] = rapidjson.loads(v)
-                except rapidjson.JSONDecodeError:
+                    expanded[k] = ast.literal_eval(v)
+                except Exception:
                     # Leave expanded[k] absent and log the error
-                    logger.exception(f'Error parsing {k!r} JSON for {key!r}')
+                    logger.exception(f'Error parsing {k!r} literal for {key!r}')
             else:
                 expanded[k] = v
 
