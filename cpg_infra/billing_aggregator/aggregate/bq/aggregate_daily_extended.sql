@@ -13,7 +13,10 @@ JSON_VALUE(PARSE_JSON(labels, wide_number_mode=>'round'), '$.batch_id') as batch
 JSON_VALUE(PARSE_JSON(labels, wide_number_mode=>'round'), '$.job_id') as job_id,
 JSON_VALUE(PARSE_JSON(labels, wide_number_mode=>'round'), '$.sequencing_type') as sequencing_type,
 JSON_VALUE(PARSE_JSON(labels, wide_number_mode=>'round'), '$.stage') as stage,
-COALESCE(JSON_VALUE(PARSE_JSON(labels, wide_number_mode=>'round'), '$.sequencing_group'), JSON_VALUE(PARSE_JSON(labels, wide_number_mode=>'round'), '$.sequencing-group')) as sequencing_group,
+CASE WHEN JSON_QUERY(labels, '$.sequencing_groups') IS NOT NULL THEN ARRAY_TO_STRING(JSON_EXTRACT_STRING_ARRAY(labels, '$.sequencing_groups'), ',')
+ELSE COALESCE(JSON_VALUE(PARSE_JSON(labels, wide_number_mode=>'round'), '$.sequencing_group'), JSON_VALUE(PARSE_JSON(labels, wide_number_mode=>'round'), '$.sequencing-group'))
+END as sequencing_group,
+CASE WHEN JSON_QUERY(labels, '$.cohorts') IS NOT NULL THEN ARRAY_TO_STRING(JSON_EXTRACT_STRING_ARRAY(labels, '$.cohorts'), ',') ELSE NULL END as cohorts,
 JSON_VALUE(PARSE_JSON(labels, wide_number_mode=>'round'), '$.compute-category') as compute_category,
 JSON_VALUE(PARSE_JSON(labels, wide_number_mode=>'round'), '$.cromwell-sub-workflow-name') as cromwell_sub_workflow_name,
 JSON_VALUE(PARSE_JSON(labels, wide_number_mode=>'round'), '$.cromwell-workflow-id') as cromwell_workflow_id,
@@ -28,6 +31,7 @@ SUM(cost) as cost
 FROM `billing-admin-290403.billing_aggregate.aggregate`
 WHERE NOT REGEXP_CONTAINS(LOWER(service.description), r'credit') AND cost_type <> 'tax'
 GROUP BY day, topic, cost_category, sku, invoice_month, ar_guid, dataset, batch_id, job_id, sequencing_type, stage, sequencing_group,
+cohorts,
 compute_category,
 cromwell_sub_workflow_name,
 cromwell_workflow_id,
