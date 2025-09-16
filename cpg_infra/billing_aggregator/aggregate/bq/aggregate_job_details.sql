@@ -3,7 +3,7 @@ AS
 SELECT
     JSON_VALUE(PARSE_JSON(labels, wide_number_mode=>'round'), '$.ar-guid') as ar_guid,
     JSON_VALUE(PARSE_JSON(labels, wide_number_mode=>'round'), '$.batch_id') as batch_id,
-    CASE WHEN JSON_QUERY(labels, '$.sequencing_groups') IS NOT NULL THEN ARRAY_TO_STRING(JSON_VALUE_ARRAY(labels, '$.sequencing_groups'), ',')
+    CASE WHEN JSON_QUERY(labels, '$.sequencing_groups') IS NOT NULL THEN REGEXP_REPLACE(REPLACE(JSON_VALUE(PARSE_JSON(labels), '$.sequencing_groups'),"'",""), "\\[|\\]", "")
     ELSE COALESCE(JSON_VALUE(PARSE_JSON(labels, wide_number_mode=>'round'), '$.sequencing_group'), JSON_VALUE(PARSE_JSON(labels, wide_number_mode=>'round'), '$.sequencing-group'))
     END as sequencing_group,
     CASE WHEN JSON_QUERY(labels, '$.cohorts') IS NOT NULL THEN ARRAY_TO_STRING(JSON_VALUE_ARRAY(labels, '$.cohorts'), ',') ELSE NULL END as cohorts,
