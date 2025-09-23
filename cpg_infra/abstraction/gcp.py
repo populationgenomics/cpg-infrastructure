@@ -399,11 +399,9 @@ class GcpInfrastructure(CloudInfraBase):
         def soft_delete_policy_args():
             # If soft delete protection is disabled, set retention to 0 to disable it
             # If enabled, use None to let GCP use the default policy
-            if not soft_delete_protection:
-                return gcp.storage.BucketSoftDeletePolicyArgs(
-                    retention_duration_seconds=0
-                )
-            return None
+            if soft_delete_protection:
+                return None
+            return gcp.storage.BucketSoftDeletePolicyArgs(retention_duration_seconds=0)
 
         return gcp.storage.Bucket(
             self.get_pulumi_name(name + '-bucket'),
