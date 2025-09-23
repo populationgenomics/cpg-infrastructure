@@ -180,11 +180,13 @@ class CloudInfraBase(ABC):
         versioning: bool = True,
         autoclass: bool = False,
         project: Optional[str] = None,
+        soft_delete_protection: bool = True,
     ) -> Any:
         """
         This should take a potentially `non-unique` bucket name,
         and create a bucket, returning a resource.
         :param requester_pays:
+        :param soft_delete_protection: Whether to enable soft delete protection
         """
 
     @abstractmethod
@@ -387,6 +389,7 @@ class DryRunInfra(CloudInfraBase):
         versioning: bool = True,
         autoclass: bool = False,
         project: Optional[str] = None,
+        soft_delete_protection: bool = True,
     ) -> Any:
         print(f'Create bucket: {name} w/ rules: {", ".join(lifecycle_rules)}')
         return f'BUCKET://{name}'

@@ -384,6 +384,7 @@ class GcpInfrastructure(CloudInfraBase):
         versioning: bool = True,
         autoclass: bool = False,
         project: Optional[str] = None,
+        soft_delete_protection: bool = True,
     ) -> Any:
         unique_bucket_name = name
         if not unique:
@@ -395,6 +396,15 @@ class GcpInfrastructure(CloudInfraBase):
             # Only set the parameter if required, to avoid superflous changes to existing buckets.
             return gcp.storage.BucketAutoclassArgs(enabled=True) if autoclass else None
 
+        def soft_delete_policy_args():
+            # If soft delete protection is disabled, set retention to 0 to disable it
+            # If enabled, use None to let GCP use the default policy
+            if not soft_delete_protection:
+                return gcp.storage.BucketSoftDeletePolicyArgs(
+                    retention_duration_seconds=0
+                )
+            return None
+
         return gcp.storage.Bucket(
             self.get_pulumi_name(name + '-bucket'),
             name=unique_bucket_name,
@@ -402,6 +412,7 @@ class GcpInfrastructure(CloudInfraBase):
             uniform_bucket_level_access=True,
             versioning=gcp.storage.BucketVersioningArgs(enabled=versioning),
             autoclass=autoclass_args(),
+            soft_delete_policy=soft_delete_policy_args(),
             labels={'bucket': unique_bucket_name},
             # duplicate the array to avoid adding the lifecycle rule to an existing list
             lifecycle_rules=[

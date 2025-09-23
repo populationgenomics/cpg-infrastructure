@@ -1735,6 +1735,7 @@ class CPGDatasetCloudInfrastructure:
             lifecycle_rules=[self.infra.bucket_rule_temporary()],
             versioning=False,
             autoclass=False,  # Gets cleared out automatically.
+            soft_delete_protection=False,
         )
 
     @cached_property
@@ -1849,6 +1850,7 @@ class CPGDatasetCloudInfrastructure:
             lifecycle_rules=[self.infra.bucket_rule_temporary()],
             versioning=False,
             autoclass=False,  # Gets cleared out automatically.
+            soft_delete_protection=False,
         )
 
     @cached_property

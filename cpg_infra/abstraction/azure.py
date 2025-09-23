@@ -301,6 +301,7 @@ class AzureInfra(CloudInfraBase):
         versioning: bool = True,
         autoclass: bool = False,
         project: Optional[str] = None,
+        soft_delete_protection: bool = True,
     ) -> Any:
         # Policies are set at the storage account level
         # the rules are generated using other function calls
