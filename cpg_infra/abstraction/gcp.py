@@ -397,10 +397,11 @@ class GcpInfrastructure(CloudInfraBase):
             return gcp.storage.BucketAutoclassArgs(enabled=True) if autoclass else None
 
         def soft_delete_policy_args():
-            # If soft delete protection is disabled, set retention to 0 to disable it
             # If enabled, use None to let GCP use the default policy
             if soft_delete_protection:
                 return None
+
+            # If soft delete protection is disabled, set retention to 0 to disable it
             return gcp.storage.BucketSoftDeletePolicyArgs(retention_duration_seconds=0)
 
         return gcp.storage.Bucket(
