@@ -1,4 +1,4 @@
 [slack]
-channel = 'rd-storage-monitoring'
-token_secret_id = 'rd-storage-monitoring-bot-token'
+channel = 'rd-pipelines'
+token_secret_id = 'slack-production-bot-token'
 token_project_id = 'cpg-common'

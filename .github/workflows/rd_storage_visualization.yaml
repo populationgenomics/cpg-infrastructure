@@ -1,9 +1,9 @@
-name: Storage visualization
+name: RD storage visualization
 
 on:
-  # Run every Sunday morning.
+  # Run every Monday morning.
   schedule:
-    - cron: "0 0 * * 0"
+    - cron: "0 4 * * 1"
   # Run on demand.
   workflow_dispatch:
 
