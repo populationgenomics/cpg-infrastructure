@@ -1,0 +1,49 @@
+name: RD storage visualization
+
+on:
+  # Run every Monday morning.
+  schedule:
+    - cron: "0 4 * * 1"
+  # Run on demand.
+  workflow_dispatch:
+
+jobs:
+  submit_batch:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout this repository (cpg-infrastructure).
+      - uses: actions/checkout@v3
+
+      # Checkout the private repository (cpg-infrastructure-private).
+      - uses: actions/checkout@v3
+        with:
+          repository: populationgenomics/cpg-infrastructure-private
+          path: cpg-infrastructure-private
+          ssh-key: ${{ secrets.INFRA_PRIVATE_DEPLOY_TOKEN }}
+
+      - name: "Authenticate to Google Cloud"
+        id: "google-cloud-auth"
+        uses: "google-github-actions/auth@v1"
+        with:
+          credentials_json: "${{ secrets.GCP_STORAGE_VISUALIZATION_CREDENTIALS }}"
+          project_id: cpg-common
+
+      - name: "gcloud docker auth"
+        run: gcloud auth configure-docker australia-southeast1-docker.pkg.dev
+
+      - name: "build Docker image"
+        run: docker build -f storage_visualization/Dockerfile -t australia-southeast1-docker.pkg.dev/cpg-common/images/storage-visualization:latest storage_visualization
+
+      - name: "push Docker image"
+        run: docker push australia-southeast1-docker.pkg.dev/cpg-common/images/storage-visualization:latest
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - run: pip install analysis-runner
+
+      - name: "Submit batch"
+        # Automatically confirm to run with "full" access level.
+        run: yes | storage_visualization/rd_submit.py cpg-infrastructure-private/config-datasets.yaml
