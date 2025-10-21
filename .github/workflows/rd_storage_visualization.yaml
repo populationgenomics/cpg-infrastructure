@@ -4,7 +4,6 @@ on:
   # Run every Monday morning.
   schedule:
     - cron: "0 4 * * 1"
-    
   # Run on demand.
   workflow_dispatch:
     inputs:
