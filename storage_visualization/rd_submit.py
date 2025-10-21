@@ -39,7 +39,7 @@ def main():
         access_level=os.getenv('ACCESS_LEVEL', 'full'),
         config=['storage_visualization/rd_slack.toml'],
         output_dir='rd_storage_visualization/'
-        + datetime.datetime.now().date().strftime('%y-%m-%d'),  # noqa: DTZ005
+        + datetime.datetime.now().date().strftime('%y-%m-%dT%H:%M:%S'),  # noqa: DTZ005
         description='RD projects storage visualization',
         script=['storage_visualization/main.py', *datasets, bucket_type]
         if bucket_type

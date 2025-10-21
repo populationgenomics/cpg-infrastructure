@@ -16,7 +16,13 @@ import pandas as pd
 import plotly.express as px
 from cloudpathlib import AnyPath
 
-from cpg_utils.config import config_retrieve, dataset_path, output_path
+from cpg_utils import to_path
+from cpg_utils.config import (
+    config_retrieve,
+    dataset_path,
+    get_access_level,
+    output_path,
+)
 from cpg_utils.slack import upload_file
 
 ROOT_NODE = '<root>'
@@ -70,9 +76,8 @@ def get_parser():
         action='store_true',
     )
     parser.add_argument(
-        '--use-fixed-url',
-        help='Use a fixed URL for the treemap HTML output',
-        action='store_true',
+        '--bucket-type',
+        help='Optional bucket type to scan (upload, tmp, analysis, web)',
     )
 
     return parser
@@ -197,6 +202,7 @@ def prepare_rows_from_input_paths(  # noqa: C901
     input_paths: list[str],
     max_depth: int,
     group_by_dataset: bool,
+    bucket_type: str | None,
 ) -> tuple[list[tuple], list[str]]:
     """Prepare rows for a dataframe from the given input paths.
 
@@ -204,12 +210,14 @@ def prepare_rows_from_input_paths(  # noqa: C901
         input_paths (list[str]): json.gz files produced from disk_usage.py
         max_depth (int): Maximum folder depth to display
         group_by_dataset (bool): Group bucket storage stats by their dataset
+        bucket_type (str | None): Optional bucket type to subset to (upload, tmp, analysis, web)
 
     Returns:
         tuple[list[tuple], list[str]]: (rows, errors)
     """
     rows: list[tuple] = []
 
+    access_level = 'test' if get_access_level() == 'test' else 'main'
     root_values: dict[str, int] = defaultdict(int)
     datasets: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     missing_datasets: list[str] = []
@@ -224,6 +232,11 @@ def prepare_rows_from_input_paths(  # noqa: C901
 
         with AnyPath(input_path).open('rb') as f, gzip.open(f, 'rt') as gfz:
             for name, vals in json.load(gfz).items():
+                # If a bucket type filter is set, skip non-matching buckets.
+                if bucket_type is not None and not to_path(name).bucket.endswith(
+                    f'-{access_level}-{bucket_type}'
+                ):
+                    continue
                 depth = name.count('/') - 1  # Don't account for gs:// scheme.
                 if depth > max_depth:
                     continue
@@ -272,6 +285,7 @@ def main() -> None:
             args.input,
             args.max_depth,
             args.group_by_dataset,
+            args.bucket_type,
         )
 
         logging.info('Writing results')
@@ -301,7 +315,7 @@ def main() -> None:
             output_png='treemap.png',
         )
 
-        if args.use_fixed_url:
+        if config_retrieve(['workflow', 'use_fixed_url'], default=False):
             # copy to fixed location, overwriting previous
             AnyPath(fixed_html_path).write_bytes(AnyPath(output_html_path).read_bytes())
             web_html_path = fixed_web_html_path

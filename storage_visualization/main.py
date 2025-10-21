@@ -7,7 +7,7 @@ import sys
 # See requirements.txt for why we're disabling the linter warnings here.
 import hailtop.batch as hb  # pylint: disable=import-error
 
-from cpg_utils.config import config_retrieve, output_path
+from cpg_utils.config import output_path
 from cpg_utils.git import (
     get_git_commit_ref_of_current_repository,
     get_organisation_name_from_current_directory,
@@ -58,9 +58,7 @@ def main():
     # Process all datasets in parallel, as separate jobs.
     job_output_paths = {}
     for dataset in datasets:
-        job_name = (
-            f'process-{dataset}-{bucket_type}' if bucket_type else f'process-{dataset}'
-        )
+        job_name = f'process-{dataset}'
         job = batch.new_job(name=job_name)
         prepare_job(job, clone_repo=True)
 
@@ -71,13 +69,11 @@ def main():
         job.memory('highmem')
 
         path = output_path(
-            f'{dataset}-{bucket_type}.json.gz' if bucket_type else f'{dataset}.json.gz',
+            f'{dataset}.json.gz',
             dataset='common',
             category='analysis',
         )
-        job.command(
-            f'storage_visualization/disk_usage.py {dataset} {path} {bucket_type or ""}'
-        )
+        job.command(f'storage_visualization/disk_usage.py {dataset} {path}')
 
         job_output_paths[job] = path
 
@@ -98,8 +94,8 @@ storage_visualization/treemap.py \\
     --group-by-dataset \\
     --post-slack-message {input_commands}
     """
-    if config_retrieve(['workflow', 'use_fixed_url']):
-        treemap_job_command += ' \\\n    --use-fixed-url'
+    if bucket_type:
+        treemap_job_command += f' \\\n    --bucket-type {bucket_type}'
     treemap_job.command(treemap_job_command)
 
     batch.run(wait=False)
