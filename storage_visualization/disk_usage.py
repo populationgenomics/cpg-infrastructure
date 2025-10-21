@@ -67,8 +67,8 @@ def aggregate_level(name: str) -> str:
 
 def main():
     """Main entrypoint."""
-    if len(sys.argv) != 3:  # noqa: PLR2004
-        print('Usage: disk_usage.py <dataset> <output.json.gz>')
+    if len(sys.argv) != 3 and len(sys.argv) != 4:  # noqa: PLR2004
+        print('Usage: disk_usage.py <dataset> <output.json.gz> <optional: bucket_type>')
         sys.exit(1)
 
     # Don't print DEBUG logs from urllib3.connectionpool.
@@ -76,12 +76,25 @@ def main():
 
     storage_client = storage.Client()
     dataset = sys.argv[1]
+
+    # If the upload/tmp/analysis/web flag is present, only scan those buckets.
+    if len(sys.argv) == 4:  # noqa: PLR2004
+        bucket_type = sys.argv[3]
+        bucket_suffixes = [
+            suffix for suffix in BUCKET_SUFFIXES if suffix.endswith(bucket_type)
+        ]
+        if not bucket_suffixes:
+            logging.error(f'No bucket suffixes found for bucket type "{bucket_type}".')
+            sys.exit(1)
+    else:
+        bucket_suffixes = BUCKET_SUFFIXES
+
     access_level = get_access_level()
 
     aggregate_stats: defaultdict[str, defaultdict[str, int]] = defaultdict(
         lambda: defaultdict(int),
     )
-    for bucket_suffix in BUCKET_SUFFIXES:
+    for bucket_suffix in bucket_suffixes:
         if access_level == 'test' and not bucket_suffix.startswith('test'):
             continue  # Skip main buckets when testing.
 

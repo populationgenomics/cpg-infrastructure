@@ -16,7 +16,7 @@ import pandas as pd
 import plotly.express as px
 from cloudpathlib import AnyPath
 
-from cpg_utils.config import output_path
+from cpg_utils.config import config_retrieve, dataset_path, output_path
 from cpg_utils.slack import upload_file
 
 ROOT_NODE = '<root>'
@@ -67,6 +67,11 @@ def get_parser():
     parser.add_argument(
         '--post-slack-message',
         help='Post the generated treemap to Slack',
+        action='store_true',
+    )
+    parser.add_argument(
+        '--use-fixed-url',
+        help='Use a fixed URL for the treemap HTML output',
         action='store_true',
     )
 
@@ -270,7 +275,18 @@ def main() -> None:
         )
 
         logging.info('Writing results')
+        # HTML output path with a datestamp
         output_html_path = output_path('treemap.html', category='web', dataset='common')
+        # HTML output path to a fixed location for the most recent treemap
+        output_prefix = config_retrieve(['workflow', 'output_prefix']).split('/')[-1]
+        fixed_html_path = dataset_path(
+            f'{output_prefix}/treemap.html', category='web', dataset='common'
+        )
+        fixed_web_html_path = dataset_path(
+            f'{output_prefix}/treemap.html',
+            category='web_url',
+            dataset='common',
+        )
 
         web_html_path = output_path(
             'treemap.html',
@@ -284,6 +300,11 @@ def main() -> None:
             # write locally to use in slack message
             output_png='treemap.png',
         )
+
+        if args.use_fixed_url:
+            # copy to fixed location, overwriting previous
+            AnyPath(fixed_html_path).write_bytes(AnyPath(output_html_path).read_bytes())
+            web_html_path = fixed_web_html_path
 
         if should_post_to_slack:
             post_to_slack(
