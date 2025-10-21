@@ -70,7 +70,11 @@ def main():
         job.cpu(1)
         job.memory('highmem')
 
-        path = output_path(f'{dataset}.json.gz', dataset='common', category='analysis')
+        path = output_path(
+            f'{dataset}-{bucket_type}.json.gz' if bucket_type else f'{dataset}.json.gz',
+            dataset='common',
+            category='analysis',
+        )
         job.command(
             f'storage_visualization/disk_usage.py {dataset} {path} {bucket_type or ""}'
         )
