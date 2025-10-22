@@ -290,20 +290,25 @@ def main() -> None:
 
         logging.info('Writing results')
         # HTML output path with a datestamp
-        output_html_path = output_path('treemap.html', category='web', dataset='common')
+        output_file_name = (
+            f'{args.bucket_type}_treemap.html' if args.bucket_type else 'treemap.html'
+        )
+        output_html_path = output_path(
+            output_file_name, category='web', dataset='common'
+        )
         # HTML output path to a fixed location for the most recent treemap
         output_prefix = config_retrieve(['workflow', 'output_prefix']).split('/')[-1]
         fixed_html_path = dataset_path(
-            f'{output_prefix}/treemap.html', category='web', dataset='common'
+            f'{output_prefix}/{output_file_name}', category='web', dataset='common'
         )
         fixed_web_html_path = dataset_path(
-            f'{output_prefix}/treemap.html',
+            f'{output_prefix}/{output_file_name}',
             category='web_url',
             dataset='common',
         )
 
         web_html_path = output_path(
-            'treemap.html',
+            output_file_name,
             category='web_url',
             dataset='common',
         )
