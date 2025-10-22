@@ -16,7 +16,13 @@ import pandas as pd
 import plotly.express as px
 from cloudpathlib import AnyPath
 
-from cpg_utils.config import output_path
+from cpg_utils import to_path
+from cpg_utils.config import (
+    config_retrieve,
+    dataset_path,
+    get_access_level,
+    output_path,
+)
 from cpg_utils.slack import upload_file
 
 ROOT_NODE = '<root>'
@@ -68,6 +74,10 @@ def get_parser():
         '--post-slack-message',
         help='Post the generated treemap to Slack',
         action='store_true',
+    )
+    parser.add_argument(
+        '--bucket-type',
+        help='Optional bucket type to scan (upload, tmp, analysis, web)',
     )
 
     return parser
@@ -192,6 +202,7 @@ def prepare_rows_from_input_paths(  # noqa: C901
     input_paths: list[str],
     max_depth: int,
     group_by_dataset: bool,
+    bucket_type: str | None,
 ) -> tuple[list[tuple], list[str]]:
     """Prepare rows for a dataframe from the given input paths.
 
@@ -199,12 +210,14 @@ def prepare_rows_from_input_paths(  # noqa: C901
         input_paths (list[str]): json.gz files produced from disk_usage.py
         max_depth (int): Maximum folder depth to display
         group_by_dataset (bool): Group bucket storage stats by their dataset
+        bucket_type (str | None): Optional bucket type to subset to (upload, tmp, analysis, web)
 
     Returns:
         tuple[list[tuple], list[str]]: (rows, errors)
     """
     rows: list[tuple] = []
 
+    access_level = 'test' if get_access_level() == 'test' else 'main'
     root_values: dict[str, int] = defaultdict(int)
     datasets: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     missing_datasets: list[str] = []
@@ -219,6 +232,11 @@ def prepare_rows_from_input_paths(  # noqa: C901
 
         with AnyPath(input_path).open('rb') as f, gzip.open(f, 'rt') as gfz:
             for name, vals in json.load(gfz).items():
+                # If a bucket type filter is set, skip non-matching buckets.
+                if bucket_type is not None and not to_path(name).bucket.endswith(
+                    f'-{access_level}-{bucket_type}'
+                ):
+                    continue
                 depth = name.count('/') - 1  # Don't account for gs:// scheme.
                 if depth > max_depth:
                     continue
@@ -267,13 +285,30 @@ def main() -> None:
             args.input,
             args.max_depth,
             args.group_by_dataset,
+            args.bucket_type,
         )
 
         logging.info('Writing results')
-        output_html_path = output_path('treemap.html', category='web', dataset='common')
+        # HTML output path with a datestamp
+        output_file_name = (
+            f'{args.bucket_type}_treemap.html' if args.bucket_type else 'treemap.html'
+        )
+        output_html_path = output_path(
+            output_file_name, category='web', dataset='common'
+        )
+        # HTML output path to a fixed location for the most recent treemap
+        output_prefix = config_retrieve(['workflow', 'output_prefix']).split('/')[-1]
+        fixed_html_path = dataset_path(
+            f'{output_prefix}/{output_file_name}', category='web', dataset='common'
+        )
+        fixed_web_html_path = dataset_path(
+            f'{output_prefix}/{output_file_name}',
+            category='web_url',
+            dataset='common',
+        )
 
         web_html_path = output_path(
-            'treemap.html',
+            output_file_name,
             category='web_url',
             dataset='common',
         )
@@ -284,6 +319,11 @@ def main() -> None:
             # write locally to use in slack message
             output_png='treemap.png',
         )
+
+        if config_retrieve(['workflow', 'use_fixed_url'], default=False):
+            # copy to fixed location, overwriting previous
+            AnyPath(fixed_html_path).write_bytes(AnyPath(output_html_path).read_bytes())
+            web_html_path = fixed_web_html_path
 
         if should_post_to_slack:
             post_to_slack(

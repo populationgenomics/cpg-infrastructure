@@ -76,6 +76,7 @@ def main():
 
     storage_client = storage.Client()
     dataset = sys.argv[1]
+
     access_level = get_access_level()
 
     aggregate_stats: defaultdict[str, defaultdict[str, int]] = defaultdict(

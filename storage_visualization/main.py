@@ -40,15 +40,26 @@ def prepare_job(job: hb.batch.job.BashJob, clone_repo: bool):
 def main():
     """Main entrypoint."""
     if len(sys.argv) < 2:
-        print('Usage: main.py <dataset1> <dataset2> ...')
+        print(
+            'Usage: main.py <dataset1> <dataset2> ... <datasetN> <optional: bucket_type>'
+        )
         sys.exit(1)
+
+    # If the upload/tmp/analysis/web flag is present, only scan those buckets.
+    if sys.argv[-1] in ['upload', 'tmp', 'analysis', 'web']:
+        bucket_type = sys.argv[-1]
+        datasets = sys.argv[1:-1]
+    else:
+        bucket_type = None
+        datasets = sys.argv[1:]
 
     batch = get_batch(name='Storage visualization driver')
 
     # Process all datasets in parallel, as separate jobs.
     job_output_paths = {}
-    for dataset in sys.argv[1:]:
-        job = batch.new_job(name=f'process-{dataset}')
+    for dataset in datasets:
+        job_name = f'process-{dataset}'
+        job = batch.new_job(name=job_name)
         prepare_job(job, clone_repo=True)
 
         # Reading all blob metadata is expensive and can take a long time, so don't risk
@@ -57,7 +68,11 @@ def main():
         job.cpu(1)
         job.memory('highmem')
 
-        path = output_path(f'{dataset}.json.gz', dataset='common', category='analysis')
+        path = output_path(
+            f'{dataset}.json.gz',
+            dataset='common',
+            category='analysis',
+        )
         job.command(f'storage_visualization/disk_usage.py {dataset} {path}')
 
         job_output_paths[job] = path
@@ -74,13 +89,14 @@ def main():
     input_commands = ' '.join(
         f'\\\n    --input {path}' for path in job_output_paths.values()
     )
-    treemap_job.command(
-        f"""
+    treemap_job_command = f"""
 storage_visualization/treemap.py \\
     --group-by-dataset \\
     --post-slack-message {input_commands}
-    """,
-    )
+    """
+    if bucket_type:
+        treemap_job_command += f' \\\n    --bucket-type {bucket_type}'
+    treemap_job.command(treemap_job_command)
 
     batch.run(wait=False)
 

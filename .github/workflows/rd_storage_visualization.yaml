@@ -6,6 +6,15 @@ on:
     - cron: "0 4 * * 1"
   # Run on demand.
   workflow_dispatch:
+    inputs:
+      bucket_type:
+        description: 'Optional bucket type to scan (upload, tmp, analysis, web)'
+        required: false
+        default: 'upload'
+
+env:
+  # Default bucket type for scheduled runs
+  DEFAULT_BUCKET_TYPE: 'upload'
 
 jobs:
   submit_batch:
@@ -46,4 +55,4 @@ jobs:
 
       - name: "Submit batch"
         # Automatically confirm to run with "full" access level.
-        run: yes | storage_visualization/rd_submit.py cpg-infrastructure-private/config-datasets.yaml
+        run: yes | storage_visualization/rd_submit.py cpg-infrastructure-private/config-datasets.yaml ${{ github.event.inputs.bucket_type || env.DEFAULT_BUCKET_TYPE }}
