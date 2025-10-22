@@ -89,13 +89,15 @@ def main():
     input_commands = ' '.join(
         f'\\\n    --input {path}' for path in job_output_paths.values()
     )
+
+    bucket_arg = f'--bucket-type {bucket_type}' if bucket_type else ''
+
     treemap_job_command = f"""
 storage_visualization/treemap.py \\
     --group-by-dataset \\
-    --post-slack-message {input_commands}
+    --post-slack-message {input_commands} {bucket_arg}
     """
-    if bucket_type:
-        treemap_job_command += f' --bucket-type {bucket_type}'
+
     treemap_job.command(treemap_job_command)
 
     batch.run(wait=False)
