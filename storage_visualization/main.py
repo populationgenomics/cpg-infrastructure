@@ -95,7 +95,7 @@ storage_visualization/treemap.py \\
     --post-slack-message {input_commands}
     """
     if bucket_type:
-        treemap_job_command += f' \\\n    --bucket-type {bucket_type}'
+        treemap_job_command += f' --bucket-type {bucket_type}'
     treemap_job.command(treemap_job_command)
 
     batch.run(wait=False)
