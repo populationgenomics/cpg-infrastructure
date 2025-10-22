@@ -297,7 +297,7 @@ def main() -> None:
             output_file_name, category='web', dataset='common'
         )
         # HTML output path to a fixed location for the most recent treemap
-        output_prefix = config_retrieve(['workflow', 'output_prefix']).split('/')[-1]
+        output_prefix = config_retrieve(['workflow', 'output_prefix']).split('/')[0]
         fixed_html_path = dataset_path(
             f'{output_prefix}/{output_file_name}', category='web', dataset='common'
         )
