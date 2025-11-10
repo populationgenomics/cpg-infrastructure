@@ -22,8 +22,7 @@ GroupName = Literal[
     'metadata-access',
     'metadata-contribute',
     'web-access',
-    'release-access',
-    'upload',
+    'release-access'
 ]
 
 
@@ -356,6 +355,32 @@ class CPGDatasetConfig(DeserializableDataclass):
         # if overriding from the default CpgInfrastructure.currency
         currency: str | None = None
 
+
+    @dataclasses.dataclass(frozen=True)
+    class DefaultUploadBucketConfig(DeserializableDataclass):
+        uploaders: list[str]
+
+    @dataclasses.dataclass(frozen=True)
+    class AdditionalUploadBucketConfig(DeserializableDataclass):
+        name: str
+        uploaders: list[str]
+
+
+    @dataclasses.dataclass(frozen=True)
+    class UploadDropboxConfig(DeserializableDataclass):
+        id: str
+        name: str
+        filetypes: list[str]
+        uploaders: list[str]
+        max_filesize_mb: int | None = None
+        move_to_bucket: str | None = None
+
+    @dataclasses.dataclass(frozen=True)
+    class UploadConfig(DeserializableDataclass):
+        default_bucket: 'CPGDatasetConfig.DefaultUploadBucketConfig'
+        additional_buckets: list['CPGDatasetConfig.AdditionalUploadBucketConfig']
+        dropboxes: list['CPGDatasetConfig.UploadDropboxConfig']
+
     # the name of the dataset
     dataset: str
 
@@ -399,9 +424,6 @@ class CPGDatasetConfig(DeserializableDataclass):
     # give READONLY access to these datasets, as this dataset needs it
     depends_on_readonly: list[str] = dataclasses.field(default_factory=list)
 
-    # extra places that collaborators can upload data too
-    additional_upload_buckets: list[str] = dataclasses.field(default_factory=list)
-
     # convenience place for plumbing extra service-accounts for SM
     sm_read_only_sas: list[str] = dataclasses.field(default_factory=list)
     sm_read_write_sas: list[str] = dataclasses.field(default_factory=list)
@@ -420,6 +442,8 @@ class CPGDatasetConfig(DeserializableDataclass):
 
     # Which users to do you want to be a part of each group.
     members: dict[GroupName, list[MemberKey]] = dataclasses.field(default_factory=dict)
+
+    upload_config: UploadConfig | None = None
 
     @classmethod
     def instantiate(cls, **kwargs: dict[str, Any]):
