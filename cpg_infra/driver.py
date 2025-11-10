@@ -1756,24 +1756,37 @@ class CPGDatasetCloudInfrastructure:
 
     @cached_property
     def main_upload_buckets(self) -> dict[str, Any]:
-        main_upload_undelete = self.infra.bucket_rule_undelete(days=30)
-        main_upload_buckets = {
-            'main-upload': self.infra.create_bucket(
-                'main-upload',
-                lifecycle_rules=[main_upload_undelete],
-                autoclass=self.dataset_config.autoclass,
-            ),
+
+        undelete_rule = self.infra.bucket_rule_undelete(days=30)
+
+        # Always create the default main upload bucket
+        default_bucket = self.infra.create_bucket(
+            'main-upload',
+            lifecycle_rules=[undelete_rule],
+            autoclass=self.dataset_config.autoclass,
+        )
+
+        upload_buckets = {
+            'main-upload': default_bucket
         }
 
-        for additional_upload_bucket in self.dataset_config.additional_upload_buckets:
-            main_upload_buckets[additional_upload_bucket] = self.infra.create_bucket(
-                additional_upload_bucket,
-                lifecycle_rules=[main_upload_undelete],
-                unique=True,
-                autoclass=self.dataset_config.autoclass,
-            )
+        # If additional buckets are configured, then create those too
+        upload_config = self.dataset_config.upload_config
 
-        return main_upload_buckets
+        if upload_config and upload_config.additional_buckets:
+            for additional_bucket in upload_config.additional_buckets:
+                name = f'main-upload-{additional_bucket.name}'
+                bucket = self.infra.create_bucket(
+                    name,
+                    lifecycle_rules=undelete_rule,
+                    autoclass=self.dataset_config.autoclass
+                )
+
+                upload_buckets[name] = bucket
+
+        return upload_buckets
+
+
 
     # endregion MAIN BUCKETS
     # region TEST BUCKETS
