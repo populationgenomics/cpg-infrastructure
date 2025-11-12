@@ -3,13 +3,13 @@
 CPG Dataset infrastructure
 """
 
-import graphlib
 import os.path
 import re
 from collections import defaultdict
 from functools import cached_property
 from typing import Any, Callable, Iterable, Iterator, NamedTuple, Type
 
+import graphlib
 import pulumi
 import pulumi_gcp as gcp
 import toml
