@@ -3,13 +3,13 @@
 CPG Dataset infrastructure
 """
 
+import graphlib
 import os.path
 import re
 from collections import defaultdict
 from functools import cached_property
 from typing import Any, Callable, Iterable, Iterator, NamedTuple, Type
 
-import graphlib
 import pulumi
 import pulumi_gcp as gcp
 import toml
@@ -2218,7 +2218,7 @@ class CPGDatasetCloudInfrastructure:
             access_level,
             account,
         ) in self.cromwell_machine_accounts_by_access_level.items():
-            self.infra.add_member_to_lifescience_api(
+            self.infra.add_member_to_batch_api(
                 f'cromwell-service-account-{access_level}-workflows-runner',
                 account,
             )

@@ -757,10 +757,10 @@ class GcpInfrastructure(CloudInfraBase):
 
     # region GCP SPECIFIC
 
-    def add_member_to_lifescience_api(self, resource_key: str, account):
+    def add_member_to_batch_api(self, resource_key: str, account):
         gcp.projects.IAMMember(
             self.get_pulumi_name(resource_key),
-            role='roles/lifesciences.workflowsRunner',
+            role='roles/batch.agentReporter',
             member=get_member_key(account),
             project=self.project_id,
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_lifescienceapi]),
