@@ -992,6 +992,7 @@ class CPGDatasetCloudInfrastructure:
     # endregion MACHINE ACCOUNTS
 
     # region PERSON ACCESS
+    # Set up permissions for people specified in members.yaml files
     def setup_externally_specified_members(self):
         groups = [
             self.data_manager_group,
@@ -999,7 +1000,6 @@ class CPGDatasetCloudInfrastructure:
             self.metadata_access_group,
             self.metadata_contribute_group,
             self.metadata_write_group,
-            self.upload_group,
             self.web_access_group,
             self.release_access_group,
         ]
