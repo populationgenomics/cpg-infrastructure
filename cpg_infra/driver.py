@@ -66,6 +66,15 @@ METAMIST_PERMISSIONS = [
 ]
 
 
+class MainUploadBucket(NamedTuple):
+    bucket: Any
+    upload_config: (
+        CPGDatasetConfig.UploadConfig.DefaultUploadBucketConfig
+        | CPGDatasetConfig.UploadConfig.AdditionalUploadBucketConfig
+        | None
+    )
+
+
 AccessLevel = str
 
 
@@ -1337,7 +1346,7 @@ class CPGDatasetCloudInfrastructure:
                 'analysis': self.infra.bucket_output_path(self.main_analysis_bucket),
                 'tmp': self.infra.bucket_output_path(self.main_tmp_bucket),
                 'upload': self.infra.bucket_output_path(
-                    self.main_upload_buckets['main-upload'],
+                    self.main_upload_buckets['main-upload'].bucket,
                 ),
             },
         }
@@ -1680,10 +1689,37 @@ class CPGDatasetCloudInfrastructure:
 
     def setup_storage_main_upload_buckets_permissions(self):
         for bname, main_upload_bucket in self.main_upload_buckets.items():
+            upload_config = main_upload_bucket.upload_config
+
+            # If there are members specifically added to this bucket, then add them
+            # directly. These are not added to the upload group as that group has
+            # access to all buckets. This mechanism allows us to give access to
+            # specific users to specific buckets.
+            if upload_config is not None:
+                uploaders = upload_config.uploaders
+
+                for member_id in uploaders:
+                    member = self.config.users.get(member_id)
+                    if not member:
+                        raise ValueError(f'Member {member_id} not found in config')
+
+                    h = compute_hash(
+                        dataset=self.dataset_config.dataset,
+                        member=member.id,
+                        cloud=self.infra.name(),
+                    )
+                    if cloud_user := member.clouds[self.infra.name()]:
+                        self.infra.add_member_to_bucket(
+                            f'main-upload-{bname}-uploader-{h}',
+                            bucket=main_upload_bucket.bucket,
+                            member=cloud_user.id,
+                            membership=BucketMembership.MUTATE,
+                        )
+
             # main_upload SA has ADMIN
             self.infra.add_member_to_bucket(
                 f'main-upload-service-account-{bname}-bucket-creator',
-                bucket=main_upload_bucket,
+                bucket=main_upload_bucket.bucket,
                 member=self.main_upload_account,
                 membership=BucketMembership.MUTATE,
             )
@@ -1691,7 +1727,7 @@ class CPGDatasetCloudInfrastructure:
             # upload_group has ADMIN
             self.infra.add_member_to_bucket(
                 f'main-upload-upload-group-{bname}-bucket-admin',
-                bucket=main_upload_bucket,
+                bucket=main_upload_bucket.bucket,
                 member=self.upload_group,
                 membership=BucketMembership.MUTATE,
             )
@@ -1699,14 +1735,14 @@ class CPGDatasetCloudInfrastructure:
             # full GROUP has ADMIN
             self.infra.add_member_to_bucket(
                 f'full-{bname}-bucket-admin',
-                bucket=main_upload_bucket,
+                bucket=main_upload_bucket.bucket,
                 member=self.full_group,
                 membership=BucketMembership.MUTATE,
             )
 
             self.infra.add_member_to_bucket(
                 f'main-read-{bname}-bucket-viewer',
-                bucket=main_upload_bucket,
+                bucket=main_upload_bucket.bucket,
                 member=self.main_read_group,
                 membership=BucketMembership.READ,
             )
@@ -1715,7 +1751,7 @@ class CPGDatasetCloudInfrastructure:
             # (semi surprising tbh, but useful for reading uploaded metadata)
             self.infra.add_member_to_bucket(
                 f'analysis-group-{bname}-bucket-viewer',
-                bucket=main_upload_bucket,
+                bucket=main_upload_bucket.bucket,
                 member=self.analysis_group,
                 membership=BucketMembership.READ,
             )
@@ -1755,8 +1791,9 @@ class CPGDatasetCloudInfrastructure:
         )
 
     @cached_property
-    def main_upload_buckets(self) -> dict[str, Any]:
-
+    def main_upload_buckets(
+        self,
+    ) -> dict[str, MainUploadBucket]:
         undelete_rule = self.infra.bucket_rule_undelete(days=30)
 
         # Always create the default main upload bucket
@@ -1766,27 +1803,33 @@ class CPGDatasetCloudInfrastructure:
             autoclass=self.dataset_config.autoclass,
         )
 
-        upload_buckets = {
-            'main-upload': default_bucket
+        upload_config = self.dataset_config.upload_config
+
+        upload_buckets: dict[
+            str,
+            MainUploadBucket,
+        ] = {
+            'main-upload': MainUploadBucket(
+                bucket=default_bucket,
+                upload_config=upload_config.default_bucket if upload_config else None,
+            )
         }
 
         # If additional buckets are configured, then create those too
-        upload_config = self.dataset_config.upload_config
-
         if upload_config and upload_config.additional_buckets:
             for additional_bucket in upload_config.additional_buckets:
                 name = f'main-upload-{additional_bucket.name}'
                 bucket = self.infra.create_bucket(
                     name,
                     lifecycle_rules=[undelete_rule],
-                    autoclass=self.dataset_config.autoclass
+                    autoclass=self.dataset_config.autoclass,
                 )
 
-                upload_buckets[name] = bucket
+                upload_buckets[name] = MainUploadBucket(
+                    bucket=bucket, upload_config=additional_bucket
+                )
 
         return upload_buckets
-
-
 
     # endregion MAIN BUCKETS
     # region TEST BUCKETS
