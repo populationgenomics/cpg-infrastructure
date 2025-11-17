@@ -257,7 +257,9 @@ class GcpInfrastructure(CloudInfraBase):
             billing_account=self.config.billing.gcp.account_id,
             opts=opts,
             # deleting projects is pretty tedious, so let's just NOT do that.
-            skip_delete=True,
+            # A deletion policy of `ABANDON` means that the project will not be deleted in GCP if
+            # the pulumi resource is deleted. It is equivalent to the deprecated `skip_delete=True`
+            deletion_policy='ABANDON',
         )
 
     def create_budget(self, resource_key: str, *, project, budget: int, budget_filter):
