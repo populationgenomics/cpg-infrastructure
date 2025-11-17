@@ -1778,7 +1778,7 @@ class CPGDatasetCloudInfrastructure:
                 name = f'main-upload-{additional_bucket.name}'
                 bucket = self.infra.create_bucket(
                     name,
-                    lifecycle_rules=undelete_rule,
+                    lifecycle_rules=[undelete_rule],
                     autoclass=self.dataset_config.autoclass
                 )
 
