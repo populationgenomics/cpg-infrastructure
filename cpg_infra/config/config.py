@@ -22,7 +22,7 @@ GroupName = Literal[
     'metadata-access',
     'metadata-contribute',
     'web-access',
-    'release-access'
+    'release-access',
 ]
 
 
@@ -102,6 +102,15 @@ class CPGInfrastructureConfig(DeserializableDataclass):
             server_machine_account: str
             logger_machine_account: str
             container_registry_name: str
+
+        gcp: GCP
+
+    @dataclasses.dataclass(frozen=True)
+    class DataDropbox(DeserializableDataclass):
+        @dataclasses.dataclass(frozen=True)
+        class GCP(DeserializableDataclass):
+            project: str
+            server_machine_account: str
 
         gcp: GCP
 
@@ -240,6 +249,8 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     hail: Hail | None = None
     # configuration options for the analysis runner, the guard to analysis at the CPG
     analysis_runner: AnalysisRunner | None = None
+    # configuration options for the data dropbox server
+    data_dropbox: DataDropbox | None = None
     # configuration options for the web service, a server that serves static files
     # from a bucket
     web_service: WebService | None = None
@@ -370,15 +381,16 @@ class CPGDatasetConfig(DeserializableDataclass):
         class UploadDropboxConfig(DeserializableDataclass):
             id: str
             name: str
-            filetypes: list[str]
+            allowed_filetypes: list[str]
             uploaders: list[str]
-            max_filesize_mb: int | None = None
+            max_concurrent_files: int | None = None
+            description: str | None = None
+            max_file_size: str | None = None
             move_to_bucket: str | None = None
 
-
-        default_bucket: DefaultUploadBucketConfig
-        additional_buckets: list[AdditionalUploadBucketConfig]
-        dropboxes: list[UploadDropboxConfig]
+        default_bucket: DefaultUploadBucketConfig | None = None
+        additional_buckets: list[AdditionalUploadBucketConfig] | None = None
+        dropboxes: list[UploadDropboxConfig] | None = None
 
     # the name of the dataset
     dataset: str
