@@ -678,7 +678,7 @@ class CPGInfrastructure:
             name=secret_name, project=self.config.data_dropbox.gcp.project
         )
 
-        # add credentials to the secret
+        # Write the dropbox config to the secret
         self.common_gcp_infra.add_secret_version(
             'data-dropbox-server-config-latest',
             secret=secret,
