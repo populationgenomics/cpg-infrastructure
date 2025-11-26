@@ -192,10 +192,10 @@ class GcpInfrastructure(CloudInfraBase):
         )
 
     @cached_property
-    def _svc_lifescienceapi(self):
+    def _svc_batchapi(self):
         return gcp.projects.Service(
-            self.get_pulumi_name('lifesciences-service'),
-            service='lifesciences.googleapis.com',
+            self.get_pulumi_name('batch-service'),
+            service='batch.googleapis.com',
             disable_on_destroy=False,
             project=self.project_id,
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_serviceusage]),
@@ -759,13 +759,13 @@ class GcpInfrastructure(CloudInfraBase):
 
     # region GCP SPECIFIC
 
-    def add_member_to_lifescience_api(self, resource_key: str, account):
+    def add_member_to_batch_api(self, resource_key: str, account):
         gcp.projects.IAMMember(
             self.get_pulumi_name(resource_key),
-            role='roles/lifesciences.workflowsRunner',
+            role='roles/batch.agentReporter',
             member=get_member_key(account),
             project=self.project_id,
-            opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_lifescienceapi]),
+            opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_batchapi]),
         )
 
     def add_member_to_dataproc_api(self, resource_key: str, account, role: str):
