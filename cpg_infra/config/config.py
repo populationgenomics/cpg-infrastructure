@@ -23,7 +23,6 @@ GroupName = Literal[
     'metadata-contribute',
     'web-access',
     'release-access',
-    'upload',
 ]
 
 
@@ -103,6 +102,15 @@ class CPGInfrastructureConfig(DeserializableDataclass):
             server_machine_account: str
             logger_machine_account: str
             container_registry_name: str
+
+        gcp: GCP
+
+    @dataclasses.dataclass(frozen=True)
+    class DataDropbox(DeserializableDataclass):
+        @dataclasses.dataclass(frozen=True)
+        class GCP(DeserializableDataclass):
+            project: str
+            server_machine_account: str
 
         gcp: GCP
 
@@ -241,6 +249,8 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     hail: Hail | None = None
     # configuration options for the analysis runner, the guard to analysis at the CPG
     analysis_runner: AnalysisRunner | None = None
+    # configuration options for the data dropbox server
+    data_dropbox: DataDropbox | None = None
     # configuration options for the web service, a server that serves static files
     # from a bucket
     web_service: WebService | None = None
@@ -356,6 +366,32 @@ class CPGDatasetConfig(DeserializableDataclass):
         # if overriding from the default CpgInfrastructure.currency
         currency: str | None = None
 
+    @dataclasses.dataclass(frozen=True)
+    class UploadConfig(DeserializableDataclass):
+        @dataclasses.dataclass(frozen=True)
+        class DefaultUploadBucketConfig(DeserializableDataclass):
+            uploaders: list[str]
+
+        @dataclasses.dataclass(frozen=True)
+        class AdditionalUploadBucketConfig(DeserializableDataclass):
+            name: str
+            uploaders: list[str]
+
+        @dataclasses.dataclass(frozen=True)
+        class UploadDropboxConfig(DeserializableDataclass):
+            id: str
+            name: str
+            allowed_filetypes: list[str]
+            uploaders: list[str]
+            max_concurrent_files: int | None = None
+            description: str | None = None
+            max_file_size: str | None = None
+            move_to_bucket: str | None = None
+
+        default_bucket: DefaultUploadBucketConfig | None = None
+        additional_buckets: list[AdditionalUploadBucketConfig] | None = None
+        dropboxes: list[UploadDropboxConfig] | None = None
+
     # the name of the dataset
     dataset: str
 
@@ -399,9 +435,6 @@ class CPGDatasetConfig(DeserializableDataclass):
     # give READONLY access to these datasets, as this dataset needs it
     depends_on_readonly: list[str] = dataclasses.field(default_factory=list)
 
-    # extra places that collaborators can upload data too
-    additional_upload_buckets: list[str] = dataclasses.field(default_factory=list)
-
     # convenience place for plumbing extra service-accounts for SM
     sm_read_only_sas: list[str] = dataclasses.field(default_factory=list)
     sm_read_write_sas: list[str] = dataclasses.field(default_factory=list)
@@ -420,6 +453,8 @@ class CPGDatasetConfig(DeserializableDataclass):
 
     # Which users to do you want to be a part of each group.
     members: dict[GroupName, list[MemberKey]] = dataclasses.field(default_factory=dict)
+
+    upload_config: UploadConfig | None = None
 
     @classmethod
     def instantiate(cls, **kwargs: dict[str, Any]):

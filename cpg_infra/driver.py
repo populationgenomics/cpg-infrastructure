@@ -3,9 +3,11 @@
 CPG Dataset infrastructure
 """
 
+import json
 import os.path
 import re
 from collections import defaultdict
+from dataclasses import asdict
 from functools import cached_property
 from typing import Any, Callable, Iterable, Iterator, NamedTuple, Type
 
@@ -64,6 +66,12 @@ METAMIST_PERMISSIONS = [
     SM_MAIN_WRITE,
     SM_MAIN_CONTRIBUTE,
 ]
+
+
+class MainUploadBucket(NamedTuple):
+    bucket: Any
+    uploaders: list[str]
+    is_dropbox: bool = False
 
 
 AccessLevel = str
@@ -379,6 +387,9 @@ class CPGInfrastructure:
         # Add read and write level members to metamist projects
         self.update_metamist_members()
 
+        # Generate data dropbox config from dataset upload configs
+        self.generate_dropbox_config()
+
         # Store the deployed infrastructure config on gcp storage
         self.output_infrastructure_config()
 
@@ -599,6 +610,88 @@ class CPGInfrastructure:
                     contribute_members=prepare_group_members(infra, SM_TEST_CONTRIBUTE),
                     write_members=prepare_group_members(infra, SM_TEST_WRITE),
                 )
+
+    def generate_dropbox_config(self):
+        if not self.config.data_dropbox:
+            return
+
+        # Flat list of dropboxes
+        all_dropboxes: list[dict[str, Any]] = []
+        dropbox_ids_by_project: dict[str, set[str]] = defaultdict(set)
+
+        for project, config in self.dataset_configs.items():
+            if not config.upload_config or not config.upload_config.dropboxes:
+                continue
+
+            dropboxes = config.upload_config.dropboxes
+            additional_buckets = config.upload_config.additional_buckets
+
+            # Generate list of upload bucket names, so that we can check the
+            # `move_to_bucket` setting is valid.
+            upload_bucket_names = [ad.name for ad in additional_buckets or []]
+            # Allow moving to the default upload bucket
+            upload_bucket_names.append('default')
+
+            for dropbox in dropboxes:
+                if (
+                    dropbox.move_to_bucket
+                    and dropbox.move_to_bucket not in upload_bucket_names
+                ):
+                    raise ValueError(
+                        f'Dropbox move_to_bucket setting of {dropbox.move_to_bucket} refers to an unknown bucket'
+                    )
+
+                # Ensure that this dropbox isn't duplicated in the project
+                if dropbox.id in dropbox_ids_by_project[project]:
+                    raise ValueError(
+                        f'Dropbox id {dropbox.id} is duplicated in project {project}'
+                    )
+
+                dropbox_ids_by_project[project].add(dropbox.id)
+
+                dropbox_uploaders: list[str] = []
+
+                # Go through uploaders, check their validity and get their
+                # resolved user ids
+                for uploader in dropbox.uploaders:
+                    member = self.config.users.get(uploader)
+
+                    if not member:
+                        raise ValueError(f'Member {uploader} not found in config')
+
+                    cloud_user = member.clouds.get('gcp')
+
+                    if not cloud_user:
+                        raise ValueError(
+                            f'Member {uploader} does not have a gcp id specified'
+                        )
+                    user_id = cloud_user.id
+                    dropbox_uploaders.append(user_id)
+
+                all_dropboxes.append(
+                    asdict(dropbox)
+                    | {'project': project, 'uploaders': dropbox_uploaders}
+                )
+
+        secret_name = 'dropbox-server-config'  # noqa: S105 # linter thinks this is a password but it ain't
+        secret = self.common_gcp_infra.create_secret(
+            name=secret_name, project=self.config.data_dropbox.gcp.project
+        )
+
+        # Write the dropbox config to the secret
+        self.common_gcp_infra.add_secret_version(
+            'data-dropbox-server-config-latest',
+            secret=secret,
+            contents=json.dumps({'dropboxes': all_dropboxes}),
+        )
+
+        self.common_gcp_infra.add_secret_member(
+            'data-dropbox-server-config-accessor',
+            secret=secret,
+            project=self.config.data_dropbox.gcp.project,
+            member=self.config.data_dropbox.gcp.server_machine_account,
+            membership=SecretMembership.ACCESSOR,
+        )
 
     # dataset agnostic infrastructure
 
@@ -992,6 +1085,7 @@ class CPGDatasetCloudInfrastructure:
     # endregion MACHINE ACCOUNTS
 
     # region PERSON ACCESS
+    # Set up permissions for people specified in members.yaml files
     def setup_externally_specified_members(self):
         groups = [
             self.data_manager_group,
@@ -999,7 +1093,6 @@ class CPGDatasetCloudInfrastructure:
             self.metadata_access_group,
             self.metadata_contribute_group,
             self.metadata_write_group,
-            self.upload_group,
             self.web_access_group,
             self.release_access_group,
         ]
@@ -1337,7 +1430,7 @@ class CPGDatasetCloudInfrastructure:
                 'analysis': self.infra.bucket_output_path(self.main_analysis_bucket),
                 'tmp': self.infra.bucket_output_path(self.main_tmp_bucket),
                 'upload': self.infra.bucket_output_path(
-                    self.main_upload_buckets['main-upload'],
+                    self.main_upload_buckets['main-upload'].bucket,
                 ),
             },
         }
@@ -1680,18 +1773,55 @@ class CPGDatasetCloudInfrastructure:
 
     def setup_storage_main_upload_buckets_permissions(self):
         for bname, main_upload_bucket in self.main_upload_buckets.items():
+            # If there are members specifically added to this bucket, then add them
+            # directly. These are not added to the upload group as that group has
+            # access to all buckets. This mechanism allows us to give access to
+            # specific users to specific buckets. Only do this if the bucket is not a
+            # dropbox. Access to upload to dropboxes is handelled differently
+            if not main_upload_bucket.is_dropbox:
+                uploaders = main_upload_bucket.uploaders
+
+                for member_id in uploaders:
+                    member = self.config.users.get(member_id)
+                    if not member:
+                        raise ValueError(f'Member {member_id} not found in config')
+
+                    h = compute_hash(
+                        dataset=self.dataset_config.dataset,
+                        member=member.id,
+                        cloud=self.infra.name(),
+                    )
+                    if cloud_user := member.clouds[self.infra.name()]:
+                        self.infra.add_member_to_bucket(
+                            f'main-upload-{bname}-uploader-{h}',
+                            bucket=main_upload_bucket.bucket,
+                            member=cloud_user.id,
+                            membership=BucketMembership.MUTATE,
+                        )
+
             # main_upload SA has ADMIN
             self.infra.add_member_to_bucket(
                 f'main-upload-service-account-{bname}-bucket-creator',
-                bucket=main_upload_bucket,
+                bucket=main_upload_bucket.bucket,
                 member=self.main_upload_account,
                 membership=BucketMembership.MUTATE,
             )
 
+            # Dropbox server service account has ADMIN
+            # This is needed so that objects can be written to dropbox
+            # buckets, and then automatically copied to upload buckets.
+            if self.config.data_dropbox:
+                self.infra.add_member_to_bucket(
+                    f'dropbox-server-service-account-{bname}-bucket-creator',
+                    bucket=main_upload_bucket.bucket,
+                    member=self.config.data_dropbox.gcp.server_machine_account,
+                    membership=BucketMembership.MUTATE,
+                )
+
             # upload_group has ADMIN
             self.infra.add_member_to_bucket(
                 f'main-upload-upload-group-{bname}-bucket-admin',
-                bucket=main_upload_bucket,
+                bucket=main_upload_bucket.bucket,
                 member=self.upload_group,
                 membership=BucketMembership.MUTATE,
             )
@@ -1699,14 +1829,14 @@ class CPGDatasetCloudInfrastructure:
             # full GROUP has ADMIN
             self.infra.add_member_to_bucket(
                 f'full-{bname}-bucket-admin',
-                bucket=main_upload_bucket,
+                bucket=main_upload_bucket.bucket,
                 member=self.full_group,
                 membership=BucketMembership.MUTATE,
             )
 
             self.infra.add_member_to_bucket(
                 f'main-read-{bname}-bucket-viewer',
-                bucket=main_upload_bucket,
+                bucket=main_upload_bucket.bucket,
                 member=self.main_read_group,
                 membership=BucketMembership.READ,
             )
@@ -1715,7 +1845,7 @@ class CPGDatasetCloudInfrastructure:
             # (semi surprising tbh, but useful for reading uploaded metadata)
             self.infra.add_member_to_bucket(
                 f'analysis-group-{bname}-bucket-viewer',
-                bucket=main_upload_bucket,
+                bucket=main_upload_bucket.bucket,
                 member=self.analysis_group,
                 membership=BucketMembership.READ,
             )
@@ -1755,25 +1885,69 @@ class CPGDatasetCloudInfrastructure:
         )
 
     @cached_property
-    def main_upload_buckets(self) -> dict[str, Any]:
-        main_upload_undelete = self.infra.bucket_rule_undelete(days=30)
-        main_upload_buckets = {
-            'main-upload': self.infra.create_bucket(
-                'main-upload',
-                lifecycle_rules=[main_upload_undelete],
-                autoclass=self.dataset_config.autoclass,
-            ),
+    def main_upload_buckets(
+        self,
+    ) -> dict[str, MainUploadBucket]:
+        undelete_rule = self.infra.bucket_rule_undelete(days=30)
+
+        # Always create the default main upload bucket
+        default_bucket = self.infra.create_bucket(
+            'main-upload',
+            lifecycle_rules=[undelete_rule],
+            autoclass=self.dataset_config.autoclass,
+        )
+
+        upload_config = self.dataset_config.upload_config
+
+        upload_buckets: dict[
+            str,
+            MainUploadBucket,
+        ] = {
+            'main-upload': MainUploadBucket(
+                bucket=default_bucket,
+                uploaders=upload_config.default_bucket.uploaders
+                if upload_config
+                and upload_config.default_bucket
+                and upload_config.default_bucket.uploaders
+                else [],
+            )
         }
 
-        for additional_upload_bucket in self.dataset_config.additional_upload_buckets:
-            main_upload_buckets[additional_upload_bucket] = self.infra.create_bucket(
-                additional_upload_bucket,
-                lifecycle_rules=[main_upload_undelete],
-                unique=True,
-                autoclass=self.dataset_config.autoclass,
-            )
+        # If additional buckets are configured, then create those too
+        if upload_config and upload_config.additional_buckets:
+            for additional_bucket in upload_config.additional_buckets:
+                name = f'main-upload-{additional_bucket.name}'
+                bucket = self.infra.create_bucket(
+                    name,
+                    lifecycle_rules=[undelete_rule],
+                    autoclass=self.dataset_config.autoclass,
+                )
 
-        return main_upload_buckets
+                upload_buckets[name] = MainUploadBucket(
+                    bucket=bucket, uploaders=additional_bucket.uploaders or []
+                )
+
+        # If any dropboxes are set up then set them up here
+        if upload_config and upload_config.dropboxes:
+            for dropbox in upload_config.dropboxes:
+                # dropbox is abbreviated to db to allow for reasonably long ids to stay
+                # under the 63 char limit
+                name = f'main-upload-db-{dropbox.id}'
+                bucket = self.infra.create_bucket(
+                    name,
+                    # Data from these buckets should be copied to an upload bucket
+                    # so just keep the objects here temporarily
+                    lifecycle_rules=[self.infra.bucket_rule_temporary()],
+                    versioning=False,
+                    autoclass=False,
+                    soft_delete_protection=False,
+                )
+
+                upload_buckets[name] = MainUploadBucket(
+                    bucket=bucket, uploaders=dropbox.uploaders, is_dropbox=True
+                )
+
+        return upload_buckets
 
     # endregion MAIN BUCKETS
     # region TEST BUCKETS
