@@ -7,6 +7,7 @@ google-auth==2.*
 pulumi-azure-native==2.21.2
 pulumi-azuread==5.46.0
 pulumi-gcp~=7.6
+pulumi-github>=6.0.0
 pulumi==3.96.2
 pytest==8.3.2
 toml-sort
