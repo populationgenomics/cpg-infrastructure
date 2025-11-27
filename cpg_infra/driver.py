@@ -1810,7 +1810,10 @@ class CPGDatasetCloudInfrastructure:
             # Dropbox server service account has ADMIN
             # This is needed so that objects can be written to dropbox
             # buckets, and then automatically copied to upload buckets.
-            if self.config.data_dropbox:
+            if (
+                isinstance(self.infra, GcpInfrastructure)
+                and self.config.data_dropbox is not None
+            ):
                 self.infra.add_member_to_bucket(
                     f'dropbox-server-service-account-{bname}-bucket-creator',
                     bucket=main_upload_bucket.bucket,
