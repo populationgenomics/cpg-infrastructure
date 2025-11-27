@@ -757,10 +757,19 @@ class GcpInfrastructure(CloudInfraBase):
 
     # region GCP SPECIFIC
 
-    def add_member_to_batch_api(self, resource_key: str, account):
+    def add_batch_agent_reporter_role(self, resource_key: str, account):
         gcp.projects.IAMMember(
             self.get_pulumi_name(resource_key),
             role='roles/batch.agentReporter',
+            member=get_member_key(account),
+            project=self.project_id,
+            opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_batchapi]),
+        )
+
+    def add_batch_jobs_editor_role(self, resource_key: str, account):
+        gcp.projects.IAMMember(
+            self.get_pulumi_name(resource_key),
+            role='roles/batch.jobsEditor',
             member=get_member_key(account),
             project=self.project_id,
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_batchapi]),
