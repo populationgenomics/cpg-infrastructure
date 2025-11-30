@@ -2395,10 +2395,16 @@ class CPGDatasetCloudInfrastructure:
             access_level,
             account,
         ) in self.cromwell_machine_accounts_by_access_level.items():
-            self.infra.add_member_to_batch_api(
+            self.infra.add_batch_agent_reporter_role(
                 f'cromwell-service-account-{access_level}-workflows-runner',
                 account,
             )
+
+        # Give the Cromwell runner the batch job editor role
+        self.infra.add_batch_jobs_editor_role(
+            'cromwell-runner-batch-jobs-editor',
+            self.config.cromwell.gcp.runner_machine_account,
+        )
 
     # endregion CROMWELL
     # region SPARK
