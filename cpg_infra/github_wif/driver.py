@@ -120,7 +120,6 @@ def check_or_create_wif_pool(project_id: str) -> gcp.iam.WorkloadIdentityPool | 
     Returns:
         WorkloadIdentityPool resource or None if it already exists
     """
-
     return gcp.iam.WorkloadIdentityPool(
         f'{project_id}-github-pool',
         workload_identity_pool_id=WIF_POOL_NAME,
