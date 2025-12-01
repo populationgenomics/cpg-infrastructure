@@ -120,9 +120,7 @@ def check_or_create_wif_pool(project_id: str) -> gcp.iam.WorkloadIdentityPool | 
     Returns:
         WorkloadIdentityPool resource or None if it already exists
     """
-    # Try to get the existing pool
-    # Note: In Pulumi, we typically just create resources and let Pulumi handle
-    # whether they already exist or need to be created.
+
     return gcp.iam.WorkloadIdentityPool(
         f'{project_id}-github-pool',
         workload_identity_pool_id=WIF_POOL_NAME,
