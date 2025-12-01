@@ -61,7 +61,7 @@ export GITHUB_WIF_CONFIG=/path/to/your/github_wif.yaml
 export GITHUB_TOKEN=ghp_...
 
 # Initialize Pulumi stack (if first time)
-pulumi stack init dev
+pulumi stack init github_wif
 
 # Preview changes
 pulumi preview
@@ -209,14 +209,6 @@ If repository names are very long:
 
 - Use a shorter `name` field (different from `github_repo`)
 - Names are automatically truncated, but explicit short names are clearer
-
-### Pool or Provider Not Found
-
-The module references existing `github-pool` and `github-provider`. If you see errors:
-
-- Verify the WIF pool and provider exist in the GCP project
-- Check `project_number` is correct
-- Ensure you have permissions to view WIF resources
 
 ## Adding New Repositories
 
