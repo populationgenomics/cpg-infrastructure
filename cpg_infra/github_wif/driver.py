@@ -11,6 +11,7 @@ from typing import Any, Literal
 
 import pulumi
 import pulumi_gcp as gcp
+import pulumi_github as github
 
 # Constants
 WIF_POOL_NAME = 'github-pool'
@@ -278,6 +279,80 @@ def grant_artifact_registry_access(
     )
 
 
+def manage_github_secrets(
+    github_repo: str,
+    environment: str,
+    provider_name: pulumi.Output[str],
+    service_account_email: pulumi.Output[str],
+) -> None:
+    """
+    Create GitHub secrets for WIF in the specified repository environment.
+
+    Args:
+        github_repo: Full GitHub repo path (org/repo)
+        environment: Environment name
+        provider_name: WIF provider resource name
+        service_account_email: Service account email
+    """
+    # Parse org and repo
+    if '/' not in github_repo:
+        # Should be caught by validation, but safe fallback
+        return
+
+    org_name, repo_name = github_repo.split('/', 1)
+
+    # Configure the GitHub provider explicitly for this organization
+    # This ensures it looks for the repo in the correct org, not the user's profile
+    gh_provider = github.Provider(
+        f'{repo_name}-{environment}-provider',
+        owner=org_name,
+    )
+
+    # Ensure the environment exists
+    # We use a resource name that includes the repo to avoid collisions if multiple repos use same env name
+
+    # Sanitize environment name for Pulumi resource name
+    env_resource_name = f'{repo_name}-{environment}-env'
+
+    # Configure deployment branch policy for production
+    deployment_branch_policy = None
+    if environment == 'production':
+        deployment_branch_policy = (
+            github.RepositoryEnvironmentDeploymentBranchPolicyArgs(
+                protected_branches=True,
+                custom_branch_policies=False,
+            )
+        )
+
+    repo_env = github.RepositoryEnvironment(
+        env_resource_name,
+        repository=repo_name,
+        environment=environment,
+        deployment_branch_policy=deployment_branch_policy,
+        opts=pulumi.ResourceOptions(provider=gh_provider),
+    )
+
+    # Create WIF_PROVIDER secret
+    github.ActionsEnvironmentSecret(
+        f'{env_resource_name}-wif-provider',
+        repository=repo_name,
+        environment=environment,
+        secret_name='WIF_PROVIDER',  # noqa: S106
+        plaintext_value=provider_name,
+        opts=pulumi.ResourceOptions(depends_on=[repo_env], provider=gh_provider),
+    )
+
+    # Create WIF_SERVICE_ACCOUNT secret
+    github.ActionsEnvironmentSecret(
+        f'{env_resource_name}-wif-sa',
+        repository=repo_name,
+        environment=environment,
+        secret_name='WIF_SERVICE_ACCOUNT',  # noqa: S106
+        plaintext_value=service_account_email,
+        opts=pulumi.ResourceOptions(depends_on=[repo_env], provider=gh_provider),
+    )
+
+
 def setup_github_wif_infrastructure(
     config: dict[str, Any],
 ) -> dict[str, Any]:
@@ -359,79 +434,3 @@ def setup_github_wif_infrastructure(
                 )
 
     return {}
-
-
-def manage_github_secrets(
-    github_repo: str,
-    environment: str,
-    provider_name: pulumi.Output[str],
-    service_account_email: pulumi.Output[str],
-) -> None:
-    """
-    Create GitHub secrets for WIF in the specified repository environment.
-
-    Args:
-        github_repo: Full GitHub repo path (org/repo)
-        environment: Environment name
-        provider_name: WIF provider resource name
-        service_account_email: Service account email
-    """
-    import pulumi_github as github
-
-    # Parse org and repo
-    if '/' not in github_repo:
-        # Should be caught by validation, but safe fallback
-        return
-
-    org_name, repo_name = github_repo.split('/', 1)
-
-    # Configure the GitHub provider explicitly for this organization
-    # This ensures it looks for the repo in the correct org, not the user's profile
-    gh_provider = github.Provider(
-        f'{repo_name}-{environment}-provider',
-        owner=org_name,
-    )
-
-    # Ensure the environment exists
-    # We use a resource name that includes the repo to avoid collisions if multiple repos use same env name
-
-    # Sanitize environment name for Pulumi resource name
-    env_resource_name = f'{repo_name}-{environment}-env'
-
-    # Configure deployment branch policy for production
-    deployment_branch_policy = None
-    if environment == 'production':
-        deployment_branch_policy = (
-            github.RepositoryEnvironmentDeploymentBranchPolicyArgs(
-                protected_branches=True,
-                custom_branch_policies=False,
-            )
-        )
-
-    repo_env = github.RepositoryEnvironment(
-        env_resource_name,
-        repository=repo_name,
-        environment=environment,
-        deployment_branch_policy=deployment_branch_policy,
-        opts=pulumi.ResourceOptions(provider=gh_provider),
-    )
-
-    # Create WIF_PROVIDER secret
-    github.ActionsEnvironmentSecret(
-        f'{env_resource_name}-wif-provider',
-        repository=repo_name,
-        environment=environment,
-        secret_name='WIF_PROVIDER',  # noqa: S106
-        plaintext_value=provider_name,
-        opts=pulumi.ResourceOptions(depends_on=[repo_env], provider=gh_provider),
-    )
-
-    # Create WIF_SERVICE_ACCOUNT secret
-    github.ActionsEnvironmentSecret(
-        f'{env_resource_name}-wif-sa',
-        repository=repo_name,
-        environment=environment,
-        secret_name='WIF_SERVICE_ACCOUNT',  # noqa: S106
-        plaintext_value=service_account_email,
-        opts=pulumi.ResourceOptions(depends_on=[repo_env], provider=gh_provider),
-    )
