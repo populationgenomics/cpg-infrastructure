@@ -2841,10 +2841,22 @@ class CPGDatasetCloudInfrastructure:
     @cached_property
     def notebook_account(self):
         assert self.config.notebooks
-        return self.infra.create_machine_account(
+        account = self.infra.create_machine_account(
             f'notebook-{self.dataset_config.dataset}',
             project=self.config.notebooks.gcp.project,
         )
+
+        # Export for PAM stack StackReference
+        pulumi.export(
+            f'notebook-{self.dataset_config.dataset}-id',
+            account.id,
+        )
+        pulumi.export(
+            f'notebook-{self.dataset_config.dataset}-email',
+            account.email,
+        )
+
+        return account
 
     # endregion NOTEBOOKS
     # region ANALYSIS RUNNER
