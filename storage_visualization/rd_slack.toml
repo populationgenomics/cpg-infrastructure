@@ -1,5 +1,5 @@
 [slack]
-channel = 'rd-pipelines'
+channel = 'C082NA58R7S'  # rd-pipelines
 token_secret_id = 'slack-production-bot-token'
 token_project_id = 'cpg-common'
 
