@@ -130,6 +130,7 @@ def post_to_slack(
     upload_file(
         content=content,
         comment=comment,
+        title='Visualization preview',
     )
 
 
