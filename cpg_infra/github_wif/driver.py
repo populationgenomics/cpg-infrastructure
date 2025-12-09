@@ -1,4 +1,4 @@
-# flake8: noqa: ANN001,ANN201,ERA001
+# flake8: noqa: ANN001,ANN201,ERA001,ANN204
 """
 GitHub Workload Identity Federation (WIF) setup for Pulumi
 
@@ -6,6 +6,7 @@ This module provides functionality to set up GitHub repositories with
 GCP Workload Identity Federation for OIDC authentication and Artifact Registry access.
 """
 
+import dataclasses
 import re
 from typing import Any, Literal
 
@@ -13,35 +14,64 @@ import pulumi
 import pulumi_gcp as gcp
 import pulumi_github as github
 
+from cpg_infra.config.deserializabledataclass import DeserializableDataclass
+
 # Constants
 WIF_POOL_NAME = 'github-pool'
 WIF_PROVIDER_NAME = 'github-provider'
 GITHUB_ORG = 'populationgenomics'
+GITHUB_ORG_ID = '23189395'
 
 # Service account name max length is 30 characters
 SA_NAME_MAX_LENGTH = 30
 
 
-def validate_github_wif_config(config: dict[str, Any]) -> None:
-    """
-    Validate GitHub WIF configuration structure.
+@dataclasses.dataclass(frozen=True)
+class GitHubWIFEnvironment(DeserializableDataclass):
+    """Configuration for a single GitHub environment (e.g., development, production)."""
 
-    Args:
-        config: Parsed configuration dictionary
+    name: str
+    push_registry: str
+    read_registries: list[str] = dataclasses.field(default_factory=list)
 
-    Raises:
-        ValueError: If configuration is invalid
-    """
-    if not config or 'projects' not in config:
-        raise ValueError('Invalid GitHub WIF config: missing "projects" key')
 
-    for project_id, project_config in config['projects'].items():
-        if 'project_number' not in project_config:
-            raise ValueError(f'Project {project_id} missing "project_number"')
-        if 'location' not in project_config:
-            raise ValueError(f'Project {project_id} missing "location"')
-        if 'repositories' not in project_config:
-            raise ValueError(f'Project {project_id} missing "repositories"')
+@dataclasses.dataclass(frozen=True)
+class GitHubWIFRepository(DeserializableDataclass):
+    """Configuration for a single GitHub repository."""
+
+    name: str
+    github_repo: str
+    environments: list[GitHubWIFEnvironment]
+
+    def __post_init__(self):
+        """Validate repository configuration."""
+        super().__post_init__()
+        if '/' not in self.github_repo:
+            raise ValueError(
+                f"Invalid github_repo format: '{self.github_repo}'. "
+                f"Expected format: 'org/repo' (e.g., 'populationgenomics/my-repo')"
+            )
+
+
+@dataclasses.dataclass(frozen=True)
+class GitHubWIFProject(DeserializableDataclass):
+    """Configuration for a single GCP project with WIF repositories."""
+
+    project_number: str
+    location: str
+    repositories: list[GitHubWIFRepository]
+
+
+@dataclasses.dataclass(frozen=True)
+class GitHubWIFConfig(DeserializableDataclass):
+    """Top-level configuration for GitHub WIF setup."""
+
+    projects: dict[str, GitHubWIFProject]
+
+    @staticmethod
+    def from_dict(config: dict[str, Any]) -> 'GitHubWIFConfig':
+        """Parse and validate configuration from a dictionary."""
+        return GitHubWIFConfig(**config)
 
 
 def sanitize_sa_name(
@@ -92,23 +122,6 @@ def sanitize_sa_name(
         sa_name = 'gh-' + sa_name[3:]  # Replace first 3 chars with 'gh-'
 
     return sa_name
-
-
-def get_wif_provider_resource_name(project_number: str) -> pulumi.Output[str]:
-    """
-    Get the full resource name for the WIF provider.
-
-    Args:
-        project_number: GCP project number
-
-    Returns:
-        Full WIF provider resource name
-    """
-    return pulumi.Output.concat(
-        f'projects/{project_number}/locations/global/',
-        f'workloadIdentityPools/{WIF_POOL_NAME}/',
-        f'providers/{WIF_PROVIDER_NAME}',
-    )
 
 
 def check_or_create_wif_pool(project_id: str) -> gcp.iam.WorkloadIdentityPool | None:
@@ -162,7 +175,7 @@ def check_or_create_wif_provider(
             'attribute.actor': 'assertion.actor',
             'attribute.repository': 'assertion.repository',
         },
-        attribute_condition=f"assertion.repository_owner == '{GITHUB_ORG}'",
+        attribute_condition=f"assertion.repository_owner_id == '{GITHUB_ORG_ID}'",
         oidc=gcp.iam.WorkloadIdentityPoolProviderOidcArgs(
             issuer_uri='https://token.actions.githubusercontent.com',
         ),
@@ -296,8 +309,10 @@ def manage_github_secrets(
     """
     # Parse org and repo
     if '/' not in github_repo:
-        # Should be caught by validation, but safe fallback
-        return
+        raise ValueError(
+            f"Invalid github_repo format: '{github_repo}'. "
+            f"Expected format: 'org/repo' (e.g., 'populationgenomics/my-repo')"
+        )
 
     org_name, repo_name = github_repo.split('/', 1)
 
@@ -354,38 +369,40 @@ def manage_github_secrets(
 
 
 def setup_github_wif_infrastructure(
-    config: dict[str, Any],
+    config: GitHubWIFConfig | dict[str, Any],
 ) -> dict[str, Any]:
     """
     Main function to set up GitHub WIF infrastructure from parsed config.
 
     Args:
-        config: Parsed configuration dictionary (from external wrapper script)
+        config: Parsed configuration (GitHubWIFConfig or dict)
 
     Returns:
-        Dictionary of outputs for each repository/environment combination
+        Empty dictionary (for backwards compatibility)
     """
-    validate_github_wif_config(config)
+    # Allow passing dict for backwards compatibility, but convert to typed config
+    if isinstance(config, dict):
+        config = GitHubWIFConfig.from_dict(config)
 
-    for project_id, project_config in config['projects'].items():
-        project_number = project_config['project_number']
-        location = project_config['location']
+    for project_id, project_config in config.projects.items():
+        project_number = project_config.project_number
+        location = project_config.location
 
         # Create or reference WIF pool and provider for this project
         pool = check_or_create_wif_pool(project_id)
-        check_or_create_wif_provider(project_id, pool)
+        provider = check_or_create_wif_provider(project_id, pool)
 
-        # Get the provider resource name for outputs
-        provider_name = get_wif_provider_resource_name(project_number)
+        # Get the provider resource name from the provider output
+        provider_name = provider.name
 
-        for repo_config in project_config.get('repositories', []):
-            repo_name = repo_config['name']
-            github_repo = repo_config['github_repo']
+        for repo_config in project_config.repositories:
+            repo_name = repo_config.name
+            github_repo = repo_config.github_repo
 
-            for env_config in repo_config.get('environments', []):
-                env_name = env_config['name']
-                push_registry = env_config['push_registry']
-                read_registries = env_config.get('read_registries', [])
+            for env_config in repo_config.environments:
+                env_name = env_config.name
+                push_registry = env_config.push_registry
+                read_registries = env_config.read_registries
 
                 # Create service account
                 sa = create_github_service_account(
