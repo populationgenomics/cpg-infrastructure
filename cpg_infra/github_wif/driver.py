@@ -20,7 +20,6 @@ from cpg_infra.config.deserializabledataclass import DeserializableDataclass
 WIF_POOL_NAME = 'github-pool'
 WIF_PROVIDER_NAME = 'github-provider'
 GITHUB_ORG = 'populationgenomics'
-GITHUB_ORG_ID = '23189395'
 
 # Service account name max length is 30 characters
 SA_NAME_MAX_LENGTH = 30
@@ -142,7 +141,7 @@ def check_or_create_wif_pool(project_id: str) -> gcp.iam.WorkloadIdentityPool | 
         description='Workload Identity Pool for GitHub Actions OIDC',
         disabled=False,
         opts=pulumi.ResourceOptions(
-            # Don't fail if it already exists
+            # Protect from accidental deletion
             protect=True,
         ),
     )
@@ -175,12 +174,13 @@ def check_or_create_wif_provider(
             'attribute.actor': 'assertion.actor',
             'attribute.repository': 'assertion.repository',
         },
-        attribute_condition=f"assertion.repository_owner_id == '{GITHUB_ORG_ID}'",
+        attribute_condition=f"assertion.repository_owner == '{GITHUB_ORG}'",
         oidc=gcp.iam.WorkloadIdentityPoolProviderOidcArgs(
             issuer_uri='https://token.actions.githubusercontent.com',
         ),
         opts=pulumi.ResourceOptions(
             depends_on=[pool],
+            # Protect from accidental deletion
             protect=True,
         ),
     )
