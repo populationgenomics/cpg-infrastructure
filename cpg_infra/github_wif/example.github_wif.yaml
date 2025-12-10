@@ -1,0 +1,43 @@
+# GitHub Workload Identity Federation Configuration
+#
+# This file defines GitHub repositories that should have WIF access to GCP Artifact Registry.
+# See: https://github.com/populationgenomics/cpg-infrastructure/blob/main/cpg_infra/abstraction/GITHUB_WIF_README.md
+#
+# Structure:
+#   projects:
+#     <gcp-project-id>:
+#       project_number: "<project-number>"
+#       location: "<region>"
+#       repositories:
+#         - name: <short-name>
+#           github_repo: populationgenomics/<repo-name>
+#           environments:
+#             - name: <development|production>
+#               push_registry: <registry-name>
+#               read_registries: [<registry-name>, ...]
+
+# Example configuration (uncomment and modify as needed):
+# projects:
+  # # Development Project
+  # cpg-my-project-dev:
+  #   project_number: "987654321"
+  #   location: "australia-southeast1"
+  #   repositories:
+  #     - name: test-repo
+  #       github_repo: populationgenomics/test-repo
+  #       environments:
+  #         - name: development
+  #           push_registry: images
+#
+  # # Production Project
+  # cpg-my-project:
+  #   project_number: "987654321"
+  #   location: "australia-southeast1"
+  #   repositories:
+  #     - name: test-repo
+  #       github_repo: populationgenomics/test-repo
+  #       environments:
+  #         - name: production
+  #           push_registry: images
+
+projects: {}
