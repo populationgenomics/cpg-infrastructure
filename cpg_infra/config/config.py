@@ -387,6 +387,7 @@ class CPGDatasetConfig(DeserializableDataclass):
             description: str | None = None
             max_file_size: str | None = None
             move_to_bucket: str | None = None
+            slack_notification_channel_id: str | None = None
 
         default_bucket: DefaultUploadBucketConfig | None = None
         additional_buckets: list[AdditionalUploadBucketConfig] | None = None
