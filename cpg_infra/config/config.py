@@ -370,12 +370,12 @@ class CPGDatasetConfig(DeserializableDataclass):
     class UploadConfig(DeserializableDataclass):
         @dataclasses.dataclass(frozen=True)
         class DefaultUploadBucketConfig(DeserializableDataclass):
-            uploaders: list[str]
+            uploaders: list[str] | None = None
 
         @dataclasses.dataclass(frozen=True)
         class AdditionalUploadBucketConfig(DeserializableDataclass):
             name: str
-            uploaders: list[str]
+            uploaders: list[str] | None = None
 
         @dataclasses.dataclass(frozen=True)
         class UploadDropboxConfig(DeserializableDataclass):
