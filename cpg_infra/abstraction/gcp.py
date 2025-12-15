@@ -350,10 +350,16 @@ class GcpInfrastructure(CloudInfraBase):
             condition=gcp.storage.BucketLifecycleRuleConditionArgs(age=days),
         )
 
-    def bucket_rule_temporary(self, days=TMP_BUCKET_PERIOD_IN_DAYS) -> Any:
+    def bucket_rule_temporary(
+        self,
+        days: int = TMP_BUCKET_PERIOD_IN_DAYS,
+        matches_prefixes: list[str] | None = None,
+    ) -> Any:
         return gcp.storage.BucketLifecycleRuleArgs(
             action=gcp.storage.BucketLifecycleRuleActionArgs(type='Delete'),
-            condition=gcp.storage.BucketLifecycleRuleConditionArgs(age=days),
+            condition=gcp.storage.BucketLifecycleRuleConditionArgs(
+                age=days, matches_prefixes=matches_prefixes
+            ),
         )
 
     def bucket_rule_abort_incomplete_multipart_upload(

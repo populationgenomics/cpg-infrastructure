@@ -1938,9 +1938,14 @@ class CPGDatasetCloudInfrastructure:
                 name = f'main-upload-db-{dropbox.id}'
                 bucket = self.infra.create_bucket(
                     name,
-                    # Data from these buckets should be copied to an upload bucket
-                    # so just keep the objects here temporarily
-                    lifecycle_rules=[self.infra.bucket_rule_temporary()],
+                    # Lifecycle rule for the incomplete folder to delete incomplete
+                    # uploads after 8 days
+                    lifecycle_rules=[
+                        self.infra.bucket_rule_temporary(
+                            matches_prefixes=['incomplete/'],
+                            days=8,
+                        ),
+                    ],
                     versioning=False,
                     autoclass=False,
                     soft_delete_protection=False,
