@@ -383,7 +383,10 @@ class DryRunInfra(CloudInfraBase):
         days: int = TMP_BUCKET_PERIOD_IN_DAYS,
         matches_prefixes: list[str] | None = None,
     ) -> Any:
-        return f'RULE:tmp={days}d,prefixes={matches_prefixes}'
+        prefixes_text = (
+            f',matches_prefixes={matches_prefixes}' if matches_prefixes else ''
+        )
+        return f'RULE:tmp={days}d{prefixes_text}'
 
     def bucket_rule_archive(self, days=ARCHIVE_PERIOD_IN_DAYS) -> Any:
         return f'RULE:archive={days}d'
