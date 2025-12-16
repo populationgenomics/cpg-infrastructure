@@ -162,7 +162,11 @@ class CloudInfraBase(ABC):
         Return a lifecycle_rule that stores data for n days after delete"""
 
     @abstractmethod
-    def bucket_rule_temporary(self, days: int = TMP_BUCKET_PERIOD_IN_DAYS) -> Any:
+    def bucket_rule_temporary(
+        self,
+        days: int = TMP_BUCKET_PERIOD_IN_DAYS,
+        matches_prefixes: list[str] | None = None,
+    ) -> Any:
         """
         Return a lifecycle_rule that deletes data n days after its creation"""
 
@@ -374,8 +378,15 @@ class DryRunInfra(CloudInfraBase):
     def bucket_rule_undelete(self, days=UNDELETE_PERIOD_IN_DAYS) -> Any:
         return f'RULE:undelete={days}d'
 
-    def bucket_rule_temporary(self, days=TMP_BUCKET_PERIOD_IN_DAYS) -> Any:
-        return f'RULE:tmp={days}d'
+    def bucket_rule_temporary(
+        self,
+        days: int = TMP_BUCKET_PERIOD_IN_DAYS,
+        matches_prefixes: list[str] | None = None,
+    ) -> Any:
+        prefixes_text = (
+            f',matches_prefixes={matches_prefixes}' if matches_prefixes else ''
+        )
+        return f'RULE:tmp={days}d{prefixes_text}'
 
     def bucket_rule_archive(self, days=ARCHIVE_PERIOD_IN_DAYS) -> Any:
         return f'RULE:archive={days}d'
