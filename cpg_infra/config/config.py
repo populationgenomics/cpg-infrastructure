@@ -263,6 +263,10 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     # configuration options for billing + billing aggregation
     billing: Billing | None = None
 
+    # configuration options for PAM (Privileged Access Manager)
+    # This is optional and only used when PAM stack is deployed separately
+    pam: dict[str, Any] | None = None
+
     # When resources are renamed, it can be useful to explicitly apply changes in two
     # phases: delete followed by create; that's opposite of the default create followed by
     # delete, which can end up with missing permissions. To implement the first phase
