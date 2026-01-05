@@ -277,7 +277,20 @@ class AzureInfra(CloudInfraBase):
             ),
         )
 
-    def bucket_rule_temporary(self, days=TMP_BUCKET_PERIOD_IN_DAYS) -> Any:
+    def bucket_rule_temporary(
+        self,
+        days: int = TMP_BUCKET_PERIOD_IN_DAYS,
+        matches_prefixes: list[str] | None = None,
+    ) -> Any:
+        filters = (
+            az.storage.ManagementPolicyFilterArgs(
+                prefix_match=matches_prefixes,
+                blob_types=['blockBlob'],
+            )
+            if matches_prefixes
+            else None
+        )
+
         return az.storage.ManagementPolicyRuleArgs(
             name='bucket-rule-tmp',
             type='Lifecycle',
@@ -285,10 +298,11 @@ class AzureInfra(CloudInfraBase):
                 actions=az.storage.ManagementPolicyActionArgs(
                     base_blob=az.storage.ManagementPolicyBaseBlobArgs(
                         delete=az.storage.DateAfterModificationArgs(
-                            days_after_modification_greater_than=days,
+                            days_after_modification_greater_than=days
                         ),
                     ),
                 ),
+                filters=filters,
             ),
         )
 
