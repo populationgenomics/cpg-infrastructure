@@ -4,16 +4,12 @@
 
 Core logic for setting up Privileged Access Manager (PAM) resources:
 - PAM entitlements for storage bucket access
-- GitHub Workload Identity Federation pools
-- WIF bindings and token creator permissions
+- Token creator role bindings
 """
-
-from pathlib import Path
 
 import pulumi
 import pulumi_gcp as gcp
 import pulumi_github as github
-import yaml
 
 
 class PAMInfra:
@@ -40,15 +36,6 @@ def get_project_number(project_id: str) -> str:
     """
     project = gcp.organizations.get_project(project_id=project_id)
     return project.number
-
-
-def load_pam_config():
-    """Load PAM configuration from YAML"""
-    config_path = Path(__file__).parent / 'pam.yaml'
-    if not config_path.exists():
-        return {}
-    with open(config_path, encoding='utf-8') as f:
-        return yaml.safe_load(f) or {}
 
 
 def create_pam_entitlement(
@@ -172,94 +159,6 @@ def setup_pam_entitlements(
 
     # Return entitlement IDs for export
     return entitlement_ids
-
-
-def setup_github_wif_pool(
-    infra: PAMInfra,
-    project_id: str,
-    project_number: str,
-    broker_sa_name: str | pulumi.Output[str],
-    wif_github_repository: str,
-    wif_github_environment: str,
-):
-    """
-    Setup GitHub Workload Identity Federation pool and provider
-
-    Args:
-        infra: Infrastructure instance (for get_pulumi_name)
-        project_id: GCP project ID
-        project_number: Numeric GCP project ID
-        broker_sa_name: PAM broker service account name
-        wif_github_repository: GitHub repository (e.g., 'org/repo')
-        wif_github_environment: GitHub environment name for binding
-    """
-    # Extract GitHub org from repository
-    github_org = wif_github_repository.split('/')[0]
-
-    # Constants
-    wif_pool_name = 'github-pool'
-    wif_provider_name = 'github-provider'
-
-    # Create Workload Identity Pool
-    wif_pool = gcp.iam.WorkloadIdentityPool(
-        infra.get_pulumi_name('github-wif-pool'),
-        workload_identity_pool_id=wif_pool_name,
-        project=project_id,
-        display_name='GitHub Actions Pool',
-        description='Workload Identity Pool for GitHub Actions OIDC',
-        disabled=False,
-        opts=pulumi.ResourceOptions(
-            protect=True,
-        ),
-    )
-
-    # Create OIDC Provider
-    wif_provider = gcp.iam.WorkloadIdentityPoolProvider(
-        infra.get_pulumi_name('github-wif-provider'),
-        workload_identity_pool_id=wif_pool.workload_identity_pool_id,
-        workload_identity_pool_provider_id=wif_provider_name,
-        project=project_id,
-        display_name='GitHub Actions Provider',
-        description=f'OIDC provider for {github_org} GitHub repositories',
-        disabled=False,
-        attribute_mapping={
-            'google.subject': 'assertion.sub',
-            'attribute.actor': 'assertion.actor',
-            'attribute.repository': 'assertion.repository',
-        },
-        attribute_condition=f"assertion.repository_owner == '{github_org}'",
-        oidc=gcp.iam.WorkloadIdentityPoolProviderOidcArgs(
-            issuer_uri='https://token.actions.githubusercontent.com',
-        ),
-        opts=pulumi.ResourceOptions(
-            depends_on=[wif_pool],
-            protect=True,
-        ),
-    )
-
-    # Bind broker SA to WIF pool for the specified environment
-    principal = pulumi.Output.all(
-        project_number=project_number,
-        environment=wif_github_environment,
-        repository=wif_github_repository,
-        pool_name=wif_pool_name,
-    ).apply(
-        lambda args: (
-            f'principal://iam.googleapis.com/projects/{args["project_number"]}/'
-            f'locations/global/workloadIdentityPools/{args["pool_name"]}/'
-            f'subject/repo:{args["repository"]}:environment:{args["environment"]}'
-        )
-    )
-
-    gcp.serviceaccount.IAMBinding(
-        infra.get_pulumi_name('pam-broker-wif-binding'),
-        service_account_id=broker_sa_name,
-        role='roles/iam.workloadIdentityUser',
-        members=[principal],
-        opts=pulumi.ResourceOptions(
-            depends_on=[wif_provider],
-        ),
-    )
 
 
 def create_broker_service_account(

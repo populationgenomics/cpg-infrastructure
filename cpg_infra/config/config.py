@@ -219,6 +219,19 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         gcp_cost_controls: GCPCostControls | None = None
         hail_aggregator_username: str | None = None
 
+    @dataclasses.dataclass(frozen=True)
+    class PAM(DeserializableDataclass):
+        """Configuration for Privileged Access Manager (PAM)"""
+
+        @dataclasses.dataclass(frozen=True)
+        class WIF(DeserializableDataclass):
+            """Workload Identity Federation configuration for PAM"""
+
+            github_repository: str
+            github_environment: str
+
+        wif: WIF
+
     # used in the gcp.organizations.get_organization(domain=self.config.domain) call
     domain: str
     # Used when constructing budgets, usually AUD, USD, etc
@@ -265,7 +278,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
 
     # configuration options for PAM (Privileged Access Manager)
     # This is optional and only used when PAM stack is deployed separately
-    pam: dict[str, Any] | None = None
+    pam: PAM | None = None
 
     # When resources are renamed, it can be useful to explicitly apply changes in two
     # phases: delete followed by create; that's opposite of the default create followed by
