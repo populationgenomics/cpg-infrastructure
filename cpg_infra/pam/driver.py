@@ -1,4 +1,4 @@
-# flake8: noqa: ANN204,ANN401
+# flake8: noqa: ANN204
 
 """PAM Infrastructure Driver
 
@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pulumi
 import pulumi_gcp as gcp
+import pulumi_github as github
 import yaml
 
 
@@ -244,9 +245,9 @@ def setup_github_wif_pool(
         pool_name=wif_pool_name,
     ).apply(
         lambda args: (
-            f"principal://iam.googleapis.com/projects/{args['project_number']}/"
-            f"locations/global/workloadIdentityPools/{args['pool_name']}/"
-            f"subject/repo:{args['repository']}:environment:{args['environment']}"
+            f'principal://iam.googleapis.com/projects/{args["project_number"]}/'
+            f'locations/global/workloadIdentityPools/{args["pool_name"]}/'
+            f'subject/repo:{args["repository"]}:environment:{args["environment"]}'
         )
     )
 
@@ -257,5 +258,139 @@ def setup_github_wif_pool(
         members=[principal],
         opts=pulumi.ResourceOptions(
             depends_on=[wif_provider],
+        ),
+    )
+
+
+def create_broker_service_account(
+    project_id: str,
+    account_id: str = 'pam-broker',
+    display_name: str = 'PAM Broker Service Account',
+) -> gcp.serviceaccount.Account:
+    """
+    Create PAM broker service account
+
+    Args:
+        project_id: GCP project ID where broker SA will be created
+        account_id: Service account ID (defaults to 'pam-broker')
+        display_name: Display name for the service account
+
+    Returns:
+        Service account resource
+    """
+    return gcp.serviceaccount.Account(
+        'pam-broker',
+        account_id=account_id,
+        project=project_id,
+        display_name=display_name,
+        description=(
+            'Broker SA for GitHub Actions PAM integration. '
+            'Authenticates via WIF and impersonates dataset notebook SAs '
+            'to request temporary PAM grants for storage access.'
+        ),
+    )
+
+
+def setup_github_environment_secrets(
+    wif_repository: str,
+    wif_environment: str,
+    wif_provider_path: str | pulumi.Output[str],
+    broker_sa_email: str | pulumi.Output[str],
+    common_project_number: str | pulumi.Output[str],
+    common_project_id: str,
+):
+    """
+    Setup GitHub environment and secrets for PAM workflow
+
+    Creates GitHub environment and populates it with secrets needed
+    for PAM grant requests via GitHub Actions.
+
+    Args:
+        wif_repository: GitHub repository (e.g., 'org/repo')
+        wif_environment: GitHub environment name
+        wif_provider_path: Full WIF provider resource path
+        broker_sa_email: PAM broker service account email
+        common_project_number: GCP project number (where WIF pool lives)
+        common_project_id: GCP project ID (where WIF pool lives)
+    """
+    # Extract repo name from org/repo format
+    repo_name = wif_repository.split('/')[-1]
+
+    # Create PAM environment in GitHub repository
+    # Note: This requires a GITHUB_TOKEN with appropriate permissions
+    pam_env = github.RepositoryEnvironment(
+        'pam-environment',
+        repository=repo_name,
+        environment=wif_environment,
+    )
+
+    # Create environment secrets
+    github.ActionsEnvironmentSecret(
+        'wif-provider-secret',
+        repository=repo_name,
+        environment=wif_environment,
+        secret_name='WIF_PROVIDER',  # noqa: S106
+        plaintext_value=wif_provider_path,
+        opts=pulumi.ResourceOptions(depends_on=[pam_env]),
+    )
+
+    github.ActionsEnvironmentSecret(
+        'pam-broker-sa-secret',
+        repository=repo_name,
+        environment=wif_environment,
+        secret_name='PAM_BROKER_SA',  # noqa: S106
+        plaintext_value=broker_sa_email,
+        opts=pulumi.ResourceOptions(depends_on=[pam_env]),
+    )
+
+    github.ActionsEnvironmentSecret(
+        'gcp-project-number-secret',
+        repository=repo_name,
+        environment=wif_environment,
+        secret_name='GCP_PROJECT_NUMBER',  # noqa: S106
+        plaintext_value=str(common_project_number)
+        if isinstance(common_project_number, str)
+        else common_project_number.apply(str),
+        opts=pulumi.ResourceOptions(depends_on=[pam_env]),
+    )
+
+    github.ActionsEnvironmentSecret(
+        'gcp-common-project-secret',
+        repository=repo_name,
+        environment=wif_environment,
+        secret_name='GCP_COMMON_PROJECT',  # noqa: S106
+        plaintext_value=common_project_id,
+        opts=pulumi.ResourceOptions(depends_on=[pam_env]),
+    )
+
+    pulumi.log.info(
+        f'Created GitHub environment "{wif_environment}" '
+        f'with secrets for repository {wif_repository}',
+    )
+
+
+def grant_token_creator_to_broker(
+    dataset_name: str,
+    notebook_sa_id: str | pulumi.Output[str],
+    broker_sa_email: str | pulumi.Output[str],
+):
+    """
+    Grant token creator role to broker SA on notebook SA
+
+    This allows the broker (authenticated via WIF) to impersonate
+    the notebook SA for PAM grant requests.
+
+    Args:
+        dataset_name: Dataset name (for resource naming)
+        notebook_sa_id: Full resource ID of notebook service account
+        broker_sa_email: Email of PAM broker service account
+    """
+    return gcp.serviceaccount.IAMMember(
+        f'pam-tc-{dataset_name}',  # Shortened prefix to avoid length limits
+        service_account_id=notebook_sa_id,
+        role='roles/iam.serviceAccountTokenCreator',
+        member=pulumi.Output.concat(
+            'serviceAccount:',
+            broker_sa_email,
         ),
     )
