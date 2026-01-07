@@ -23,6 +23,7 @@ GroupName = Literal[
     'metadata-contribute',
     'web-access',
     'release-access',
+    'pam-read-access',
 ]
 
 
@@ -221,11 +222,15 @@ class CPGInfrastructureConfig(DeserializableDataclass):
 
     @dataclasses.dataclass(frozen=True)
     class PAM(DeserializableDataclass):
-        """Configuration for Privileged Access Manager (PAM)"""
+        """Configuration for Privileged Access Manager (PAM)
+
+        PAM allows notebook service accounts to request time-limited
+        elevated access to storage buckets through a broker service account.
+        """
 
         @dataclasses.dataclass(frozen=True)
         class WIF(DeserializableDataclass):
-            """Workload Identity Federation configuration for PAM"""
+            """Workload Identity Federation configuration for PAM broker"""
 
             github_repository: str
             github_environment: str
@@ -446,6 +451,11 @@ class CPGDatasetConfig(DeserializableDataclass):
     enable_shared_project: bool = False
     # creates a metamist project (+ test metamist project if setup_test is True)
     enable_metamist_project: bool = True
+
+    # enable PAM (Privileged Access Manager) for notebook service accounts
+    # When enabled, creates PAM entitlements that allow notebook SAs to request
+    # time-limited access to the main bucket via a broker service account
+    enable_pam_for_notebook: bool = False
 
     # give FULL access to these datasets, as this dataset depends_on them
     depends_on: list[str] = dataclasses.field(default_factory=list)

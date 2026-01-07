@@ -26,6 +26,7 @@ from cpg_infra.abstraction.base import (
     ContainerRegistryMembership,
     DryRunInfra,
     MachineAccountRole,
+    PAMAccessType,
     SecretMembership,
 )
 from cpg_infra.abstraction.gcp import GcpInfrastructure
@@ -42,6 +43,9 @@ from cpg_infra.config import (
     CPGInfrastructureConfig,
     CPGInfrastructureUser,
     HailAccount,
+)
+from cpg_infra.github_wif.driver import (
+    setup_pam_broker_infrastructure,
 )
 from cpg_infra.plugin import get_plugins
 
@@ -359,6 +363,9 @@ class CPGInfrastructure:
 
         # Create a python registry for storing private python packages
         self.setup_python_registry()
+
+        # Setup PAM broker infrastructure if PAM is configured
+        self.setup_pam_broker()
 
         # Deploy all the assets required for each dataset. Groups, permissions
         # storage buckets, metamist and hail users etc.
@@ -867,6 +874,69 @@ class CPGInfrastructure:
             description='Python packages for CPG',
         )
 
+    def setup_pam_broker(self):
+        """
+        Setup PAM broker service account and WIF infrastructure.
+
+        The PAM broker is used by GitHub Actions to request PAM grants
+        on behalf of notebook service accounts. It's created once in the
+        common project and shared across all datasets with PAM enabled.
+        """
+        if not self.config.pam:
+            pulumi.log.info('PAM not configured, skipping broker setup')
+            return
+
+        # Check if any dataset has PAM enabled
+        pam_enabled_datasets = [
+            dc for dc in self.dataset_configs.values() if dc.enable_pam_for_notebook
+        ]
+        if not pam_enabled_datasets:
+            pulumi.log.info(
+                'No datasets have PAM enabled for notebooks, skipping broker setup'
+            )
+            return
+
+        # Get common dataset's project for the broker SA
+        common_config = next(
+            (
+                dc
+                for dc in self.dataset_configs.values()
+                if dc.dataset == self.config.common_dataset
+            ),
+            None,
+        )
+        if not common_config:
+            raise ValueError(
+                'PAM requires common_dataset to be configured',
+            )
+        broker_project_id = common_config.gcp.project
+
+        # Get project number
+        project = gcp.organizations.get_project(project_id=broker_project_id)
+        project_number = project.number
+
+        # Setup broker infrastructure (SA, WIF, GitHub secrets)
+        self._pam_broker_sa = setup_pam_broker_infrastructure(
+            project_id=broker_project_id,
+            project_number=project_number,
+            wif_repository=self.config.pam.wif.github_repository,
+            wif_environment=self.config.pam.wif.github_environment,
+        )
+
+        # Export broker SA email for reference
+        pulumi.export('pam-broker-email', self._pam_broker_sa.email)
+
+        # Track which datasets have PAM enabled
+        pam_datasets = {dc.dataset: dc.gcp.project for dc in pam_enabled_datasets}
+        pulumi.export('pam-enabled-datasets', pam_datasets)
+
+    @cached_property
+    def pam_broker_sa(self):
+        """Get the PAM broker service account (lazy initialization)."""
+        if not hasattr(self, '_pam_broker_sa'):
+            return None
+        return self._pam_broker_sa
+
     def setup_python_registry(self):
         """
         Setup the python registry permissions in gcp-common
@@ -1021,6 +1091,9 @@ class CPGDatasetCloudInfrastructure:
 
         if self.should_setup_analysis_runner:
             self.setup_analysis_runner()
+
+        # Setup PAM (independent of notebooks - can be for users, notebooks, or both)
+        self.setup_pam()
 
         self.infra.finalise()
 
@@ -2830,6 +2903,7 @@ class CPGDatasetCloudInfrastructure:
                 role='roles/compute.admin',
                 member=self.notebook_account,
             )
+
         elif isinstance(self.infra, DryRunInfra):
             pass
         else:
@@ -2837,6 +2911,127 @@ class CPGDatasetCloudInfrastructure:
             raise NotImplementedError(
                 f'No implementation for compute.admin for notebook account on {self.infra.name()}',
             )
+
+    def _grant_pam_token_creator_to_broker(
+        self,
+        notebook_sa_id: pulumi.Output[str],
+        broker_sa_email: pulumi.Output[str],
+    ) -> gcp.serviceaccount.IAMMember:
+        """
+        Grant the broker SA permission to create tokens for a notebook SA.
+
+        This allows the broker (authenticated via WIF from GitHub Actions)
+        to impersonate the notebook SA when requesting PAM grants.
+
+        Args:
+            notebook_sa_id: Full resource ID of the notebook service account
+            broker_sa_email: Email of the broker service account
+
+        Returns:
+            IAM member binding
+        """
+        return gcp.serviceaccount.IAMMember(
+            self.infra.get_pulumi_name('pam-broker-token-creator'),
+            service_account_id=notebook_sa_id,
+            role='roles/iam.serviceAccountTokenCreator',
+            member=pulumi.Output.concat('serviceAccount:', broker_sa_email),
+        )
+
+    def setup_pam(self):
+        """
+        Setup PAM entitlements for this dataset.
+
+        Creates PAM entitlements that allow eligible principals to request
+        time-limited access to the main bucket. Principals can include:
+        - Users listed in pam-read-access group (always, if any)
+        - Notebook service account (if enable_pam_for_notebook is True)
+
+        This method is called from the main dataset setup, not from notebooks setup,
+        to allow PAM to be configured independently for users and notebooks.
+        """
+        if not isinstance(self.infra, GcpInfrastructure):
+            return
+
+        # Get members from pam-read-access group if defined
+        pam_members = self.dataset_config.members.get('pam-read-access', [])
+
+        # Check if PAM should be set up at all
+        has_pam_users = bool(pam_members)
+        has_pam_notebook = self.dataset_config.enable_pam_for_notebook
+
+        if not has_pam_users and not has_pam_notebook:
+            # No PAM configuration needed for this dataset
+            return
+
+        if not self.config.pam:
+            pulumi.log.warn(
+                f'{self.dataset_config.dataset}: PAM is requested (users or notebooks) '
+                f'but no PAM configuration in infrastructure config',
+            )
+            return
+
+        # Get the PAM broker SA from the root
+        broker_sa = self.root.pam_broker_sa
+        if not broker_sa:
+            pulumi.log.warn(
+                f'{self.dataset_config.dataset}: PAM broker SA not available, '
+                f'PAM setup may be incomplete',
+            )
+            return
+
+        # Convert user member IDs to principals
+        principals_list = []
+        for member_id in pam_members:
+            user = self.config.users.get(member_id)
+            if user and 'gcp' in user.clouds:
+                gcp_email = user.clouds['gcp'].id
+                if gcp_email.endswith('.iam.gserviceaccount.com'):
+                    principals_list.append(f'serviceAccount:{gcp_email}')
+                else:
+                    principals_list.append(f'user:{gcp_email}')
+
+        # Build principals list based on what's enabled
+        if has_pam_notebook:
+            # Only enable PAM for notebook if notebooks are being set up
+            if not self.should_setup_notebooks:
+                pulumi.log.warn(
+                    f'{self.dataset_config.dataset}: enable_pam_for_notebook is True '
+                    f'but notebooks are not enabled for this dataset',
+                )
+            else:
+                # Grant token creator role to broker on notebook SA
+                # This allows the broker (authenticated via WIF) to impersonate the notebook SA
+                self._grant_pam_token_creator_to_broker(
+                    notebook_sa_id=self.notebook_account.id,
+                    broker_sa_email=broker_sa.email,
+                )
+
+                # Include notebook SA in principals
+                principals = self.notebook_account.email.apply(
+                    lambda email: [f'serviceAccount:{email}', *principals_list],
+                )
+
+        # If notebook PAM wasn't set up (or not enabled), use users-only principals
+        if not has_pam_notebook or not self.should_setup_notebooks:
+            if not principals_list:
+                # No users and no valid notebook - nothing to do
+                return
+            principals = pulumi.Output.from_input(principals_list)
+
+        # Create PAM entitlement for read access to main bucket
+        self.infra.create_pam_entitlement(
+            resource_key='pam-entitlement-main-read',
+            bucket=self.main_bucket,
+            principals=principals,
+            access_type=PAMAccessType.READ,
+            max_duration='604800s',  # 7 days
+        )
+
+        # Export entitlement ID for reference
+        pulumi.export(
+            f'pam-entitlement-{self.dataset_config.dataset}-read',
+            f'pam-{self.dataset_config.dataset}-read',
+        )
 
     @cached_property
     def notebook_account(self):
