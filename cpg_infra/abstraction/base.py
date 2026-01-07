@@ -47,8 +47,8 @@ class BucketMembership(Enum):
     MUTATE = 'mutate'
 
 
-class PAMAccessType(Enum):
-    """PAM entitlement access type for temporary bucket access"""
+class TemporaryBucketAccessType(Enum):
+    """Access type for temporary/just-in-time bucket access"""
 
     READ = 'read'
     WRITE = 'write'
@@ -219,19 +219,19 @@ class CloudInfraBase(ABC):
         :param membership:
         """
 
-    def create_pam_entitlement(
+    def create_temporary_bucket_access(
         self,
         resource_key: str,
         bucket,
-        access_type: 'PAMAccessType',
+        access_type: 'TemporaryBucketAccessType',
         principals: list[str],
         max_duration: str = '604800s',
     ) -> Any:
         """
-        Create a PAM entitlement for temporary bucket access.
+        Create a temporary/just-in-time access entitlement for a bucket.
 
         This allows specified principals to request time-limited access
-        to a bucket through Privileged Access Manager.
+        to a bucket. On GCP, this is implemented using Privileged Access Manager (PAM).
 
         Args:
             resource_key: Unique Pulumi resource key
@@ -242,9 +242,9 @@ class CloudInfraBase(ABC):
             max_duration: Maximum grant duration (default 7 days = 604800s)
 
         Returns:
-            PAM Entitlement resource (or None if not supported on this cloud)
+            Entitlement resource (or None if not supported on this cloud)
         """
-        # Default implementation returns None - only GCP implements PAM
+        # Default implementation returns None - only GCP implements this via PAM
         return None
 
     @abstractmethod

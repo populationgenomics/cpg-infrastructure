@@ -23,7 +23,7 @@ GroupName = Literal[
     'metadata-contribute',
     'web-access',
     'release-access',
-    'pam-read-access',
+    'tmp-main-read-access',
 ]
 
 
@@ -220,23 +220,6 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         gcp_cost_controls: GCPCostControls | None = None
         hail_aggregator_username: str | None = None
 
-    @dataclasses.dataclass(frozen=True)
-    class PAM(DeserializableDataclass):
-        """Configuration for Privileged Access Manager (PAM)
-
-        PAM allows notebook service accounts to request time-limited
-        elevated access to storage buckets through a broker service account.
-        """
-
-        @dataclasses.dataclass(frozen=True)
-        class WIF(DeserializableDataclass):
-            """Workload Identity Federation configuration for PAM broker"""
-
-            github_repository: str
-            github_environment: str
-
-        wif: WIF
-
     # used in the gcp.organizations.get_organization(domain=self.config.domain) call
     domain: str
     # Used when constructing budgets, usually AUD, USD, etc
@@ -280,10 +263,6 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     metamist: Metamist | None = None
     # configuration options for billing + billing aggregation
     billing: Billing | None = None
-
-    # configuration options for PAM (Privileged Access Manager)
-    # This is optional and only used when PAM stack is deployed separately
-    pam: PAM | None = None
 
     # When resources are renamed, it can be useful to explicitly apply changes in two
     # phases: delete followed by create; that's opposite of the default create followed by
@@ -452,10 +431,10 @@ class CPGDatasetConfig(DeserializableDataclass):
     # creates a metamist project (+ test metamist project if setup_test is True)
     enable_metamist_project: bool = True
 
-    # enable PAM (Privileged Access Manager) for notebook service accounts
-    # When enabled, creates PAM entitlements that allow notebook SAs to request
-    # time-limited access to the main bucket via a broker service account
-    enable_pam_for_notebook: bool = False
+    # Allow notebook service accounts to request temporary read access to the main bucket.
+    # When enabled, creates entitlements that allow notebook SAs to request
+    # time-limited access via a broker service account.
+    allow_notebook_tmp_main_read: bool = False
 
     # give FULL access to these datasets, as this dataset depends_on them
     depends_on: list[str] = dataclasses.field(default_factory=list)

@@ -21,8 +21,8 @@ from cpg_infra.abstraction.base import (
     CloudName,
     ContainerRegistryMembership,
     MachineAccountRole,
-    PAMAccessType,
     SecretMembership,
+    TemporaryBucketAccessType,
 )
 from cpg_infra.abstraction.google_group_membership import (
     GoogleGroupMembership,
@@ -518,19 +518,20 @@ class GcpInfrastructure(CloudInfraBase):
                 ),
             )
 
-    def create_pam_entitlement(
+    def create_temporary_bucket_access(
         self,
         resource_key: str,
         bucket,
-        access_type: 'PAMAccessType',
+        access_type: 'TemporaryBucketAccessType',
         principals: list[str] | pulumi.Output[list[str]],
         max_duration: str = '604800s',
     ) -> Any:
         """
-        Create a PAM entitlement for temporary bucket access.
+        Create a temporary/just-in-time access entitlement for a bucket.
 
+        On GCP, this is implemented using Privileged Access Manager (PAM).
         This allows specified principals to request time-limited access
-        to a bucket through Privileged Access Manager.
+        to a bucket.
 
         Args:
             resource_key: Unique Pulumi resource key
@@ -546,12 +547,12 @@ class GcpInfrastructure(CloudInfraBase):
         bucket_name = get_member_key(bucket)
 
         # Determine role based on access type
-        if access_type == PAMAccessType.READ:
+        if access_type == TemporaryBucketAccessType.READ:
             role = 'roles/storage.objectViewer'
-        elif access_type == PAMAccessType.WRITE:
+        elif access_type == TemporaryBucketAccessType.WRITE:
             role = 'roles/storage.objectAdmin'
         else:
-            raise ValueError(f'Unsupported PAM access type: {access_type}')
+            raise ValueError(f'Unsupported access type: {access_type}')
 
         # Create entitlement ID from dataset and access type
         entitlement_id = f'pam-{self.dataset}-{access_type.value}'
