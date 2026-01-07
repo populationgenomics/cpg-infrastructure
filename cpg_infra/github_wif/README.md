@@ -212,7 +212,7 @@ If repository names are very long:
 
 ## Adding New Repositories
 
-1. Add repository config to `github_wif.yaml`
+1. Add repository config to [`github_wif.yaml`](https://github.com/populationgenomics/cpg-infrastructure-private/blob/main/github_wif/github_wif.yaml)
 2. Run `pulumi up`
 3. The GitHub secrets will be automatically created in the repository environment
-4. Create a GitHub Actions workflow using the secrets (see example above)
+4. Create a GitHub Actions workflow using the secrets (see template above under **Using in GitHub Actions**)
