@@ -3253,6 +3253,7 @@ class CPGDatasetCloudInfrastructure:
                 'images-reader': [self.images_reader_group],
                 'images-dev-reader': [self.images_dev_reader_group],
                 'images-dev-writer': [self.images_dev_writer_group],
+                'tmp-main-read-access': [self.tmp_main_read_access_group],
             }
             if self.dataset_config.setup_test:
                 group_map['test-read'] = [
