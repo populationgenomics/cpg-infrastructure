@@ -2945,8 +2945,13 @@ class CPGDatasetCloudInfrastructure:
         """
         Setup temporary main read access for this dataset.
 
-        Creates a tmp-main-read-access group and PAM entitlement that allows members of
-        that group to request time-limited read access to the main bucket.
+        Always creates a tmp-main-read-access group so that this dataset can be used
+        as a dependency by other datasets (the group must exist for transitive
+        membership to work).
+
+        If PAM is configured (users in tmp-main-read-access or allow_notebook_tmp_main_read),
+        also creates a PAM entitlement that allows members of the group to request
+        time-limited read access to the main bucket.
 
         Members can include:
         - Users listed in tmp-main-read-access group in members.yaml
@@ -2961,6 +2966,10 @@ class CPGDatasetCloudInfrastructure:
         if not isinstance(self.infra, GcpInfrastructure):
             return
 
+        # Always create the group so this dataset can be used as a dependency.
+        # Access the cached property to trigger group creation.
+        _ = self.tmp_main_read_access_group
+
         # Get members from tmp-main-read-access group if defined in members.yaml
         pam_members = self.dataset_config.members.get('tmp-main-read-access', [])
 
@@ -2969,7 +2978,7 @@ class CPGDatasetCloudInfrastructure:
         has_pam_notebook = self.dataset_config.allow_notebook_tmp_main_read
 
         if not has_pam_users and not has_pam_notebook:
-            # No PAM configuration needed for this dataset
+            # Group created but no PAM configuration needed for this dataset
             return
 
         # Get the PAM broker SA from the root
@@ -3248,7 +3257,7 @@ class CPGDatasetCloudInfrastructure:
                 )
 
         for dependency in self.dataset_config.depends_on_readonly:
-            group_map = {
+            group_map: dict[str, list] = {
                 'main-read': [
                     self.main_read_group,
                     self.main_create_group,
