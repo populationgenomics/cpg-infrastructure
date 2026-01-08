@@ -23,6 +23,7 @@ GroupName = Literal[
     'metadata-contribute',
     'web-access',
     'release-access',
+    'tmp-main-read-access',
 ]
 
 
@@ -430,6 +431,11 @@ class CPGDatasetConfig(DeserializableDataclass):
     enable_shared_project: bool = False
     # creates a metamist project (+ test metamist project if setup_test is True)
     enable_metamist_project: bool = True
+
+    # Allow notebook service accounts to request temporary read access to the main bucket.
+    # When enabled, creates entitlements that allow notebook SAs to request
+    # time-limited access via a broker service account.
+    allow_notebook_tmp_main_read: bool = False
 
     # give FULL access to these datasets, as this dataset depends_on them
     depends_on: list[str] = dataclasses.field(default_factory=list)

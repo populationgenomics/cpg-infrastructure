@@ -4,6 +4,8 @@ GitHub Workload Identity Federation (WIF) setup for Pulumi
 
 This module provides functionality to set up GitHub repositories with
 GCP Workload Identity Federation for OIDC authentication and Artifact Registry access.
+
+It also includes PAM broker service account setup for Privileged Access Manager.
 """
 
 import dataclasses
@@ -23,6 +25,9 @@ GITHUB_ORG = 'populationgenomics'
 
 # Service account name max length is 30 characters
 SA_NAME_MAX_LENGTH = 30
+
+# PAM broker service account name
+PAM_BROKER_SA_NAME = 'pam-broker'
 
 
 @dataclasses.dataclass(frozen=True)
@@ -62,10 +67,21 @@ class GitHubWIFProject(DeserializableDataclass):
 
 
 @dataclasses.dataclass(frozen=True)
+class PAMBrokerConfig(DeserializableDataclass):
+    """Configuration for PAM broker GitHub WIF setup."""
+
+    project_id: str
+    project_number: str
+    github_repository: str
+    github_environment: str
+
+
+@dataclasses.dataclass(frozen=True)
 class GitHubWIFConfig(DeserializableDataclass):
     """Top-level configuration for GitHub WIF setup."""
 
     projects: dict[str, GitHubWIFProject]
+    pam_broker: PAMBrokerConfig | None = None
 
     @staticmethod
     def from_dict(config: dict[str, Any]) -> 'GitHubWIFConfig':
@@ -450,4 +466,77 @@ def setup_github_wif_infrastructure(
                     sa.email,
                 )
 
+    # Set up PAM broker WIF if configured
+    if config.pam_broker:
+        setup_pam_broker_github_wif(
+            project_id=config.pam_broker.project_id,
+            project_number=config.pam_broker.project_number,
+            wif_repository=config.pam_broker.github_repository,
+            wif_environment=config.pam_broker.github_environment,
+        )
+
     return {}
+
+
+# region PAM Broker Functions
+
+
+def setup_pam_broker_github_wif(
+    project_id: str,
+    project_number: str,
+    wif_repository: str,
+    wif_environment: str,
+) -> None:
+    """
+    Set up GitHub WIF bindings and secrets for the PAM broker.
+
+    This assumes the PAM broker service account already exists (created by the
+    main infrastructure stack). It sets up:
+    - WIF pool and provider (if not already existing)
+    - WIF impersonation binding for the broker SA
+    - GitHub environment secrets
+
+    Args:
+        project_id: GCP project ID where the broker SA exists
+        project_number: GCP project number
+        wif_repository: GitHub repository (org/repo format)
+        wif_environment: GitHub environment name
+    """
+    # Reference the existing broker service account by name
+    broker_sa_email = f'{PAM_BROKER_SA_NAME}@{project_id}.iam.gserviceaccount.com'
+
+    # Set up WIF pool and provider
+    wif_pool = check_or_create_wif_pool(project_id)
+    _wif_provider = check_or_create_wif_provider(project_id, wif_pool)
+
+    # Grant WIF impersonation to broker SA (using email directly)
+    # Create the principal identifier for WIF
+    principal = (
+        f'principal://iam.googleapis.com/projects/{project_number}/'
+        f'locations/global/workloadIdentityPools/{WIF_POOL_NAME}/'
+        f'subject/repo:{wif_repository}:environment:{wif_environment}'
+    )
+
+    gcp.serviceaccount.IAMMember(
+        f'{project_id}-pam-broker-wif-binding',
+        service_account_id=f'projects/{project_id}/serviceAccounts/{broker_sa_email}',
+        role='roles/iam.workloadIdentityUser',
+        member=principal,
+    )
+
+    # Build WIF provider path for GitHub secrets
+    wif_provider_path = (
+        f'projects/{project_number}/locations/global/'
+        f'workloadIdentityPools/{WIF_POOL_NAME}/providers/{WIF_PROVIDER_NAME}'
+    )
+
+    # Set up GitHub secrets
+    manage_github_secrets(
+        github_repo=wif_repository,
+        environment=wif_environment,
+        provider_name=pulumi.Output.from_input(wif_provider_path),
+        service_account_email=pulumi.Output.from_input(broker_sa_email),
+    )
+
+
+# endregion PAM Broker Functions

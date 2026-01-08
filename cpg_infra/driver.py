@@ -27,6 +27,7 @@ from cpg_infra.abstraction.base import (
     DryRunInfra,
     MachineAccountRole,
     SecretMembership,
+    TemporaryBucketAccessType,
 )
 from cpg_infra.abstraction.gcp import GcpInfrastructure
 from cpg_infra.abstraction.hailbatch import (
@@ -43,6 +44,7 @@ from cpg_infra.config import (
     CPGInfrastructureUser,
     HailAccount,
 )
+from cpg_infra.github_wif.driver import PAM_BROKER_SA_NAME
 from cpg_infra.plugin import get_plugins
 
 
@@ -359,6 +361,9 @@ class CPGInfrastructure:
 
         # Create a python registry for storing private python packages
         self.setup_python_registry()
+
+        # Setup PAM broker infrastructure if PAM is configured
+        self.setup_pam_broker()
 
         # Deploy all the assets required for each dataset. Groups, permissions
         # storage buckets, metamist and hail users etc.
@@ -867,6 +872,59 @@ class CPGInfrastructure:
             description='Python packages for CPG',
         )
 
+    def setup_pam_broker(self):
+        """
+        Setup PAM broker service account.
+
+        The PAM broker is used by GitHub Actions to request PAM grants
+        on behalf of notebook service accounts. It's created once in the
+        common project and shared across all datasets with PAM enabled.
+
+        Note: The WIF bindings and GitHub secrets are set up separately
+        in the github_wif stack, which references this SA by name.
+        """
+        # Check if any dataset has PAM enabled
+        pam_enabled_datasets = [
+            dc
+            for dc in self.dataset_configs.values()
+            if dc.allow_notebook_tmp_main_read
+        ]
+        if not pam_enabled_datasets:
+            pulumi.log.info(
+                'No datasets have PAM enabled for notebooks, skipping broker setup'
+            )
+            return
+
+        # Get common dataset's project for the broker SA
+        common_config = next(
+            (
+                dc
+                for dc in self.dataset_configs.values()
+                if dc.dataset == self.config.common_dataset
+            ),
+            None,
+        )
+        if not common_config:
+            raise ValueError(
+                'PAM requires common_dataset to be configured',
+            )
+        broker_project_id = common_config.gcp.project
+
+        # Create the broker service account
+        self._pam_broker_sa = gcp.serviceaccount.Account(
+            f'{broker_project_id}-{PAM_BROKER_SA_NAME}',
+            account_id=PAM_BROKER_SA_NAME,
+            display_name='PAM Broker for GitHub Actions',
+            description='Service account used by GitHub Actions to request PAM grants',
+            project=broker_project_id,
+            create_ignore_already_exists=True,
+        )
+
+    @property
+    def pam_broker_sa(self):
+        """The PAM broker service account, or None if not configured."""
+        return getattr(self, '_pam_broker_sa', None)
+
     def setup_python_registry(self):
         """
         Setup the python registry permissions in gcp-common
@@ -1021,6 +1079,9 @@ class CPGDatasetCloudInfrastructure:
 
         if self.should_setup_analysis_runner:
             self.setup_analysis_runner()
+
+        # Setup temporary main read access (independent of notebooks - can be for users, notebooks, or both)
+        self.setup_tmp_main_read_access()
 
         self.infra.finalise()
 
@@ -1295,6 +1356,17 @@ class CPGDatasetCloudInfrastructure:
     @cached_property
     def full_group(self):
         return self.create_group('full')
+
+    @cached_property
+    def tmp_main_read_access_group(self):
+        """
+        Group for temporary main read access via PAM.
+
+        Members of this group can request time-limited read access to the main bucket
+        through Privileged Access Manager. This group is included in transitive
+        dependencies, so access to dependent datasets' main buckets is also granted.
+        """
+        return self.create_group('tmp-main-read-access')
 
     @cached_property
     def access_level_groups(self) -> dict[AccessLevel, Any]:
@@ -2835,6 +2907,7 @@ class CPGDatasetCloudInfrastructure:
                 role='roles/compute.admin',
                 member=self.notebook_account,
             )
+
         elif isinstance(self.infra, DryRunInfra):
             pass
         else:
@@ -2842,6 +2915,132 @@ class CPGDatasetCloudInfrastructure:
             raise NotImplementedError(
                 f'No implementation for compute.admin for notebook account on {self.infra.name()}',
             )
+
+    def _grant_pam_token_creator_to_broker(
+        self,
+        notebook_sa_id: pulumi.Output[str],
+        broker_sa_email: pulumi.Output[str],
+    ) -> gcp.serviceaccount.IAMMember:
+        """
+        Grant the broker SA permission to create tokens for a notebook SA.
+
+        This allows the broker (authenticated via WIF from GitHub Actions)
+        to impersonate the notebook SA when requesting PAM grants.
+
+        Args:
+            notebook_sa_id: Full resource ID of the notebook service account
+            broker_sa_email: Email of the broker service account
+
+        Returns:
+            IAM member binding
+        """
+        return gcp.serviceaccount.IAMMember(
+            self.infra.get_pulumi_name('pam-broker-token-creator'),
+            service_account_id=notebook_sa_id,
+            role='roles/iam.serviceAccountTokenCreator',
+            member=pulumi.Output.concat('serviceAccount:', broker_sa_email),
+        )
+
+    def setup_tmp_main_read_access(self):
+        """
+        Setup temporary main read access for this dataset.
+
+        Creates a tmp-main-read-access group and PAM entitlement that allows members of
+        that group to request time-limited read access to the main bucket.
+
+        Members can include:
+        - Users listed in tmp-main-read-access group in members.yaml
+        - Notebook service account (if allow_notebook_tmp_main_read is True)
+
+        By using a group, the existing setup_dependencies_group_memberships logic
+        automatically grants access to dependent datasets' main buckets as well.
+
+        This method is called from the main dataset setup, not from notebooks setup,
+        to allow temporary access to be configured independently for users and notebooks.
+        """
+        if not isinstance(self.infra, GcpInfrastructure):
+            return
+
+        # Get members from tmp-main-read-access group if defined in members.yaml
+        pam_members = self.dataset_config.members.get('tmp-main-read-access', [])
+
+        # Check if temporary access should be set up at all
+        has_pam_users = bool(pam_members)
+        has_pam_notebook = self.dataset_config.allow_notebook_tmp_main_read
+
+        if not has_pam_users and not has_pam_notebook:
+            # No PAM configuration needed for this dataset
+            return
+
+        # Get the PAM broker SA from the root
+        broker_sa = self.root.pam_broker_sa
+        if not broker_sa:
+            pulumi.log.warn(
+                f'{self.dataset_config.dataset}: PAM broker SA not available, '
+                f'PAM setup may be incomplete',
+            )
+            return
+
+        # Add user members to the tmp-main-read-access group
+        for member_id in pam_members:
+            user = self.config.users.get(member_id)
+            if not user:
+                pulumi.log.warn(f'Member {member_id} not found in config')
+                continue
+
+            if cloud_user := user.clouds.get('gcp'):
+                h = compute_hash(
+                    dataset=self.dataset_config.dataset,
+                    member=user.id,
+                    cloud=self.infra.name(),
+                )
+                self.tmp_main_read_access_group.add_member(
+                    self.infra.get_pulumi_name(f'tmp-main-read-access-member-{h}'),
+                    member=cloud_user.id,
+                    user=cloud_user,
+                )
+
+        # Add notebook SA to tmp-main-read-access group if enabled
+        if has_pam_notebook:
+            if not self.should_setup_notebooks:
+                pulumi.log.warn(
+                    f'{self.dataset_config.dataset}: allow_notebook_tmp_main_read is True '
+                    f'but notebooks are not enabled for this dataset',
+                )
+            else:
+                # Grant token creator role to broker on notebook SA
+                # This allows the broker (authenticated via WIF) to impersonate the notebook SA
+                self._grant_pam_token_creator_to_broker(
+                    notebook_sa_id=self.notebook_account.id,
+                    broker_sa_email=broker_sa.email,
+                )
+
+                # Add notebook SA to the tmp-main-read-access group
+                self.tmp_main_read_access_group.add_member(
+                    self.infra.get_pulumi_name('notebook-sa-in-tmp-main-read-access'),
+                    member=self.notebook_account,
+                )
+
+        # Create temporary bucket access entitlement using the group as principal
+        # The group format for PAM is 'group:<group-email>'
+        assert isinstance(self.infra, GcpInfrastructure)
+        group_email = (
+            f'{self.tmp_main_read_access_group.name}@{self.config.gcp.groups_domain}'
+        )
+
+        self.infra.create_temporary_bucket_access(
+            resource_key='temporary-bucket-access-main-read',
+            bucket=self.main_bucket,
+            principals=[f'group:{group_email}'],
+            access_type=TemporaryBucketAccessType.READ,
+            max_duration='604800s',  # 7 days
+        )
+
+        # Export entitlement ID for reference
+        pulumi.export(
+            f'pam-entitlement-{self.dataset_config.dataset}-read',
+            f'pam-{self.dataset_config.dataset}-read',
+        )
 
     @cached_property
     def notebook_account(self):
@@ -3023,6 +3222,7 @@ class CPGDatasetCloudInfrastructure:
                 self.images_dev_reader_group,
                 self.images_writer_group,
                 self.images_dev_writer_group,
+                self.tmp_main_read_access_group,
             ]
 
             if self.dataset_config.setup_test:
@@ -3058,6 +3258,7 @@ class CPGDatasetCloudInfrastructure:
                 'images-reader': [self.images_reader_group],
                 'images-dev-reader': [self.images_dev_reader_group],
                 'images-dev-writer': [self.images_dev_writer_group],
+                'tmp-main-read-access': [self.tmp_main_read_access_group],
             }
             if self.dataset_config.setup_test:
                 group_map['test-read'] = [

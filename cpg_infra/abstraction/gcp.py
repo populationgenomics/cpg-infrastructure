@@ -22,6 +22,7 @@ from cpg_infra.abstraction.base import (
     ContainerRegistryMembership,
     MachineAccountRole,
     SecretMembership,
+    TemporaryBucketAccessType,
 )
 from cpg_infra.abstraction.google_group_membership import (
     GoogleGroupMembership,
@@ -522,6 +523,105 @@ class GcpInfrastructure(CloudInfraBase):
                     depends_on=[self._svc_cloudidentity],
                 ),
             )
+
+    def create_temporary_bucket_access(
+        self,
+        resource_key: str,
+        bucket,
+        access_type: 'TemporaryBucketAccessType',
+        principals: list[str] | pulumi.Output[list[str]],
+        max_duration: str = '604800s',
+    ) -> Any:
+        """
+        Create a temporary/just-in-time access entitlement for a bucket.
+
+        On GCP, this is implemented using Privileged Access Manager (PAM).
+        This allows specified principals to request time-limited access
+        to a bucket.
+
+        Args:
+            resource_key: Unique Pulumi resource key
+            bucket: The bucket to grant temporary access to
+            access_type: Type of access (READ or WRITE)
+            principals: List of principals eligible to request access
+            max_duration: Maximum grant duration (default 7 days = 604800s)
+
+        Returns:
+            PAM Entitlement resource
+        """
+        # Get bucket name
+        bucket_name = get_member_key(bucket)
+
+        # Determine role based on access type
+        if access_type == TemporaryBucketAccessType.READ:
+            role = 'roles/storage.objectViewer'
+        elif access_type == TemporaryBucketAccessType.WRITE:
+            role = 'roles/storage.objectAdmin'
+        else:
+            raise ValueError(f'Unsupported access type: {access_type}')
+
+        # Create entitlement ID from dataset and access type
+        entitlement_id = f'pam-{self.dataset}-{access_type.value}'
+
+        # IAM condition for bucket access (both bucket-level and object-level operations)
+        # Note: bucket_name could be a pulumi.Output, so we handle both cases
+        if isinstance(bucket_name, pulumi.Output):
+            condition_expr = bucket_name.apply(
+                lambda name: (
+                    f'resource.service == "storage.googleapis.com" && '
+                    f'(resource.name == "projects/_/buckets/{name}" || '
+                    f'resource.name.startsWith("projects/_/buckets/{name}/objects/"))'
+                ),
+            )
+        else:
+            condition_expr = (
+                f'resource.service == "storage.googleapis.com" && '
+                f'(resource.name == "projects/_/buckets/{bucket_name}" || '
+                f'resource.name.startsWith("projects/_/buckets/{bucket_name}/objects/"))'
+            )
+
+        return gcp.privilegedaccessmanager.Entitlement(
+            self.get_pulumi_name(resource_key),
+            parent=f'projects/{self.project.number}/locations/global',
+            entitlement_id=entitlement_id,
+            max_request_duration=max_duration,
+            location='global',
+            # Requester justification config
+            requester_justification_config=gcp.privilegedaccessmanager.EntitlementRequesterJustificationConfigArgs(
+                unstructured=gcp.privilegedaccessmanager.EntitlementRequesterJustificationConfigUnstructuredArgs(),
+            ),
+            # Eligible users/service accounts/groups
+            eligible_users=[
+                gcp.privilegedaccessmanager.EntitlementEligibleUserArgs(
+                    principals=principals
+                    if isinstance(principals, pulumi.Output)
+                    else pulumi.Output.from_input(principals),
+                ),
+            ],
+            # Privileged access with IAM condition
+            privileged_access=gcp.privilegedaccessmanager.EntitlementPrivilegedAccessArgs(
+                gcp_iam_access=gcp.privilegedaccessmanager.EntitlementPrivilegedAccessGcpIamAccessArgs(
+                    resource_type='cloudresourcemanager.googleapis.com/Project',
+                    resource=pulumi.Output.concat(
+                        '//cloudresourcemanager.googleapis.com/projects/',
+                        self.project.number,
+                    ),
+                    role_bindings=[
+                        gcp.privilegedaccessmanager.EntitlementPrivilegedAccessGcpIamAccessRoleBindingArgs(
+                            role=role,
+                            condition_expression=condition_expr,
+                        ),
+                    ],
+                ),
+            ),
+            # Auto-approval (empty steps)
+            approval_workflow=gcp.privilegedaccessmanager.EntitlementApprovalWorkflowArgs(
+                manual_approvals=gcp.privilegedaccessmanager.EntitlementApprovalWorkflowManualApprovalsArgs(
+                    require_approver_justification=False,
+                    steps=[],
+                ),
+            ),
+        )
 
     def give_member_ability_to_list_buckets(
         self,

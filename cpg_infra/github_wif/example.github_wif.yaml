@@ -15,29 +15,41 @@
 #             - name: <development|production>
 #               push_registry: <registry-name>
 #               read_registries: [<registry-name>, ...]
+#
+#   pam_broker:  # Optional: PAM broker WIF setup (SA must exist in main stack)
+#     project_id: <gcp-project-id>
+#     project_number: "<project-number>"
+#     github_repository: populationgenomics/<repo-name>
+#     github_environment: <environment-name>
 
 # Example configuration (uncomment and modify as needed):
 # projects:
-  # # Development Project
-  # cpg-my-project-dev:
-  #   project_number: "987654321"
-  #   location: "australia-southeast1"
-  #   repositories:
-  #     - name: test-repo
-  #       github_repo: populationgenomics/test-repo
-  #       environments:
-  #         - name: development
-  #           push_registry: images
+# # Development Project
+# cpg-my-project-dev:
+#   project_number: "987654321"
+#   location: "australia-southeast1"
+#   repositories:
+#     - name: test-repo
+#       github_repo: populationgenomics/test-repo
+#       environments:
+#         - name: development
+#           push_registry: images
 #
-  # # Production Project
-  # cpg-my-project:
-  #   project_number: "987654321"
-  #   location: "australia-southeast1"
-  #   repositories:
-  #     - name: test-repo
-  #       github_repo: populationgenomics/test-repo
-  #       environments:
-  #         - name: production
-  #           push_registry: images
+# # Production Project
+# cpg-my-project:
+#   project_number: "987654321"
+#   location: "australia-southeast1"
+#   repositories:
+#     - name: test-repo
+#       github_repo: populationgenomics/test-repo
+#       environments:
+#         - name: production
+#           push_registry: images
+#
+# pam_broker:
+#   project_id: cpg-common
+#   project_number: "1234567890"
+#   github_repository: populationgenomics/cpg-infrastructure-private
+#   github_environment: pam
 
 projects: {}

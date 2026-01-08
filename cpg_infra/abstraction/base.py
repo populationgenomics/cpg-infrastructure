@@ -47,6 +47,13 @@ class BucketMembership(Enum):
     MUTATE = 'mutate'
 
 
+class TemporaryBucketAccessType(Enum):
+    """Access type for temporary/just-in-time bucket access"""
+
+    READ = 'read'
+    WRITE = 'write'
+
+
 class ContainerRegistryMembership(Enum):
     """Container registry membership type"""
 
@@ -215,6 +222,34 @@ class CloudInfraBase(ABC):
         Note: You MUST specify a unique resource_key
         :param membership:
         """
+
+    def create_temporary_bucket_access(
+        self,
+        resource_key: str,
+        bucket,
+        access_type: 'TemporaryBucketAccessType',
+        principals: list[str],
+        max_duration: str = '604800s',
+    ) -> Any:
+        """
+        Create a temporary/just-in-time access entitlement for a bucket.
+
+        This allows specified principals to request time-limited access
+        to a bucket. On GCP, this is implemented using Privileged Access Manager (PAM).
+
+        Args:
+            resource_key: Unique Pulumi resource key
+            bucket: The bucket to grant temporary access to
+            access_type: Type of access (READ or WRITE)
+            principals: List of principals eligible to request access
+                       (e.g., ['user:email@example.com', 'serviceAccount:sa@project.iam.gserviceaccount.com'])
+            max_duration: Maximum grant duration (default 7 days = 604800s)
+
+        Returns:
+            Entitlement resource (or None if not supported on this cloud)
+        """
+        # Default implementation returns None - only GCP implements this via PAM
+        return None
 
     @abstractmethod
     def add_blob_to_bucket(self, resource_name, bucket, output_name, contents):
