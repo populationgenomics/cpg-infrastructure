@@ -618,7 +618,6 @@ class GcpInfrastructure(CloudInfraBase):
             parent=pulumi.Output.concat(
                 'projects/',
                 self.project.number,
-                '/locations/global',
             ),
             entitlement_id=entitlement_id,
             max_request_duration=max_duration,
