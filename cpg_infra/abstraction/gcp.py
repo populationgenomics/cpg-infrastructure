@@ -236,6 +236,18 @@ class GcpInfrastructure(CloudInfraBase):
             ),
         )
 
+    @cached_property
+    def _svc_pam(self):
+        return gcp.projects.Service(
+            self.get_pulumi_name('privilegedaccessmanager-service'),
+            service='privilegedaccessmanager.googleapis.com',
+            disable_on_destroy=False,
+            project=self.project_id,
+            opts=pulumi.resource.ResourceOptions(
+                depends_on=[self._svc_cloudresourcemanager],
+            ),
+        )
+
     # endregion SERVICES
 
     def create_project(self, resource_key, name):
@@ -624,6 +636,9 @@ class GcpInfrastructure(CloudInfraBase):
                     require_approver_justification=False,
                     steps=[],
                 ),
+            ),
+            opts=pulumi.resource.ResourceOptions(
+                depends_on=[self._svc_pam],
             ),
         )
 
