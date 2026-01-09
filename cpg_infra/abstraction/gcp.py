@@ -248,6 +248,27 @@ class GcpInfrastructure(CloudInfraBase):
             ),
         )
 
+    @cached_property
+    def _pam_service_agent_binding(self):
+        """
+        Grant the PAM Service Agent role to the PAM service agent.
+
+        This is required to enable PAM on the project. The service agent is at
+        the organization level and follows the format:
+        service-org-{ORG_ID}@gcp-sa-pam.iam.gserviceaccount.com
+
+        See: https://cloud.google.com/iam/docs/pam-permissions-and-setup
+        """
+        return gcp.projects.IAMMember(
+            self.get_pulumi_name('pam-service-agent-binding'),
+            project=self.project_id,
+            role='roles/privilegedaccessmanager.serviceAgent',
+            member=f'serviceAccount:service-org-{self.organization.org_id}@gcp-sa-pam.iam.gserviceaccount.com',
+            opts=pulumi.resource.ResourceOptions(
+                depends_on=[self._svc_pam],
+            ),
+        )
+
     # endregion SERVICES
 
     def create_project(self, resource_key, name):
@@ -638,7 +659,7 @@ class GcpInfrastructure(CloudInfraBase):
                 ),
             ),
             opts=pulumi.resource.ResourceOptions(
-                depends_on=[self._svc_pam],
+                depends_on=[self._svc_pam, self._pam_service_agent_binding],
             ),
         )
 
