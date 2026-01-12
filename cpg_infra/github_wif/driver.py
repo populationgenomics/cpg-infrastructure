@@ -1,4 +1,4 @@
-# flake8: noqa: ANN001,ANN201,ERA001,ANN204
+# flake8: noqa: ERA001, ANN204
 """
 GitHub Workload Identity Federation (WIF) setup for Pulumi
 
@@ -71,6 +71,7 @@ class PAMBrokerConfig(DeserializableDataclass):
     """Configuration for PAM broker GitHub WIF setup."""
 
     project_id: str
+    wif_pool_name: str
     project_number: str
     github_repository: str
     github_environment: str
@@ -139,7 +140,9 @@ def sanitize_sa_name(
     return sa_name
 
 
-def check_or_create_wif_pool(project_id: str) -> gcp.iam.WorkloadIdentityPool | None:
+def check_or_create_wif_pool(
+    project_id: str, override_pool_name: str | None = None
+) -> gcp.iam.WorkloadIdentityPool | None:
     """
     Check if WIF pool exists, create if it doesn't.
 
@@ -149,9 +152,10 @@ def check_or_create_wif_pool(project_id: str) -> gcp.iam.WorkloadIdentityPool | 
     Returns:
         WorkloadIdentityPool resource or None if it already exists
     """
+    pool_name = override_pool_name if override_pool_name else WIF_POOL_NAME
     return gcp.iam.WorkloadIdentityPool(
-        f'{project_id}-github-pool',
-        workload_identity_pool_id=WIF_POOL_NAME,
+        f'{project_id}-{pool_name}',
+        workload_identity_pool_id=pool_name,
         project=project_id,
         display_name='GitHub Actions Pool',
         description='Workload Identity Pool for GitHub Actions OIDC',
@@ -470,6 +474,7 @@ def setup_github_wif_infrastructure(
     if config.pam_broker:
         setup_pam_broker_github_wif(
             project_id=config.pam_broker.project_id,
+            wif_pool_name=config.pam_broker.wif_pool_name,
             project_number=config.pam_broker.project_number,
             wif_repository=config.pam_broker.github_repository,
             wif_environment=config.pam_broker.github_environment,
@@ -484,6 +489,7 @@ def setup_github_wif_infrastructure(
 def setup_pam_broker_github_wif(
     project_id: str,
     project_number: str,
+    wif_pool_name: str,
     wif_repository: str,
     wif_environment: str,
 ) -> None:
@@ -506,7 +512,7 @@ def setup_pam_broker_github_wif(
     broker_sa_email = f'{PAM_BROKER_SA_NAME}@{project_id}.iam.gserviceaccount.com'
 
     # Set up WIF pool and provider
-    wif_pool = check_or_create_wif_pool(project_id)
+    wif_pool = check_or_create_wif_pool(project_id, override_pool_name=wif_pool_name)
     _wif_provider = check_or_create_wif_provider(project_id, wif_pool)
 
     # Grant WIF impersonation to broker SA (using email directly)
