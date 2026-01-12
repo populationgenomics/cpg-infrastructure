@@ -650,15 +650,14 @@ class GcpInfrastructure(CloudInfraBase):
                     ],
                 ),
             ),
-            # Auto-approval (empty steps)
-            approval_workflow=gcp.privilegedaccessmanager.EntitlementApprovalWorkflowArgs(
-                manual_approvals=gcp.privilegedaccessmanager.EntitlementApprovalWorkflowManualApprovalsArgs(
-                    require_approver_justification=False,
-                    steps=[],
-                ),
-            ),
+            # Set to None to allow auto approval
+            # https://www.pulumi.com/registry/packages/gcp/api-docs/privilegedaccessmanager/entitlement/#approval_workflow_python
+            approval_workflow=None,
             opts=pulumi.resource.ResourceOptions(
                 depends_on=[self._svc_pam, self._pam_service_agent_binding],
+                # If the entitlement needs to be replaced, delete it before creating
+                # the new one otherwise you get a "Error 409: Resource already exists" error
+                delete_before_replace=True
             ),
         )
 
