@@ -521,7 +521,9 @@ def setup_pam_broker_github_wif(
 
     # Set up WIF pool and provider
     wif_pool = check_or_create_wif_pool(project_id, override_pool_name=wif_pool_name)
-    _wif_provider = check_or_create_wif_provider(project_id, wif_pool, override_provider_name=wif_provider_name)
+    _wif_provider = check_or_create_wif_provider(
+        project_id, wif_pool, override_provider_name=wif_provider_name
+    )
 
     # Grant WIF impersonation to broker SA (using email directly)
     # Create the principal identifier for WIF
