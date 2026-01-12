@@ -657,7 +657,7 @@ class GcpInfrastructure(CloudInfraBase):
                 depends_on=[self._svc_pam, self._pam_service_agent_binding],
                 # If the entitlement needs to be replaced, delete it before creating
                 # the new one otherwise you get a "Error 409: Resource already exists" error
-                delete_before_replace=True
+                delete_before_replace=True,
             ),
         )
 
