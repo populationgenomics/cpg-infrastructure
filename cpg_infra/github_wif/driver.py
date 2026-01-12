@@ -72,6 +72,7 @@ class PAMBrokerConfig(DeserializableDataclass):
 
     project_id: str
     wif_pool_name: str
+    wif_provider_name: str
     project_number: str
     github_repository: str
     github_environment: str
@@ -170,6 +171,7 @@ def check_or_create_wif_pool(
 def check_or_create_wif_provider(
     project_id: str,
     pool: gcp.iam.WorkloadIdentityPool,
+    override_provider_name: str | None = None,
 ) -> gcp.iam.WorkloadIdentityPoolProvider:
     """
     Check if WIF provider exists, create if it doesn't.
@@ -181,8 +183,12 @@ def check_or_create_wif_provider(
     Returns:
         WorkloadIdentityPoolProvider resource
     """
+    provider_name = (
+        override_provider_name if override_provider_name else WIF_PROVIDER_NAME
+    )
+
     return gcp.iam.WorkloadIdentityPoolProvider(
-        f'{project_id}-github-provider',
+        f'{project_id}-{provider_name}',
         workload_identity_pool_id=pool.workload_identity_pool_id,
         workload_identity_pool_provider_id=WIF_PROVIDER_NAME,
         project=project_id,
@@ -475,6 +481,7 @@ def setup_github_wif_infrastructure(
         setup_pam_broker_github_wif(
             project_id=config.pam_broker.project_id,
             wif_pool_name=config.pam_broker.wif_pool_name,
+            wif_provider_name=config.pam_broker.wif_provider_name,
             project_number=config.pam_broker.project_number,
             wif_repository=config.pam_broker.github_repository,
             wif_environment=config.pam_broker.github_environment,
@@ -490,6 +497,7 @@ def setup_pam_broker_github_wif(
     project_id: str,
     project_number: str,
     wif_pool_name: str,
+    wif_provider_name: str,
     wif_repository: str,
     wif_environment: str,
 ) -> None:
@@ -513,7 +521,9 @@ def setup_pam_broker_github_wif(
 
     # Set up WIF pool and provider
     wif_pool = check_or_create_wif_pool(project_id, override_pool_name=wif_pool_name)
-    _wif_provider = check_or_create_wif_provider(project_id, wif_pool)
+    _wif_provider = check_or_create_wif_provider(
+        project_id, wif_pool, override_provider_name=wif_provider_name
+    )
 
     # Grant WIF impersonation to broker SA (using email directly)
     # Create the principal identifier for WIF
