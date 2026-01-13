@@ -190,7 +190,7 @@ def check_or_create_wif_provider(
     return gcp.iam.WorkloadIdentityPoolProvider(
         f'{project_id}-{provider_name}',
         workload_identity_pool_id=pool.workload_identity_pool_id,
-        workload_identity_pool_provider_id=WIF_PROVIDER_NAME,
+        workload_identity_pool_provider_id=provider_name,
         project=project_id,
         display_name='GitHub Actions Provider',
         description=f'OIDC provider for {GITHUB_ORG} GitHub repositories',
@@ -529,7 +529,7 @@ def setup_pam_broker_github_wif(
     # Create the principal identifier for WIF
     principal = (
         f'principal://iam.googleapis.com/projects/{project_number}/'
-        f'locations/global/workloadIdentityPools/{WIF_POOL_NAME}/'
+        f'locations/global/workloadIdentityPools/{wif_pool_name}/'
         f'subject/repo:{wif_repository}:environment:{wif_environment}'
     )
 
@@ -543,7 +543,7 @@ def setup_pam_broker_github_wif(
     # Build WIF provider path for GitHub secrets
     wif_provider_path = (
         f'projects/{project_number}/locations/global/'
-        f'workloadIdentityPools/{WIF_POOL_NAME}/providers/{WIF_PROVIDER_NAME}'
+        f'workloadIdentityPools/{wif_pool_name}/providers/{wif_provider_name}'
     )
 
     # Set up GitHub secrets
