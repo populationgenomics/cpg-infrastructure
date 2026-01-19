@@ -124,17 +124,17 @@ Members have different roles within a dataset, those roles include:
 - web:
   - Access to view main-web bucket through web server
 - upload:
-  - Upload data into upload buckets as specified in the `$DATASET/upload.yaml` file.
+  - Upload data into upload buckets as specified in the `datasets/$DATASET/upload.yaml` file.
 
 ## Setup
 
 In our production environment, we have a:
 
-- `cpg.toml`: CPG InfrastructureConfig
-- `production.yaml`: A dictionary of `dataset: <config-options>`
-- `$DATASET/members.yaml`: A dictionary of group name to members
-- `$DATASET/budgets.yaml`: A dictionary of the `CPGDatasetConfig.budgets` option
-- `$DATASET/upload.yaml`: A dictionary of the `CPGDatasetConfig.upload_config` option
+- `config-infrastructure.yaml`: CPG InfrastructureConfig
+- `config-datasets.yaml`: A dictionary of `dataset: <config-options>`
+- `datasets/$DATASET/members.yaml`: A dictionary of group name to members
+- `datasets/$DATASET/budgets.yaml`: A dictionary of the `CPGDatasetConfig.budgets` option
+- `datasets/$DATASET/upload.yaml`: A dictionary of the `CPGDatasetConfig.upload_config` option
 
 And some code that takes this format, and transforms this into the required classes. We structure it this way, to allow for easier code-reviews and CODEOWNERS.
 

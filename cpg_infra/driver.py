@@ -729,11 +729,6 @@ class CPGInfrastructure:
             # nest in .infrastructure
             d = {'infrastructure': dict(zip(keys, values))}
 
-            # JohnM 10 Dec 2024: Temporarily override QoB JAR to avoid ballooning hail costs
-            # 2bb197d63 is 0.2.134 with SET-261-log-400-errors, built via a CI deploy batch
-            v134_retry_via_ci = '2bb197d63afd58f9452af306e0eb14d6924d0019'
-            d['workflow'] = {'default_jar_spec_revision': v134_retry_via_ci}
-
             return dict_to_toml(d)
 
         infra_config = pulumi.Output.all(*[v[1] for v in items]).apply(_build_config)
