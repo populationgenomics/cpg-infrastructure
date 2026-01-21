@@ -4,9 +4,16 @@ SELECT
     JSON_VALUE(PARSE_JSON(labels, wide_number_mode=>'round'), '$.ar-guid') as ar_guid,
     JSON_VALUE(PARSE_JSON(labels, wide_number_mode=>'round'), '$.batch_id') as batch_id,
     CASE WHEN JSON_QUERY(labels, '$.sequencing_groups') IS NOT NULL
-    THEN 
-        UPPER(REGEXP_REPLACE(REPLACE(JSON_VALUE(PARSE_JSON(labels), '$.sequencing_groups'),"'",""), "\\[|\\]|[|]|\u0027,| |\"", ""))
-    ELSE 
+    THEN
+        -- sequencing_groups can be in 2 different formats
+        UPPER(
+            COALESCE(
+                ARRAY_TO_STRING(JSON_VALUE_ARRAY(labels, '$.sequencing_groups'), ','),
+                REGEXP_REPLACE(REPLACE(JSON_VALUE(PARSE_JSON(labels), '$.sequencing_groups'),"'",""), "\\[|\\]|[|]|\u0027,| |\"", "")
+            )
+        )
+    ELSE
+        -- otherwise again 2 different formats for singular key name
         UPPER(COALESCE(
             JSON_VALUE(PARSE_JSON(labels, wide_number_mode=>'round'), '$.sequencing_group'),
             JSON_VALUE(PARSE_JSON(labels, wide_number_mode=>'round'), '$.sequencing-group')
