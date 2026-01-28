@@ -14,8 +14,5 @@ toml-sort
 toml==0.10.2
 xxhash==3.2.0
 metamist
-# https://tenor.com/en-GB/view/magic-gif-26166638
-metamist-infrastructure @ git+https://github.com/populationgenomics/metamist.git@8c6db36c820f335921d890a07a491a1b3746c710#subdirectory=metamist_infrastructure
+metamist-infrastructure @ git+https://github.com/populationgenomics/metamist.git@main#subdirectory=metamist_infrastructure
 setuptools>=65.5.1 # not directly required, pinned by pip-audit to avoid a vulnerability
-# pinning pyparser to avoid metamist_infrastructure related issues
-pyparsing==3.2.5
