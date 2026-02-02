@@ -107,8 +107,11 @@ HAIL_NON_QUERY_JOB_PER_BATCH_LIMIT = 50000
 
 # runs every 1 hour, add 5 minutes to overlap with previous period
 DEFAULT_RANGE_INTERVAL = timedelta(
-    hours=int(os.getenv('DEFAULT_INTERVAL_HOURS', '1')), minutes=5
+    hours=int(os.getenv('DEFAULT_INTERVAL_HOURS', '1')),
+    minutes=int(os.getenv('DEFAULT_INTERVAL_MINUTES', '5')),
 )
+
+BATCH_GROUP_CHUNK_SIZE = int(os.getenv('BATCH_GROUP_CHUNK_SIZE', '5'))
 
 # Labels with Python literal string values that should be expanded into list objects etc
 OBJECT_LABELS = {'cohorts', 'datasets', 'sequencing_groups'}
@@ -653,7 +656,7 @@ async def process_entries_from_hail_in_chunks(
         Generator[dict[str, Any], None, None],
     ],
     billing_project: Optional[str] = None,
-    batch_group_chunk_size: int = 5,
+    batch_group_chunk_size: int = BATCH_GROUP_CHUNK_SIZE,
     log_prefix: str = '',
     mode: str = 'prod',
     output_path: str | None = './',
