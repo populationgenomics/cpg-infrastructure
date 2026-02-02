@@ -24,6 +24,7 @@ IMPORTANT:
 
 """
 
+import argparse
 import asyncio
 import hashlib
 import json
@@ -238,6 +239,25 @@ async def main(
 
 if __name__ == '__main__':
     # Set logging levels
+    logger.setLevel(logging.INFO)
 
-    test_start, test_end = datetime(2022, 12, 1), datetime(2023, 2, 17)
-    asyncio.new_event_loop().run_until_complete(main(start=test_start, end=test_end))
+    # Check start and end date provided
+    parser = argparse.ArgumentParser(description="Loading GCP billing data.")
+    parser.add_argument("--start", nargs='?', help="Start date of period to load")
+    parser.add_argument("--end", nargs='?', help="End date of period to load")
+    args = parser.parse_args()
+
+    if args.start and args.end:
+        start_date = datetime.fromordinal(
+            datetime.strptime(args.start, '%Y-%m-%d').toordinal()  # noqa: DTZ007
+        )
+        end_date = datetime.fromordinal(
+            datetime.strptime(args.end, '%Y-%m-%d').toordinal()  # noqa: DTZ007
+        )
+
+        # iterate over the period if start_date/end_date is not none
+        for period in utils.date_range_iterator(start_date, end_date):
+            (start, end) = period
+            asyncio.new_event_loop().run_until_complete(main(start=start, end=end))
+    else:
+        asyncio.new_event_loop().run_until_complete(main())

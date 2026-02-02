@@ -28,6 +28,7 @@ TO DO :
 - Getting latest cram for sample by sequence type (eg: exome / genome)
 """
 
+import argparse
 import asyncio
 import copy
 import dataclasses
@@ -797,13 +798,32 @@ if __name__ == '__main__':
     logging.getLogger('asyncio').setLevel(logging.ERROR)
     logging.getLogger('urllib3').setLevel(logging.WARNING)
 
-    test_start, test_end = None, None
+    # Check start and end date provided
+    parser = argparse.ArgumentParser(description="Loading Seqr billing data.")
+    parser.add_argument("--start", nargs='?', help="Start date of period to load")
+    parser.add_argument("--end", nargs='?', help="End date of period to load")
+    args = parser.parse_args()
 
-    asyncio.new_event_loop().run_until_complete(
-        main(
-            start=test_start,
-            end=test_end,
-            mode='prod',
-            # output_path=os.path.join(os.getcwd(), 'seqr'),
-        ),
-    )
+    if args.start and args.end:
+        start_date = datetime.fromordinal(
+            datetime.strptime(args.start, '%Y-%m-%d').toordinal()  # noqa: DTZ007
+        )
+        end_date = datetime.fromordinal(
+            datetime.strptime(args.end, '%Y-%m-%d').toordinal()  # noqa: DTZ007
+        )
+
+        # iterate over the period if start_date/end_date is not none
+        for period in utils.date_range_iterator(start_date, end_date):
+            (start, end) = period
+            asyncio.new_event_loop().run_until_complete(
+                main(start=start, end=end, mode='prod')
+            )
+    else:
+        asyncio.new_event_loop().run_until_complete(
+            main(
+                start=None,
+                end=None,
+                mode='prod',
+                # output_path=os.path.join(os.getcwd(), 'seqr')
+            )
+        )
