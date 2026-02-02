@@ -799,9 +799,9 @@ if __name__ == '__main__':
     logging.getLogger('urllib3').setLevel(logging.WARNING)
 
     # Check start and end date provided
-    parser = argparse.ArgumentParser(description="Loading Seqr billing data.")
-    parser.add_argument("--start", nargs='?', help="Start date of period to load")
-    parser.add_argument("--end", nargs='?', help="End date of period to load")
+    parser = argparse.ArgumentParser(description='Loading Seqr billing data.')
+    parser.add_argument('--start', nargs='?', help='Start date of period to load')
+    parser.add_argument('--end', nargs='?', help='End date of period to load')
     args = parser.parse_args()
 
     if args.start and args.end:

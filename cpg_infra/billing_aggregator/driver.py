@@ -324,8 +324,14 @@ class BillingAggregator(CpgInfrastructurePlugin):
             memory = '1024M'
             cpu = 1
             timeout = 540
+            default_interval_hours = self.config.billing.aggregator.interval_hours
 
             # TODO: We should consider moving function specific cpu/memory/timeout values to config
+
+            if function in ['gcp']:
+                # GCP function can handle more than an hour and
+                # there seems to be inconsistency how often Google insert new billing records
+                default_interval_hours = 8 * default_interval_hours
 
             if function in ['hail', 'seqr', 'seqr24', 'gcp']:
                 # max possible timeout is 1H for HTTP functions
@@ -359,7 +365,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
                     # 'SETUP_GCP_LOGGING': 'true',
                     'GCP_AGGREGATE_DEST_TABLE': self.config.billing.aggregator.destination_bq_table,
                     'GCP_BILLING_SOURCE_TABLE': self.config.billing.gcp.source_bq_table,
-                    'DEFAULT_INTERVAL_HOURS': self.config.billing.aggregator.interval_hours,
+                    'DEFAULT_INTERVAL_HOURS': default_interval_hours,
                     'BILLING_PROJECT_ID': self.config.billing.gcp.project_id,
                     'ICA_RAW_TABLE': self.config.billing.aggregator.ica_raw_table,
                     'ICA_API_SECRET_NAME': self.config.billing.aggregator.ica_api_secret_name,
