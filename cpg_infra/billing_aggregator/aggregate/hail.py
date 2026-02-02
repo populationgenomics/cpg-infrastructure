@@ -267,12 +267,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.start and args.end:
-        start_date = datetime.fromordinal(
-            datetime.strptime(args.start, '%Y-%m-%d').toordinal()  # noqa: DTZ007
+        start_date = datetime.strptime(args.start, '%Y-%m-%d').replace(
+            tzinfo=timezone.utc
         )
-        end_date = datetime.fromordinal(
-            datetime.strptime(args.end, '%Y-%m-%d').toordinal()  # noqa: DTZ007
-        )
+        end_date = datetime.strptime(args.end, '%Y-%m-%d').replace(tzinfo=timezone.utc)
 
         # iterate over the period if start_date/end_date is not none
         for period in utils.date_range_iterator(start_date, end_date):

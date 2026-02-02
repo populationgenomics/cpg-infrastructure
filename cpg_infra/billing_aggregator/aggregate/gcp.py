@@ -30,7 +30,7 @@ import hashlib
 import json
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional
 
 import functions_framework
@@ -248,15 +248,13 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.start and args.end:
-        start_date = datetime.fromordinal(
-            datetime.strptime(args.start, '%Y-%m-%d').toordinal()  # noqa: DTZ007
+        start_date = datetime.strptime(args.start, '%Y-%m-%d').replace(
+            tzinfo=timezone.utc
         )
-        end_date = datetime.fromordinal(
-            datetime.strptime(args.end, '%Y-%m-%d').toordinal()  # noqa: DTZ007
-        )
+        end_date = datetime.strptime(args.end, '%Y-%m-%d').replace(tzinfo=timezone.utc)
 
         # iterate over the period if start_date/end_date is not none
-        for period in utils.date_range_iterator(start_date, end_date):
+        for period in utils.get_date_intervals_for(start_date, end_date):
             (start, end) = period
             asyncio.new_event_loop().run_until_complete(main(start=start, end=end))
     else:
