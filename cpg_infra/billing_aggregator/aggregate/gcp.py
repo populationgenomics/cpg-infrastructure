@@ -258,4 +258,4 @@ if __name__ == '__main__':
             (start, end) = period
             asyncio.new_event_loop().run_until_complete(main(start=start, end=end))
     else:
-        asyncio.new_event_loop().run_until_complete(main())
+        asyncio.new_event_loop().run_until_complete(main(start=None, end=None))

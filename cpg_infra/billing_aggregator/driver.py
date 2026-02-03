@@ -329,8 +329,16 @@ class BillingAggregator(CpgInfrastructurePlugin):
             # TODO: We should consider moving function specific cpu/memory/timeout values to config
 
             if function in ['gcp']:
-                # GCP function can handle more than an hour and
+                # GCP function can handle more than an hour of data aggregation and
                 # there seems to be inconsistency how often Google insert new billing records
+                # From Google docs:
+                # "In summary, while the system works to provide relatively fresh data,
+                # it is not a real-time (within minutes) stream, and you should design your analysis
+                # around the understanding that data might be delayed by a few hours."
+                #
+                # atm default_interval_hours is usually set to 1H,
+                # 8H seems to be a good start as interval for GCP,
+                # but might need to be extended if we find that is not sufficient
                 default_interval_hours = 8 * default_interval_hours
 
             if function in ['hail', 'seqr', 'seqr24', 'gcp']:
