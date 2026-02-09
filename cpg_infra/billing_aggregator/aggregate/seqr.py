@@ -334,6 +334,11 @@ def migrate_entries_from_bq(
 ) -> int:
     """
     Migrate entries from BQ to GCP, using the given proportionate maps
+
+    Milo H Comment:
+    The challange is 'usage_end_time' vs 'export_time', there could be up to 12 hours delay, meaning this SQL would miss records
+    However if we use 'export_time' in the query, 
+    then later function generate_proportionate_maps_of_datasets would fail as it is based on usage_end_time
     """
 
     logger.debug('Migrating seqr data to BQ')
