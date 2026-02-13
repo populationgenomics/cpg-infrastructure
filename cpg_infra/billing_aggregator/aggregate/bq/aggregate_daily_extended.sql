@@ -13,9 +13,22 @@ JSON_VALUE(PARSE_JSON(labels, wide_number_mode=>'round'), '$.batch_id') as batch
 JSON_VALUE(PARSE_JSON(labels, wide_number_mode=>'round'), '$.job_id') as job_id,
 JSON_VALUE(PARSE_JSON(labels, wide_number_mode=>'round'), '$.sequencing_type') as sequencing_type,
 JSON_VALUE(PARSE_JSON(labels, wide_number_mode=>'round'), '$.stage') as stage,
-CASE WHEN JSON_QUERY(labels, '$.sequencing_groups') IS NOT NULL THEN ARRAY_TO_STRING(JSON_VALUE_ARRAY(labels, '$.sequencing_groups'), ',')
-ELSE COALESCE(JSON_VALUE(PARSE_JSON(labels, wide_number_mode=>'round'), '$.sequencing_group'), JSON_VALUE(PARSE_JSON(labels, wide_number_mode=>'round'), '$.sequencing-group'))
-END as sequencing_group,
+CASE WHEN JSON_QUERY(labels, '$.sequencing_groups') IS NOT NULL
+    THEN
+        -- sequencing_groups can be in 2 different formats
+        UPPER(
+            COALESCE(
+                ARRAY_TO_STRING(JSON_VALUE_ARRAY(labels, '$.sequencing_groups'), ','),
+                REGEXP_REPLACE(REPLACE(JSON_VALUE(PARSE_JSON(labels), '$.sequencing_groups'),"'",""), "\\[|\\]|[|]|\u0027,| |\"", "")
+            )
+        )
+    ELSE
+        -- otherwise again 2 different formats for singular key name
+        UPPER(COALESCE(
+            JSON_VALUE(PARSE_JSON(labels, wide_number_mode=>'round'), '$.sequencing_group'),
+            JSON_VALUE(PARSE_JSON(labels, wide_number_mode=>'round'), '$.sequencing-group')
+        ))
+    END as sequencing_group,
 CASE WHEN JSON_QUERY(labels, '$.cohorts') IS NOT NULL THEN ARRAY_TO_STRING(JSON_VALUE_ARRAY(labels, '$.cohorts'), ',') ELSE NULL END as cohorts,
 JSON_VALUE(PARSE_JSON(labels, wide_number_mode=>'round'), '$.compute-category') as compute_category,
 JSON_VALUE(PARSE_JSON(labels, wide_number_mode=>'round'), '$.cromwell-sub-workflow-name') as cromwell_sub_workflow_name,
