@@ -21,6 +21,7 @@ Tasks:
         (ie: finished between START + END of previous time period)
 """
 
+import argparse
 import asyncio
 import base64
 import gzip
@@ -259,12 +260,30 @@ if __name__ == '__main__':
     logging.getLogger('asyncio').setLevel(logging.ERROR)
     logging.getLogger('urllib3').setLevel(logging.WARNING)
 
-    test_start, test_end = datetime(2024, 2, 14), None
-    asyncio.new_event_loop().run_until_complete(
-        main(
-            start=test_start,
-            end=test_end,
-            mode='prod',
-            # output_path=os.path.join(os.getcwd(), 'hail'),
-        ),
-    )
+    # Check start and end date provided
+    parser = argparse.ArgumentParser(description='Loading Hail billing data.')
+    parser.add_argument('--start', nargs='?', help='Start date of period to load')
+    parser.add_argument('--end', nargs='?', help='End date of period to load')
+    args = parser.parse_args()
+
+    if args.start and args.end:
+        start_date = datetime.strptime(args.start, '%Y-%m-%d').replace(
+            tzinfo=timezone.utc
+        )
+        end_date = datetime.strptime(args.end, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+
+        # iterate over the period if start_date/end_date is not none
+        for period in utils.date_range_iterator(start_date, end_date):
+            (start, end) = period
+            asyncio.new_event_loop().run_until_complete(
+                main(start=start, end=end, mode='prod')
+            )
+    else:
+        asyncio.new_event_loop().run_until_complete(
+            main(
+                start=None,
+                end=None,
+                mode='prod',
+                # output_path=os.path.join(os.getcwd(), 'hail')
+            )
+        )
