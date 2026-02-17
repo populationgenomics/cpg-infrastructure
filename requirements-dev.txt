@@ -3,3 +3,4 @@ coverage
 -r requirements.txt
 google-api-python-client-stubs==1.15.0
 google-cloud-storage==2.14.0
+types-setuptools~=82.0
