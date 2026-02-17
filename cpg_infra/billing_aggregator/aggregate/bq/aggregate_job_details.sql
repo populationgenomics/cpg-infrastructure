@@ -20,9 +20,9 @@ SELECT
         ))
     END as sequencing_group,
     CASE WHEN JSON_QUERY(labels, '$.cohorts') IS NOT NULL
-    THEN 
+    THEN
         ARRAY_TO_STRING(JSON_VALUE_ARRAY(labels, '$.cohorts'), ',')
-    ELSE 
+    ELSE
         NULL
     END as cohorts,
     invoice.month as invoice_month,
