@@ -61,14 +61,6 @@ def get_member_key(member):  # pylint: disable=too-many-return-statements
         ):
             return f'serviceAccount:{member}'
 
-        # Handle principals that are users and not service accounts
-        # These need to be prefixed with `user:`
-        # The check for not containing `:` is to ensure we don't add the user prefix
-        # if there is another member type specified like `domain:` or `serviceAccount:`
-        # The check for @ is to ensure we only add this for users, which will be an email
-        if ':' not in member and '@' in member:
-            return f'user:{member}'
-
         return member
 
     raise NotImplementedError(f'Invalid member type {type(member)}')

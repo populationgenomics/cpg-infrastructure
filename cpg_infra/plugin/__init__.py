@@ -1,6 +1,6 @@
 """Ability to extend CPG infrastructure with plugins"""
 
-import importlib.metadata
+import pkg_resources
 
 from cpg_infra.config import CPGInfrastructureConfig
 
@@ -34,9 +34,7 @@ def get_plugins() -> dict[str, type[CpgInfrastructurePlugin]]:
 
     plugins = {}
 
-    for entry_point in importlib.metadata.entry_points().get(
-        PLUGIN_ENTRYPOINT_NAME, []
-    ):
+    for entry_point in pkg_resources.iter_entry_points(PLUGIN_ENTRYPOINT_NAME):
         plugins[entry_point.name] = entry_point.load()
 
     return plugins
