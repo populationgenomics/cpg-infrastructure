@@ -327,6 +327,8 @@ class BillingAggregator(CpgInfrastructurePlugin):
             default_interval_hours = self.config.billing.aggregator.interval_hours
 
             # TODO: We should consider moving function specific cpu/memory/timeout values to config
+            # Scheduler start minute, staggered to avoid all functions running at the same time
+            start_minute = 0
 
             if function in ['gcp']:
                 # GCP function can handle more than an hour of data aggregation and
@@ -340,6 +342,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 # 8H seems to be a good start as interval for GCP,
                 # but might need to be extended if we find that is not sufficient
                 default_interval_hours = 8 * default_interval_hours
+                start_minute = 1
 
             if function in ['hail', 'seqr', 'seqr24', 'gcp']:
                 # max possible timeout is 1H for HTTP functions
@@ -350,12 +353,14 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 # 4GB per 1x cpu
                 cpu = 2
                 memory = '8Gi'
+                start_minute = 2
 
             if function in ['seqr', 'seqr24']:
                 # seqr specific aggreg function needs over 8GB of memory
                 # 4GB per 1x cpu
                 cpu = 4
                 memory = '16Gi'
+                start_minute = 3 if function == 'seqr' else 4
 
             # Create the function, the trigger and subscription.
             fxn = self.create_cloud_function(
@@ -395,7 +400,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
                         service_account_email=self.config.billing.coordinator_machine_account,
                     ),
                 ),
-                schedule=f'0 */{self.config.billing.aggregator.interval_hours} * * *',
+                schedule=f'{start_minute} */{self.config.billing.aggregator.interval_hours} * * *',
                 project=self.config.billing.gcp.project_id,
                 region=self.config.gcp.region,
                 time_zone='Australia/Sydney',
