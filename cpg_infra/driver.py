@@ -2976,6 +2976,15 @@ class CPGDatasetCloudInfrastructure:
             # Group created but no PAM configuration needed for this dataset
             return
 
+        # Grant browser role so tmp-main-read-access members can see the
+        # project in GCP Console, even without analysis group membership.
+        self.infra.add_project_role(
+            'tmp-main-read-access-project-browser',
+            role='roles/browser',
+            member=self.tmp_main_read_access_group.group,
+            project=self.infra.project_id,
+        )
+
         # Get the PAM broker SA from the root
         broker_sa = self.root.pam_broker_sa
         if not broker_sa:
