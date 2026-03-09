@@ -6,6 +6,7 @@ from cpg_infra.config.config import (
     CPGDatasetComponents,
     CPGDatasetConfig,
     CPGInfrastructureConfig,
+    CPGInfrastructureGroup,
     CPGInfrastructureUser,
     GroupName,
     HailAccount,
