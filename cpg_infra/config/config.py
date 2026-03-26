@@ -154,6 +154,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
             project: str
             service_name: str
             machine_account: str
+            legacy_machine_account: str
 
         @dataclasses.dataclass(frozen=True)
         class ETLConfiguration(DeserializableDataclass):
