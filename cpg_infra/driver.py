@@ -774,7 +774,7 @@ class CPGInfrastructure:
 
         if self.config.metamist:
             group_cache_accessors.append(
-                ('sample-metadata', self.config.metamist.gcp.machine_account),
+                ('sample-metadata', self.config.metamist.gcp.legacy_machine_account),
             )
 
         if self.config.web_service:
@@ -2588,6 +2588,11 @@ class CPGDatasetCloudInfrastructure:
         self.main_list_group.add_member(
             self.infra.get_pulumi_name('metamist-service-account-in-main-list'),
             self.infra.config.metamist.gcp.machine_account,
+        )
+
+        self.main_list_group.add_member(
+            self.infra.get_pulumi_name('metamist-service-account-in-main-list'),
+            self.infra.config.metamist.gcp.legacy_machine_account,
         )
 
     def setup_metamist_cloudrun_permissions(self):
