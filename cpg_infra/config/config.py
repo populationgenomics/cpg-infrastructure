@@ -40,6 +40,15 @@ class CPGInfrastructureUser(DeserializableDataclass):
 
 
 @dataclasses.dataclass(frozen=True)
+class CPGInfrastructureGroup(DeserializableDataclass):
+    """Represents an additional adhoc group under infrastructure management"""
+
+    name: str
+    description: str
+    members: list[MemberKey] = dataclasses.field(default_factory=list)
+
+
+@dataclasses.dataclass(frozen=True)
 class CPGInfrastructureConfig(DeserializableDataclass):
     """
     Configuration that describes all variables required to instantiate the
@@ -264,6 +273,8 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     metamist: Metamist | None = None
     # configuration options for billing + billing aggregation
     billing: Billing | None = None
+    # list of additional adhoc groups under infrastructure management
+    adhoc_groups: list[CPGInfrastructureGroup] | None = None
 
     # When resources are renamed, it can be useful to explicitly apply changes in two
     # phases: delete followed by create; that's opposite of the default create followed by

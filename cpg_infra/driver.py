@@ -369,6 +369,9 @@ class CPGInfrastructure:
         # storage buckets, metamist and hail users etc.
         self.deploy_datasets()
 
+        # Deploy managed adhoc assets that are not associated with datasets.
+        self.deploy_adhoc()
+
         plugins = get_plugins()
         initialised_plugins = []
         for plugin_name in self.config.plugins_enabled:
@@ -413,6 +416,28 @@ class CPGInfrastructure:
     def deploy_datasets(self):
         for cloud_dataset in self.dataset_infrastructures.values():
             cloud_dataset.main()
+
+    def deploy_adhoc(self):
+        infra = self.common_gcp_infra
+
+        for group in self.config.adhoc_groups or []:
+            cloud_group = self.group_provider.create_group(
+                infra,
+                name=group.name,
+                cache_members=False,
+            )
+            for member_id in group.members:
+                member = self.config.users.get(member_id)
+                if not member:
+                    raise ValueError(f'Member {member_id} not found in config')
+
+                if cloud_user := member.clouds.get(GcpInfrastructure.name()):
+                    pulumi_name = f'{group.name}-{compute_hash("", member_id, GcpInfrastructure.name())}'
+                    cloud_group.add_member(
+                        infra.get_pulumi_name(pulumi_name),
+                        member=cloud_user.id,
+                        user=cloud_user,
+                    )
 
     def setup_hail_batch_billing_project_members(self):
         internal_users = [
