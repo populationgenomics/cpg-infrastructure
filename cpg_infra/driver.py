@@ -920,6 +920,27 @@ class CPGInfrastructure:
         """The PAM broker service account, or None if not configured."""
         return getattr(self, '_pam_broker_sa', None)
 
+    @cached_property
+    def datasets_needing_pam_entitlement(self) -> set[str]:
+        """
+        Datasets that need a PAM entitlement created, either because they have
+        PAM directly configured, or because they are a dependency of a dataset
+        that does.
+
+        This allows dependent datasets to have entitlements created automatically
+        without requiring allow_notebook_tmp_main_read on every dataset in the
+        dependency chain.
+        """
+        needs_entitlement: set[str] = set()
+        for dc in self.dataset_configs.values():
+            if dc.allow_notebook_tmp_main_read or dc.members.get(
+                'tmp-main-read-access',
+            ):
+                needs_entitlement.add(dc.dataset)
+                for dep in [*dc.depends_on, *dc.depends_on_readonly]:
+                    needs_entitlement.add(dep)
+        return needs_entitlement
+
     def setup_python_registry(self):
         """
         Setup the python registry permissions in gcp-common
@@ -2976,8 +2997,11 @@ class CPGDatasetCloudInfrastructure:
         # Check if temporary access should be set up at all
         has_pam_users = bool(pam_members)
         has_pam_notebook = self.dataset_config.allow_notebook_tmp_main_read
+        is_pam_dependency = (
+            self.dataset_config.dataset in self.root.datasets_needing_pam_entitlement
+        )
 
-        if not has_pam_users and not has_pam_notebook:
+        if not has_pam_users and not has_pam_notebook and not is_pam_dependency:
             # Group created but no PAM configuration needed for this dataset
             return
 
