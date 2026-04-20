@@ -46,6 +46,7 @@ from cpg_infra.config import (
 )
 from cpg_infra.github_wif.driver import PAM_BROKER_SA_NAME
 from cpg_infra.plugin import get_plugins
+from cpg_infra.utils import access_levels
 
 
 class SampleMetadataAccessorMembership(NamedTuple):
@@ -79,10 +80,7 @@ class MainUploadBucket(NamedTuple):
 AccessLevel = str
 
 
-def access_levels(*, include_test: bool) -> Iterable[AccessLevel]:
-    if include_test:
-        return ('test', 'standard', 'full')
-    return ('standard', 'full')
+
 
 
 NON_NAME_REGEX = re.compile(r'[^A-Za-z\d_-]')
