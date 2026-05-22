@@ -318,9 +318,9 @@ class CPGDatasetComponents(Enum):
     ANALYSIS_RUNNER = 'analysis-runner'
 
     @staticmethod
-    def default_component_for_infrastructure() -> dict[
-        str, list['CPGDatasetComponents']
-    ]:
+    def default_component_for_infrastructure() -> (
+        dict[str, list['CPGDatasetComponents']]
+    ):
         return {
             'dry-run': list(CPGDatasetComponents),
             'gcp': list(CPGDatasetComponents),
