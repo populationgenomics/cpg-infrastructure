@@ -189,7 +189,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
             # Custom audience list for the Cloud Run Security
             custom_audience_list: dict[str, list[str]] | None = None
 
-        gcp: GCP
+        gcp: list[GCP]
         etl: ETLConfiguration | None = None
         slack_channel: str | None = None
 
@@ -318,9 +318,9 @@ class CPGDatasetComponents(Enum):
     ANALYSIS_RUNNER = 'analysis-runner'
 
     @staticmethod
-    def default_component_for_infrastructure() -> (
-        dict[str, list['CPGDatasetComponents']]
-    ):
+    def default_component_for_infrastructure() -> dict[
+        str, list['CPGDatasetComponents']
+    ]:
         return {
             'dry-run': list(CPGDatasetComponents),
             'gcp': list(CPGDatasetComponents),
