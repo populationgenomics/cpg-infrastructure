@@ -189,7 +189,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
             # Custom audience list for the Cloud Run Security
             custom_audience_list: dict[str, list[str]] | None = None
 
-        gcp: GCP
+        gcp: list[GCP]
         etl: ETLConfiguration | None = None
         slack_channel: str | None = None
 
