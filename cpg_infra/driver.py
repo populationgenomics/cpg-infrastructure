@@ -2635,7 +2635,7 @@ class CPGDatasetCloudInfrastructure:
         # to read the actual contents of objects
         for service in self.infra.config.metamist.gcp:
             self.main_list_group.add_member(
-                self.infra.get_pulumi_name('metamist-service-account-in-main-list'),
+                self.infra.get_pulumi_name(f'{service.service_name}-service-account-in-main-list'),
                 service.machine_account,
             )
 
