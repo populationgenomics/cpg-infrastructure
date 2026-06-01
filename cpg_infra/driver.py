@@ -798,7 +798,7 @@ class CPGInfrastructure:
             )
 
         if self.config.metamist:
-            for service in self.config.metamist.gcp:
+            for service in self.config.metamist.all_gcp_deploys():
                 group_cache_accessors.append(
                     (service.service_name, service.machine_account),
                 )
@@ -867,7 +867,7 @@ class CPGInfrastructure:
 
         assert self.config.metamist
 
-        for service in self.config.metamist.gcp:
+        for service in self.config.metamist.all_gcp_deploys():
             infra.add_cloudrun_invoker(
                 f'sample-metadata-cloudrun-invokers-{service.service_name}',
                 service=service.service_name,
@@ -2633,7 +2633,8 @@ class CPGDatasetCloudInfrastructure:
         # add metamist machine account to the `main-list` group for the dataset.
         # this group gives list access to the dataset buckets but grants no ability
         # to read the actual contents of objects
-        for service in self.infra.config.metamist.gcp:
+        assert self.infra.config.metamist
+        for service in self.infra.config.metamist.all_gcp_deploys():
             self.main_list_group.add_member(
                 self.infra.get_pulumi_name(
                     f'{service.service_name}-service-account-in-main-list'

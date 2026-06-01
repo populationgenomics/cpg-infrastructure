@@ -160,9 +160,24 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     class Metamist(DeserializableDataclass):
         @dataclasses.dataclass(frozen=True)
         class GCP(DeserializableDataclass):
+            @dataclasses.dataclass(frozen=True)
+            class GCPMetamistDeploys(DeserializableDataclass):
+                project: str
+                service_name: str
+                machine_account: str
+
+            # Weird structure explained:
+            # The project service_name and machine account are left as-is
+            # so the metamist etl infrastructure code defined in the metamist
+            # repo still work. Any additional deploys go into the dev list
+
+            # This way all of the infra.metamist.gcp.project references in the
+            # etl plugin will continue to work
             project: str
             service_name: str
             machine_account: str
+
+            dev: list[GCPMetamistDeploys] | None = None
 
         @dataclasses.dataclass(frozen=True)
         class ETLConfiguration(DeserializableDataclass):
@@ -188,7 +203,14 @@ class CPGInfrastructureConfig(DeserializableDataclass):
             # Custom audience list for the Cloud Run Security
             custom_audience_list: dict[str, list[str]] | None = None
 
-        gcp: list[GCP]
+        def all_gcp_deploys(self) -> list[GCP]:
+            if not self.gcp.dev:
+                return [self.gcp]
+
+            dev_deploys = [self.GCP(**dev.__dict__) for dev in self.gcp.dev]
+            return [self.gcp, *dev_deploys]
+
+        gcp: GCP
         etl: ETLConfiguration | None = None
         slack_channel: str | None = None
 
