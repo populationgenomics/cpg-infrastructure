@@ -3,6 +3,7 @@
 CPG Dataset infrastructure
 """
 
+import graphlib
 import json
 import os.path
 import re
@@ -11,7 +12,6 @@ from dataclasses import asdict
 from functools import cached_property
 from typing import Any, Callable, Iterable, Iterator, NamedTuple, Type
 
-import graphlib
 import pulumi
 import pulumi_gcp as gcp
 import toml
@@ -798,9 +798,9 @@ class CPGInfrastructure:
             )
 
         if self.config.metamist:
-            for service in self.config.metamist.all_gcp_deploys():
+            for index, service in enumerate(self.config.metamist.all_gcp_deploys()):
                 group_cache_accessors.append(
-                    (service.service_name, service.machine_account),
+                    (f'{service.service_name}-{index}', service.machine_account),
                 )
 
         if self.config.web_service:
@@ -867,9 +867,9 @@ class CPGInfrastructure:
 
         assert self.config.metamist
 
-        for service in self.config.metamist.all_gcp_deploys():
+        for index, service in enumerate(self.config.metamist.all_gcp_deploys()):
             infra.add_cloudrun_invoker(
-                f'sample-metadata-cloudrun-invokers-{service.service_name}',
+                f'sample-metadata-cloudrun-invokers-{service.service_name}-{index}',
                 service=service.service_name,
                 project=service.project,
                 member=self.gcp_metamist_invoker_group,
