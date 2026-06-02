@@ -3,6 +3,7 @@
 CPG Dataset infrastructure
 """
 
+import graphlib
 import json
 import os.path
 import re
@@ -11,7 +12,6 @@ from dataclasses import asdict
 from functools import cached_property
 from typing import Any, Callable, Iterable, Iterator, NamedTuple, Type
 
-import graphlib
 import pulumi
 import pulumi_gcp as gcp
 import toml
@@ -2634,10 +2634,10 @@ class CPGDatasetCloudInfrastructure:
         # this group gives list access to the dataset buckets but grants no ability
         # to read the actual contents of objects
         assert self.infra.config.metamist
-        for service in self.infra.config.metamist.all_gcp_deploys():
+        for index,service in enumerate(self.infra.config.metamist.all_gcp_deploys()):
             self.main_list_group.add_member(
                 self.infra.get_pulumi_name(
-                    f'{service.service_name}-service-account-in-main-list'
+                    f'metamist-service-account-in-main-list-{service.service_name}-{index}',
                 ),
                 service.machine_account,
             )
