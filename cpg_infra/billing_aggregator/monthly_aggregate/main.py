@@ -128,7 +128,7 @@ async def process_and_upload_monthly_billing_report(
 
     data['cost'].fillna(0)
     data['key'] = data.topic + '-' + data.month + '-' + data.cost_category
-    values: list = list(data.to_numpy().tolist())
+    values: list = data.to_numpy().tolist()
     updated = append_values_to_google_sheet(OUTPUT_GOOGLE_SHEET, values, invoice_month)
 
     return f'{updated} cells appended for invoice month {invoice_month}', 200
