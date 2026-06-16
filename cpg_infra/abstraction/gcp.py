@@ -762,7 +762,11 @@ class GcpInfrastructure(CloudInfraBase):
             group_key=gcp.cloudidentity.GroupGroupKeyArgs(id=mail),
             labels={'cloudidentity.googleapis.com/groups.discussion_forum': ''},
             parent=f'customers/{self.config.gcp.customer_id}',
-            opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudidentity]),
+            opts=pulumi.resource.ResourceOptions(
+                depends_on=[self._svc_cloudidentity],
+                # Pre-existing groups may have null instead of EMPTY etc, so ignore this
+                ignore_changes=['initial_group_config'],
+            ),
         )
 
         # Only set allowExternalMembers': 'true' if settings specify it
