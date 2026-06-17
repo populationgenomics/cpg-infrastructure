@@ -298,7 +298,7 @@ class CloudInfraBase(ABC):
     # endregion MACHINE ACCOUNTS
     # GROUPS
     @abstractmethod
-    def create_group(self, name: str) -> Any:
+    def create_group(self, name: str, description: str | None = None) -> Any:
         """
         Create a GROUP, which is a proxy for a number of members
         """
@@ -466,8 +466,9 @@ class DryRunInfra(CloudInfraBase):
     def get_credentials_for_machine_account(self, resource_key, account):
         return f'{resource_key} :: {account}.CREDENTIALS'
 
-    def create_group(self, name: str) -> Any:
-        print(f'Creating Group: {name}')
+    def create_group(self, name: str, description: str | None = None) -> Any:
+        desc = f' (description: {description})' if description else ''
+        print(f'Creating Group: {name}{desc}')
         return f'{name}@{self.config.gcp.groups_domain}'
 
     def add_group_member(
