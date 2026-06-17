@@ -746,7 +746,7 @@ class GcpInfrastructure(CloudInfraBase):
             service_account_id=account.email,
         ).private_key.apply(lambda s: base64.b64decode(s).decode('utf-8'))
 
-    def create_group(self, name: str) -> Any:
+    def create_group(self, name: str, description: str | None = None) -> Any:
         mail = f'{name}@{self.config.gcp.groups_domain}'
 
         # Dev GCP accounts don't have access to create empty groups, so on dev they are
@@ -758,6 +758,7 @@ class GcpInfrastructure(CloudInfraBase):
         group = gcp.cloudidentity.Group(
             self.get_pulumi_name(name + '-group'),
             display_name=name,
+            description=description,
             initial_group_config=initial_group_config,
             group_key=gcp.cloudidentity.GroupGroupKeyArgs(id=mail),
             labels={'cloudidentity.googleapis.com/groups.discussion_forum': ''},

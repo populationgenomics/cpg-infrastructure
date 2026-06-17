@@ -440,10 +440,11 @@ class AzureInfra(CloudInfraBase):
     def get_credentials_for_machine_account(self, resource_key, account):
         pass
 
-    def create_group(self, name: str) -> Any:
+    def create_group(self, name: str, description: str | None = None) -> Any:
         return azuread.Group(
             self.get_pulumi_name(name + '-group'),
             display_name=name,
+            description=description,
             security_enabled=True,
         )
 
