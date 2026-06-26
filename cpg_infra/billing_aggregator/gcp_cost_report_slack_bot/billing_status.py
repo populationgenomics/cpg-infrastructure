@@ -38,6 +38,13 @@ def get_unlinked_project_ids(
     permission denied, transport/auth failure) is treated as "unknown": the
     project is skipped and logged, so a transient failure never produces a
     false "billing unlinked" alert.
+
+    Skips are logged at INFO, not WARNING: the candidate set includes external
+    projects the service account has no IAM on, which 403 on every run, so these
+    skips are expected and non-actionable. (The choice doesn't affect alerting:
+    this function doesn't configure structured logging, so its app logs reach
+    Cloud Logging at DEFAULT severity regardless of Python level. INFO is purely
+    for readability.)
     """
     unlinked: set[str] = set()
     for project_id in project_ids:
@@ -46,7 +53,7 @@ def get_unlinked_project_ids(
                 name=f'projects/{project_id}',
             )
         except (GoogleAPICallError, RetryError, GoogleAuthError) as err:
-            logging.warning(
+            logging.info(
                 f'Could not determine billing status for {project_id}, '
                 f'skipping: {err}',
             )
