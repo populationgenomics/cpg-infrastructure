@@ -35,7 +35,7 @@
 - **Modify** `cpg_infra/billing_aggregator/gcp_cost_report_slack_bot/main.py`
   Instantiate `CloudBillingClient`, build the candidate union, call `get_unlinked_project_ids`, then `apply_unlinked_to_summary` — placed after the `len(totals) == 0` guard.
 - **Modify** `cpg_infra/billing_aggregator/gcp_cost_report_slack_bot/deploy.sh`
-  Switch the manual test deploy from `--trigger-topic` to `--trigger-http`; `cd` into the function folder so source is correct.
+  Repurpose as the **dev** deploy: deploy a separate gen2 function `gcp-cost-reporting-dev` (entry point `slack_bot_cost_report`) in `billing-admin-290403` / `australia-southeast1`, posting to `#sabrina-dev`, triggered by the existing `cost-report` Pub/Sub topic; `cd` into the function folder so source is correct.
 - **Modify** `cpg_infra/billing_aggregator/gcp_cost_report_slack_bot/README.md`
   Document the manual deploy + `curl` test loop against `#sabrina-dev`.
 
@@ -506,7 +506,7 @@ git commit -m "feat(cost-report): surface unlinked-billing projects in daily mes
 
 ---
 
-### Task 4: Make `deploy.sh` HTTP-triggered + document the test loop
+### Task 4: Add the `gcp-cost-reporting-dev` deploy + document the test loop
 
 **Files:**
 - Modify: `cpg_infra/billing_aggregator/gcp_cost_report_slack_bot/deploy.sh`
@@ -514,17 +514,25 @@ git commit -m "feat(cost-report): surface unlinked-billing projects in daily mes
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks.
-- Produces: a manual test-deploy workflow targeting `#sabrina-dev`, triggerable on demand via `curl` (supporting `{"force_run": true}`).
+- Produces: a dev deploy of a **separate** gen2 function `gcp-cost-reporting-dev` (entry point `slack_bot_cost_report`) in `billing-admin-290403` / `australia-southeast1`, posting to `#sabrina-dev`, triggered by the existing `cost-report` Pub/Sub topic. Production (Pulumi) is NOT subscribed to that topic, so publishing test messages cannot reach `#production-announcements`.
 
-- [ ] **Step 1: Update `deploy.sh` to an HTTP trigger**
+> Context (from the predecessor repo `populationgenomics/cpg-cost-control`): this function has always been deployed as a Pub/Sub-triggered Cloud Function on the `cost-report` topic, running as the shared `gcp-cost-control@` service account, which holds Project Billing Manager / Billing Viewer / Browser at the org level — so `get_project_billing_info` needs no extra IAM. A gen2 function also exposes a Cloud Run HTTP URL, so `force_run` is still reachable via a direct `curl` POST.
+
+- [ ] **Step 1: Replace `deploy.sh` with the dev deploy**
 
 Replace the entire contents of `cpg_infra/billing_aggregator/gcp_cost_report_slack_bot/deploy.sh` with:
 
 ```bash
 #!/bin/bash
-# Manual TEST deploy of the cost-report Slack bot.
-# Posts to the dev Slack channel below — NOT production. Production is managed
-# by Pulumi (cpg_infra/billing_aggregator/driver.py); do not use this for prod.
+# Manual DEV deploy of the cost-report Slack bot.
+# Deploys a SEPARATE function (gcp-cost-reporting-dev) that posts to the dev
+# Slack channel below — NOT production. Production is managed by Pulumi
+# (cpg_infra/billing_aggregator/driver.py); do not use this for prod.
+#
+# Triggered by the existing 'cost-report' Pub/Sub topic. Production is NOT
+# subscribed to that topic, so test publishes are isolated from
+# #production-announcements. Being gen2 (Cloud Run under the hood) the function
+# also has an HTTP URL for force_run testing — see README.md "Manual testing".
 set -euo pipefail
 
 # Always deploy this folder regardless of where the script is invoked from.
@@ -539,16 +547,16 @@ QUERY_TIME_ZONE="Australia/Sydney"
 BILLING_ACCOUNT_ID="01D012-20A6A2-CBD343"
 
 gcloud config set project $BILLING_ADMIN_PROJECT
-gcloud functions deploy slack_bot_cost_report --runtime python311 \
+gcloud functions deploy gcp-cost-reporting-dev --runtime python311 \
     --gen2 \
     --region=$REGION \
+    --entry-point slack_bot_cost_report \
     --service-account $SERVICE_ACCOUNT \
     --set-env-vars SLACK_CHANNEL=$SLACK_CHANNEL \
     --set-env-vars BIGQUERY_BILLING_TABLE=$BIGQUERY_BILLING_TABLE \
     --set-env-vars QUERY_TIME_ZONE=$QUERY_TIME_ZONE \
     --set-env-vars BILLING_ACCOUNT_ID=$BILLING_ACCOUNT_ID \
-    --trigger-http \
-    --no-allow-unauthenticated \
+    --trigger-topic cost-report \
     --timeout=540s
 ```
 
@@ -560,97 +568,113 @@ Append the following section to `cpg_infra/billing_aggregator/gcp_cost_report_sl
 ## Manual testing (dev)
 
 Production is deployed by Pulumi (`cpg_infra/billing_aggregator/driver.py`) on a
-daily `0 9 * * *` schedule and posts to `#production-announcements`. For
-iterating on changes, deploy a separate HTTP-triggered copy that posts to
-`#sabrina-dev` and trigger it on demand. The function is read-only on GCP
-(reads BigQuery, budgets and project billing info; posts to Slack) — it cannot
-change any project's billing.
+daily `0 9 * * *` schedule and posts to `#production-announcements`. To iterate
+on changes, deploy a separate dev function (`gcp-cost-reporting-dev`) that posts
+to `#sabrina-dev`. It runs as the same service account as production, so it
+already has the billing/BigQuery permissions it needs, and it is read-only on
+GCP (reads BigQuery, budgets and project billing info; posts to Slack) — it
+cannot change any project's billing.
 
 ```bash
-# 1. Deploy the test function (posts to the SLACK_CHANNEL set in deploy.sh).
+# 1. Deploy the dev function. It triggers off the existing 'cost-report'
+#    Pub/Sub topic; production is NOT subscribed to that topic, so this is
+#    isolated from #production-announcements.
 ./deploy.sh
 
-# 2. Grab its URL.
-URL=$(gcloud functions describe slack_bot_cost_report \
+# 2a. Daily-style run (flagged projects + any unlinked-billing projects):
+#     publish any message to the trigger topic (payload is ignored).
+gcloud pubsub topics publish cost-report --message='{}' \
+    --project=billing-admin-290403
+
+# 2b. Full Monday-style dump via force_run: POST directly to the function's
+#     Cloud Run URL (a gen2 function exposes one even with a Pub/Sub trigger).
+URL=$(gcloud functions describe gcp-cost-reporting-dev \
     --region=australia-southeast1 --gen2 \
     --format='value(serviceConfig.uri)')
-
-# 3a. Daily-style run: flagged projects + any unlinked-billing projects.
-curl -m 600 -X POST "$URL" \
-    -H "Authorization: bearer $(gcloud auth print-identity-token)" \
-    -H "Content-Type: application/json" \
-    -d '{}'
-
-# 3b. Full dump (everything, as on Mondays): add force_run.
 curl -m 600 -X POST "$URL" \
     -H "Authorization: bearer $(gcloud auth print-identity-token)" \
     -H "Content-Type: application/json" \
     -d '{"force_run": true}'
 
+# 3. Watch #sabrina-dev, and read logs:
+gcloud functions logs read gcp-cost-reporting-dev \
+    --region=australia-southeast1 --gen2 --limit=50
+
 # 4. (Optional) tear down when finished.
-gcloud functions delete slack_bot_cost_report \
+gcloud functions delete gcp-cost-reporting-dev \
     --region=australia-southeast1 --gen2 --quiet
 ```
 
-If `curl` returns 403, grant yourself the invoker role on the function
+If the `curl` returns 403, grant yourself the invoker role on the function
 (`roles/run.invoker` for gen2) and retry.
 ```
 
-- [ ] **Step 3: Lint the shell script (best-effort) and commit**
+- [ ] **Step 3: Make executable and commit**
 
 ```bash
 chmod +x cpg_infra/billing_aggregator/gcp_cost_report_slack_bot/deploy.sh
 git add cpg_infra/billing_aggregator/gcp_cost_report_slack_bot/deploy.sh cpg_infra/billing_aggregator/gcp_cost_report_slack_bot/README.md
-git commit -m "chore(cost-report): http-trigger test deploy + document test loop"
+git commit -m "chore(cost-report): add gcp-cost-reporting-dev deploy + test docs"
 ```
 
 ---
 
-### Task 5: Manual human end-to-end test against `#sabrina-dev`
+### Task 5: Deploy `gcp-cost-reporting-dev` and verify end-to-end
 
-**Files:** none (verification only).
+**Files:** none (deploy + verification only).
 
 **Interfaces:**
-- Consumes: the deployed test function from Task 4 and all logic from Tasks 1–3.
-- Produces: confirmation the feature works live and prod is untouched.
+- Consumes: `deploy.sh` from Task 4 and all logic from Tasks 1–3.
+- Produces: confirmation the feature works live in `#sabrina-dev` and prod is untouched.
 
-> This is the human-in-the-loop test the unit tests can't cover (live GCP + Slack rendering). Rendering correctness is already proven by Tasks 1–2; this confirms wiring, permissions, and visual output.
+> Executed by the controller (not a subagent): it deploys a live Cloud Function, publishes to a topic, and reads `#sabrina-dev`. Rendering correctness is already proven by the unit tests; this confirms wiring, IAM, and visual output. Requires `gcloud` authenticated to `billing-admin-290403`.
 
 - [ ] **Step 1: Preconditions**
 
-Confirm you're on branch `SET-1051-highlight-projects-with-unlinked-billing-in-cost-report-slack-message`, deps installed, and `deploy.sh` has `SLACK_CHANNEL="sabrina-dev"` (NOT a prod channel).
+Confirm: on branch `SET-1051-...`; Tasks 1–4 committed; `deploy.sh` has `SLACK_CHANNEL="sabrina-dev"`; `gcloud auth list` shows an account with deploy rights on `billing-admin-290403`.
 
-- [ ] **Step 2: Deploy + trigger the daily-style run**
+- [ ] **Step 2: Deploy the dev function**
 
 ```bash
-cd cpg_infra/billing_aggregator/gcp_cost_report_slack_bot
-./deploy.sh
-# then run steps 2 & 3a from the README test loop
+cd cpg_infra/billing_aggregator/gcp_cost_report_slack_bot && ./deploy.sh
 ```
-Expected: HTTP 200; a cost-report message appears in `#sabrina-dev`; no errors.
+Expected: deploy succeeds; `gcp-cost-reporting-dev` ACTIVE in `australia-southeast1`.
 
-- [ ] **Step 3: Verify the unlinked rendering**
+- [ ] **Step 3: Trigger a daily-style run**
+
+```bash
+gcloud pubsub topics publish cost-report --message='{}' --project=billing-admin-290403
+```
+Expected: a cost-report message appears in `#sabrina-dev` (verify by reading the channel via the Slack tools or by eye).
+
+- [ ] **Step 4: Verify the unlinked rendering**
 
 In `#sabrina-dev`, confirm:
-- If any project currently has unlinked billing, it appears at the **top of the flagged list**, with `💵⛓️‍💥 Billing unlinked` in the left (Previous Day) column and its normal monthly value (or `No monthly cost`) in the right column.
+- Any project with unlinked billing appears at the **top of the flagged list**, with `💵⛓️‍💥 Billing unlinked` in the left (Previous Day) column and its normal monthly value (or `No monthly cost`) in the right column.
 - No healthy project is falsely labelled unlinked.
 
-If **no** project is currently unlinked (so the indicator can't be seen), deliberately exercise the path: temporarily **unlink billing on a disposable sandbox project you own**, re-run the curl, confirm it shows at the top with the indicator, then **re-link billing** (the function is read-only and will NOT re-link it for you).
+If **no** project is currently unlinked (so the indicator can't render), ask the human to temporarily unlink billing on a disposable sandbox project to confirm the live render, then re-link it (the function is read-only and will NOT re-link it).
 
-- [ ] **Step 4: Verify the full-dump path**
-
-Run README step 3b (`force_run`). Expected: the full multi-chunk project list posts to `#sabrina-dev`, with unlinked projects still at the top of the flagged chunk.
-
-- [ ] **Step 5: Check logs + confirm prod untouched**
+- [ ] **Step 5: Verify the full-dump (force_run) path**
 
 ```bash
-gcloud functions logs read slack_bot_cost_report --region=australia-southeast1 --gen2 --limit=50
+URL=$(gcloud functions describe gcp-cost-reporting-dev --region=australia-southeast1 --gen2 --format='value(serviceConfig.uri)')
+curl -m 600 -X POST "$URL" -H "Authorization: bearer $(gcloud auth print-identity-token)" -H "Content-Type: application/json" -d '{"force_run": true}'
 ```
-Expected: an info line `Projects with unlinked billing: [...]` when applicable; no `Could not determine billing status` warnings for healthy projects. Confirm `#production-announcements` and the Pulumi-managed function/schedule were not affected.
+Expected: the full multi-chunk project list posts to `#sabrina-dev`, unlinked projects still at the top of the flagged chunk.
 
-- [ ] **Step 6: (Optional) tear down the test function**
+- [ ] **Step 6: Check logs + confirm prod untouched**
 
-Run README step 4 to delete the test function when finished.
+```bash
+gcloud functions logs read gcp-cost-reporting-dev --region=australia-southeast1 --gen2 --limit=50
+```
+Expected: an info line `Projects with unlinked billing: [...]` when applicable; no `Could not determine billing status` warnings for healthy projects. Confirm `#production-announcements` and the Pulumi-managed function/schedule are unaffected.
+
+- [ ] **Step 7: (Optional) tear down the dev function**
+
+```bash
+gcloud functions delete gcp-cost-reporting-dev --region=australia-southeast1 --gen2 --quiet
+```
 
 ---
 
@@ -663,7 +687,7 @@ Run README step 4 to delete the test function when finished.
 - Use `google-cloud-billing` `CloudBillingClient` → Tasks 1 & 3. ✅
 - Three-state error handling (only flag definitive `False`) → Task 1 Step 5 + test `test_errors_are_skipped_not_flagged`. ✅
 - Render: prepend to top of flagged list, `💵⛓️‍💥 Billing unlinked` in day column, month column unchanged / `No monthly cost` → Task 2 + tests. ✅
-- Sustainable deploy/test via manual deploy to `#sabrina-dev`, HTTP trigger + curl, documented → Tasks 4 & 5. ✅
+- Sustainable deploy/test via `gcp-cost-reporting-dev` (Pub/Sub `cost-report` trigger) to `#sabrina-dev`, with force_run reachable over the gen2 HTTP URL, documented → Tasks 4 & 5. ✅
 - "Cost reporting bot updated and deployed" (DoD) → Task 5 (deploy + verify). ✅
 
 **2. Placeholder scan:** No TBD/“handle edge cases”/“similar to Task N”. All code blocks are complete; all commands have expected output. ✅
