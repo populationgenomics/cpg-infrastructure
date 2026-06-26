@@ -34,9 +34,7 @@ def get_plugins() -> dict[str, type[CpgInfrastructurePlugin]]:
 
     plugins = {}
 
-    for entry_point in importlib.metadata.entry_points().get(
-        PLUGIN_ENTRYPOINT_NAME, []
-    ):
+    for entry_point in importlib.metadata.entry_points(group=PLUGIN_ENTRYPOINT_NAME):
         plugins[entry_point.name] = entry_point.load()
 
     return plugins
