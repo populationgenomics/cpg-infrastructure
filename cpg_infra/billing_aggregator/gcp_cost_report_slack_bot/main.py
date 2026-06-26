@@ -371,7 +371,7 @@ def slack_bot_cost_report(request: flask.Request):
     apply_unlinked_to_summary(
         project_summary,
         unlinked_project_ids,
-        make_project_link=lambda pid: f'<{billing_link(pid)}|{pid}>',
+        make_project_link=lambda pid: f'<{billing_link(pid)}|*{pid}*>',
     )
 
     # Format the totals and add them to the totals summary
@@ -440,9 +440,12 @@ def post_slack_message(
 
     is_monday = datetime.now(tz=TIMEZONE).weekday() == 0
 
-    # Next, if we are posting today add hail to the flagged projects at the bottom
+    # Always surface the hail project in the flagged section, but only once. If
+    # hail is over budget it is already in flagged_projects (and bolded by
+    # format_billing_row), so appending it again would list it twice (SET-588).
     hail_project = [x for x in project_summary_keys_sorted if 'hail' in x].pop()
-    flagged_projects.append(project_summary[hail_project]['value'])
+    if not project_summary[hail_project]['sort'][0]:
+        flagged_projects.append(project_summary[hail_project]['value'])
     all_rows = [*totals_summary, *sorted_projects]
 
     def chunk_list(lst: list, n: int) -> Generator[list, None, None]:

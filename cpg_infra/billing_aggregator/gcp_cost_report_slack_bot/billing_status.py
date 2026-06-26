@@ -63,6 +63,14 @@ def get_unlinked_project_ids(
     return unlinked
 
 
+def _bold(text: str) -> str:
+    """Wrap text in Slack bold markers, leaving already-bold text unchanged."""
+    text = text.strip()
+    if text.startswith('*') and text.endswith('*'):
+        return text
+    return f'*{text}*'
+
+
 def apply_unlinked_to_summary(
     project_summary: dict[str, dict[str, Any]],
     unlinked_project_ids: Iterable[str],
@@ -70,14 +78,17 @@ def apply_unlinked_to_summary(
 ) -> dict[str, dict[str, Any]]:
     """Mark unlinked projects in the cost-report project summary.
 
-    For every unlinked project:
-      * the "Previous Day" column is replaced with UNLINKED_DAY_LABEL,
-      * the "Month (%)" column is preserved (or set to "No monthly cost" when
-        the project has no cost row this run),
-      * the sort key is bumped to UNLINKED_SORT_TIER so the project sorts to
-        the very top of the flagged list, ordered by monthly spend desc.
+    Every unlinked project is rebuilt in bold (the same emphasis flagged
+    projects get), since it sits at the top of the flagged list:
+      * the "Previous Day" column becomes a bold UNLINKED_DAY_LABEL,
+      * the "Month (%)" column keeps its value (or "No monthly cost" when the
+        project has no cost row this run), bolded,
+      * the project link is rebuilt via make_project_link,
+      * the sort key is bumped to UNLINKED_SORT_TIER so the project sorts to the
+        very top of the flagged list, ordered by monthly spend desc.
 
-    project_summary is mutated in place and also returned for convenience.
+    make_project_link must return a display-ready (bold) Slack link for a
+    project id. project_summary is mutated in place and also returned.
     Entries are shaped like:
         {project_id: {'sort': (tier_or_bool, day_total, month_total),
                       'value': (project_link, 'day_str | month_str')}}
@@ -85,25 +96,24 @@ def apply_unlinked_to_summary(
     for project_id in unlinked_project_ids:
         existing = project_summary.get(project_id)
         if existing is not None:
-            project_link, row_str = existing['value']
-            if _ROW_COLUMN_SEPARATOR in row_str:
-                month_str = row_str.split(_ROW_COLUMN_SEPARATOR, 1)[1]
-            else:
-                month_str = _NO_MONTH_PLACEHOLDER
-            old_sort = existing['sort']
-            existing['value'] = (
-                project_link,
-                f'{UNLINKED_DAY_LABEL}{_ROW_COLUMN_SEPARATOR}{month_str}',
+            _, row_str = existing['value']
+            month_str = (
+                row_str.split(_ROW_COLUMN_SEPARATOR, 1)[1]
+                if _ROW_COLUMN_SEPARATOR in row_str
+                else _NO_MONTH_PLACEHOLDER
             )
+            old_sort = existing['sort']
             # (tier, month_total, day_total): unlinked rows order by month desc.
-            existing['sort'] = (UNLINKED_SORT_TIER, old_sort[2], old_sort[1])
+            sort_key = (UNLINKED_SORT_TIER, old_sort[2], old_sort[1])
         else:
-            project_summary[project_id] = {
-                'sort': (UNLINKED_SORT_TIER, 0.0, 0.0),
-                'value': (
-                    make_project_link(project_id),
-                    f'{UNLINKED_DAY_LABEL}{_ROW_COLUMN_SEPARATOR}'
-                    f'{_NO_MONTH_PLACEHOLDER}',
-                ),
-            }
+            month_str = _NO_MONTH_PLACEHOLDER
+            sort_key = (UNLINKED_SORT_TIER, 0.0, 0.0)
+        project_summary[project_id] = {
+            'sort': sort_key,
+            'value': (
+                make_project_link(project_id),
+                f'{_bold(UNLINKED_DAY_LABEL)}{_ROW_COLUMN_SEPARATOR}'
+                f'{_bold(month_str)}',
+            ),
+        }
     return project_summary
