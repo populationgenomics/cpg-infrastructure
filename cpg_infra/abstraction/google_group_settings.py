@@ -76,10 +76,11 @@ class GoogleGroupSettings(pulumi.dynamic.Resource):
     """A Pulumi dynamic resource for Google Groups settings."""
 
     group_email: pulumi.Output[str]
-    # Allowed keys are documented (partially) by GoogleGroupSettingsDict above;
-    # full reference:
+    # Holds any Google Groups Settings API key (so typed as a plain dict, not the
+    # partial GoogleGroupSettingsDict); the common/known keys are documented by
+    # GoogleGroupSettingsDict above. Full reference:
     # https://developers.google.com/admin-sdk/groups-settings/v1/reference/groups
-    settings: pulumi.Output[GoogleGroupSettingsDict]
+    settings: pulumi.Output[dict]
 
     def __init__(
         self,
