@@ -207,6 +207,7 @@ class CPGInfrastructure:
                 name=group.name,
                 description=group.description,
                 cache_members=False,
+                group_settings=group.group_settings,
             )
             for member_id in group.members:
                 member = self.config.users.get(member_id)
