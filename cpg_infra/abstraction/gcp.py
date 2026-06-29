@@ -776,23 +776,15 @@ class GcpInfrastructure(CloudInfraBase):
             ),
         )
 
-        # Group settings: allowExternalMembers is governed solely by the global
-        # allow_external_group_members flag (dev accounts lack permission to change
-        # it), so it is stripped from any per-group override to avoid re-enabling
-        # what the flag disables. Other keys (e.g. whoCanPostMessage for a
-        # world-postable group) merge in. Only emit the resource when non-empty.
-        settings: dict[str, str] = {
-            k: v
-            for k, v in (group_settings or {}).items()
-            if k != 'allowExternalMembers'
-        }
-        if self.config.gcp.allow_external_group_members:
-            settings['allowExternalMembers'] = 'true'
-        if settings:
+        # Every Google Group setting (allowExternalMembers, whoCanPostMessage, …)
+        # requires Workspace-admin privileges the deploying identity may lack (dev
+        # deploys), so gate the whole resource rather than individual keys: skip it
+        # entirely when this deploy can't set group settings.
+        if self.config.gcp.can_set_group_settings:
             GoogleGroupSettings(
                 self.get_pulumi_name(name + '-group-settings'),
                 group_email=mail,
-                settings=settings,
+                settings={'allowExternalMembers': 'true', **(group_settings or {})},
                 opts=pulumi.resource.ResourceOptions(depends_on=[group]),
             )
         return group

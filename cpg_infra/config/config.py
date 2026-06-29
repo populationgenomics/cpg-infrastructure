@@ -73,11 +73,12 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         budget_notification_pubsub: str | None
         config_bucket_name: str
         dataset_storage_prefix: str
-        # This is mostly just to allow dev deploys to work, changing the setting to allow
-        # external members on a group requires a high level of access permissions which
-        # we don't want to give to all developers. Setting this to false will stop the
-        # infra code from trying to change that setting
-        allow_external_group_members: bool = True
+        # Whether this deploy may set Google Group settings (allowExternalMembers,
+        # whoCanPostMessage, …). All of them require Workspace-admin privileges most
+        # developers lack, so dev deploys set this False to skip the group-settings
+        # resource entirely and avoid permission-denied failures. (A sibling of
+        # create_empty_groups, which gates a separate group-creation privilege.)
+        can_set_group_settings: bool = True
         # Creating groups without an initial member requires extra access permissions
         # so allow this to be turned off to make dev deploys possible
         create_empty_groups: bool = True
