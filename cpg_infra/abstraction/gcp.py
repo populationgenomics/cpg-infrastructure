@@ -749,6 +749,7 @@ class GcpInfrastructure(CloudInfraBase):
     def create_group(
         self,
         name: str,
+        *,
         description: str | None = None,
         group_settings: dict[str, str] | None = None,
     ) -> Any:
