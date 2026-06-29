@@ -48,7 +48,9 @@ class CPGInfrastructureGroup(DeserializableDataclass):
     members: list[MemberKey] = dataclasses.field(default_factory=list)
     # Extra Google Groups Settings API keys merged into the group's settings,
     # e.g. {'whoCanPostMessage': 'ANYONE_CAN_POST'} to make a group world-postable.
-    # See https://developers.google.com/admin-sdk/groups-settings/v1/reference/groups
+    # Allowed keys are documented by GoogleGroupSettingsDict
+    # (cpg_infra.abstraction.google_group_settings); kept as a plain dict here so
+    # the config deserializer handles it (TypedDicts break its isinstance check).
     group_settings: dict[str, str] = dataclasses.field(default_factory=dict)
 
 
