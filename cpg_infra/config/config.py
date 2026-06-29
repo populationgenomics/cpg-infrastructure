@@ -74,7 +74,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         config_bucket_name: str
         dataset_storage_prefix: str
         # Whether this deploy may set Google Group settings (allowExternalMembers,
-        # whoCanPostMessage, …). All of them require Workspace-admin privileges most
+        # whoCanPostMessage, ...). All of them require Workspace-admin privileges most
         # developers lack, so dev deploys set this False to skip the group-settings
         # resource entirely and avoid permission-denied failures. (A sibling of
         # create_empty_groups, which gates a separate group-creation privilege.)

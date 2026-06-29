@@ -20,7 +20,7 @@ class GoogleGroupSettingsDict(TypedDict, total=False):
     """Documented (partial, non-exhaustive) Google Groups Settings API keys.
 
     The keys cpg_infra sets or is likely to. `total=False`: every key is
-    optional. The `Literal` value sets are the API's enums as of writing — see
+    optional. The `Literal` value sets are the API's enums as of writing -- see
     the authoritative reference for the full/updated key and value lists:
     https://developers.google.com/admin-sdk/groups-settings/v1/reference/groups
     """

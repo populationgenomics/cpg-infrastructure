@@ -776,7 +776,7 @@ class GcpInfrastructure(CloudInfraBase):
             ),
         )
 
-        # Every Google Group setting (allowExternalMembers, whoCanPostMessage, …)
+        # Every Google Group setting (allowExternalMembers, whoCanPostMessage, ...)
         # requires Workspace-admin privileges the deploying identity may lack (dev
         # deploys), so gate the whole resource rather than individual keys: skip it
         # entirely when this deploy can't set group settings.
