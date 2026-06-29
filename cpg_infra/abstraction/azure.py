@@ -440,7 +440,14 @@ class AzureInfra(CloudInfraBase):
     def get_credentials_for_machine_account(self, resource_key, account):
         pass
 
-    def create_group(self, name: str, description: str | None = None) -> Any:
+    def create_group(
+        self,
+        name: str,
+        description: str | None = None,
+        group_settings: dict[str, str] | None = None,
+    ) -> Any:
+        # group_settings are Google Groups Settings keys; Azure AD has no equivalent, so ignore.
+        del group_settings
         return azuread.Group(
             self.get_pulumi_name(name + '-group'),
             display_name=name,

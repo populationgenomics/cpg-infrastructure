@@ -746,7 +746,12 @@ class GcpInfrastructure(CloudInfraBase):
             service_account_id=account.email,
         ).private_key.apply(lambda s: base64.b64decode(s).decode('utf-8'))
 
-    def create_group(self, name: str, description: str | None = None) -> Any:
+    def create_group(
+        self,
+        name: str,
+        description: str | None = None,
+        group_settings: dict[str, str] | None = None,
+    ) -> Any:
         mail = f'{name}@{self.config.gcp.groups_domain}'
 
         # Dev GCP accounts don't have access to create empty groups, so on dev they are
@@ -770,14 +775,20 @@ class GcpInfrastructure(CloudInfraBase):
             ),
         )
 
-        # Only set allowExternalMembers': 'true' if settings specify it
-        # this defaults to True
+        # Group settings: allowExternalMembers (unless disabled — defaults to True)
+        # plus any per-group overrides (e.g. whoCanPostMessage for a world-postable
+        # group). Only emit the settings resource when there is something to set.
+        settings: dict[str, str] = {}
         if self.config.gcp.allow_external_group_members:
             # Allow domain-external members in the group.
+            settings['allowExternalMembers'] = 'true'
+        if group_settings:
+            settings.update(group_settings)
+        if settings:
             GoogleGroupSettings(
                 self.get_pulumi_name(name + '-group-settings'),
                 group_email=mail,
-                settings={'allowExternalMembers': 'true'},
+                settings=settings,
                 opts=pulumi.resource.ResourceOptions(depends_on=[group]),
             )
         return group
