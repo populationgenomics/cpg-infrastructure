@@ -301,6 +301,7 @@ class CloudInfraBase(ABC):
     def create_group(
         self,
         name: str,
+        *,
         description: str | None = None,
         group_settings: dict[str, str] | None = None,
     ) -> Any:
@@ -478,6 +479,7 @@ class DryRunInfra(CloudInfraBase):
     def create_group(
         self,
         name: str,
+        *,
         description: str | None = None,
         group_settings: dict[str, str] | None = None,
     ) -> Any:
