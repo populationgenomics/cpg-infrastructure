@@ -218,6 +218,7 @@ class CPGInfrastructure:
             name: str,
             cache_members: bool,
             members: dict | None = None,
+            description: str | None = None,
         ) -> Group:
             if infra.name() not in self.groups:
                 self.groups[infra.name()] = {}
@@ -228,7 +229,7 @@ class CPGInfrastructure:
                 name=name,
                 cache_members=cache_members,
                 members=members or {},
-                group=infra.create_group(self.group_prefix + name),
+                group=infra.create_group(self.group_prefix + name, description),
             )
             self.groups[infra.name()][name] = group
 
@@ -424,6 +425,7 @@ class CPGInfrastructure:
             cloud_group = self.group_provider.create_group(
                 infra,
                 name=group.name,
+                description=group.description,
                 cache_members=False,
             )
             for member_id in group.members:
