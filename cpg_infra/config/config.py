@@ -161,7 +161,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         @dataclasses.dataclass(frozen=True)
         class GCP(DeserializableDataclass):
             @dataclasses.dataclass(frozen=True)
-            class GCPMetamistDeploys(DeserializableDataclass):
+            class GCPMetamistDeploy(DeserializableDataclass):
                 project: str
                 service_name: str
                 machine_account: str
@@ -177,8 +177,8 @@ class CPGInfrastructureConfig(DeserializableDataclass):
             service_name: str
             legacy_machine_account: str
 
-            dev: GCPMetamistDeploys | None = None
-            prod: GCPMetamistDeploys | None = None
+            dev: GCPMetamistDeploy | None = None
+            prod: GCPMetamistDeploy | None = None
 
         @dataclasses.dataclass(frozen=True)
         class ETLConfiguration(DeserializableDataclass):
