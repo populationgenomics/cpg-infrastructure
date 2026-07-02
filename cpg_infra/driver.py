@@ -805,11 +805,17 @@ class CPGInfrastructure:
             )
 
             group_cache_accessors.append(
-                (self.config.metamist.gcp.prod.service_name, self.config.metamist.gcp.prod.machine_account),
+                (
+                    self.config.metamist.gcp.prod.service_name,
+                    self.config.metamist.gcp.prod.machine_account,
+                ),
             )
 
             group_cache_accessors.append(
-                (self.config.metamist.gcp.dev.service_name, self.config.metamist.gcp.dev.machine_account),
+                (
+                    self.config.metamist.gcp.dev.service_name,
+                    self.config.metamist.gcp.dev.machine_account,
+                ),
             )
 
         if self.config.web_service:
@@ -2661,15 +2667,14 @@ class CPGDatasetCloudInfrastructure:
         )
 
         self.main_list_group.add_member(
-            self.infra.get_pulumi_name('metamist-service-account-in-main-list'),
+            self.infra.get_pulumi_name('metamist-prod-service-account-in-main-list'),
             self.infra.config.metamist.gcp.prod.machine_account,
         )
 
         self.main_list_group.add_member(
-            self.infra.get_pulumi_name('metamist-service-account-in-main-list'),
+            self.infra.get_pulumi_name('metamist-dev-service-account-in-main-list'),
             self.infra.config.metamist.gcp.dev.machine_account,
         )
-
 
     def setup_metamist_cloudrun_permissions(self):
         # now we give the metamist_access_group access to cloud-run instance
