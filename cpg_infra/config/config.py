@@ -175,9 +175,10 @@ class CPGInfrastructureConfig(DeserializableDataclass):
             # etl plugin will continue to work
             project: str
             service_name: str
-            machine_account: str
+            legacy_machine_account: str
 
-            dev: list[GCPMetamistDeploys] | None = None
+            dev: GCPMetamistDeploys | None = None
+            prod: GCPMetamistDeploys | None = None
 
         @dataclasses.dataclass(frozen=True)
         class ETLConfiguration(DeserializableDataclass):
@@ -202,13 +203,6 @@ class CPGInfrastructureConfig(DeserializableDataclass):
             private_repo_packages: list[str] | None = None
             # Custom audience list for the Cloud Run Security
             custom_audience_list: dict[str, list[str]] | None = None
-
-        def all_gcp_deploys(self) -> list[GCP]:
-            if not self.gcp.dev:
-                return [self.gcp]
-
-            dev_deploys = [self.GCP(**dev.__dict__) for dev in self.gcp.dev]
-            return [self.gcp, *dev_deploys]
 
         gcp: GCP
         etl: ETLConfiguration | None = None

@@ -800,10 +800,17 @@ class CPGInfrastructure:
             )
 
         if self.config.metamist:
-            for index, service in enumerate(self.config.metamist.all_gcp_deploys()):
-                group_cache_accessors.append(
-                    (f'{service.service_name}-{index}', service.machine_account),
-                )
+            group_cache_accessors.append(
+                ('sample-metadata', self.config.metamist.gcp.legacy_machine_account),
+            )
+
+            group_cache_accessors.append(
+                (self.config.metamist.gcp.prod.service_name, self.config.metamist.gcp.prod.machine_account),
+            )
+
+            group_cache_accessors.append(
+                (self.config.metamist.gcp.dev.service_name, self.config.metamist.gcp.dev.machine_account),
+            )
 
         if self.config.web_service:
             group_cache_accessors.append(
@@ -869,13 +876,26 @@ class CPGInfrastructure:
 
         assert self.config.metamist
 
-        for index, service in enumerate(self.config.metamist.all_gcp_deploys()):
-            infra.add_cloudrun_invoker(
-                f'sample-metadata-cloudrun-invokers-{service.service_name}-{index}',
-                service=service.service_name,
-                project=service.project,
-                member=self.gcp_metamist_invoker_group,
-            )
+        infra.add_cloudrun_invoker(
+            'sample-metadata-cloudrun-invokers',
+            service=self.config.metamist.gcp.service_name,
+            project=self.config.metamist.gcp.project,
+            member=self.gcp_metamist_invoker_group,
+        )
+
+        infra.add_cloudrun_invoker(
+            'metamist-cloudrun-invokers',
+            service=self.config.metamist.gcp.prod.service_name,
+            project=self.config.metamist.gcp.prod.project,
+            member=self.gcp_metamist_invoker_group,
+        )
+
+        infra.add_cloudrun_invoker(
+            'metamist-dev-cloudrun-invokers',
+            service=self.config.metamist.gcp.dev.service_name,
+            project=self.config.metamist.gcp.dev.project,
+            member=self.gcp_metamist_invoker_group,
+        )
 
     @cached_property
     def gcp_python_registry(self):
@@ -2635,14 +2655,21 @@ class CPGDatasetCloudInfrastructure:
         # add metamist machine account to the `main-list` group for the dataset.
         # this group gives list access to the dataset buckets but grants no ability
         # to read the actual contents of objects
-        assert self.infra.config.metamist
-        for index, service in enumerate(self.infra.config.metamist.all_gcp_deploys()):
-            self.main_list_group.add_member(
-                self.infra.get_pulumi_name(
-                    f'metamist-service-account-in-main-list-{service.service_name}-{index}',
-                ),
-                service.machine_account,
-            )
+        self.main_list_group.add_member(
+            self.infra.get_pulumi_name('metamist-service-account-in-main-list'),
+            self.infra.config.metamist.gcp.legacy_machine_account,
+        )
+
+        self.main_list_group.add_member(
+            self.infra.get_pulumi_name('metamist-service-account-in-main-list'),
+            self.infra.config.metamist.gcp.prod.machine_account,
+        )
+
+        self.main_list_group.add_member(
+            self.infra.get_pulumi_name('metamist-service-account-in-main-list'),
+            self.infra.config.metamist.gcp.dev.machine_account,
+        )
+
 
     def setup_metamist_cloudrun_permissions(self):
         # now we give the metamist_access_group access to cloud-run instance
