@@ -804,6 +804,20 @@ class CPGInfrastructure:
                 ('sample-metadata', self.config.metamist.gcp.legacy_machine_account),
             )
 
+            group_cache_accessors.append(
+                (
+                    self.config.metamist.gcp.prod.service_name,
+                    self.config.metamist.gcp.prod.machine_account,
+                ),
+            )
+
+            group_cache_accessors.append(
+                (
+                    self.config.metamist.gcp.dev.service_name,
+                    self.config.metamist.gcp.dev.machine_account,
+                ),
+            )
+
         if self.config.web_service:
             group_cache_accessors.append(
                 ('web-service', self.config.web_service.gcp.server_machine_account),
@@ -872,6 +886,20 @@ class CPGInfrastructure:
             'sample-metadata-cloudrun-invokers',
             service=self.config.metamist.gcp.service_name,
             project=self.config.metamist.gcp.project,
+            member=self.gcp_metamist_invoker_group,
+        )
+
+        infra.add_cloudrun_invoker(
+            'metamist-cloudrun-invokers',
+            service=self.config.metamist.gcp.prod.service_name,
+            project=self.config.metamist.gcp.prod.project,
+            member=self.gcp_metamist_invoker_group,
+        )
+
+        infra.add_cloudrun_invoker(
+            'metamist-dev-cloudrun-invokers',
+            service=self.config.metamist.gcp.dev.service_name,
+            project=self.config.metamist.gcp.dev.project,
             member=self.gcp_metamist_invoker_group,
         )
 
@@ -2635,12 +2663,17 @@ class CPGDatasetCloudInfrastructure:
         # to read the actual contents of objects
         self.main_list_group.add_member(
             self.infra.get_pulumi_name('metamist-service-account-in-main-list'),
-            self.infra.config.metamist.gcp.machine_account,
+            self.infra.config.metamist.gcp.legacy_machine_account,
         )
 
         self.main_list_group.add_member(
-            self.infra.get_pulumi_name('metamist-service-account-in-main-list'),
-            self.infra.config.metamist.gcp.legacy_machine_account,
+            self.infra.get_pulumi_name('metamist-prod-service-account-in-main-list'),
+            self.infra.config.metamist.gcp.prod.machine_account,
+        )
+
+        self.main_list_group.add_member(
+            self.infra.get_pulumi_name('metamist-dev-service-account-in-main-list'),
+            self.infra.config.metamist.gcp.dev.machine_account,
         )
 
     def setup_metamist_cloudrun_permissions(self):

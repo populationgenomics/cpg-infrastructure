@@ -160,10 +160,25 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     class Metamist(DeserializableDataclass):
         @dataclasses.dataclass(frozen=True)
         class GCP(DeserializableDataclass):
+            @dataclasses.dataclass(frozen=True)
+            class GCPMetamistDeploy(DeserializableDataclass):
+                project: str
+                service_name: str
+                machine_account: str
+
+            # Weird structure explained:
+            # The project service_name and machine account are left as-is
+            # so the metamist etl infrastructure code defined in the metamist
+            # repo still work. Any additional deploys go into the dev list
+
+            # This way all of the infra.metamist.gcp.project references in the
+            # etl plugin will continue to work
             project: str
             service_name: str
-            machine_account: str
             legacy_machine_account: str
+
+            dev: GCPMetamistDeploy | None = None
+            prod: GCPMetamistDeploy | None = None
 
         @dataclasses.dataclass(frozen=True)
         class ETLConfiguration(DeserializableDataclass):
