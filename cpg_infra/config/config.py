@@ -46,6 +46,12 @@ class CPGInfrastructureGroup(DeserializableDataclass):
     name: str
     description: str
     members: list[MemberKey] = dataclasses.field(default_factory=list)
+    # Extra Google Groups Settings API keys merged into the group's settings,
+    # e.g. {'whoCanPostMessage': 'ANYONE_CAN_POST'} to make a group world-postable.
+    # Allowed keys are documented by GoogleGroupSettingsDict
+    # (cpg_infra.abstraction.google_group_settings); kept as a plain dict here so
+    # the config deserializer handles it (TypedDicts break its isinstance check).
+    group_settings: dict[str, str] = dataclasses.field(default_factory=dict)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -67,11 +73,12 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         budget_notification_pubsub: str | None
         config_bucket_name: str
         dataset_storage_prefix: str
-        # This is mostly just to allow dev deploys to work, changing the setting to allow
-        # external members on a group requires a high level of access permissions which
-        # we don't want to give to all developers. Setting this to false will stop the
-        # infra code from trying to change that setting
-        allow_external_group_members: bool = True
+        # Whether this deploy may set Google Group settings (allowExternalMembers,
+        # whoCanPostMessage, ...). All of them require Workspace-admin privileges most
+        # developers lack, so dev deploys set this False to skip the group-settings
+        # resource entirely and avoid permission-denied failures. (A sibling of
+        # create_empty_groups, which gates a separate group-creation privilege.)
+        can_set_group_settings: bool = True
         # Creating groups without an initial member requires extra access permissions
         # so allow this to be turned off to make dev deploys possible
         create_empty_groups: bool = True
