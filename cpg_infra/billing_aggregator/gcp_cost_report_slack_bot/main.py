@@ -14,9 +14,11 @@ from typing import Any, Generator, Tuple
 import flask
 import functions_framework
 import slack
+from billing_status import apply_unlinked_to_summary, get_unlinked_project_ids
 from google.auth import default
 from google.cloud import bigquery, secretmanager
 from google.cloud.billing import budgets_v1 as budget
+from google.cloud.billing_v1 import CloudBillingClient
 from pytz import timezone
 from slack.errors import SlackApiError
 
@@ -118,6 +120,7 @@ slack_client = slack.WebClient(token=slack_token)
 
 bigquery_client = bigquery.Client()
 budget_client = budget.BudgetServiceClient()
+cloud_billing_client = CloudBillingClient()
 
 
 # Cache the budgets for the billing account.
@@ -350,6 +353,27 @@ def slack_bot_cost_report(request: flask.Request):
         )
         return 'Nothing to log', 204
 
+    # Flag projects whose billing account has been unlinked/disabled so they
+    # appear at the top of the flagged list until billing is re-linked. The
+    # candidate set is the union of every project with a budget and every
+    # project in the cost report (excluding the '<none>' bucket).
+    candidate_project_ids = (
+        set(get_budget_map().keys()) | set(project_summary.keys())
+    ) - {'<none>'}
+    unlinked_project_ids = get_unlinked_project_ids(
+        candidate_project_ids,
+        cloud_billing_client,
+    )
+    if unlinked_project_ids:
+        logging.info(
+            f'Projects with unlinked billing: {sorted(unlinked_project_ids)}',
+        )
+    apply_unlinked_to_summary(
+        project_summary,
+        unlinked_project_ids,
+        make_project_link=lambda pid: f'<{billing_link(pid)}|*{pid}*>',
+    )
+
     # Format the totals and add them to the totals summary
     for currency, by_category in totals.items():
         fields: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
@@ -416,9 +440,12 @@ def post_slack_message(
 
     is_monday = datetime.now(tz=TIMEZONE).weekday() == 0
 
-    # Next, if we are posting today add hail to the flagged projects at the bottom
+    # Always surface the hail project in the flagged section, but only once. If
+    # hail is over budget it is already in flagged_projects (and bolded by
+    # format_billing_row), so appending it again would list it twice (SET-588).
     hail_project = [x for x in project_summary_keys_sorted if 'hail' in x].pop()
-    flagged_projects.append(project_summary[hail_project]['value'])
+    if not project_summary[hail_project]['sort'][0]:
+        flagged_projects.append(project_summary[hail_project]['value'])
     all_rows = [*totals_summary, *sorted_projects]
 
     def chunk_list(lst: list, n: int) -> Generator[list, None, None]:
