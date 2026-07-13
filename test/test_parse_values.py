@@ -2,11 +2,21 @@
 Test module for checking the parsing of values in the config
 """
 
-from typing import Any, Literal
+from typing import Any, Literal, Optional, TypedDict, TypeVar, Union
 from unittest import TestCase
 
 from cpg_infra.config import CPGDatasetConfig, CPGInfrastructureConfig
 from cpg_infra.config.deserializabledataclass import try_parse_value_as_type
+
+
+class _Settings(TypedDict, total=False):
+    """A TypedDict used to check pass-through parsing."""
+
+    who_can_post: str
+
+
+# A non-class type used to check TypeError-free handling of exotic constructs.
+T = TypeVar('T')
 
 
 class TestParseValues(TestCase):
@@ -199,3 +209,69 @@ class TestParseValues(TestCase):
         self.assertEqual(1, try_parse_value_as_type(1, Any))
         self.assertEqual('hi', try_parse_value_as_type('hi', Any))
         self.assertEqual({'hi': 'world'}, try_parse_value_as_type({'hi': 'world'}, Any))
+
+    def test_variable_length_tuple(self):
+        """tuple[X, ...] coerces every element to X, regardless of length"""
+        dtype = tuple[int, ...]
+        self.assertTupleEqual((), try_parse_value_as_type([], dtype))
+        self.assertTupleEqual((1,), try_parse_value_as_type(['1'], dtype))
+        self.assertTupleEqual(
+            (1, 2, 3),
+            try_parse_value_as_type(['1', '2', '3'], dtype),
+        )
+
+    def test_variable_length_tuple_failure(self):
+        """tuple[X, ...] rejects an element that can't be coerced to X"""
+        dtype = tuple[int, ...]
+        with self.assertRaises(ValueError):
+            try_parse_value_as_type(['1', 'nope'], dtype)
+
+    def test_typing_union(self):
+        """typing.Union (not just `X | Y`) is routed through union parsing"""
+        dtype = Union[int, str]
+        self.assertEqual(1, try_parse_value_as_type('1', dtype))
+        self.assertEqual('hello', try_parse_value_as_type('hello', dtype))
+
+    def test_typing_optional_none(self):
+        """Optional[X] accepts None"""
+        dtype = Optional[int]
+        self.assertIsNone(try_parse_value_as_type(None, dtype))
+        self.assertEqual(1, try_parse_value_as_type('1', dtype))
+
+    def test_union_failure_chains_cause(self):
+        """A failed union coercion chains the first branch error as its cause"""
+        with self.assertRaises(ValueError) as ctx:
+            try_parse_value_as_type('hello', int | float)
+        self.assertIsInstance(ctx.exception.__cause__, ValueError)
+
+    def test_typeddict_passthrough(self):
+        """A TypedDict is treated as a plain dict: any mapping passes, unvalidated"""
+        value = {'who_can_post': 'ANYONE', 'unlisted_key': 123}
+        self.assertDictEqual(value, try_parse_value_as_type(value, _Settings))
+
+    def test_typeddict_rejects_non_dict(self):
+        """A TypedDict field still rejects a non-dict value"""
+        with self.assertRaises(ValueError):
+            try_parse_value_as_type(['not', 'a', 'dict'], _Settings)
+
+    def test_dataclass_instance_passthrough(self):
+        """An already-deserialised dataclass instance passes through unchanged"""
+        instance = try_parse_value_as_type(
+            {'dataset': 'DATASET', 'budgets': {}, 'gcp': {'project': 'dataset-1234'}},
+            CPGDatasetConfig,
+        )
+        self.assertIs(
+            instance,
+            try_parse_value_as_type(instance, CPGDatasetConfig),
+        )
+
+    def test_non_class_type_raises_value_error(self):
+        """A non-class type (e.g. a TypeVar) raises ValueError, not TypeError"""
+        with self.assertRaises(ValueError):
+            try_parse_value_as_type(1, T)
+
+    def test_union_with_non_class_branch_falls_through(self):
+        """A non-class union branch is skipped so a valid branch still matches"""
+        # a lone TypeVar branch is the point of this test
+        dtype = Union[T, int]  # type: ignore[valid-type]
+        self.assertEqual(1, try_parse_value_as_type('1', dtype))
