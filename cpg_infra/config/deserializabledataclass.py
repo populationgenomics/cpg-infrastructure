@@ -195,8 +195,9 @@ def try_parse_value_as_type(value: Any, dtype: Any) -> Any:
 
     # Otherwise dtype resolves to a concrete class: the generic's origin
     # (`list[str]` -> list) or the bare type itself (dict, a TypedDict, a
-    # DeserializableDataclass, int, ...).
-    cls = origin or dtype
+    # DeserializableDataclass, int, ...). Typed Any: origin/dtype are dynamic
+    # type objects that the isclass guard below narrows at runtime.
+    cls: Any = origin or dtype
 
     # Parameterised/bare containers, with element coercion.
     if parser := CONTAINER_PARSERS.get(cls):
@@ -213,7 +214,7 @@ def try_parse_value_as_type(value: Any, dtype: Any) -> Any:
         match value:
             case dict():
                 return cls.instantiate(**value)
-            case cls():  # already deserialised -- pass through
+            case _ if isinstance(value, cls):  # already deserialised -- pass through
                 return value
             case _:
                 raise ValueError(f'Expected dict, got {type(value)} for {value!r}')
