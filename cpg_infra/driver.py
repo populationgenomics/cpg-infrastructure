@@ -7,7 +7,6 @@ import json
 import os.path
 import re
 from collections import defaultdict
-from dataclasses import asdict
 from functools import cached_property
 from typing import Any, Callable, Iterable, Iterator, NamedTuple, Type
 
@@ -701,7 +700,7 @@ class CPGInfrastructure:
                     dropbox_uploaders.append(user_id)
 
                 all_dropboxes.append(
-                    asdict(dropbox)
+                    dropbox.model_dump()
                     | {'project': project, 'uploaders': dropbox_uploaders}
                 )
 
@@ -3378,7 +3377,9 @@ class CPGDatasetCloudInfrastructure:
 def test():
     infra_config_dict = dict(cpg_utils.config.get_config(print_config=False))
     infra_config_dict['infrastructure']['reference_dataset'] = 'fewgenomes'
-    infra_config = CPGInfrastructureConfig.from_dict(infra_config_dict)
+    infra_config = CPGInfrastructureConfig.model_validate(
+        infra_config_dict.get('infrastructure', infra_config_dict),
+    )
 
     configs = [
         CPGDatasetConfig(

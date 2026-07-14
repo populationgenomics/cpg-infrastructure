@@ -6,8 +6,8 @@ This repository contains all the driving code to build our pulumi stack, but non
 
 ```python
 # inside a pulumi context
-config = CPGInfrastructureConfig.from_dict(...)
-datasets = [CPGDatasetConfig.from_dict(...) for d in _datasets]
+config = CPGInfrastructureConfig.model_validate(...)
+datasets = [CPGDatasetConfig.model_validate(...) for d in _datasets]
 infra = CPGInfrastructure(config, datasets)
 infra.main()
 ```
