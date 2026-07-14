@@ -299,7 +299,7 @@ class CPGDatasetComponents(Enum):
 class HailAccount(ConfigModel):
     """Represents a hail account on a specific cloud.
 
-    cloud_id can hold a pulumi.Output constructed at runtime, pydantic doesn't know 
+    cloud_id can hold a pulumi.Output constructed at runtime, pydantic doesn't know
     about this type so need to allow arbitrary types for this model.
     """
 

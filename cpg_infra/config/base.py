@@ -19,6 +19,6 @@ class ConfigModel(BaseModel):
     model_config = ConfigDict(frozen=True, extra='forbid')
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> Self:
+    def from_dict(cls: type[Self], d: dict[str, Any]) -> Self:
         """Allow for places that still use from_dict, just alias to model_validate"""
         return cls.model_validate(d)
