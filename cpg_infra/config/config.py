@@ -1,17 +1,17 @@
-# flake8: noqa: ANN102,ANN204,ANN206,,C901,ANN401,PLR2004mERA001
+# flake8: noqa: ANN102,ANN204,ANN206,C901,ANN401,PLR2004,ERA001
 """
 This module contains all the configuration objects that are used to
 describe the CPG infrastructure, including what's required from a
 specific dataset.
 """
 
-import dataclasses
 from enum import Enum
 from typing import Any, Literal
 
-import toml
+import pulumi
+from pydantic import Field
 
-from cpg_infra.config.deserializabledataclass import DeserializableDataclass
+from cpg_infra.config.base import ConfigModel
 
 MemberKey = str
 GroupType = str
@@ -21,16 +21,15 @@ GroupName = Literal[
     'analysis',
     'metadata-access',
     'metadata-contribute',
+    'metadata-write',
     'web-access',
     'release-access',
     'tmp-main-read-access',
 ]
 
 
-@dataclasses.dataclass(frozen=True)
-class CPGInfrastructureUser(DeserializableDataclass):
-    @dataclasses.dataclass(frozen=True)
-    class Cloud(DeserializableDataclass):
+class CPGInfrastructureUser(ConfigModel):
+    class Cloud(ConfigModel):
         id: str  # noqa: RUF100, A003
         hail_batch_username: str | None = None
 
@@ -39,17 +38,15 @@ class CPGInfrastructureUser(DeserializableDataclass):
     can_access_internal_dataset_logs: bool = False
 
 
-@dataclasses.dataclass(frozen=True)
-class CPGInfrastructureGroup(DeserializableDataclass):
+class CPGInfrastructureGroup(ConfigModel):
     """Represents an additional adhoc group under infrastructure management"""
 
     name: str
     description: str
-    members: list[MemberKey] = dataclasses.field(default_factory=list)
+    members: list[MemberKey] = Field(default_factory=list)
 
 
-@dataclasses.dataclass(frozen=True)
-class CPGInfrastructureConfig(DeserializableDataclass):
+class CPGInfrastructureConfig(ConfigModel):
     """
     Configuration that describes all variables required to instantiate the
     CPG infrastructure.
@@ -59,8 +56,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     the correct keys.
     """
 
-    @dataclasses.dataclass(frozen=True)
-    class GCP(DeserializableDataclass):
+    class GCP(ConfigModel):
         customer_id: str
         region: str
         groups_domain: str
@@ -76,26 +72,22 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         # so allow this to be turned off to make dev deploys possible
         create_empty_groups: bool = True
 
-    @dataclasses.dataclass(frozen=True)
-    class Azure(DeserializableDataclass):
+    class Azure(ConfigModel):
         region: str
         subscription: str
         tenant: str
         dataset_storage_prefix: str
         config_bucket_name: str
 
-    @dataclasses.dataclass(frozen=True)
-    class Hail(DeserializableDataclass):
-        @dataclasses.dataclass(frozen=True)
-        class GCP(DeserializableDataclass):
+    class Hail(ConfigModel):
+        class GCP(ConfigModel):
             hail_batch_url: str
             hail_auth_url: str
             git_credentials_secret_name: str | None = None
             git_credentials_secret_project: str | None = None
             wheel_bucket_name: str | None = None
 
-        @dataclasses.dataclass(frozen=True)
-        class Azure(DeserializableDataclass):
+        class Azure(ConfigModel):
             hail_batch_url: str
             hail_auth_url: str
 
@@ -103,10 +95,8 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         azure: Azure | None = None
         username_prefix: str | None = None
 
-    @dataclasses.dataclass(frozen=True)
-    class AnalysisRunner(DeserializableDataclass):
-        @dataclasses.dataclass(frozen=True)
-        class GCP(DeserializableDataclass):
+    class AnalysisRunner(ConfigModel):
+        class GCP(ConfigModel):
             project: str
             cloud_run_instance_name: str
             server_machine_account: str
@@ -115,60 +105,48 @@ class CPGInfrastructureConfig(DeserializableDataclass):
 
         gcp: GCP
 
-    @dataclasses.dataclass(frozen=True)
-    class DataDropbox(DeserializableDataclass):
-        @dataclasses.dataclass(frozen=True)
-        class GCP(DeserializableDataclass):
+    class DataDropbox(ConfigModel):
+        class GCP(ConfigModel):
             project: str
             server_machine_account: str
 
         gcp: GCP
 
-    @dataclasses.dataclass(frozen=True)
-    class WebService(DeserializableDataclass):
+    class WebService(ConfigModel):
         """
         This is a CPG-specific configuration that allows a
         web-server to serve static files from a bucket.
         """
 
-        @dataclasses.dataclass(frozen=True)
-        class GCP(DeserializableDataclass):
+        class GCP(ConfigModel):
             server_machine_account: str
 
         gcp: GCP
         # The template is a string that can be formatted with: namespace, dataset
         web_url_template: str | None = None
 
-    @dataclasses.dataclass(frozen=True)
-    class Notebooks(DeserializableDataclass):
-        @dataclasses.dataclass(frozen=True)
-        class GCP(DeserializableDataclass):
+    class Notebooks(ConfigModel):
+        class GCP(ConfigModel):
             project: str
 
         gcp: GCP
 
-    @dataclasses.dataclass(frozen=True)
-    class Cromwell(DeserializableDataclass):
-        @dataclasses.dataclass(frozen=True)
-        class GCP(DeserializableDataclass):
+    class Cromwell(ConfigModel):
+        class GCP(ConfigModel):
             access_group_id: str
             runner_machine_account: str
 
         gcp: GCP
 
-    @dataclasses.dataclass(frozen=True)
-    class Metamist(DeserializableDataclass):
-        @dataclasses.dataclass(frozen=True)
-        class GCP(DeserializableDataclass):
+    class Metamist(ConfigModel):
+        class GCP(ConfigModel):
             project: str
             service_name: str
             machine_account: str
             legacy_machine_account: str
 
-        @dataclasses.dataclass(frozen=True)
-        class ETLConfiguration(DeserializableDataclass):
-            @dataclasses.dataclass(frozen=True)
-            class ETLParserConfiguration(DeserializableDataclass):
+        class ETLConfiguration(ConfigModel):
+            class ETLParserConfiguration(ConfigModel):
                 # the name of the entrypoint (metamist_parser) to look up the parser
                 parser_name: str
                 # the list of etl-accessors defined in the config
@@ -193,18 +171,15 @@ class CPGInfrastructureConfig(DeserializableDataclass):
         etl: ETLConfiguration | None = None
         slack_channel: str | None = None
 
-    @dataclasses.dataclass(frozen=True)
-    class Billing(DeserializableDataclass):
-        @dataclasses.dataclass(frozen=True)
-        class GCP(DeserializableDataclass):
+    class Billing(ConfigModel):
+        class GCP(ConfigModel):
             """Details of the BILLING account"""
 
             project_id: str
             account_id: str
             source_bq_table: str | None = None
 
-        @dataclasses.dataclass(frozen=True)
-        class GCPAggregator(DeserializableDataclass):
+        class GCPAggregator(ConfigModel):
             destination_bq_table: str
             slack_channel: str
             slack_token_secret_name: str
@@ -215,8 +190,7 @@ class CPGInfrastructureConfig(DeserializableDataclass):
             ica_raw_table: str | None = None
             ica_api_secret_name: str | None = None
 
-        @dataclasses.dataclass(frozen=True)
-        class GCPCostControls(DeserializableDataclass):
+        class GCPCostControls(ConfigModel):
             """Config required for the GCP cost control that disables billing"""
 
             machine_account: str
@@ -286,21 +260,9 @@ class CPGInfrastructureConfig(DeserializableDataclass):
     group_prefix: str | None = None
 
     # The default budget notification thresholds
-    budget_notification_thresholds: list[float] = dataclasses.field(
+    budget_notification_thresholds: list[float] = Field(
         default_factory=lambda: [0.5, 0.9, 1.0],
     )
-
-    @staticmethod
-    def from_toml(path: str) -> 'CPGInfrastructureConfig':
-        with open(path, encoding='utf-8') as f:
-            d = toml.load(f)
-        return CPGInfrastructureConfig.from_dict(d)
-
-    @staticmethod
-    def from_dict(d: dict[str, Any]) -> 'CPGInfrastructureConfig':
-        if 'infrastructure' in d:
-            d = d['infrastructure']
-        return CPGInfrastructureConfig(**d)
 
 
 class CPGDatasetComponents(Enum):
@@ -334,44 +296,37 @@ class CPGDatasetComponents(Enum):
         }
 
 
-@dataclasses.dataclass(frozen=True)
-class HailAccount(DeserializableDataclass):
-    """Represents a hail account on a specific cloud"""
+class HailAccount(ConfigModel):
+    """Represents a hail account on a specific cloud.
+
+    cloud_id can hold a pulumi.Output constructed at runtime, pydantic doesn't know
+    about this type so need to allow arbitrary types for this model.
+    """
+
+    # pulumi.Output isn't a pydantic-native type, so relax validation just here
+    model_config = ConfigModel.model_config | {'arbitrary_types_allowed': True}
 
     username: str
-    # give this type: any, because DeserializableDataclass doesn't support checking this type
-    cloud_id: Any  # type str | pulumi.Output[str]
+    cloud_id: str | pulumi.Output[str]
 
 
-@dataclasses.dataclass(frozen=True)
-class CPGDatasetConfig(DeserializableDataclass):
+class CPGDatasetConfig(ConfigModel):
     """
     Configuration that describes the minimum information
     required to construct the dataset infrastructure
     """
 
-    def __post_init__(self):
-        try:
-            super().__post_init__()
-        except TypeError as e:
-            raise TypeError(
-                f'Could not instantiate {self.__class__.__name__} for {self.dataset!r}: {e!s}',
-            ) from e
-
-    @dataclasses.dataclass(frozen=True)
-    class Gcp(DeserializableDataclass):
+    class Gcp(ConfigModel):
         project: str
         region: str | None = None
         # Allow for cases where the hail service accounts were created manually
         # and do not match the dataset name
         hail_service_account_dataset_name_override: str | None = None
 
-    @dataclasses.dataclass(frozen=True)
-    class Azure(DeserializableDataclass):
+    class Azure(ConfigModel):
         region: str | None = None
 
-    @dataclasses.dataclass(frozen=True)
-    class Budget(DeserializableDataclass):
+    class Budget(ConfigModel):
         # dollars
 
         monthly_budget: int
@@ -379,19 +334,15 @@ class CPGDatasetConfig(DeserializableDataclass):
         # if overriding from the default CpgInfrastructure.currency
         currency: str | None = None
 
-    @dataclasses.dataclass(frozen=True)
-    class UploadConfig(DeserializableDataclass):
-        @dataclasses.dataclass(frozen=True)
-        class DefaultUploadBucketConfig(DeserializableDataclass):
+    class UploadConfig(ConfigModel):
+        class DefaultUploadBucketConfig(ConfigModel):
             uploaders: list[str] | None = None
 
-        @dataclasses.dataclass(frozen=True)
-        class AdditionalUploadBucketConfig(DeserializableDataclass):
+        class AdditionalUploadBucketConfig(ConfigModel):
             name: str
             uploaders: list[str] | None = None
 
-        @dataclasses.dataclass(frozen=True)
-        class UploadDropboxConfig(DeserializableDataclass):
+        class UploadDropboxConfig(ConfigModel):
             id: str
             name: str
             allowed_filetypes: list[str]
@@ -431,7 +382,7 @@ class CPGDatasetConfig(DeserializableDataclass):
     create_container_registry: bool = False
 
     # which clouds do you want to deploy to?
-    deploy_locations: list[CloudName] = dataclasses.field(
+    deploy_locations: list[CloudName] = Field(
         default_factory=lambda: ['gcp'],
     )
 
@@ -450,13 +401,13 @@ class CPGDatasetConfig(DeserializableDataclass):
     allow_notebook_tmp_main_read: bool = False
 
     # give FULL access to these datasets, as this dataset depends_on them
-    depends_on: list[str] = dataclasses.field(default_factory=list)
+    depends_on: list[str] = Field(default_factory=list)
     # give READONLY access to these datasets, as this dataset needs it
-    depends_on_readonly: list[str] = dataclasses.field(default_factory=list)
+    depends_on_readonly: list[str] = Field(default_factory=list)
 
     # convenience place for plumbing extra service-accounts for SM
-    sm_read_only_sas: list[str] = dataclasses.field(default_factory=list)
-    sm_read_write_sas: list[str] = dataclasses.field(default_factory=list)
+    sm_read_only_sas: list[str] = Field(default_factory=list)
+    sm_read_write_sas: list[str] = Field(default_factory=list)
 
     # Grace period for archive storage tier buckets.
     archive_age: int = 0
@@ -466,20 +417,11 @@ class CPGDatasetConfig(DeserializableDataclass):
     autoclass: bool = True
 
     # which components should this dataset deploy on each cloud
-    components: dict[CloudName, list[CPGDatasetComponents]] = dataclasses.field(
+    components: dict[CloudName, list[CPGDatasetComponents]] = Field(
         default_factory=dict,
     )
 
     # Which users to do you want to be a part of each group.
-    members: dict[GroupName, list[MemberKey]] = dataclasses.field(default_factory=dict)
+    members: dict[GroupName, list[MemberKey]] = Field(default_factory=dict)
 
     upload_config: UploadConfig | None = None
-
-    @classmethod
-    def instantiate(cls, **kwargs: dict[str, Any]):
-        if components := kwargs.get('components'):
-            kwargs['components'] = {
-                k: [CPGDatasetComponents(c) for c in comps]
-                for k, comps in components.items()
-            }
-        return super().instantiate(**kwargs)

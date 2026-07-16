@@ -1,4 +1,4 @@
-# flake8: noqa: ERA001, ANN204
+# flake8: noqa: ERA001, ANN204, ANN102
 """
 GitHub Workload Identity Federation (WIF) setup for Pulumi
 
@@ -8,15 +8,15 @@ GCP Workload Identity Federation for OIDC authentication and Artifact Registry a
 It also includes PAM broker service account setup for Privileged Access Manager.
 """
 
-import dataclasses
 import re
 from typing import Any, Literal
 
 import pulumi
 import pulumi_gcp as gcp
 import pulumi_github as github
+from pydantic import Field, field_validator
 
-from cpg_infra.config.deserializabledataclass import DeserializableDataclass
+from cpg_infra.config.base import ConfigModel
 
 # Constants
 WIF_POOL_NAME = 'github-pool'
@@ -30,35 +30,34 @@ SA_NAME_MAX_LENGTH = 30
 PAM_BROKER_SA_NAME = 'pam-broker'
 
 
-@dataclasses.dataclass(frozen=True)
-class GitHubWIFEnvironment(DeserializableDataclass):
+class GitHubWIFEnvironment(ConfigModel):
     """Configuration for a single GitHub environment (e.g., development, production)."""
 
     name: str
     push_registry: str
-    read_registries: list[str] = dataclasses.field(default_factory=list)
+    read_registries: list[str] = Field(default_factory=list)
 
 
-@dataclasses.dataclass(frozen=True)
-class GitHubWIFRepository(DeserializableDataclass):
+class GitHubWIFRepository(ConfigModel):
     """Configuration for a single GitHub repository."""
 
     name: str
     github_repo: str
     environments: list[GitHubWIFEnvironment]
 
-    def __post_init__(self):
+    @field_validator('github_repo')
+    @classmethod
+    def _require_org_slash_repo(cls, v: str) -> str:
         """Validate repository configuration."""
-        super().__post_init__()
-        if '/' not in self.github_repo:
+        if '/' not in v:
             raise ValueError(
-                f"Invalid github_repo format: '{self.github_repo}'. "
+                f"Invalid github_repo format: '{v}'. "
                 f"Expected format: 'org/repo' (e.g., 'populationgenomics/my-repo')"
             )
+        return v
 
 
-@dataclasses.dataclass(frozen=True)
-class GitHubWIFProject(DeserializableDataclass):
+class GitHubWIFProject(ConfigModel):
     """Configuration for a single GCP project with WIF repositories."""
 
     project_number: str
@@ -66,8 +65,7 @@ class GitHubWIFProject(DeserializableDataclass):
     repositories: list[GitHubWIFRepository]
 
 
-@dataclasses.dataclass(frozen=True)
-class PAMBrokerConfig(DeserializableDataclass):
+class PAMBrokerConfig(ConfigModel):
     """Configuration for PAM broker GitHub WIF setup."""
 
     project_id: str
@@ -78,17 +76,11 @@ class PAMBrokerConfig(DeserializableDataclass):
     github_environment: str
 
 
-@dataclasses.dataclass(frozen=True)
-class GitHubWIFConfig(DeserializableDataclass):
+class GitHubWIFConfig(ConfigModel):
     """Top-level configuration for GitHub WIF setup."""
 
     projects: dict[str, GitHubWIFProject]
     pam_broker: PAMBrokerConfig | None = None
-
-    @staticmethod
-    def from_dict(config: dict[str, Any]) -> 'GitHubWIFConfig':
-        """Parse and validate configuration from a dictionary."""
-        return GitHubWIFConfig(**config)
 
 
 def sanitize_sa_name(
@@ -407,10 +399,11 @@ def setup_github_wif_infrastructure(
         Empty dictionary (for backwards compatibility)
     """
     # Allow passing dict for backwards compatibility, but convert to typed config
-    if isinstance(config, dict):
-        config = GitHubWIFConfig.from_dict(config)
+    wif_config = (
+        GitHubWIFConfig.model_validate(config) if isinstance(config, dict) else config
+    )
 
-    for project_id, project_config in config.projects.items():
+    for project_id, project_config in wif_config.projects.items():
         project_number = project_config.project_number
         location = project_config.location
 
@@ -477,14 +470,14 @@ def setup_github_wif_infrastructure(
                 )
 
     # Set up PAM broker WIF if configured
-    if config.pam_broker:
+    if wif_config.pam_broker:
         setup_pam_broker_github_wif(
-            project_id=config.pam_broker.project_id,
-            wif_pool_name=config.pam_broker.wif_pool_name,
-            wif_provider_name=config.pam_broker.wif_provider_name,
-            project_number=config.pam_broker.project_number,
-            wif_repository=config.pam_broker.github_repository,
-            wif_environment=config.pam_broker.github_environment,
+            project_id=wif_config.pam_broker.project_id,
+            wif_pool_name=wif_config.pam_broker.wif_pool_name,
+            wif_provider_name=wif_config.pam_broker.wif_provider_name,
+            project_number=wif_config.pam_broker.project_number,
+            wif_repository=wif_config.pam_broker.github_repository,
+            wif_environment=wif_config.pam_broker.github_environment,
         )
 
     return {}
