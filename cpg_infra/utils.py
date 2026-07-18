@@ -3,10 +3,17 @@
 
 import contextlib
 import os
+from typing import Iterable
 
 import pulumi
 
 DEFAULT_ALLOWED_EXTENSIONS = frozenset({'.py', '.txt', '.json'})
+
+
+def access_levels(*, include_test: bool) -> Iterable[str]:
+    if include_test:
+        return ("test", "standard", "full")
+    return ("standard", "full")
 
 
 def archive_folder(
