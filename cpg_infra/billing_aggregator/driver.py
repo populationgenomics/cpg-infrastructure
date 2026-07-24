@@ -339,9 +339,11 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 # around the understanding that data might be delayed by a few hours."
                 #
                 # atm default_interval_hours is usually set to 1H,
-                # 8H seems to be a good start as interval for GCP,
-                # but might need to be extended if we find that is not sufficient
-                default_interval_hours = 8 * default_interval_hours
+                # 8H was a good start as interval for GCP, however
+                # based on billing records investigation 8H only covers around 80%,
+                # 24H should give us close to 100% of all the billing records.
+                # Again, we might need to extend if we find that is not sufficient
+                default_interval_hours = 24 * default_interval_hours
                 start_minute = 1
 
             if function in ['hail', 'seqr', 'seqr24', 'gcp']:
