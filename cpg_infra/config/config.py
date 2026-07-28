@@ -360,6 +360,13 @@ class CPGDatasetConfig(ConfigModel):
     # the name of the dataset
     dataset: str
 
+    # human-friendly / stylised name for the metamist project, synced into the
+    # project's meta. Only applies when enable_metamist_project is true.
+    display_name: str | None = None
+    # free-text description for the metamist project, synced into the project's
+    # meta. Only applies when enable_metamist_project is true.
+    description: str | None = None
+
     # the budgets of the dataset, keyed by the cloud ID
     budgets: dict[CloudName, Budget]
 

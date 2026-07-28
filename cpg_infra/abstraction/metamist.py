@@ -36,6 +36,7 @@ class MetamistProjectProvider(pulumi.dynamic.ResourceProvider):
 
     def create(self, props: dict[str, Any]) -> pulumi.dynamic.CreateResult:
         name = props['project_name']
+        meta = props.get('meta') or {}
 
         if project := get_project_by_name(name):
             project_id = project['id']
@@ -49,11 +50,39 @@ class MetamistProjectProvider(pulumi.dynamic.ResourceProvider):
         if not project_id:
             raise RuntimeError(f'Failed to create project {name}')
 
+        # create_project can't carry meta, so sync it with a follow-up call.
+        # Applies to both newly-created and pre-existing projects.
+        if meta:
+            ProjectApi().update_project(name, {'meta': meta})
+
         return pulumi.dynamic.CreateResult(
             id_=f'metamist-project::{name}::{project_id}',
             outs={
                 'project_id': project_id,
                 'project_name': name,
+                'meta': meta,
+            },
+        )
+
+    def update(self, _id: str, _olds, _news) -> pulumi.dynamic.UpdateResult:
+        name = _news['project_name']
+        old_meta = _olds.get('meta') or {}
+        new_meta = _news.get('meta') or {}
+
+        # Declarative sync: the server merge-patches meta, so a key dropped from
+        # config would otherwise linger. Send an explicit null for any key that
+        # was set before but is absent now, so it gets cleared.
+        merged = {k: None for k in old_meta}
+        merged.update(new_meta)
+
+        if merged:
+            ProjectApi().update_project(name, {'meta': merged})
+
+        return pulumi.dynamic.UpdateResult(
+            outs={
+                'project_id': _olds['project_id'],
+                'project_name': name,
+                'meta': new_meta,
             },
         )
 
@@ -63,8 +92,11 @@ class MetamistProjectProvider(pulumi.dynamic.ResourceProvider):
         if _olds['project_name'] != _news['project_name']:
             replaces.append('project_name')
 
+        # A meta-only change is an in-place update (never a project replace).
+        meta_changed = (_olds.get('meta') or {}) != (_news.get('meta') or {})
+
         return pulumi.dynamic.DiffResult(
-            changes=len(replaces) > 0,
+            changes=len(replaces) > 0 or meta_changed,
             replaces=replaces,
             delete_before_replace=len(replaces) > 0,
         )
@@ -82,19 +114,22 @@ class MetamistProjectProvider(pulumi.dynamic.ResourceProvider):
 
 
 class MetamistProject(pulumi.dynamic.Resource):
-    """Create a membership to a Hail Batch Billing Project"""
+    """Create a metamist project and sync its meta"""
 
     project_id: pulumi.Output[int]
     project_name: pulumi.Output[str]
+    meta: pulumi.Output[dict]
 
     def __init__(
         self,
         name: str,
         project_name: str,
+        meta: dict | None = None,
         opts: pulumi.ResourceOptions | None = None,
     ) -> None:
         args = {
             'project_name': project_name,
+            'meta': meta or {},
         }
         super().__init__(MetamistProjectProvider(), name, args, opts)
 

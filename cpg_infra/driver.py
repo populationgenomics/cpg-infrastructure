@@ -1023,11 +1023,28 @@ class CPGDatasetInfrastructure:
             if self.dataset_config.setup_test:
                 _ = self.metamist_test_project
 
+    def _metamist_project_meta(self, is_test: bool = False) -> dict[str, str]:
+        """Build the metamist project meta dict from dataset config.
+
+        Only includes keys that are set. The test project's display_name is
+        suffixed with ' (test)' to stay distinguishable in UIs.
+        """
+        meta: dict[str, str] = {}
+        display_name = self.dataset_config.display_name
+        if display_name:
+            meta['display_name'] = (
+                f'{display_name} (test)' if is_test else display_name
+            )
+        if self.dataset_config.description:
+            meta['description'] = self.dataset_config.description
+        return meta
+
     @cached_property
     def metamist_project(self):
         return MetamistProject(
             f'metamist-project-{self.dataset}',
             project_name=self.dataset,
+            meta=self._metamist_project_meta(),
         )
 
     @cached_property
@@ -1035,6 +1052,7 @@ class CPGDatasetInfrastructure:
         return MetamistProject(
             f'metamist-project-{self.dataset}-test',
             project_name=self.dataset + '-test',
+            meta=self._metamist_project_meta(is_test=True),
         )
 
 
