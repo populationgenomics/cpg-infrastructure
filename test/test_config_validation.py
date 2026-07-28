@@ -78,6 +78,64 @@ class TestConfigValidation(TestCase):
         self.assertEqual('Rare Disease Cohort', config.display_name)
         self.assertEqual('A cohort for rare disease research', config.description)
 
+    @staticmethod
+    def _dataset_config(**extra: str) -> CPGDatasetConfig:
+        return CPGDatasetConfig.model_validate(
+            {
+                'dataset': 'DATASET',
+                'budgets': {},
+                'gcp': {'project': 'dataset-1234'},
+                **extra,
+            },
+        )
+
+    def test_metamist_project_meta_empty(self):
+        """Meta is empty when neither display_name nor description is set"""
+        config = self._dataset_config()
+        self.assertEqual({}, config.metamist_project_meta())
+        self.assertEqual({}, config.metamist_project_meta(is_test=True))
+
+    def test_metamist_project_meta_only_set_keys(self):
+        """Only keys that are set are included in the meta dict"""
+        self.assertEqual(
+            {'display_name': 'Rare Disease Cohort'},
+            self._dataset_config(
+                display_name='Rare Disease Cohort'
+            ).metamist_project_meta(),
+        )
+        self.assertEqual(
+            {'description': 'A cohort'},
+            self._dataset_config(description='A cohort').metamist_project_meta(),
+        )
+
+    def test_metamist_project_meta_full(self):
+        """Both fields flow into the meta dict for a non-test project"""
+        config = self._dataset_config(
+            display_name='Rare Disease Cohort',
+            description='A cohort for rare disease research',
+        )
+        self.assertEqual(
+            {
+                'display_name': 'Rare Disease Cohort',
+                'description': 'A cohort for rare disease research',
+            },
+            config.metamist_project_meta(),
+        )
+
+    def test_metamist_project_meta_test_suffix(self):
+        """The test project suffixes display_name but not description"""
+        config = self._dataset_config(
+            display_name='Rare Disease Cohort',
+            description='A cohort for rare disease research',
+        )
+        self.assertEqual(
+            {
+                'display_name': 'Rare Disease Cohort (test)',
+                'description': 'A cohort for rare disease research',
+            },
+            config.metamist_project_meta(is_test=True),
+        )
+
     def test_components_string_coercion(self):
         """Component strings are coerced into CPGDatasetComponents enum members"""
         config = CPGDatasetConfig.model_validate(
