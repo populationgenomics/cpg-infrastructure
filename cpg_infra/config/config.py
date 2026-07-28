@@ -432,3 +432,18 @@ class CPGDatasetConfig(ConfigModel):
     members: dict[GroupName, list[MemberKey]] = Field(default_factory=dict)
 
     upload_config: UploadConfig | None = None
+
+    def metamist_project_meta(self, is_test: bool = False) -> dict[str, str]:
+        """Build the metamist project meta dict from this config.
+
+        Only includes keys that are set. The test project's display_name is
+        suffixed with ' (test)' to stay distinguishable in UIs.
+        """
+        meta: dict[str, str] = {}
+        if self.display_name:
+            meta['display_name'] = (
+                f'{self.display_name} (test)' if is_test else self.display_name
+            )
+        if self.description:
+            meta['description'] = self.description
+        return meta

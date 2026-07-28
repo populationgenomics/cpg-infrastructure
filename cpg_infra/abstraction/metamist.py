@@ -118,13 +118,13 @@ class MetamistProject(pulumi.dynamic.Resource):
 
     project_id: pulumi.Output[int]
     project_name: pulumi.Output[str]
-    meta: pulumi.Output[dict]
+    meta: pulumi.Output[dict[str, str]]
 
     def __init__(
         self,
         name: str,
         project_name: str,
-        meta: dict | None = None,
+        meta: dict[str, str] | None = None,
         opts: pulumi.ResourceOptions | None = None,
     ) -> None:
         args = {
