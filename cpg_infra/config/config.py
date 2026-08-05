@@ -395,6 +395,15 @@ class CPGDatasetConfig(ConfigModel):
     # creates a metamist project (+ test metamist project if setup_test is True)
     enable_metamist_project: bool = True
 
+    # Metamist Display name
+    display_name: str | None = None
+
+    # Dataset's team ownership
+    team_ownership: str | None = None
+
+    # Dataset's Metamist Billing group
+    billing_groups: list[str] = Field(default_factory=list)
+
     # Allow notebook service accounts to request temporary read access to the main bucket.
     # When enabled, creates entitlements that allow notebook SAs to request
     # time-limited access via a broker service account.
