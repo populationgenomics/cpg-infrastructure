@@ -25,6 +25,7 @@ GroupName = Literal[
     'web-access',
     'release-access',
     'tmp-main-read-access',
+    'external-repository-reader',
 ]
 
 
