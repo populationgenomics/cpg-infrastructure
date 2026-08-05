@@ -50,7 +50,7 @@ class MetamistProjectProvider(pulumi.dynamic.ResourceProvider):
         if not project_id:
             raise RuntimeError(f'Failed to create project {name}')
 
-        # create_project can't carry meta, so sync it with a follow-up call.
+        # create_project doesn't carry meta, so sync it with a follow-up call.
         # Applies to both newly-created and pre-existing projects.
         if meta:
             ProjectApi().update_project(name, {'meta': meta})
@@ -69,14 +69,19 @@ class MetamistProjectProvider(pulumi.dynamic.ResourceProvider):
         old_meta = _olds.get('meta') or {}
         new_meta = _news.get('meta') or {}
 
-        # Declarative sync: the server merge-patches meta, so a key dropped from
-        # config would otherwise linger. Send an explicit null for any key that
-        # was set before but is absent now, so it gets cleared.
-        merged = {k: None for k in old_meta}
-        merged.update(new_meta)
+        # The cpg-infra-private config is the source of truth for these meta keys:
+        # we sync config -> metamist, but never metamist -> config. So to change a
+        # display_name or description, edit the dataset config rather than editing
+        # the project meta directly in metamist.
+        #
+        # The server merge-patches meta, so a key dropped from the config would
+        # otherwise linger. Send an explicit null for those keys to clear them.
+        meta_update = dict(new_meta)
+        for k in old_meta.keys() - new_meta.keys():
+            meta_update[k] = None  # Tell update_project() to remove this entry
 
-        if merged:
-            ProjectApi().update_project(name, {'meta': merged})
+        if meta_update:
+            ProjectApi().update_project(name, {'meta': meta_update})
 
         return pulumi.dynamic.UpdateResult(
             outs={

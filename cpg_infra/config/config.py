@@ -433,17 +433,15 @@ class CPGDatasetConfig(ConfigModel):
 
     upload_config: UploadConfig | None = None
 
-    def metamist_project_meta(self, is_test: bool = False) -> dict[str, str]:
+    def metamist_project_meta(self, suffix: str = '') -> dict[str, str]:
         """Build the metamist project meta dict from this config.
 
-        Only includes keys that are set. The test project's display_name is
-        suffixed with ' (test)' to stay distinguishable in UIs.
+        Only includes keys that are set. Callers pass a suffix to append to
+        display_name, so that e.g. test projects stay distinguishable in UIs.
         """
         meta: dict[str, str] = {}
         if self.display_name:
-            meta['display_name'] = (
-                f'{self.display_name} (test)' if is_test else self.display_name
-            )
+            meta['display_name'] = self.display_name + suffix
         if self.description:
             meta['description'] = self.description
         return meta

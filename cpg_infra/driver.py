@@ -1036,7 +1036,7 @@ class CPGDatasetInfrastructure:
         return MetamistProject(
             f'metamist-project-{self.dataset}-test',
             project_name=self.dataset + '-test',
-            meta=self.dataset_config.metamist_project_meta(is_test=True),
+            meta=self.dataset_config.metamist_project_meta(' (test)'),
         )
 
 
