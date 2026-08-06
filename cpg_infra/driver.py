@@ -1198,6 +1198,7 @@ class CPGDatasetCloudInfrastructure:
             self.metadata_write_group,
             self.web_access_group,
             self.release_access_group,
+            self.external_repository_reader_group,
         ]
 
         for group in groups:
@@ -1364,6 +1365,10 @@ class CPGDatasetCloudInfrastructure:
     @cached_property
     def release_access_group(self):
         return self.create_group('release-access')
+
+    @cached_property
+    def external_repository_reader_group(self):
+        return self.create_group('external-repository-reader')
 
     # access groups
 
@@ -1784,6 +1789,13 @@ class CPGDatasetCloudInfrastructure:
             'main-read-main-bucket-read',
             self.main_bucket,
             self.main_read_group,
+            BucketMembership.READ,
+        )
+
+        self.infra.add_member_to_bucket(
+            'external-repository-reader-main-bucket-read',
+            self.main_bucket,
+            self.external_repository_reader_group,
             BucketMembership.READ,
         )
 
