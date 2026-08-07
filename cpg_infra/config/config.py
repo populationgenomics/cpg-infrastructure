@@ -399,7 +399,9 @@ class CPGDatasetConfig(ConfigModel):
     display_name: str | None = None
 
     # Dataset's team ownership
-    team_ownership: str | None = None
+    team_ownership: Literal['Rare Disease', 'Population Genomics', 'Shared'] | None = (
+        None
+    )
 
     # Dataset's Metamist Billing group
     billing_groups: list[str] = Field(default_factory=list)
