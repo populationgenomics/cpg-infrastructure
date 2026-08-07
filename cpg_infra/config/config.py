@@ -361,6 +361,13 @@ class CPGDatasetConfig(ConfigModel):
     # the name of the dataset
     dataset: str
 
+    # human-friendly / stylised name for the metamist project, synced into the
+    # project's meta. Only applies when enable_metamist_project is true.
+    display_name: str | None = None
+    # free-text description for the metamist project, synced into the project's
+    # meta. Only applies when enable_metamist_project is true.
+    description: str | None = None
+
     # the budgets of the dataset, keyed by the cloud ID
     budgets: dict[CloudName, Budget]
 
@@ -426,3 +433,16 @@ class CPGDatasetConfig(ConfigModel):
     members: dict[GroupName, list[MemberKey]] = Field(default_factory=dict)
 
     upload_config: UploadConfig | None = None
+
+    def metamist_project_meta(self, suffix: str = '') -> dict[str, str]:
+        """Build the metamist project meta dict from this config.
+
+        Only includes keys that are set. Callers pass a suffix to append to
+        display_name, so that e.g. test projects stay distinguishable in UIs.
+        """
+        meta: dict[str, str] = {}
+        if self.display_name:
+            meta['display_name'] = self.display_name + suffix
+        if self.description:
+            meta['description'] = self.description
+        return meta

@@ -1028,6 +1028,7 @@ class CPGDatasetInfrastructure:
         return MetamistProject(
             f'metamist-project-{self.dataset}',
             project_name=self.dataset,
+            meta=self.dataset_config.metamist_project_meta(),
         )
 
     @cached_property
@@ -1035,6 +1036,7 @@ class CPGDatasetInfrastructure:
         return MetamistProject(
             f'metamist-project-{self.dataset}-test',
             project_name=self.dataset + '-test',
+            meta=self.dataset_config.metamist_project_meta(' (test)'),
         )
 
 
