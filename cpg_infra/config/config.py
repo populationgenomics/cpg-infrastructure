@@ -461,5 +461,5 @@ class CPGDatasetConfig(ConfigModel):
             meta['team_ownership'] = self.team_ownership
         if self.billing_groups:
             meta['billing_groups'] = sorted(self.billing_groups)
-        
+
         return meta
