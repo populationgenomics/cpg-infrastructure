@@ -60,6 +60,23 @@ class TestConfigValidation(TestCase):
         self.assertEqual('dataset-1234', config.gcp.project)
         # defaults are applied
         self.assertEqual(['gcp'], config.deploy_locations)
+        # metamist project labels default to unset
+        self.assertIsNone(config.display_name)
+        self.assertIsNone(config.description)
+
+    def test_metamist_project_labels(self):
+        """display_name and description are optional and parse when provided"""
+        config = CPGDatasetConfig.model_validate(
+            {
+                'dataset': 'DATASET',
+                'budgets': {},
+                'gcp': {'project': 'dataset-1234'},
+                'display_name': 'Rare Disease Cohort',
+                'description': 'A cohort for rare disease research',
+            },
+        )
+        self.assertEqual('Rare Disease Cohort', config.display_name)
+        self.assertEqual('A cohort for rare disease research', config.description)
 
     def test_components_string_coercion(self):
         """Component strings are coerced into CPGDatasetComponents enum members"""

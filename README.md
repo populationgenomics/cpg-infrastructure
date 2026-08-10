@@ -125,6 +125,9 @@ Members have different roles within a dataset, those roles include:
   - Access to view main-web bucket through web server
 - upload:
   - Upload data into upload buckets as specified in the `datasets/$DATASET/upload.yaml` file.
+- external-repository-reader
+  - Read access to data in main. This is distinct from the `data-manager` role as it only grants read access to main and no additional access to any other buckets or services.
+  - Developed to support Terra Data Repository service account access to self-hosted production data in CPG buckets. Do not assign this role to a human user.
 
 ## Setup
 
