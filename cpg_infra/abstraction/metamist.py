@@ -134,7 +134,12 @@ class MetamistProject(pulumi.dynamic.Resource):
 
     project_id: pulumi.Output[int]
     project_name: pulumi.Output[str]
-    meta: pulumi.Output[dict[str, str | list[str]]]
+    # Pulumi's translate_output_properties can't destructure a PEP 604 union
+    # (str | list[str]) inside a generic — it raises AssertionError when a
+    # dict value happens to be a list. `dict[str, Any]` is the tightest
+    # runtime-safe annotation; the constructor parameter below keeps the
+    # narrower contract for callers and type checkers.
+    meta: pulumi.Output[dict[str, Any]]
 
     def __init__(
         self,
