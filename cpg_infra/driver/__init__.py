@@ -17,9 +17,9 @@ from cpg_infra.config import (
     CPGInfrastructureUser,
     HailAccount,
 )
+from cpg_infra.driver._infra_registry import NAME_TO_INFRA_CLASS
 from cpg_infra.driver.constants import (
     METAMIST_PERMISSIONS,
-    NAME_TO_INFRA_CLASS,
     NON_NAME_REGEX,
     SM_MAIN_CONTRIBUTE,
     SM_MAIN_READ,
@@ -66,6 +66,13 @@ def test():
     ]
     infra = CPGInfrastructure(infra_config, configs)
     infra.main()
+
+
+# Tell pytest not to collect the function above as a test case: its body calls
+# infra.main() against a real Pulumi engine and would fire during any pytest run
+# that can import cpg_infra.driver. The __test__ attribute is pytest's
+# supported opt-out for functions/classes whose name happens to start with "test".
+test.__test__ = False  # type: ignore[attr-defined]
 
 
 if __name__ == '__main__':

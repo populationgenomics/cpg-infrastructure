@@ -4,17 +4,11 @@ Constants and helper functions used across the driver package.
 """
 
 import re
-from typing import Iterable, Type
+from typing import Iterable
 
 import toml
 import xxhash
 from toml_sort import TomlSort
-
-# NOTE: Importing these registers them as CloudInfraBase subclasses so that
-# NAME_TO_INFRA_CLASS below picks them up.
-from cpg_infra.abstraction.azure import AzureInfra  # noqa: F401
-from cpg_infra.abstraction.base import CloudInfraBase, DryRunInfra  # noqa: F401
-from cpg_infra.abstraction.gcp import GcpInfrastructure  # noqa: F401
 
 
 AccessLevel = str
@@ -38,12 +32,6 @@ METAMIST_PERMISSIONS = [
 
 NON_NAME_REGEX = re.compile(r'[^A-Za-z\d_-]')
 TOML_CONFIG_JOINER = '\n||||'
-
-
-NAME_TO_INFRA_CLASS: dict[str, Type[CloudInfraBase]] = {
-    c.name(): c  # type: ignore
-    for c in CloudInfraBase.__subclasses__()
-}
 
 
 def access_levels(*, include_test: bool) -> Iterable[AccessLevel]:

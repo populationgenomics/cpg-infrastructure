@@ -15,7 +15,7 @@ from cpg_infra.config import (
     CPGDatasetConfig,
     CPGInfrastructureConfig,
 )
-from cpg_infra.driver.constants import NAME_TO_INFRA_CLASS
+from cpg_infra.driver._infra_registry import NAME_TO_INFRA_CLASS
 from cpg_infra.driver.cpg_dataset_cloud_infrastructure import (
     CPGDatasetCloudInfrastructure,
 )
