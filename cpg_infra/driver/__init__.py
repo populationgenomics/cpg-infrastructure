@@ -7,6 +7,8 @@ Re-exports the classes, constants, and helpers that previously lived in
 continues to work.
 """
 
+from __future__ import annotations
+
 import cpg_utils.config
 
 from cpg_infra.config import (
@@ -17,7 +19,6 @@ from cpg_infra.config import (
     CPGInfrastructureUser,
     HailAccount,
 )
-from cpg_infra.driver._infra_registry import NAME_TO_INFRA_CLASS
 from cpg_infra.driver.constants import (
     METAMIST_PERMISSIONS,
     NON_NAME_REGEX,
@@ -33,16 +34,19 @@ from cpg_infra.driver.constants import (
     compute_hash,
     dict_to_toml,
 )
-from cpg_infra.driver.cpg_dataset_cloud_infrastructure import (
+from cpg_infra.driver.dataset_cloud_infrastructure import (
     CPGDatasetCloudInfrastructure,
 )
-from cpg_infra.driver.cpg_dataset_infrastructure import CPGDatasetInfrastructure
-from cpg_infra.driver.cpg_infrastructure import CPGInfrastructure
+from cpg_infra.driver.dataset_infrastructure import (
+    NAME_TO_INFRA_CLASS,
+    CPGDatasetInfrastructure,
+)
+from cpg_infra.driver.infrastructure import CPGInfrastructure
 from cpg_infra.driver.group import Group
 from cpg_infra.driver.group_member import GroupMember
 from cpg_infra.driver.group_provider import GroupProvider
 from cpg_infra.driver.main_upload_bucket import MainUploadBucket
-from cpg_infra.driver.sample_metadata_accessor_membership import (
+from cpg_infra.driver.sm_accessor_membership import (
     SampleMetadataAccessorMembership,
 )
 

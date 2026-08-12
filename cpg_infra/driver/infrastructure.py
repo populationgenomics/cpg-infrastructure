@@ -38,13 +38,13 @@ from cpg_infra.driver.constants import (
     compute_hash,
     dict_to_toml,
 )
-from cpg_infra.driver.cpg_dataset_infrastructure import CPGDatasetInfrastructure
+from cpg_infra.driver.dataset_infrastructure import CPGDatasetInfrastructure
 from cpg_infra.driver.group_provider import GroupProvider
 from cpg_infra.github_wif.driver import PAM_BROKER_SA_NAME
 from cpg_infra.plugin import get_plugins
 
 if TYPE_CHECKING:
-    from cpg_infra.driver.cpg_dataset_cloud_infrastructure import (
+    from cpg_infra.driver.dataset_cloud_infrastructure import (
         CPGDatasetCloudInfrastructure,
     )
     from cpg_infra.driver.group import Group

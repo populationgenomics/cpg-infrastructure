@@ -3,6 +3,8 @@
 Constants and helper functions used across the driver package.
 """
 
+from __future__ import annotations
+
 import re
 from typing import Iterable
 

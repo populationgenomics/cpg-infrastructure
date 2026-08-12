@@ -15,6 +15,7 @@ class Group:
     # Legacy nested-class access path: `Group.GroupMember`
     GroupMember = GroupMember
 
+    # TODO: potentially remove this in the future, but for now it's
     # useful for checking isinstance without isinstance
     is_group = True
 

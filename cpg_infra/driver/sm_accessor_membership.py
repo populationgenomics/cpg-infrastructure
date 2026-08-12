@@ -3,6 +3,8 @@
 SampleMetadataAccessorMembership named tuple.
 """
 
+from __future__ import annotations
+
 from typing import Any, Iterable, NamedTuple
 
 

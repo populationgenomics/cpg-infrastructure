@@ -57,12 +57,12 @@ from cpg_infra.driver.constants import (
 from cpg_infra.driver.group import Group
 from cpg_infra.driver.group_provider import GroupProvider
 from cpg_infra.driver.main_upload_bucket import MainUploadBucket
-from cpg_infra.driver.sample_metadata_accessor_membership import (
+from cpg_infra.driver.sm_accessor_membership import (
     SampleMetadataAccessorMembership,
 )
 
 if TYPE_CHECKING:
-    from cpg_infra.driver.cpg_infrastructure import CPGInfrastructure
+    from cpg_infra.driver.infrastructure import CPGInfrastructure
 
 
 class CPGDatasetCloudInfrastructure:

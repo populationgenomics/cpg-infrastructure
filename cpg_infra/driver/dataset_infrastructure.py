@@ -1,4 +1,4 @@
-# flake8: noqa: PGH003,ANN204
+# flake8: noqa: F401,PGH003,ANN204
 """
 CPGDatasetInfrastructure - infrastructure for a single dataset across
 one or more cloud providers.
@@ -7,22 +7,38 @@ one or more cloud providers.
 from __future__ import annotations
 
 from functools import cached_property
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Type
 
+# Side-effect imports: bringing each concrete ``CloudInfraBase`` subclass into
+# the process registers it with ``CloudInfraBase.__subclasses__()`` so
+# ``NAME_TO_INFRA_CLASS`` below can pick it up.
+#
+# **Add a new CloudInfraBase subclass here.** If you add a new cloud provider
+# (e.g. Seqera / Nextflow / whatever comes next) and forget to import it here,
+# ``NAME_TO_INFRA_CLASS`` will silently omit it and this class will fail to
+# instantiate the deploy location.
+from cpg_infra.abstraction.azure import AzureInfra
+from cpg_infra.abstraction.base import CloudInfraBase, DryRunInfra
+from cpg_infra.abstraction.gcp import GcpInfrastructure
 from cpg_infra.abstraction.metamist import MetamistProject
 from cpg_infra.config import (
     CloudName,
     CPGDatasetConfig,
     CPGInfrastructureConfig,
 )
-from cpg_infra.driver._infra_registry import NAME_TO_INFRA_CLASS
-from cpg_infra.driver.cpg_dataset_cloud_infrastructure import (
+from cpg_infra.driver.dataset_cloud_infrastructure import (
     CPGDatasetCloudInfrastructure,
 )
 from cpg_infra.driver.group_provider import GroupProvider
 
 if TYPE_CHECKING:
-    from cpg_infra.driver.cpg_infrastructure import CPGInfrastructure
+    from cpg_infra.driver.infrastructure import CPGInfrastructure
+
+
+NAME_TO_INFRA_CLASS: dict[str, Type[CloudInfraBase]] = {
+    c.name(): c  # type: ignore
+    for c in CloudInfraBase.__subclasses__()
+}
 
 
 class CPGDatasetInfrastructure:
