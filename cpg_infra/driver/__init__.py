@@ -10,7 +10,6 @@ continues to work.
 from __future__ import annotations
 
 import cpg_utils.config
-
 from cpg_infra.config import (
     CloudName,
     CPGDatasetComponents,
@@ -41,10 +40,10 @@ from cpg_infra.driver.dataset_infrastructure import (
     NAME_TO_INFRA_CLASS,
     CPGDatasetInfrastructure,
 )
-from cpg_infra.driver.infrastructure import CPGInfrastructure
 from cpg_infra.driver.group import Group
 from cpg_infra.driver.group_member import GroupMember
 from cpg_infra.driver.group_provider import GroupProvider
+from cpg_infra.driver.infrastructure import CPGInfrastructure
 from cpg_infra.driver.main_upload_bucket import MainUploadBucket
 from cpg_infra.driver.sm_accessor_membership import (
     SampleMetadataAccessorMembership,

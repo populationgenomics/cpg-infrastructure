@@ -12,7 +12,6 @@ import toml
 import xxhash
 from toml_sort import TomlSort
 
-
 AccessLevel = str
 
 

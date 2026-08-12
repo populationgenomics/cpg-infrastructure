@@ -33,7 +33,6 @@ from cpg_infra.abstraction.hailbatch import (
     HailBatchUser,
 )
 from cpg_infra.config import (
-    CloudName,
     CPGDatasetComponents,
     CPGDatasetConfig,
     CPGInfrastructureConfig,
@@ -54,14 +53,14 @@ from cpg_infra.driver.constants import (
     compute_hash,
     dict_to_toml,
 )
-from cpg_infra.driver.group import Group
-from cpg_infra.driver.group_provider import GroupProvider
 from cpg_infra.driver.main_upload_bucket import MainUploadBucket
 from cpg_infra.driver.sm_accessor_membership import (
     SampleMetadataAccessorMembership,
 )
 
 if TYPE_CHECKING:
+    from cpg_infra.driver.group import Group
+    from cpg_infra.driver.group_provider import GroupProvider
     from cpg_infra.driver.infrastructure import CPGInfrastructure
 
 

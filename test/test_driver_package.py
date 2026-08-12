@@ -27,6 +27,7 @@ class TestDriverPackageImports(TestCase):
         # Import inside the test so an import-time failure is attributed here
         # rather than to test discovery.
         from cpg_infra.driver import (  # noqa: F401
+            NAME_TO_INFRA_CLASS,
             CPGDatasetCloudInfrastructure,
             CPGDatasetInfrastructure,
             CPGInfrastructure,
@@ -34,7 +35,6 @@ class TestDriverPackageImports(TestCase):
             GroupMember,
             GroupProvider,
             MainUploadBucket,
-            NAME_TO_INFRA_CLASS,
             SampleMetadataAccessorMembership,
             access_levels,
             compute_hash,

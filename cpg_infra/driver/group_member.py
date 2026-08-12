@@ -5,7 +5,10 @@ GroupMember class - a single member of a Group.
 
 from __future__ import annotations
 
-from cpg_infra.config import CPGInfrastructureUser
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from cpg_infra.config import CPGInfrastructureUser
 
 
 class GroupMember:

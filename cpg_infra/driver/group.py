@@ -6,14 +6,19 @@ Group class - collection of members and/or sub-groups.
 from __future__ import annotations
 
 from cpg_infra.config import CPGInfrastructureUser
-from cpg_infra.driver.group_member import GroupMember
+
+# Imported under an underscore-prefix alias so the outer name is not shadowed
+# by the ``GroupMember`` class attribute below. Internal references use
+# ``_GroupMember`` so mypy resolves them unambiguously; external callers still
+# see ``Group.GroupMember`` via the class attribute.
+from cpg_infra.driver.group_member import GroupMember as _GroupMember
 
 
 class Group:
     """Placeholder for a Group of members"""
 
     # Legacy nested-class access path: `Group.GroupMember`
-    GroupMember = GroupMember
+    GroupMember = _GroupMember
 
     # This is a duck-type marker read by `cpg_infra/abstraction/{gcp,azure}.py`
     # useful for checking isinstance without isinstance
@@ -31,7 +36,7 @@ class Group:
         self.cache_members: bool = cache_members
         self.members: dict[
             str,
-            GroupMember | Group,
+            _GroupMember | Group,
         ] = members
 
     def add_member(
@@ -46,14 +51,14 @@ class Group:
         if isinstance(member, Group):
             self.members[resource_key] = member
         elif isinstance(user, CPGInfrastructureUser.Cloud):
-            self.members[resource_key] = self.GroupMember(member, user)
+            self.members[resource_key] = _GroupMember(member, user)
         else:
             if user:
                 raise ValueError(
                     f'Invalid user type {type(user)} ({user}) for member '
                     f'{member} for {resource_key}',
                 )
-            self.members[resource_key] = self.GroupMember(member, None)
+            self.members[resource_key] = _GroupMember(member, None)
 
     def __repr__(self) -> str:
         return f'Group({self.name!r})'

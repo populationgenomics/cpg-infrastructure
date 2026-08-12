@@ -5,25 +5,34 @@ GroupProvider - manages Group instances and their memberships across clouds.
 
 from __future__ import annotations
 
-import graphlib
 from collections import defaultdict
+from typing import TYPE_CHECKING
 
-from cpg_infra.abstraction.base import CloudInfraBase
-from cpg_infra.config import CloudName
-from cpg_infra.driver.group import Group
-from cpg_infra.driver.group_member import GroupMember
+import graphlib
+
+# Imported under an underscore-prefix alias so the outer name is not shadowed
+# by the ``Group`` class attribute below. Internal references use ``_Group``
+# so mypy resolves them unambiguously; external callers still see
+# ``GroupProvider.Group`` via the class attribute.
+from cpg_infra.driver.group import Group as _Group
+
+if TYPE_CHECKING:
+    from cpg_infra.abstraction.base import CloudInfraBase
+    from cpg_infra.config import CloudName
+    from cpg_infra.driver.group_member import GroupMember
 
 
 class GroupProvider:
     """Provider for managing groups + memberships"""
 
-    # Legacy nested-class access paths: `GroupProvider.Group` / `GroupProvider.Group.GroupMember`
-    Group = Group
+    # Legacy nested-class access paths: `GroupProvider.Group` /
+    # `GroupProvider.Group.GroupMember`
+    Group = _Group
 
     def __init__(self, group_prefix: str | None = None) -> None:
         self.groups: dict[
             CloudName,
-            dict[str, Group],
+            dict[str, _Group],
         ] = defaultdict()
 
         self.group_prefix = group_prefix or ''
@@ -39,13 +48,13 @@ class GroupProvider:
         cache_members: bool,
         members: dict | None = None,
         description: str | None = None,
-    ) -> Group:
+    ) -> _Group:
         if infra.name() not in self.groups:
             self.groups[infra.name()] = {}
         if name in self.groups[infra.name()]:
             raise ValueError(f'Group "{name}" in "{infra.name()}" already exists')
 
-        group = Group(
+        group = _Group(
             name=name,
             cache_members=cache_members,
             members=members or {},
@@ -55,7 +64,7 @@ class GroupProvider:
 
         return group
 
-    def static_group_order(self, cloud: CloudName) -> list[Group]:
+    def static_group_order(self, cloud: CloudName) -> list[_Group]:
         """
         not that it super matters because we do recursively look it up and
         cache the result, but it's nice to grab the groups in an order that
@@ -65,9 +74,7 @@ class GroupProvider:
 
         deps = {
             group.name: [
-                g.name
-                for g in group.members.values()
-                if isinstance(g, Group)
+                g.name for g in group.members.values() if isinstance(g, _Group)
             ]
             for group in groups.values()
         }
@@ -76,14 +83,14 @@ class GroupProvider:
 
     def resolve_group_members(
         self,
-        group: Group,
+        group: _Group,
     ) -> list[GroupMember]:
         if group.name in self._cached_resolved_members:
             return self._cached_resolved_members[group.name]
 
         resolved_members: list[GroupMember] = []
         for member in group.members.values():
-            if isinstance(member, Group):
+            if isinstance(member, _Group):
                 resolved_members.extend(self.resolve_group_members(member))
             else:
                 resolved_members.append(member)
