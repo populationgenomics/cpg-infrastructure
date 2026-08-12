@@ -39,6 +39,8 @@ class BucketMembershipRole(NamedTuple):
 
 def get_member_key(member):  # pylint: disable=too-many-return-statements
     # it's a 'cpg_infra.driver.CPGInfrastructure.GroupProvider.Group'
+    # The canonical path is now `cpg_infra.driver.group.Group`,
+    # the previous is kept for backwards compatibility
     if isinstance(member, pulumi.Output):
         return pulumi.Output.apply(member, get_member_key)
 
@@ -637,9 +639,11 @@ class GcpInfrastructure(CloudInfraBase):
             # Eligible users/service accounts/groups
             eligible_users=[
                 gcp.privilegedaccessmanager.EntitlementEligibleUserArgs(
-                    principals=principals
-                    if isinstance(principals, pulumi.Output)
-                    else pulumi.Output.from_input(principals),
+                    principals=(
+                        principals
+                        if isinstance(principals, pulumi.Output)
+                        else pulumi.Output.from_input(principals)
+                    ),
                 ),
             ],
             # Privileged access with IAM condition

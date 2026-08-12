@@ -15,7 +15,7 @@ class Group:
     # Legacy nested-class access path: `Group.GroupMember`
     GroupMember = GroupMember
 
-    # TODO: potentially remove this in the future, but for now it's
+    # This is a duck-type marker read by `cpg_infra/abstraction/{gcp,azure}.py`
     # useful for checking isinstance without isinstance
     is_group = True
 
