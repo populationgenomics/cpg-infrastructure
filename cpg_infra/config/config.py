@@ -361,12 +361,24 @@ class CPGDatasetConfig(ConfigModel):
     # the name of the dataset
     dataset: str
 
-    # human-friendly / stylised name for the metamist project, synced into the
-    # project's meta. Only applies when enable_metamist_project is true.
+    ## Metamist project fields (currently stored in meta) see metamist_project_meta() below
+    # Only applies when enable_metamist_project is true.
+
+    # Metamist human-friendly / stylised name for the metamist project
     display_name: str | None = None
-    # free-text description for the metamist project, synced into the project's
-    # meta. Only applies when enable_metamist_project is true.
+
+    # Metamist free-text description for the metamist project
     description: str | None = None
+
+    # Metamist dataset's team ownership
+    team_ownership: Literal['Rare Disease', 'Population Genomics', 'Shared'] | None = (
+        None
+    )
+
+    # Metamist dataset's Billing group
+    billing_groups: list[str] = Field(default_factory=list)
+
+    ## End Metamist project meta fields
 
     # the budgets of the dataset, keyed by the cloud ID
     budgets: dict[CloudName, Budget]
@@ -434,15 +446,20 @@ class CPGDatasetConfig(ConfigModel):
 
     upload_config: UploadConfig | None = None
 
-    def metamist_project_meta(self, suffix: str = '') -> dict[str, str]:
+    def metamist_project_meta(self, suffix: str = '') -> dict[str, str | list[str]]:
         """Build the metamist project meta dict from this config.
 
         Only includes keys that are set. Callers pass a suffix to append to
         display_name, so that e.g. test projects stay distinguishable in UIs.
         """
-        meta: dict[str, str] = {}
+        meta: dict[str, str | list[str]] = {}
         if self.display_name:
             meta['display_name'] = self.display_name + suffix
         if self.description:
             meta['description'] = self.description
+        if self.team_ownership:
+            meta['team_ownership'] = self.team_ownership
+        if self.billing_groups:
+            meta['billing_groups'] = sorted(self.billing_groups)
+
         return meta

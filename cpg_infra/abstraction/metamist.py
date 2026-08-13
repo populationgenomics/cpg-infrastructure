@@ -76,6 +76,17 @@ class MetamistProjectProvider(pulumi.dynamic.ResourceProvider):
         #
         # The server merge-patches meta, so a key dropped from the config would
         # otherwise linger. Send an explicit null for those keys to clear them.
+
+        #  new state stores it under 'project_id' (commit 295359f onwards)
+        #  state from before that rename stored it under 'id'
+        #  if neither is present (e.g. stale refresh), re-fetch by name
+        project_id = _olds.get('project_id') or _olds.get('id')
+        if project_id is None:
+            project = get_project_by_name(name)
+            if not project:
+                raise RuntimeError(f'Project {name} not found in metamist')
+            project_id = project['id']
+
         meta_update = dict(new_meta)
         for k in old_meta.keys() - new_meta.keys():
             meta_update[k] = None  # Tell update_project() to remove this entry
@@ -85,7 +96,7 @@ class MetamistProjectProvider(pulumi.dynamic.ResourceProvider):
 
         return pulumi.dynamic.UpdateResult(
             outs={
-                'project_id': _olds['project_id'],
+                'project_id': project_id,
                 'project_name': name,
                 'meta': new_meta,
             },
@@ -123,13 +134,18 @@ class MetamistProject(pulumi.dynamic.Resource):
 
     project_id: pulumi.Output[int]
     project_name: pulumi.Output[str]
-    meta: pulumi.Output[dict[str, str]]
+    # Pulumi's translate_output_properties can't destructure a PEP 604 union
+    # (str | list[str]) inside a generic — it raises AssertionError when a
+    # dict value happens to be a list. `dict[str, Any]` is the tightest
+    # runtime-safe annotation; the constructor parameter below keeps the
+    # narrower contract for callers and type checkers.
+    meta: pulumi.Output[dict[str, Any]]
 
     def __init__(
         self,
         name: str,
         project_name: str,
-        meta: dict[str, str] | None = None,
+        meta: dict[str, str | list[str]] | None = None,
         opts: pulumi.ResourceOptions | None = None,
     ) -> None:
         args = {
