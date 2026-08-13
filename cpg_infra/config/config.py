@@ -420,6 +420,12 @@ class CPGDatasetConfig(ConfigModel):
     # time-limited access via a broker service account.
     allow_notebook_tmp_main_read: bool = False
 
+    # Add the dataset's standard & full Hail service accounts to the analysis group, so
+    # Hail Batch workflows can kick off other Hail Batch workflows via analysis runner.
+    # `test` access level is excluded to disallow starting of standard/full workflows
+    # from a test workflow.
+    allow_nested_analysis_runner_jobs: bool = False
+
     # give FULL access to these datasets, as this dataset depends_on them
     depends_on: list[str] = Field(default_factory=list)
     # give READONLY access to these datasets, as this dataset needs it
