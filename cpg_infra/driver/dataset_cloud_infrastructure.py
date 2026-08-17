@@ -335,8 +335,27 @@ class CPGDatasetCloudInfrastructure:
             self.full_group,
         )
 
+        self.setup_analysis_chaining_group_memberships()
+
         if isinstance(self.infra, GcpInfrastructure):
             self.setup_gcp_monitoring_access()
+
+    def setup_analysis_chaining_group_memberships(self):
+        """Optionally add the standard & full Hail SAs to the analysis group so Hail
+        Batch workflows can kick off other Hail Batch workflows via analysis-runner."""
+        if not (
+            self.dataset_config.allow_nested_analysis_runner_jobs
+            and self.should_setup_hail
+        ):
+            return
+        for access_level in ('standard', 'full'):
+            hail_account = self.hail_accounts_by_access_level.get(access_level)
+            if not hail_account:
+                continue
+            self.analysis_group.add_member(
+                self.infra.get_pulumi_name(f'hail-{access_level}-in-analysis-chaining'),
+                member=hail_account.cloud_id,
+            )
 
     @cached_property
     def data_manager_group(self):
