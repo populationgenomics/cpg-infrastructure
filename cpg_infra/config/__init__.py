@@ -11,4 +11,5 @@ from cpg_infra.config.config import (
     GroupName,
     HailAccount,
     MemberKey,
+    SeqeraAccount,
 )

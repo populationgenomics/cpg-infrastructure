@@ -17,6 +17,7 @@ from cpg_infra.config import (
     CPGInfrastructureConfig,
     CPGInfrastructureUser,
     HailAccount,
+    SeqeraAccount,
 )
 from cpg_infra.driver.constants import (
     METAMIST_PERMISSIONS,

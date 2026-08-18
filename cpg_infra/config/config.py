@@ -311,6 +311,19 @@ class HailAccount(ConfigModel):
     cloud_id: str | pulumi.Output[str]
 
 
+class SeqeraAccount(ConfigModel):
+    """A Seqera-facing GCP service account for one dataset+access-level.
+
+    cloud_id holds the SA email; may be a pulumi.Output at construction time
+    (same reason as HailAccount — pydantic isn't aware of pulumi types).
+    """
+
+    model_config = ConfigModel.model_config | {'arbitrary_types_allowed': True}
+
+    account_id: str
+    cloud_id: str | pulumi.Output[str]
+
+
 class CPGDatasetConfig(ConfigModel):
     """
     Configuration that describes the minimum information

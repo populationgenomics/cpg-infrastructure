@@ -142,3 +142,17 @@ class TestConfigValidation(TestCase):
             budgets={'dry-run': CPGDatasetConfig.Budget(monthly_budget=100)},
         )
         self.assertEqual(100, config.budgets['dry-run'].monthly_budget)
+
+    def test_seqera_account_model_parses(self):
+        """SeqeraAccount round-trips minimal valid input"""
+        from cpg_infra.config import SeqeraAccount
+
+        account = SeqeraAccount(
+            account_id='seqera-my-dataset-full',
+            cloud_id='seqera-my-dataset-full@project.iam.gserviceaccount.com',
+        )
+        self.assertEqual('seqera-my-dataset-full', account.account_id)
+        self.assertEqual(
+            'seqera-my-dataset-full@project.iam.gserviceaccount.com',
+            account.cloud_id,
+        )
