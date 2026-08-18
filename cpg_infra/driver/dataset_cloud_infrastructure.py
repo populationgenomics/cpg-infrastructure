@@ -103,9 +103,33 @@ class CPGDatasetCloudInfrastructure:
         self.should_setup_analysis_runner = (
             CPGDatasetComponents.ANALYSIS_RUNNER in self.components
         )
+        self.should_setup_seqera = self._resolve_should_setup_seqera()
 
         # outputs
         self.storage_tomls: dict = {}
+
+    def _resolve_should_setup_seqera(self) -> bool:
+        component_enabled = CPGDatasetComponents.SEQERA_ACCOUNTS in self.components
+        if not component_enabled:
+            return False
+        if not isinstance(self.infra, GcpInfrastructure):
+            # Defence-in-depth: SEQERA_ACCOUNTS on non-GCP is silently ignored.
+            return False
+        if self.dataset_config.team_ownership is None:
+            raise ValueError(
+                f'{self.dataset_config.dataset}: SEQERA_ACCOUNTS component is '
+                'enabled but team_ownership is not set. Seqera integration '
+                'requires a team_ownership value to bind the WIF principal '
+                'to a Seqera workspace.',
+            )
+        if self.config.seqera is None:
+            raise ValueError(
+                f'{self.dataset_config.dataset}: SEQERA_ACCOUNTS component is '
+                'enabled but CPGInfrastructureConfig.seqera is not set. '
+                'Configure the global Seqera block (org_id, wif_issuer_uri, '
+                'workspace_ids) before enabling Seqera on any dataset.',
+            )
+        return True
 
     def create_group(self, name: str, cache_members: bool = False):
         """
