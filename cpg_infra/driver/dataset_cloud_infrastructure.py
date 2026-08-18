@@ -1290,23 +1290,6 @@ class CPGDatasetCloudInfrastructure:
         self.setup_hail_bucket_permissions()
         self.setup_hail_wheels_bucket_permissions()
 
-    # region SEQERA
-
-    @cached_property
-    def seqera(self) -> DatasetSeqeraInfrastructure:
-        return DatasetSeqeraInfrastructure(self)
-
-    def setup_seqera(self) -> None:
-        self.seqera.setup()
-
-    @cached_property
-    def seqera_accounts_by_access_level(self) -> dict[str, SeqeraAccount]:
-        if not self.should_setup_seqera:
-            return {}
-        return self.seqera.accounts_by_access_level
-
-    # endregion SEQERA
-
     @cached_property
     def hail_batch_url(self):
         if isinstance(self.infra, GcpInfrastructure):
@@ -1475,6 +1458,22 @@ class CPGDatasetCloudInfrastructure:
         )
 
     # endregion HAIL
+    # region SEQERA
+
+    @cached_property
+    def seqera(self) -> DatasetSeqeraInfrastructure:
+        return DatasetSeqeraInfrastructure(self)
+
+    def setup_seqera(self) -> None:
+        self.seqera.setup()
+
+    @cached_property
+    def seqera_accounts_by_access_level(self) -> dict[str, SeqeraAccount]:
+        if not self.should_setup_seqera:
+            return {}
+        return self.seqera.accounts_by_access_level
+
+    # endregion SEQERA
     # region CROMWELL
 
     def setup_cromwell(self):
