@@ -172,6 +172,24 @@ class CPGInfrastructureConfig(ConfigModel):
         etl: ETLConfiguration | None = None
         slack_channel: str | None = None
 
+    class Seqera(ConfigModel):
+        """Global Seqera Platform configuration.
+
+        Set to enable Seqera integration for any dataset that opts in via
+        CPGDatasetComponents.SEQERA_ACCOUNTS.
+        """
+
+        org_id: int
+        # Seqera Cloud OIDC issuer URI, see:
+        # https://docs.seqera.io/platform-cloud/credentials/overview#google-cloud
+        wif_issuer_uri: str
+        # Seqera workspace ID per dataset team_ownership value.
+        # Keys MUST match the CPGDatasetConfig.team_ownership Literal.
+        workspace_ids: dict[
+            Literal['Rare Disease', 'Population Genomics', 'Shared'],
+            int,
+        ]
+
     class Billing(ConfigModel):
         class GCP(ConfigModel):
             """Details of the BILLING account"""
@@ -246,6 +264,8 @@ class CPGInfrastructureConfig(ConfigModel):
     cromwell: Cromwell | None = None
     # configuration options for our metamist service
     metamist: Metamist | None = None
+    # configuration options for Seqera platform
+    seqera: Seqera | None = None
     # configuration options for billing + billing aggregation
     billing: Billing | None = None
     # list of additional adhoc groups under infrastructure management

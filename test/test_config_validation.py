@@ -181,3 +181,38 @@ class TestConfigValidation(TestCase):
                 components,
                 f'SEQERA_ACCOUNTS should not be in default components for {cloud}',
             )
+
+    def test_seqera_infra_config_parses(self):
+        """CPGInfrastructureConfig.Seqera parses a minimal valid block"""
+        seqera = CPGInfrastructureConfig.Seqera.model_validate(
+            {
+                'org_id': 12345,
+                'wif_issuer_uri': 'https://cloud.seqera.io',
+                'workspace_ids': {
+                    'Rare Disease': 111,
+                    'Population Genomics': 222,
+                    'Shared': 333,
+                },
+            },
+        )
+        self.assertEqual(12345, seqera.org_id)
+        self.assertEqual(111, seqera.workspace_ids['Rare Disease'])
+
+    def test_seqera_workspace_ids_reject_unknown_team(self):
+        """workspace_ids with a team key outside the Literal must raise"""
+        with self.assertRaises(ValidationError):
+            CPGInfrastructureConfig.Seqera.model_validate(
+                {
+                    'org_id': 1,
+                    'wif_issuer_uri': 'https://cloud.seqera.io',
+                    'workspace_ids': {'Rare-Disease': 111},  # note the hyphen typo
+                },
+            )
+
+    def test_seqera_optional_on_infrastructure_config(self):
+        """CPGInfrastructureConfig.seqera defaults to None"""
+        # Just verify the attribute exists on the class with the right default;
+        # constructing a full CPGInfrastructureConfig here is heavy, so this
+        # inspects the model field definition.
+        field = CPGInfrastructureConfig.model_fields['seqera']
+        self.assertIsNone(field.default)
