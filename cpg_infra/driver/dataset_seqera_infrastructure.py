@@ -97,22 +97,25 @@ class DatasetSeqeraInfrastructure:
             attribute_mapping={'google.subject': 'assertion.sub'},
         )
 
+    def _account_id_for(self, level: str) -> str:
+        # SAs are project-scoped (each dataset has its own GCP project), so
+        # the dataset name would be redundant in the account_id. Keeping it
+        # short also stays within GCP's 30-char account_id limit for datasets
+        # with long names.
+        return f'seqera-{level}'
+
     @cached_property
     def _service_accounts(
         self,
     ) -> dict[str, gcp.serviceaccount.Account]:
         return {
-            level: self._infra.create_machine_account(
-                f'seqera-{self._dataset_config.dataset}-{level}',
-            )
+            level: self._infra.create_machine_account(self._account_id_for(level))
             for level in self._access_levels
         }
 
     @cached_property
     def accounts_by_access_level(self) -> dict[str, SeqeraAccount]:
         """The three Seqera SAs keyed by access level.
-
-        Populated when setup() runs; empty until then.
 
         account_id is built from the same plain string passed to
         create_machine_account() rather than read back from
@@ -123,7 +126,7 @@ class DatasetSeqeraInfrastructure:
         """
         return {
             level: SeqeraAccount(
-                account_id=f'seqera-{self._dataset_config.dataset}-{level}',
+                account_id=self._account_id_for(level),
                 cloud_id=sa.email,
             )
             for level, sa in self._service_accounts.items()
@@ -142,7 +145,7 @@ class DatasetSeqeraInfrastructure:
             for role in _SEQERA_SA_PROJECT_ROLES:
                 role_slug = role.split('/')[-1].replace('.', '-')
                 self._infra.add_project_role(
-                    f'seqera-{self._dataset_config.dataset}-{level}-{role_slug}',
+                    f'seqera-{level}-{role_slug}',
                     member=sa,
                     role=role,
                 )
@@ -162,9 +165,7 @@ class DatasetSeqeraInfrastructure:
 
         for level, sa in self._service_accounts.items():
             gcp.serviceaccount.IAMMember(
-                self._infra.get_pulumi_name(
-                    f'seqera-{self._dataset_config.dataset}-{level}-wif-user',
-                ),
+                self._infra.get_pulumi_name(f'seqera-{level}-wif-user'),
                 service_account_id=sa.name,
                 role='roles/iam.workloadIdentityUser',
                 member=principal,
