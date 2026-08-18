@@ -156,3 +156,28 @@ class TestConfigValidation(TestCase):
             'seqera-my-dataset-full@project.iam.gserviceaccount.com',
             account.cloud_id,
         )
+
+    def test_seqera_accounts_component_string_coercion(self):
+        """The 'seqera-accounts' string coerces to the enum member"""
+        config = CPGDatasetConfig.model_validate(
+            {
+                'dataset': 'DATASET',
+                'budgets': {},
+                'gcp': {'project': 'dataset-1234'},
+                'components': {'gcp': ['seqera-accounts']},
+            },
+        )
+        self.assertEqual(
+            [CPGDatasetComponents.SEQERA_ACCOUNTS],
+            config.components['gcp'],
+        )
+
+    def test_seqera_accounts_not_in_defaults(self):
+        """SEQERA_ACCOUNTS is opt-in only — not in any default component set"""
+        defaults = CPGDatasetComponents.default_component_for_infrastructure()
+        for cloud, components in defaults.items():
+            self.assertNotIn(
+                CPGDatasetComponents.SEQERA_ACCOUNTS,
+                components,
+                f'SEQERA_ACCOUNTS should not be in default components for {cloud}',
+            )

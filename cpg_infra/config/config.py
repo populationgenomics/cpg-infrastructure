@@ -279,14 +279,27 @@ class CPGDatasetComponents(Enum):
     METAMIST = 'metamist'
     CONTAINER_REGISTRY = 'container-registry'
     ANALYSIS_RUNNER = 'analysis-runner'
+    SEQERA_ACCOUNTS = 'seqera-accounts'
 
     @staticmethod
     def default_component_for_infrastructure() -> (
         dict[str, list['CPGDatasetComponents']]
     ):
+        # Explicit lists so that opt-in components (e.g. SEQERA_ACCOUNTS)
+        # can be added to the enum without silently enabling them fleet-wide.
+        _default_gcp: list['CPGDatasetComponents'] = [
+            CPGDatasetComponents.STORAGE,
+            CPGDatasetComponents.SPARK,
+            CPGDatasetComponents.CROMWELL,
+            CPGDatasetComponents.NOTEBOOKS,
+            CPGDatasetComponents.HAIL_ACCOUNTS,
+            CPGDatasetComponents.METAMIST,
+            CPGDatasetComponents.CONTAINER_REGISTRY,
+            CPGDatasetComponents.ANALYSIS_RUNNER,
+        ]
         return {
-            'dry-run': list(CPGDatasetComponents),
-            'gcp': list(CPGDatasetComponents),
+            'dry-run': list(_default_gcp),
+            'gcp': list(_default_gcp),
             'azure': [
                 CPGDatasetComponents.STORAGE,
                 CPGDatasetComponents.HAIL_ACCOUNTS,
