@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 import pulumi_gcp as gcp
 
+from cpg_infra.abstraction.gcp import GcpInfrastructure
 from cpg_infra.config import SeqeraAccount
 
 if TYPE_CHECKING:
@@ -37,10 +38,14 @@ class DatasetSeqeraInfrastructure:
     """Owns all Seqera-related resources for one dataset."""
 
     def __init__(self, parent: CPGDatasetCloudInfrastructure) -> None:
+        assert isinstance(parent.infra, GcpInfrastructure), (
+            'DatasetSeqeraInfrastructure requires GcpInfrastructure; '
+            'gating lives on CPGDatasetCloudInfrastructure.should_setup_seqera.'
+        )
         self._parent = parent
         self._config = parent.config
         self._dataset_config = parent.dataset_config
-        self._infra = parent.infra
+        self._infra: GcpInfrastructure = parent.infra
 
     @cached_property
     def _access_levels(self) -> list[str]:
@@ -55,15 +60,15 @@ class DatasetSeqeraInfrastructure:
         # has already validated that seqera config and team_ownership exist.
         assert self._config.seqera is not None
         assert self._dataset_config.team_ownership is not None
-        return self._config.seqera.workspace_ids[
-            self._dataset_config.team_ownership
-        ]
+        return self._config.seqera.workspace_ids[self._dataset_config.team_ownership]
 
     @cached_property
     def _wif_pool(self) -> gcp.iam.WorkloadIdentityPool:
         pool_id = f'seqera-{self._dataset_config.dataset}'
         return gcp.iam.WorkloadIdentityPool(
-            self._infra.get_pulumi_name(f'seqera-wif-pool-{self._dataset_config.dataset}'),
+            self._infra.get_pulumi_name(
+                f'seqera-wif-pool-{self._dataset_config.dataset}'
+            ),
             workload_identity_pool_id=pool_id,
             display_name=f'Seqera WIF pool for {self._dataset_config.dataset}',
             description=(
