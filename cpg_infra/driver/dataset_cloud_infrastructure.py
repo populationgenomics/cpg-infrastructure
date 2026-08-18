@@ -37,6 +37,7 @@ from cpg_infra.config import (
     CPGDatasetConfig,
     CPGInfrastructureConfig,
     HailAccount,
+    SeqeraAccount,
 )
 from cpg_infra.driver.constants import (
     METAMIST_PERMISSIONS,
@@ -52,6 +53,9 @@ from cpg_infra.driver.constants import (
     access_levels,
     compute_hash,
     dict_to_toml,
+)
+from cpg_infra.driver.dataset_seqera_infrastructure import (
+    DatasetSeqeraInfrastructure,
 )
 from cpg_infra.driver.main_upload_bucket import MainUploadBucket
 from cpg_infra.driver.sm_accessor_membership import (
@@ -158,6 +162,8 @@ class CPGDatasetCloudInfrastructure:
             self.setup_metamist()
         if self.should_setup_hail:
             self.setup_hail()
+        if self.should_setup_seqera:
+            self.setup_seqera()
         if self.should_setup_cromwell:
             self.setup_cromwell()
         if self.should_setup_spark:
@@ -195,6 +201,8 @@ class CPGDatasetCloudInfrastructure:
 
         for access_level, account in self.hail_accounts_by_access_level.items():
             machine_accounts['hail'].append((access_level, account.cloud_id))
+        for access_level, account in self.seqera_accounts_by_access_level.items():
+            machine_accounts['seqera'].append((access_level, account.cloud_id))
         for access_level, account in self.deployment_accounts_by_access_level.items():
             machine_accounts['deployment'].append((access_level, account))
         for (
@@ -1281,6 +1289,23 @@ class CPGDatasetCloudInfrastructure:
         self.setup_git_checkout_token_permissions()
         self.setup_hail_bucket_permissions()
         self.setup_hail_wheels_bucket_permissions()
+
+    # region SEQERA
+
+    @cached_property
+    def seqera(self) -> DatasetSeqeraInfrastructure:
+        return DatasetSeqeraInfrastructure(self)
+
+    def setup_seqera(self) -> None:
+        self.seqera.setup()
+
+    @cached_property
+    def seqera_accounts_by_access_level(self) -> dict[str, SeqeraAccount]:
+        if not self.should_setup_seqera:
+            return {}
+        return self.seqera.accounts_by_access_level
+
+    # endregion SEQERA
 
     @cached_property
     def hail_batch_url(self):
