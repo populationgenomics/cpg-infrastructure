@@ -135,14 +135,14 @@ class SeqeraComputeEnv(Resource):
         ce_name: pulumi.Input[str],
         credentials_id: pulumi.Input[str],
         platform: pulumi.Input[str],
-        config: GoogleBatchConfig,  # Accepts only GoogleBatchConfigArgs, extend this when supporting a new platform
+        config: GoogleBatchConfig,  # Accepts only GoogleBatchConfig, extend this when supporting a new platform
         description: Optional[pulumi.Input[str]] = None,
         labels: Optional[pulumi.Input[list[int]]] = None,
         opts: Optional[pulumi.ResourceOptions] = None,
     ):
         # Seqera compute envs must have unique names.
         # In-case of a replace event (but same compute env name), there will be name collision
-        # if the new compute is created while the old one exists. Therefore, old compute env is deleted before creating the new compute env
+        # if the new compute is created while the old one exists. Therefore, delete on old executed before creating the new
         merged_opts = pulumi.ResourceOptions.merge(
             opts, pulumi.ResourceOptions(delete_before_replace=True)
         )

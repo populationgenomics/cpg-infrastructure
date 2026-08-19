@@ -63,6 +63,10 @@ if TYPE_CHECKING:
     from cpg_infra.driver.group import Group
 
 
+def get_formatted_team_name(team: str) -> str:
+    return team.lower().replace(' ', '-')
+
+
 class CPGInfrastructure:
     """Class for managing all CPG infrastructure"""
 
@@ -580,9 +584,6 @@ class CPGInfrastructure:
             output_name=os.path.join(suffix, 'infrastructure.toml'),
         )
 
-    def get_team_name(self, team: str) -> str:
-        return team.lower().replace(' ', '-')
-
     def setup_seqera_workspaces(self):
         """Import Seqera workspaces to pulumi state and store reference"""
         seqera_cfg = self.config.seqera
@@ -590,7 +591,7 @@ class CPGInfrastructure:
             return
 
         for team, team_configs in seqera_cfg.teams.items():
-            team_name = self.get_team_name(team)
+            team_name = get_formatted_team_name(team)
             ws_pair = team_configs.workspaces
             for workspace_type, ref in (('main', ws_pair.main), ('test', ws_pair.test)):
                 if ref is None:
@@ -613,8 +614,8 @@ class CPGInfrastructure:
 
         gcp_key = GcpInfrastructure.name()
 
-        for team, team_cfg in seqera_cfg.teams.items():
-            member_keys = team_cfg.members
+        for team, workspace_scope in seqera_cfg.teams.items():
+            member_keys = workspace_scope.members
             if not member_keys:
                 continue
 
@@ -625,14 +626,13 @@ class CPGInfrastructure:
                     raise ValueError(f'Could not find the seqera member:{member_key} in CPG users.')
                 cloud_user = user.clouds.get(gcp_key)
                 if cloud_user is None or not cloud_user.id:
-                    pulumi.log.warn(f'Can not find seqera member: {member_key} id; skipping.')
-                    continue
+                    raise ValueError(f'Can not find seqera member: {member_key} id; skipping.')
                 member_ids.append((member_key, cloud_user.id))
 
             if not member_ids:
                 continue
 
-            team_name = self.get_team_name(team)
+            team_name = get_formatted_team_name(team)
 
             main_ws = self.seqera_workspaces.get((team, 'main'))
             # add to main workspace with `view` permission

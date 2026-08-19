@@ -48,8 +48,9 @@ class SeqeraWorkspacePair(ConfigModel):
     test: SeqeraWorkspaceRef | None = None
 
 
-class SeqeraTeam(ConfigModel):
-
+class WorkspaceScope(ConfigModel):
+    """Holds workspaces (Main and Test) and members of a workspace
+    """
     workspaces: SeqeraWorkspacePair
     members: list[MemberKey] = Field(default_factory=list)
 
@@ -211,7 +212,7 @@ class CPGInfrastructureConfig(ConfigModel):
         # Seqera Platform base URL used by dynamic resource providers.
         api_url: str
         # Holds per team, workspaces and member information
-        teams: dict[TeamOwnership, SeqeraTeam]
+        teams: dict[TeamOwnership, WorkspaceScope]
 
     class Billing(ConfigModel):
         class GCP(ConfigModel):

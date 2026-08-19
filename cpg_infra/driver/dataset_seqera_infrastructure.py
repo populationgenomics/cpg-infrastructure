@@ -18,7 +18,7 @@ import pulumi
 import pulumi_gcp as gcp
 
 from cpg_infra.abstraction.gcp import GcpInfrastructure
-from cpg_infra.config import SeqeraAccount
+from cpg_infra.config import SeqeraAccount, SeqeraWorkspaceRef, SeqeraWorkspacePair
 from cpg_infra.driver.dynamic_providers.seqera import (
     GoogleBatchConfig,
     SeqeraComputeEnv,
@@ -60,17 +60,19 @@ class DatasetSeqeraInfrastructure:
         return levels
 
     @cached_property
-    def _workspace_pair(self):
-        """The (main, test) workspace pair for this dataset's team.
+    def _workspace_pair(self) -> SeqeraWorkspacePair:
+        """workspace pair of this dataset's team.
         """
-        #TODO check these validations
+
         assert self._config.seqera is not None
         assert self._dataset_config.team_ownership is not None
         return self._config.seqera.teams[
             self._dataset_config.team_ownership
         ].workspaces
 
-    def _workspace_ref_for_access_level(self, level: str):
+    def _workspace_ref_for_access_level(self, level: str) -> SeqeraWorkspaceRef | None:
+        """Returns workspace config reference for access level.
+        """
 
         if level in _MAIN_WORKSPACE_LEVELS:
             return self._workspace_pair.main
@@ -80,9 +82,10 @@ class DatasetSeqeraInfrastructure:
         self,
         level: str,
     ) -> SeqeraWorkspace | None:
+        """Returns Pulumi resource.
+        """
 
-        ref = self._workspace_ref_for_access_level(level)
-        if ref is None:
+        if self._workspace_ref_for_access_level(level) is None:
             return None
         assert self._dataset_config.team_ownership is not None
         ws_type = 'main' if level in _MAIN_WORKSPACE_LEVELS else 'test'
@@ -162,7 +165,7 @@ class DatasetSeqeraInfrastructure:
         """
         self._grant_project_roles()
         self._bind_wif_principals()
-        self._setup_seqera_credentials_and_compute_envs()
+        self._setup_credentials_and_compute_envs()
 
     def _grant_project_roles(self) -> None:
         for level, sa in self._service_accounts.items():
@@ -212,9 +215,8 @@ class DatasetSeqeraInfrastructure:
         base = self._infra.bucket_output_path(bucket)
         return pulumi.Output.concat(base, '/seqera/', level)
 
-    def _setup_seqera_credentials_and_compute_envs(self) -> None:
-        """Create one Google credential + one GCP Batch compute env per
-        access level in the relevant workspace.
+    def _setup_credentials_and_compute_envs(self) -> None:
+        """Create credentials + GCP Batch compute env per access level in the relevant workspace.
         """
         assert isinstance(self._infra, GcpInfrastructure)
         infra = self._infra
@@ -230,13 +232,11 @@ class DatasetSeqeraInfrastructure:
 
             sa = self._service_accounts[level]
             dataset = self._dataset_config.dataset
-            cred_name = f'{dataset}-{level}-cred'
-            ce_name = f'{dataset}-{level}'
 
             wif_credentials = SeqeraGoogleCredentials(
                 self._infra.get_pulumi_name(f'seqera-cred-{dataset}-{level}'),
                 workspace_id=workspace_resource.workspace_id,
-                cred_name=cred_name,
+                cred_name=f'{dataset}-{level}-cred',
                 workload_identity_provider=self._wif_provider.name,
                 service_account_email=sa.email,
                 opts=pulumi.ResourceOptions(depends_on=[workspace_resource]),
@@ -245,14 +245,14 @@ class DatasetSeqeraInfrastructure:
             SeqeraComputeEnv(
                 self._infra.get_pulumi_name(f'seqera-ce-{dataset}-{level}'),
                 workspace_id=workspace_resource.workspace_id,
-                ce_name=ce_name,
+                ce_name=f'{dataset}-{level}',
                 credentials_id=wif_credentials.credentials_id,
                 platform='google-batch',
                 description= f'{dataset} {level} compute environment ',
                 config=GoogleBatchConfig(
                     location=infra.region,
                     work_dir=self._work_dir_for_access_level(level),
-                    service_account=sa.email,
+                    service_account=sa.email, #TODO have attached the same SA for runtime. Attach a different SA for runtime
                     project_id=project_id,
                     head_job_cpus=2,
                     head_job_memory_mb=4096,
@@ -261,7 +261,7 @@ class DatasetSeqeraInfrastructure:
                         'e2-medium',
                         'e2-standard-2'
                     ],
-                    spot=True, #TODO compute values fixed for now, need to update it
+                    spot=True, #TODO compute values fixed for now, need to update this
                 ),
                 opts=pulumi.ResourceOptions(depends_on=[workspace_resource]),
             )
