@@ -28,6 +28,31 @@ GroupName = Literal[
     'external-repository-reader',
 ]
 
+TeamOwnership = Literal['Rare Disease', 'Population Genomics', 'Shared']
+
+
+class SeqeraWorkspaceRef(ConfigModel):
+
+    workspace_id: int
+    name: str
+    full_name: str
+    visibility: Literal['PRIVATE', 'SHARED'] = 'PRIVATE'
+    description: str | None = None
+
+
+class SeqeraWorkspacePair(ConfigModel):
+    """The two Seqera workspaces per team
+    """
+
+    main: SeqeraWorkspaceRef
+    test: SeqeraWorkspaceRef | None = None
+
+
+class SeqeraTeam(ConfigModel):
+
+    workspaces: SeqeraWorkspacePair
+    members: list[MemberKey] = Field(default_factory=list)
+
 
 class CPGInfrastructureUser(ConfigModel):
     class Cloud(ConfigModel):
@@ -183,12 +208,10 @@ class CPGInfrastructureConfig(ConfigModel):
         # Seqera Cloud OIDC issuer URI, see:
         # https://docs.seqera.io/platform-cloud/credentials/overview#google-cloud
         wif_issuer_uri: str
-        # Seqera workspace ID per dataset team_ownership value.
-        # Keys MUST match the CPGDatasetConfig.team_ownership Literal.
-        workspace_ids: dict[
-            Literal['Rare Disease', 'Population Genomics', 'Shared'],
-            int,
-        ]
+        # Seqera Platform base URL used by dynamic resource providers.
+        api_url: str
+        # Holds per team, workspaces and member information
+        teams: dict[TeamOwnership, SeqeraTeam]
 
     class Billing(ConfigModel):
         class GCP(ConfigModel):
@@ -416,10 +439,7 @@ class CPGDatasetConfig(ConfigModel):
     # Metamist free-text description for the metamist project
     description: str | None = None
 
-    # Metamist dataset's team ownership
-    team_ownership: Literal['Rare Disease', 'Population Genomics', 'Shared'] | None = (
-        None
-    )
+    team_ownership: TeamOwnership | None = None
 
     # Metamist dataset's Billing group
     billing_groups: list[str] = Field(default_factory=list)

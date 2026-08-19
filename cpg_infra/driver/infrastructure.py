@@ -35,6 +35,13 @@ from cpg_infra.driver.constants import (
     dict_to_toml,
 )
 from cpg_infra.driver.dataset_infrastructure import CPGDatasetInfrastructure
+from cpg_infra.driver.dynamic_providers.seqera import (
+    SeqeraWorkspace,
+    SeqeraWorkspaceParticipant,
+)
+from cpg_infra.driver.dynamic_providers.seqera.util.api_util import (
+    configure as _configure_seqera_api,
+)
 
 # ``GroupMember`` is used at runtime for the ``isinstance`` check inside
 # ``finalize_groups``. ``GroupProvider`` is imported under an underscore-prefix
@@ -80,6 +87,15 @@ class CPGInfrastructure:
             str,
             CPGDatasetInfrastructure,
         ] = defaultdict()
+
+        if config.seqera is not None:
+            # Wire Seqera Platform API URL
+            _configure_seqera_api(config.seqera.api_url)
+
+        self.seqera_workspaces: dict[
+            tuple[str, str],
+            SeqeraWorkspace,
+        ] = {}
 
     @cached_property
     def common_dataset(self) -> CPGDatasetInfrastructure:
@@ -190,6 +206,12 @@ class CPGInfrastructure:
 
         # Store the deployed infrastructure config on gcp storage
         self.output_infrastructure_config()
+
+        # Setup Seqera infrastructure
+        self.setup_seqera_workspaces()
+
+        # Sync Seqera workspace participants
+        self.setup_seqera_workspace_members()
 
     def setup_datasets(self):
         if self.dataset_infrastructures:
@@ -557,6 +579,84 @@ class CPGInfrastructure:
             contents=infra_config,
             output_name=os.path.join(suffix, 'infrastructure.toml'),
         )
+
+    def get_team_name(self, team: str) -> str:
+        return team.lower().replace(' ', '-')
+
+    def setup_seqera_workspaces(self):
+        """Import Seqera workspaces to pulumi state and store reference"""
+        seqera_cfg = self.config.seqera
+        if seqera_cfg is None:
+            return
+
+        for team, team_configs in seqera_cfg.teams.items():
+            team_name = self.get_team_name(team)
+            ws_pair = team_configs.workspaces
+            for workspace_type, ref in (('main', ws_pair.main), ('test', ws_pair.test)):
+                if ref is None:
+                    continue
+                self.seqera_workspaces[(team, workspace_type)] = SeqeraWorkspace(
+                    f'seqera-ws-{team_name}-{workspace_type}',
+                    org_id=seqera_cfg.org_id,
+                    workspace_id=ref.workspace_id,
+                    ws_name=ref.name,
+                    full_name=ref.full_name,
+                    visibility=ref.visibility,
+                    description=ref.description,
+                )
+
+    def setup_seqera_workspace_members(self):
+        """Add CPG members to Seqera workspaces."""
+        seqera_cfg = self.config.seqera
+        if seqera_cfg is None:
+            return
+
+        gcp_key = GcpInfrastructure.name()
+
+        for team, team_cfg in seqera_cfg.teams.items():
+            member_keys = team_cfg.members
+            if not member_keys:
+                continue
+
+            member_ids: list[tuple[str, str]] = []
+            for member_key in member_keys:
+                user = self.config.users.get(member_key)
+                if user is None:
+                    raise ValueError(f'Could not find the seqera member:{member_key} in CPG users.')
+                cloud_user = user.clouds.get(gcp_key)
+                if cloud_user is None or not cloud_user.id:
+                    pulumi.log.warn(f'Can not find seqera member: {member_key} id; skipping.')
+                    continue
+                member_ids.append((member_key, cloud_user.id))
+
+            if not member_ids:
+                continue
+
+            team_name = self.get_team_name(team)
+
+            main_ws = self.seqera_workspaces.get((team, 'main'))
+            # add to main workspace with `view` permission
+            if main_ws is not None:
+                for member_key, email in member_ids:
+                    SeqeraWorkspaceParticipant(
+                        f'wsp-{team_name}-main-{member_key}',
+                        org_id=seqera_cfg.org_id,
+                        workspace_id=main_ws.workspace_id,
+                        email=email,
+                        role='view',
+                    )
+
+            test_ws = self.seqera_workspaces.get((team, 'test'))
+            # add to test workspace with `admin` permission
+            if test_ws is not None:
+                for member_key, email in member_ids:
+                    SeqeraWorkspaceParticipant(
+                        f'wsp-{team_name}-test-{member_key}',
+                        org_id=seqera_cfg.org_id,
+                        workspace_id=test_ws.workspace_id,
+                        email=email,
+                        role='admin',
+                    )
 
     # region ACCESS_CACHE
 

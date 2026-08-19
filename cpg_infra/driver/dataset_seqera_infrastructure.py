@@ -14,17 +14,27 @@ from __future__ import annotations
 from functools import cached_property
 from typing import TYPE_CHECKING
 
+import pulumi
 import pulumi_gcp as gcp
 
+from cpg_infra.abstraction.gcp import GcpInfrastructure
 from cpg_infra.config import SeqeraAccount
+from cpg_infra.driver.dynamic_providers.seqera import (
+    GoogleBatchConfig,
+    SeqeraComputeEnv,
+    SeqeraGoogleCredentials,
+    SeqeraWorkspace,
+)
 
 if TYPE_CHECKING:
     from cpg_infra.driver.dataset_cloud_infrastructure import (
         CPGDatasetCloudInfrastructure,
     )
 
-_ACCESS_LEVELS_ALWAYS = ('full', 'standard')
+_ACCESS_LEVEL_FULL = 'full'
+_ACCESS_LEVEL_STANDARD = 'standard'
 _ACCESS_LEVEL_TEST = 'test'
+_MAIN_WORKSPACE_LEVELS = frozenset({_ACCESS_LEVEL_FULL, _ACCESS_LEVEL_STANDARD})
 
 _SEQERA_SA_PROJECT_ROLES: tuple[str, ...] = (
     'roles/batch.jobsEditor',
@@ -44,20 +54,41 @@ class DatasetSeqeraInfrastructure:
 
     @cached_property
     def _access_levels(self) -> list[str]:
-        levels = list(_ACCESS_LEVELS_ALWAYS)
+        levels = list(_MAIN_WORKSPACE_LEVELS)
         if self._dataset_config.setup_test:
             levels.append(_ACCESS_LEVEL_TEST)
         return levels
 
     @cached_property
-    def _workspace_id(self) -> int:
-        # By the time this property is read, should_setup_seqera on the parent
-        # has already validated that seqera config and team_ownership exist.
+    def _workspace_pair(self):
+        """The (main, test) workspace pair for this dataset's team.
+        """
+        #TODO check these validations
         assert self._config.seqera is not None
         assert self._dataset_config.team_ownership is not None
-        return self._config.seqera.workspace_ids[
+        return self._config.seqera.teams[
             self._dataset_config.team_ownership
-        ]
+        ].workspaces
+
+    def _workspace_ref_for_access_level(self, level: str):
+
+        if level in _MAIN_WORKSPACE_LEVELS:
+            return self._workspace_pair.main
+        return self._workspace_pair.test
+
+    def _workspace_resource_for_access_level(
+        self,
+        level: str,
+    ) -> SeqeraWorkspace | None:
+
+        ref = self._workspace_ref_for_access_level(level)
+        if ref is None:
+            return None
+        assert self._dataset_config.team_ownership is not None
+        ws_type = 'main' if level in _MAIN_WORKSPACE_LEVELS else 'test'
+        return self._parent.root.seqera_workspaces.get(
+            (self._dataset_config.team_ownership, ws_type),
+        )
 
     @cached_property
     def _wif_pool(self) -> gcp.iam.WorkloadIdentityPool:
@@ -131,6 +162,7 @@ class DatasetSeqeraInfrastructure:
         """
         self._grant_project_roles()
         self._bind_wif_principals()
+        self._setup_seqera_credentials_and_compute_envs()
 
     def _grant_project_roles(self) -> None:
         for level, sa in self._service_accounts.items():
@@ -145,17 +177,21 @@ class DatasetSeqeraInfrastructure:
     def _bind_wif_principals(self) -> None:
         assert self._config.seqera is not None
         org_id = self._config.seqera.org_id
-        workspace_id = self._workspace_id
-        wif_subject = f'org:{org_id}:wsp:{workspace_id}:workflow'
-        principal = self._wif_pool.name.apply(
-            lambda pool_name: (
-                f'principal://iam.googleapis.com/{pool_name}/subject/{wif_subject}'
-            ),
-        )
         # Ensure the provider is materialised so pool exists before bindings.
         _ = self._wif_provider
 
         for level, sa in self._service_accounts.items():
+            workspace_id = self._workspace_ref_for_access_level(level).workspace_id
+
+            if workspace_id is None:
+                continue
+
+            wif_subject = f'org:{org_id}:wsp:{workspace_id}:workflow'
+            principal = self._wif_pool.name.apply(
+                lambda pool_name, subject=wif_subject: (
+                    f'principal://iam.googleapis.com/{pool_name}/subject/{subject}'
+                ),
+            )
             gcp.serviceaccount.IAMMember(
                 self._infra.get_pulumi_name(
                     f'seqera-{self._dataset_config.dataset}-{level}-wif-user',
@@ -163,4 +199,69 @@ class DatasetSeqeraInfrastructure:
                 service_account_id=sa.name,
                 role='roles/iam.workloadIdentityUser',
                 member=principal,
+            )
+
+    def _work_dir_for_access_level(self, level: str) -> pulumi.Output[str]:
+        """The work dir for a compute env for this access level.
+         corresponds to seqera work directory where pipelines store scratch data
+        """
+        if level == _ACCESS_LEVEL_TEST:
+            bucket = self._parent.test_tmp_bucket #TODO is it okay to use this bucket ?
+        else:
+            bucket = self._parent.main_tmp_bucket #TODO is it okay to use this bucket ?
+        base = self._infra.bucket_output_path(bucket)
+        return pulumi.Output.concat(base, '/seqera/', level)
+
+    def _setup_seqera_credentials_and_compute_envs(self) -> None:
+        """Create one Google credential + one GCP Batch compute env per
+        access level in the relevant workspace.
+        """
+        assert isinstance(self._infra, GcpInfrastructure)
+        infra = self._infra
+
+        project_id: pulumi.Output[str] = infra.project_id
+
+        for level in self._access_levels:
+            workspace_resource = self._workspace_resource_for_access_level(
+                level,
+            )
+            if workspace_resource is None:
+                continue
+
+            sa = self._service_accounts[level]
+            dataset = self._dataset_config.dataset
+            cred_name = f'{dataset}-{level}-cred'
+            ce_name = f'{dataset}-{level}'
+
+            wif_credentials = SeqeraGoogleCredentials(
+                self._infra.get_pulumi_name(f'seqera-cred-{dataset}-{level}'),
+                workspace_id=workspace_resource.workspace_id,
+                cred_name=cred_name,
+                workload_identity_provider=self._wif_provider.name,
+                service_account_email=sa.email,
+                opts=pulumi.ResourceOptions(depends_on=[workspace_resource]),
+            )
+
+            SeqeraComputeEnv(
+                self._infra.get_pulumi_name(f'seqera-ce-{dataset}-{level}'),
+                workspace_id=workspace_resource.workspace_id,
+                ce_name=ce_name,
+                credentials_id=wif_credentials.credentials_id,
+                platform='google-batch',
+                description= f'{dataset} {level} compute environment ',
+                config=GoogleBatchConfig(
+                    location=infra.region,
+                    work_dir=self._work_dir_for_access_level(level),
+                    service_account=sa.email,
+                    project_id=project_id,
+                    head_job_cpus=2,
+                    head_job_memory_mb=4096,
+                    compute_jobs_machine_type=[
+                        'e2-small',
+                        'e2-medium',
+                        'e2-standard-2'
+                    ],
+                    spot=True, #TODO compute values fixed for now, need to update it
+                ),
+                opts=pulumi.ResourceOptions(depends_on=[workspace_resource]),
             )

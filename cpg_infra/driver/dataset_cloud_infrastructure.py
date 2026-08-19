@@ -131,7 +131,7 @@ class CPGDatasetCloudInfrastructure:
                 f'{self.dataset_config.dataset}: SEQERA_ACCOUNTS component is '
                 'enabled but CPGInfrastructureConfig.seqera is not set. '
                 'Configure the global Seqera block (org_id, wif_issuer_uri, '
-                'workspace_ids) before enabling Seqera on any dataset.',
+                'api_url, teams) before enabling Seqera on any dataset.',
             )
         return True
 
