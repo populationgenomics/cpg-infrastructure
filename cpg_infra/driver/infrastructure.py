@@ -35,7 +35,6 @@ from cpg_infra.driver.constants import (
     dict_to_toml,
 )
 from cpg_infra.driver.dataset_infrastructure import CPGDatasetInfrastructure
-
 from cpg_infra.driver.groups import GroupMember, GroupProvider
 from cpg_infra.github_wif.driver import PAM_BROKER_SA_NAME
 from cpg_infra.plugin import get_plugins

@@ -43,4 +43,3 @@ from cpg_infra.driver.dataset_infrastructure import (
 )
 from cpg_infra.driver.groups import Group, GroupMember, GroupProvider
 from cpg_infra.driver.infrastructure import CPGInfrastructure
-

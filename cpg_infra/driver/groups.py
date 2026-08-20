@@ -5,9 +5,10 @@ Group data structures: GroupMember, Group, and GroupProvider.
 
 from __future__ import annotations
 
-import graphlib
 from collections import defaultdict
 from typing import TYPE_CHECKING
+
+import graphlib
 
 from cpg_infra.config import CPGInfrastructureUser
 
@@ -45,7 +46,6 @@ class GroupMember:
             members.append(f'username={self.user.id!r}')
 
         return f'GroupMember({", ".join(members)})'
-
 
 
 class Group:
@@ -92,7 +92,6 @@ class Group:
 
     def __repr__(self) -> str:
         return f'Group({self.name!r})'
-
 
 
 class GroupProvider:
@@ -142,9 +141,7 @@ class GroupProvider:
         groups = self.groups[cloud]
 
         deps = {
-            group.name: [
-                g.name for g in group.members.values() if isinstance(g, Group)
-            ]
+            group.name: [g.name for g in group.members.values() if isinstance(g, Group)]
             for group in groups.values()
         }
 
