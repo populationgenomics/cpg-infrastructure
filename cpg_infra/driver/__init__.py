@@ -34,6 +34,8 @@ from cpg_infra.driver.constants import (
 )
 from cpg_infra.driver.dataset_cloud_infrastructure import (
     CPGDatasetCloudInfrastructure,
+    MainUploadBucket,
+    SampleMetadataAccessorMembership,
 )
 from cpg_infra.driver.dataset_infrastructure import (
     NAME_TO_INFRA_CLASS,
@@ -41,8 +43,4 @@ from cpg_infra.driver.dataset_infrastructure import (
 )
 from cpg_infra.driver.groups import Group, GroupMember, GroupProvider
 from cpg_infra.driver.infrastructure import CPGInfrastructure
-from cpg_infra.driver.dataset_cloud_infrastructure import (
-    MainUploadBucket,
-    SampleMetadataAccessorMembership,
-)
 

@@ -53,6 +53,8 @@ from cpg_infra.driver.constants import (
     compute_hash,
     dict_to_toml,
 )
+
+
 class MainUploadBucket(NamedTuple):
     bucket: Any
     uploaders: list[str]
@@ -63,6 +65,7 @@ class SampleMetadataAccessorMembership(NamedTuple):
     name: str
     member: Any
     permissions: Iterable[str]
+
 
 if TYPE_CHECKING:
     from cpg_infra.driver.groups import Group, GroupProvider
@@ -1084,11 +1087,13 @@ class CPGDatasetCloudInfrastructure:
         ] = {
             'main-upload': MainUploadBucket(
                 bucket=default_bucket,
-                uploaders=upload_config.default_bucket.uploaders
-                if upload_config
-                and upload_config.default_bucket
-                and upload_config.default_bucket.uploaders
-                else [],
+                uploaders=(
+                    upload_config.default_bucket.uploaders
+                    if upload_config
+                    and upload_config.default_bucket
+                    and upload_config.default_bucket.uploaders
+                    else []
+                ),
             )
         }
 
