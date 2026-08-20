@@ -31,7 +31,7 @@ if TYPE_CHECKING:
         CPGDatasetConfig,
         CPGInfrastructureConfig,
     )
-    from cpg_infra.driver.group_provider import GroupProvider
+    from cpg_infra.driver.groups import GroupProvider
     from cpg_infra.driver.infrastructure import CPGInfrastructure
 
 

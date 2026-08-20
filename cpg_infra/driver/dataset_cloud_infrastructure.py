@@ -59,8 +59,7 @@ from cpg_infra.driver.sm_accessor_membership import (
 )
 
 if TYPE_CHECKING:
-    from cpg_infra.driver.group import Group
-    from cpg_infra.driver.group_provider import GroupProvider
+    from cpg_infra.driver.groups import Group, GroupProvider
     from cpg_infra.driver.infrastructure import CPGInfrastructure
 
 
