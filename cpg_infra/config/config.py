@@ -32,7 +32,6 @@ TeamOwnership = Literal['Rare Disease', 'Population Genomics', 'Shared']
 
 
 class SeqeraWorkspaceRef(ConfigModel):
-
     workspace_id: int
     name: str
     full_name: str
@@ -41,16 +40,15 @@ class SeqeraWorkspaceRef(ConfigModel):
 
 
 class SeqeraWorkspacePair(ConfigModel):
-    """The two Seqera workspaces per team
-    """
+    """The two Seqera workspaces per team"""
 
     main: SeqeraWorkspaceRef
     test: SeqeraWorkspaceRef | None = None
 
 
 class WorkspaceScope(ConfigModel):
-    """Holds workspaces (Main and Test) and members of a workspace
-    """
+    """Holds workspaces (Main and Test) and members of a workspace"""
+
     workspaces: SeqeraWorkspacePair
     members: list[MemberKey] = Field(default_factory=list)
 

@@ -18,9 +18,7 @@ import pulumi
 import pulumi_gcp as gcp
 
 from cpg_infra.abstraction.gcp import GcpInfrastructure
-from cpg_infra.config import SeqeraAccount
-from cpg_infra.abstraction.gcp import GcpInfrastructure
-from cpg_infra.config import SeqeraAccount, SeqeraWorkspaceRef, SeqeraWorkspacePair
+from cpg_infra.config import SeqeraAccount, SeqeraWorkspacePair, SeqeraWorkspaceRef
 from cpg_infra.driver.dynamic_providers.seqera import (
     GoogleBatchConfig,
     SeqeraComputeEnv,
@@ -67,18 +65,14 @@ class DatasetSeqeraInfrastructure:
 
     @cached_property
     def _workspace_pair(self) -> SeqeraWorkspacePair:
-        """workspace pair of this dataset's team.
-        """
+        """workspace pair of this dataset's team."""
 
         assert self._config.seqera is not None
         assert self._dataset_config.team_ownership is not None
-        return self._config.seqera.teams[
-            self._dataset_config.team_ownership
-        ].workspaces
+        return self._config.seqera.teams[self._dataset_config.team_ownership].workspaces
 
     def _workspace_ref_for_access_level(self, level: str) -> SeqeraWorkspaceRef | None:
-        """Returns workspace config reference for access level.
-        """
+        """Returns workspace config reference for access level."""
 
         if level in _MAIN_WORKSPACE_LEVELS:
             return self._workspace_pair.main
@@ -88,8 +82,7 @@ class DatasetSeqeraInfrastructure:
         self,
         level: str,
     ) -> SeqeraWorkspace | None:
-        """Returns Pulumi resource.
-        """
+        """Returns Pulumi resource."""
 
         if self._workspace_ref_for_access_level(level) is None:
             return None
@@ -215,18 +208,21 @@ class DatasetSeqeraInfrastructure:
 
     def _work_dir_for_access_level(self, level: str) -> pulumi.Output[str]:
         """The work dir for a compute env for this access level.
-         corresponds to seqera work directory where pipelines store scratch data
+        corresponds to seqera work directory where pipelines store scratch data
         """
         if level == _ACCESS_LEVEL_TEST:
-            bucket = self._parent.test_tmp_bucket #TODO is it okay to use this bucket ?
+            bucket = (
+                self._parent.test_tmp_bucket
+            )  # TODO is it okay to use this bucket ?
         else:
-            bucket = self._parent.main_tmp_bucket #TODO is it okay to use this bucket ?
+            bucket = (
+                self._parent.main_tmp_bucket
+            )  # TODO is it okay to use this bucket ?
         base = self._infra.bucket_output_path(bucket)
         return pulumi.Output.concat(base, '/seqera/', level)
 
     def _setup_credentials_and_compute_envs(self) -> None:
-        """Create credentials + GCP Batch compute env per access level in the relevant workspace.
-        """
+        """Create credentials + GCP Batch compute env per access level in the relevant workspace."""
         assert isinstance(self._infra, GcpInfrastructure)
         infra = self._infra
 
@@ -257,20 +253,20 @@ class DatasetSeqeraInfrastructure:
                 ce_name=f'{dataset}-{level}',
                 credentials_id=wif_credentials.credentials_id,
                 platform='google-batch',
-                description= f'{dataset} {level} compute environment ',
+                description=f'{dataset} {level} compute environment ',
                 config=GoogleBatchConfig(
                     location=infra.region,
                     work_dir=self._work_dir_for_access_level(level),
-                    service_account=sa.email, #TODO have attached the same SA for runtime. Attach a different SA for runtime
+                    service_account=sa.email,  # TODO have attached the same SA for runtime. Attach a different SA for runtime
                     project_id=project_id,
                     head_job_cpus=2,
                     head_job_memory_mb=4096,
                     compute_jobs_machine_type=[
                         'e2-small',
                         'e2-medium',
-                        'e2-standard-2'
+                        'e2-standard-2',
                     ],
-                    spot=True, #TODO compute values fixed for now, need to update this
+                    spot=True,  # TODO compute values fixed for now, need to update this
                 ),
                 opts=pulumi.ResourceOptions(depends_on=[workspace_resource]),
             )

@@ -585,7 +585,7 @@ class CPGInfrastructure:
         )
 
     def setup_seqera_workspaces(self):
-        """Import Seqera workspaces to pulumi state and store reference"""
+        """Import Seqera workspaces to pulumi state - created manually"""
         seqera_cfg = self.config.seqera
         if seqera_cfg is None:
             return
@@ -623,10 +623,14 @@ class CPGInfrastructure:
             for member_key in member_keys:
                 user = self.config.users.get(member_key)
                 if user is None:
-                    raise ValueError(f'Could not find the seqera member:{member_key} in CPG users.')
+                    raise ValueError(
+                        f'Could not find the seqera member:{member_key} in CPG users.'
+                    )
                 cloud_user = user.clouds.get(gcp_key)
                 if cloud_user is None or not cloud_user.id:
-                    raise ValueError(f'Can not find seqera member: {member_key} id; skipping.')
+                    raise ValueError(
+                        f'Can not find seqera member: {member_key} id; skipping.'
+                    )
                 member_ids.append((member_key, cloud_user.id))
 
             if not member_ids:

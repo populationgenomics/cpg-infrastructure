@@ -1,10 +1,8 @@
-"""Pulumi Dynamic Providers for managing Seqera resources.
-"""
+"""Pulumi Dynamic Providers for managing Seqera resources."""
 
 from cpg_infra.driver.dynamic_providers.seqera.inputs.compute_environment import (
     GoogleBatchConfig,
 )
-
 from cpg_infra.driver.dynamic_providers.seqera.resources.seqera_compute_environment import (
     SeqeraComputeEnv,
 )
@@ -18,7 +16,6 @@ from cpg_infra.driver.dynamic_providers.seqera.resources.seqera_workspace_partic
     SeqeraWorkspaceParticipant,
 )
 
-
 __all__ = [
     'GoogleBatchConfig',
     'SeqeraComputeEnv',
@@ -26,4 +23,3 @@ __all__ = [
     'SeqeraWorkspace',
     'SeqeraWorkspaceParticipant',
 ]
-

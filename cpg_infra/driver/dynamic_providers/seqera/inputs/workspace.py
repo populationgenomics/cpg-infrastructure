@@ -1,17 +1,20 @@
-from cpg_infra.config import SeqeraWorkspaceRef
-from pydantic import BaseModel, model_validator
 from typing import Literal, Optional
 
+from pydantic import BaseModel, model_validator
+
+from cpg_infra.config import SeqeraWorkspaceRef
+
+
 class WorkspaceArgs(SeqeraWorkspaceRef):
-    """Validate props for the workspace dynamic resource.
-    """
+    """Validate props for the workspace dynamic resource."""
+
     org_id: int
 
 
-
 WorkspaceParticipantRole = Literal[
-    "owner", "admin", "maintain", "launch", "connect", "view"
+    'owner', 'admin', 'maintain', 'launch', 'connect', 'view'
 ]
+
 
 class WorkspaceParticipantArgs(BaseModel):
     """Validate props for the workspace-participant dynamic resource."""
@@ -24,15 +27,15 @@ class WorkspaceParticipantArgs(BaseModel):
     team_id: Optional[int] = None
     participant_id: Optional[int] = None
 
-    @model_validator(mode="after")
-    def _exactly_one_subject(self) -> "WorkspaceParticipantArgs":
+    @model_validator(mode='after')
+    def _exactly_one_subject(self) -> 'WorkspaceParticipantArgs':
         # validation similar to https://registry.terraform.io/providers/seqeralabs/seqera/latest/docs/resources/workspace_participant
         provided = sum(
             1 for x in (self.email, self.member_id, self.team_id) if x is not None
         )
         if provided != 1:
             raise ValueError(
-                "SeqeraWorkspaceParticipant requires exactly one of "
+                'SeqeraWorkspaceParticipant requires exactly one of '
                 "'email', 'member_id', or 'team_id'."
             )
         return self

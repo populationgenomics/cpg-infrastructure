@@ -1,5 +1,6 @@
 """Dynamic provider for Seqera workspaces."""
 
+from http import HTTPMethod
 from typing import Any, Optional
 
 import pulumi
@@ -21,8 +22,10 @@ def _describe_workspace(org_id: int, workspace_id: int) -> dict:
     """Fetch workspace information.
     https://docs.seqera.io/platform-api/describe-workspace
     """
-    result = call_seqera_api("GET", f"/orgs/{org_id}/workspaces/{workspace_id}")
-    return result.get("workspace") or result
+    result = call_seqera_api(
+        HTTPMethod.GET, f'/orgs/{org_id}/workspaces/{workspace_id}'
+    )
+    return result.get('workspace') or result
 
 
 def _update_workspace(inputs: WorkspaceArgs) -> None:
@@ -30,13 +33,13 @@ def _update_workspace(inputs: WorkspaceArgs) -> None:
     https://docs.seqera.io/platform-api/update-workspace
     """
     call_seqera_api(
-        "PUT",
-        f"/orgs/{inputs.org_id}/workspaces/{inputs.workspace_id}",
+        HTTPMethod.PUT,
+        f'/orgs/{inputs.org_id}/workspaces/{inputs.workspace_id}',
         {
-            "name": inputs.name,
-            "fullName": inputs.full_name,
-            "description": inputs.description or "",
-            "visibility": inputs.visibility,
+            'name': inputs.name,
+            'fullName': inputs.full_name,
+            'description': inputs.description or '',
+            'visibility': inputs.visibility,
         },
     )
 
@@ -44,14 +47,14 @@ def _update_workspace(inputs: WorkspaceArgs) -> None:
 def _compare_imported_state(ws: dict, inputs: WorkspaceArgs) -> dict:
     """Compare the imported workspace state against the code-declared inputs."""
     imported_state = {
-        "name": ws.get("name"),
-        "full_name": ws.get("fullName"),
-        "description": ws.get("description") or "",
-        "visibility": ws.get("visibility"),
+        'name': ws.get('name'),
+        'full_name': ws.get('fullName'),
+        'description': ws.get('description') or '',
+        'visibility': ws.get('visibility'),
     }
     difference = [
-        f"{field}: imported={imported_state[field]!r} code={getattr(inputs, field)!r}"
-        for field in ("name", "full_name", "description", "visibility")
+        f'{field}: imported={imported_state[field]!r} code={getattr(inputs, field)!r}'
+        for field in ('name', 'full_name', 'description', 'visibility')
         if getattr(inputs, field) != imported_state[field]
     ]
     if difference:
@@ -79,8 +82,8 @@ class _WorkspaceProvider(ResourceProvider):
         return CreateResult(
             id_=str(inputs.workspace_id),
             outs={
-                "org_id": inputs.org_id,
-                "workspace_id": inputs.workspace_id,
+                'org_id': inputs.org_id,
+                'workspace_id': inputs.workspace_id,
                 **imported_state,
             },
         )
@@ -89,14 +92,14 @@ class _WorkspaceProvider(ResourceProvider):
         replaces = []
         # Diff in the workspace id is treated as a replacement.
         # But as per the current implementation, create -> imports workspace, delete -> no-op
-        if olds.get("workspace_id") != news.get("workspace_id"):
-            replaces.append("workspace_id")
+        if olds.get('workspace_id') != news.get('workspace_id'):
+            replaces.append('workspace_id')
 
         changed = bool(replaces) or (
-            olds.get("name") != news.get("name")
-            or olds.get("description") != news.get("description")
-            or olds.get("full_name") != news.get("full_name")
-            or olds.get("visibility") != news.get("visibility")
+            olds.get('name') != news.get('name')
+            or olds.get('description') != news.get('description')
+            or olds.get('full_name') != news.get('full_name')
+            or olds.get('visibility') != news.get('visibility')
         )
         return DiffResult(changes=changed, replaces=replaces or None)
 
@@ -106,9 +109,9 @@ class _WorkspaceProvider(ResourceProvider):
         """
         https://docs.seqera.io/platform-api/update-workspace
         """
-        inputs = WorkspaceArgs(**{**news, "workspace_id": int(id_)})
+        inputs = WorkspaceArgs(**{**news, 'workspace_id': int(id_)})
         _update_workspace(inputs)
-        return UpdateResult(outs={**news, "workspace_id": inputs.workspace_id})
+        return UpdateResult(outs={**news, 'workspace_id': inputs.workspace_id})
 
     def delete(self, id_: str, props: dict[str, Any]) -> None:
         # Workspace deletion is intentionally ignored as it will not be handled via IaC.
@@ -135,17 +138,17 @@ class SeqeraWorkspace(Resource):
         visibility: pulumi.Input[str],
         description: Optional[pulumi.Input[str]] = None,
         opts: Optional[pulumi.ResourceOptions] = None,
-    ):
+    ) -> None:
         super().__init__(
             _WorkspaceProvider(),
             name,
             {
-                "org_id": org_id,
-                "workspace_id": workspace_id,
-                "name": ws_name,
-                "full_name": full_name,
-                "visibility": visibility,
-                "description": description,
+                'org_id': org_id,
+                'workspace_id': workspace_id,
+                'name': ws_name,
+                'full_name': full_name,
+                'visibility': visibility,
+                'description': description,
             },
             opts,
         )

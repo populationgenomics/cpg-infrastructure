@@ -1,10 +1,10 @@
-from typing import Literal
 from dataclasses import dataclass, fields
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 import pulumi
 from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
+
 
 def _to_wire_dict(instance: Any) -> dict[str, Any]:
     """Serialize a dataclass instance to a camelCase dict, dropping Nones.
@@ -15,9 +15,9 @@ def _to_wire_dict(instance: Any) -> dict[str, Any]:
         v = getattr(instance, f.name)
         if v is None:
             continue
-        if hasattr(v, "__dataclass_fields__"):
+        if hasattr(v, '__dataclass_fields__'):
             v = _to_wire_dict(v)
-        elif isinstance(v, list) and v and hasattr(v[0], "__dataclass_fields__"):
+        elif isinstance(v, list) and v and hasattr(v[0], '__dataclass_fields__'):
             v = [_to_wire_dict(item) for item in v]
         result[to_camel(f.name)] = v
     return result
@@ -39,6 +39,7 @@ class ConfigEnvVariable:
 @dataclass
 class GoogleBatchConfig:
     """Input for SeqeraComputeEnv resource"""
+
     location: pulumi.Input[str]
     work_dir: pulumi.Input[str]
 
@@ -82,19 +83,14 @@ class GoogleBatchConfig:
     copy_image: Optional[pulumi.Input[str]] = None
 
     def to_input_dict(self) -> dict[str, Any]:
-        """camelCase → value dict for Pulumi resource inputs.
-        """
+        """camelCase → value dict for Pulumi resource inputs."""
         return _to_wire_dict(self)
-
 
 
 class ConfigEnvVariableArgs(BaseModel):
     """Validate props of the `GoogleBatchConfig.environment`"""
 
-    model_config = ConfigDict(
-        alias_generator=to_camel,
-        populate_by_name=True
-    )
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
     name: str
     value: str
@@ -105,10 +101,7 @@ class ConfigEnvVariableArgs(BaseModel):
 class GoogleBatchConfigArgs(BaseModel):
     """Validate props of the GoogleBatchConfig passed to compute environment."""
 
-    model_config = ConfigDict(
-        alias_generator=to_camel,
-        populate_by_name=True
-    )
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
     location: str
     work_dir: str
@@ -154,7 +147,8 @@ class GoogleBatchConfigArgs(BaseModel):
 
 
 # Extend when new platforms are added. Also they will require defining new `config` Input classes
-ComputeEnvPlatform = Literal["google-batch"]
+ComputeEnvPlatform = Literal['google-batch']
+
 
 class ComputeEnvArgs(BaseModel):
     """Validate props of the compute environment dynamic resource."""

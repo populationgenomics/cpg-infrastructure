@@ -1,3 +1,4 @@
+from http import HTTPMethod, HTTPStatus
 from typing import Any, Optional
 
 import pulumi
@@ -9,55 +10,61 @@ from pulumi.dynamic import (
     UpdateResult,
 )
 
+from cpg_infra.driver.dynamic_providers.seqera.inputs.workspace import (
+    WorkspaceParticipantArgs,
+)
 from cpg_infra.driver.dynamic_providers.seqera.util.api_util import (
     SeqeraAPIError,
     call_seqera_api,
 )
-from cpg_infra.driver.dynamic_providers.seqera.inputs.workspace import (
-    WorkspaceParticipantArgs,
-)
-
 
 
 def _build_create_participant_body(inputs: WorkspaceParticipantArgs) -> dict:
     if inputs.member_id is not None:
-        return {"memberId": inputs.member_id}
+        return {'memberId': inputs.member_id}
     if inputs.email is not None:
-        return {"userNameOrEmail": inputs.email}
-    return {"teamId": inputs.team_id}
+        return {'userNameOrEmail': inputs.email}
+    return {'teamId': inputs.team_id}
+
 
 def _create_participant(inputs: WorkspaceParticipantArgs) -> dict:
     """
     https://docs.seqera.io/platform-api/create-workspace-participant
     """
     created_participant = call_seqera_api(
-        "PUT",
-        f"/orgs/{inputs.org_id}/workspaces/{inputs.workspace_id}/participants/add",
+        HTTPMethod.PUT,
+        f'/orgs/{inputs.org_id}/workspaces/{inputs.workspace_id}/participants/add',
         _build_create_participant_body(inputs),
     )
-    return created_participant.get("participant") or {}
+    return created_participant.get('participant') or {}
 
-def _update_participant_role(inputs: WorkspaceParticipantArgs, participant_id: int) -> None:
+
+def _update_participant_role(
+    inputs: WorkspaceParticipantArgs, participant_id: int
+) -> None:
     """
     https://docs.seqera.io/platform-api/update-workspace-participant-role
     """
     call_seqera_api(
-        "PUT",
-        f"/orgs/{inputs.org_id}/workspaces/{inputs.workspace_id}"
-        f"/participants/{participant_id}/role",
-        {"role": inputs.role},
+        HTTPMethod.PUT,
+        f'/orgs/{inputs.org_id}/workspaces/{inputs.workspace_id}'
+        f'/participants/{participant_id}/role',
+        {'role': inputs.role},
     )
 
-def _delete_participant(org_id: int, workspace_id:int, participant_id:str) -> None:
+
+def _delete_participant(org_id: int, workspace_id: int, participant_id: str) -> None:
     """
     https://docs.seqera.io/platform-api/delete-workspace-participant
     """
+    # TODO what if the participant already deleted. Have safety handler
     call_seqera_api(
-        "DELETE",
-        f"/orgs/{org_id}"
-        f"/workspaces/{workspace_id}"
-        f"/participants/{participant_id}"
+        HTTPMethod.DELETE,
+        f'/orgs/{org_id}'
+        f'/workspaces/{workspace_id}'
+        f'/participants/{participant_id}',
     )
+
 
 class _WorkspaceParticipantProvider(ResourceProvider):
     def create(self, props: dict[str, Any]) -> CreateResult:
@@ -67,11 +74,11 @@ class _WorkspaceParticipantProvider(ResourceProvider):
         inputs = WorkspaceParticipantArgs(**props)
 
         participant = _create_participant(inputs)
-        participant_id = participant.get("participantId")
+        participant_id = participant.get('participantId')
 
         assert isinstance(participant_id, int)
 
-        created_role = participant.get("wspRole", "")
+        created_role = participant.get('wspRole', '')
 
         # Update the role if desired role is different from the created role
         # The current https://docs.seqera.io/platform-api/create-workspace-participant api does not accept a role
@@ -90,24 +97,24 @@ class _WorkspaceParticipantProvider(ResourceProvider):
                     )
                 except SeqeraAPIError as e:
                     pulumi.log.warn(
-                        f"Failed to roll back participant {participant_id} "
-                        f"after role update failed: {e}. Remove participant to reconcile"
+                        f'Failed to roll back participant {participant_id} '
+                        f'after role update failed: {e}. Remove participant to reconcile'
                     )
                 raise
 
         return CreateResult(
             id_=str(participant_id),
-            outs={**props, "participant_id": participant_id},
+            outs={**props, 'participant_id': participant_id},
         )
 
     def diff(self, _id: str, olds: dict[str, Any], news: dict[str, Any]) -> DiffResult:
         # Diff in the workspace id is treated as a replacement.
         replaces = [
             f
-            for f in ("workspace_id", "email", "member_id", "team_id")
+            for f in ('workspace_id', 'email', 'member_id', 'team_id')
             if olds.get(f) != news.get(f)
         ]
-        changed = bool(replaces) or olds.get("role") != news.get("role")
+        changed = bool(replaces) or olds.get('role') != news.get('role')
         return DiffResult(changes=changed, replaces=replaces or None)
 
     # Once added to the workspace, we can only change the role
@@ -118,14 +125,16 @@ class _WorkspaceParticipantProvider(ResourceProvider):
         participant_id = int(id_)
 
         _update_participant_role(inputs, participant_id)
-        return UpdateResult(outs={**news, "participant_id": participant_id})
+        return UpdateResult(outs={**news, 'participant_id': participant_id})
 
     def delete(self, id_: str, props: dict[str, Any]) -> None:
         try:
-            _delete_participant(int(props["org_id"]), int(props["workspace_id"]), id_)
+            _delete_participant(int(props['org_id']), int(props['workspace_id']), id_)
         except SeqeraAPIError as e:
-            if e.status_code == 404:
-                pulumi.log.info(f"Workspace participant {id_} already deleted/not found. Skipping delete.")
+            if e.status_code == HTTPStatus.NOT_FOUND:
+                pulumi.log.info(
+                    f'Workspace participant {id_} already deleted/not found. Skipping delete.'
+                )
             else:
                 raise
 
@@ -143,18 +152,18 @@ class SeqeraWorkspaceParticipant(Resource):
         member_id: Optional[pulumi.Input[int]] = None,
         team_id: Optional[pulumi.Input[int]] = None,
         opts: Optional[pulumi.ResourceOptions] = None,
-    ):
+    ) -> None:
         super().__init__(
             _WorkspaceParticipantProvider(),
             name,
             {
-                "org_id": org_id,
-                "workspace_id": workspace_id,
-                "email": email,
-                "member_id": member_id,
-                "team_id": team_id,
-                "role": role,
-                "participant_id": None,
+                'org_id': org_id,
+                'workspace_id': workspace_id,
+                'email': email,
+                'member_id': member_id,
+                'team_id': team_id,
+                'role': role,
+                'participant_id': None,
             },
             opts,
         )
