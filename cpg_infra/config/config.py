@@ -331,7 +331,7 @@ class CPGDatasetComponents(Enum):
     ):
         # Explicit lists so that opt-in components (e.g. SEQERA_ACCOUNTS)
         # can be added to the enum without silently enabling them fleet-wide.
-        _default_gcp: list['CPGDatasetComponents'] = [
+        _default_gcp: list[CPGDatasetComponents] = [
             CPGDatasetComponents.STORAGE,
             CPGDatasetComponents.SPARK,
             CPGDatasetComponents.CROMWELL,
