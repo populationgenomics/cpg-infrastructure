@@ -56,6 +56,7 @@ if TYPE_CHECKING:
     from cpg_infra.config import (
         CPGDatasetConfig,
         CPGInfrastructureConfig,
+        TeamOwnership,
     )
     from cpg_infra.driver.dataset_cloud_infrastructure import (
         CPGDatasetCloudInfrastructure,
@@ -97,7 +98,7 @@ class CPGInfrastructure:
             _configure_seqera_api(config.seqera.api_url)
 
         self.seqera_workspaces: dict[
-            tuple[str, str],
+            tuple[TeamOwnership, str],
             SeqeraWorkspace,
         ] = {}
 
@@ -175,6 +176,14 @@ class CPGInfrastructure:
         # Setup PAM broker infrastructure if PAM is configured
         self.setup_pam_broker()
 
+        # set up workspace before setting up datasets.
+        if self.config.seqera is not None:
+            # Setup Seqera infrastructure
+            self.setup_seqera_workspaces()
+
+            # Sync Seqera workspace participants
+            self.setup_seqera_workspace_members()
+
         # Deploy all the assets required for each dataset. Groups, permissions
         # storage buckets, metamist and hail users etc.
         self.deploy_datasets()
@@ -210,12 +219,6 @@ class CPGInfrastructure:
 
         # Store the deployed infrastructure config on gcp storage
         self.output_infrastructure_config()
-
-        # Setup Seqera infrastructure
-        self.setup_seqera_workspaces()
-
-        # Sync Seqera workspace participants
-        self.setup_seqera_workspace_members()
 
     def setup_datasets(self):
         if self.dataset_infrastructures:
@@ -586,31 +589,38 @@ class CPGInfrastructure:
 
     def setup_seqera_workspaces(self):
         """Import Seqera workspaces to pulumi state - created manually"""
-        seqera_cfg = self.config.seqera
-        if seqera_cfg is None:
-            return
 
-        for team, team_configs in seqera_cfg.teams.items():
-            team_name = get_formatted_team_name(team)
+        seqera_cfg = self.config.seqera
+        assert seqera_cfg is not None
+
+        for team_ownership, team_configs in seqera_cfg.teams.items():
+            team_name = get_formatted_team_name(team_ownership)
             ws_pair = team_configs.workspaces
-            for workspace_type, ref in (('main', ws_pair.main), ('test', ws_pair.test)):
-                if ref is None:
+            for workspace_type, ws_configs in (
+                ('main', ws_pair.main),
+                ('test', ws_pair.test),
+            ):
+                if ws_configs is None:
                     continue
-                self.seqera_workspaces[(team, workspace_type)] = SeqeraWorkspace(
-                    f'seqera-ws-{team_name}-{workspace_type}',
-                    org_id=seqera_cfg.org_id,
-                    workspace_id=ref.workspace_id,
-                    ws_name=ref.name,
-                    full_name=ref.full_name,
-                    visibility=ref.visibility,
-                    description=ref.description,
+                self.seqera_workspaces[(team_ownership, workspace_type)] = (
+                    SeqeraWorkspace(
+                        f'seqera-ws-{team_name}-{workspace_type}',
+                        org_id=seqera_cfg.org_id,
+                        workspace_id=ws_configs.workspace_id,
+                        ws_name=ws_configs.name,
+                        full_name=ws_configs.full_name,
+                        visibility=ws_configs.visibility,
+                        description=ws_configs.description,
+                    )
                 )
 
     def setup_seqera_workspace_members(self):
-        """Add CPG members to Seqera workspaces."""
+        """Add CPG members to Seqera workspaces.
+        These members should be in the Seqera CPG organization before adding them to workspaces.
+        """
+
         seqera_cfg = self.config.seqera
-        if seqera_cfg is None:
-            return
+        assert seqera_cfg is not None
 
         gcp_key = GcpInfrastructure.name()
 
@@ -624,7 +634,7 @@ class CPGInfrastructure:
                 user = self.config.users.get(member_key)
                 if user is None:
                     raise ValueError(
-                        f'Could not find the seqera member:{member_key} in CPG users.'
+                        f'Could not find the member:{member_key} in CPG users.'
                     )
                 cloud_user = user.clouds.get(gcp_key)
                 if cloud_user is None or not cloud_user.id:
@@ -638,17 +648,16 @@ class CPGInfrastructure:
 
             team_name = get_formatted_team_name(team)
 
-            main_ws = self.seqera_workspaces.get((team, 'main'))
+            main_ws = self.seqera_workspaces[(team, 'main')]
             # add to main workspace with `view` permission
-            if main_ws is not None:
-                for member_key, email in member_ids:
-                    SeqeraWorkspaceParticipant(
-                        f'wsp-{team_name}-main-{member_key}',
-                        org_id=seqera_cfg.org_id,
-                        workspace_id=main_ws.workspace_id,
-                        email=email,
-                        role='view',
-                    )
+            for member_key, email in member_ids:
+                SeqeraWorkspaceParticipant(
+                    f'wsp-{team_name}-main-{member_key}',
+                    org_id=seqera_cfg.org_id,
+                    workspace_id=main_ws.workspace_id,
+                    email=email,
+                    role='view',
+                )
 
             test_ws = self.seqera_workspaces.get((team, 'test'))
             # add to test workspace with `admin` permission

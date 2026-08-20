@@ -18,7 +18,7 @@ import pulumi
 import pulumi_gcp as gcp
 
 from cpg_infra.abstraction.gcp import GcpInfrastructure
-from cpg_infra.config import SeqeraAccount, SeqeraWorkspacePair, SeqeraWorkspaceRef
+from cpg_infra.config import SeqeraAccount, SeqeraWorkspaceRef, SeqeraWorkspaceRefPair
 from cpg_infra.driver.dynamic_providers.seqera import (
     GoogleBatchConfig,
     SeqeraComputeEnv,
@@ -40,7 +40,7 @@ _SEQERA_SA_PROJECT_ROLES: tuple[str, ...] = (
     'roles/batch.jobsEditor',
     'roles/batch.agentReporter',
     'roles/logging.logWriter',
-)
+)  # TODO check permissions
 
 
 class DatasetSeqeraInfrastructure:
@@ -64,8 +64,8 @@ class DatasetSeqeraInfrastructure:
         return levels
 
     @cached_property
-    def _workspace_pair(self) -> SeqeraWorkspacePair:
-        """workspace pair of this dataset's team."""
+    def _workspace_ref_pair(self) -> SeqeraWorkspaceRefPair:
+        """Workspace pair corresponding to the team which own this dataset."""
 
         assert self._config.seqera is not None
         assert self._dataset_config.team_ownership is not None
@@ -75,22 +75,21 @@ class DatasetSeqeraInfrastructure:
         """Returns workspace config reference for access level."""
 
         if level in _MAIN_WORKSPACE_LEVELS:
-            return self._workspace_pair.main
-        return self._workspace_pair.test
+            return self._workspace_ref_pair.main
+        return self._workspace_ref_pair.test
 
     def _workspace_resource_for_access_level(
         self,
         level: str,
     ) -> SeqeraWorkspace | None:
         """Returns Pulumi resource."""
-
-        if self._workspace_ref_for_access_level(level) is None:
-            return None
-        assert self._dataset_config.team_ownership is not None
-        ws_type = 'main' if level in _MAIN_WORKSPACE_LEVELS else 'test'
-        return self._parent.root.seqera_workspaces.get(
-            (self._dataset_config.team_ownership, ws_type),
-        )
+        if self._workspace_ref_for_access_level(level):
+            assert self._dataset_config.team_ownership is not None
+            ws_type = 'main' if level in _MAIN_WORKSPACE_LEVELS else 'test'
+            return self._parent.root.seqera_workspaces.get(
+                (self._dataset_config.team_ownership, ws_type),
+            )
+        return None
 
     @cached_property
     def _wif_pool(self) -> gcp.iam.WorkloadIdentityPool:
@@ -163,13 +162,13 @@ class DatasetSeqeraInfrastructure:
         }
 
     def setup(self) -> None:
-        """Materialise WIF pool, provider, SAs, and IAM bindings.
-
+        """Materialise WIF pool, provider, SAs, and IAM bindings in the GCP end
+            and create compute environments and credentials
         Idempotent — cached_properties gate resource creation.
         """
         self._grant_project_roles()
         self._bind_wif_principals()
-        self._setup_credentials_and_compute_envs()
+        self._setup_seqera_credentials_and_compute_envs()
 
     def _grant_project_roles(self) -> None:
         for level, sa in self._service_accounts.items():
@@ -188,10 +187,10 @@ class DatasetSeqeraInfrastructure:
         _ = self._wif_provider
 
         for level, sa in self._service_accounts.items():
-            workspace_id = self._workspace_ref_for_access_level(level).workspace_id
-
-            if workspace_id is None:
+            ws = self._workspace_ref_for_access_level(level)
+            if ws is None:
                 continue
+            workspace_id = ws.workspace_id
 
             wif_subject = f'org:{org_id}:wsp:{workspace_id}:workflow'
             principal = self._wif_pool.name.apply(
@@ -211,22 +210,18 @@ class DatasetSeqeraInfrastructure:
         corresponds to seqera work directory where pipelines store scratch data
         """
         if level == _ACCESS_LEVEL_TEST:
-            bucket = (
-                self._parent.test_tmp_bucket
-            )  # TODO is it okay to use this bucket ?
+            # TODO is it okay to use this bucket ?
+            bucket = self._parent.test_tmp_bucket
         else:
-            bucket = (
-                self._parent.main_tmp_bucket
-            )  # TODO is it okay to use this bucket ?
+            # TODO is it okay to use this bucket ?
+            bucket = self._parent.main_tmp_bucket
         base = self._infra.bucket_output_path(bucket)
         return pulumi.Output.concat(base, '/seqera/', level)
 
-    def _setup_credentials_and_compute_envs(self) -> None:
+    def _setup_seqera_credentials_and_compute_envs(self) -> None:
         """Create credentials + GCP Batch compute env per access level in the relevant workspace."""
-        assert isinstance(self._infra, GcpInfrastructure)
-        infra = self._infra
 
-        project_id: pulumi.Output[str] = infra.project_id
+        project_id = self._infra.project_id
 
         for level in self._access_levels:
             workspace_resource = self._workspace_resource_for_access_level(
@@ -255,7 +250,7 @@ class DatasetSeqeraInfrastructure:
                 platform='google-batch',
                 description=f'{dataset} {level} compute environment ',
                 config=GoogleBatchConfig(
-                    location=infra.region,
+                    location=self._infra.region,
                     work_dir=self._work_dir_for_access_level(level),
                     service_account=sa.email,  # TODO have attached the same SA for runtime. Attach a different SA for runtime
                     project_id=project_id,

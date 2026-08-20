@@ -28,6 +28,7 @@ class SeqeraAPIError(RuntimeError):
         self.__cause__ = cause
 
 
+# TODO test
 def call_seqera_api(
     method: str,
     path: str,
