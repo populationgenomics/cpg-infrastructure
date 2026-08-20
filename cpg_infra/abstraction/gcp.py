@@ -38,9 +38,7 @@ class BucketMembershipRole(NamedTuple):
 
 
 def get_member_key(member):  # pylint: disable=too-many-return-statements
-    # it's a 'cpg_infra.driver.CPGInfrastructure.GroupProvider.Group'
-    # The canonical path is now `cpg_infra.driver.group.Group`,
-    # the previous is kept for backwards compatibility
+    # it's a 'cpg_infra.driver.groups.Group'
     if isinstance(member, pulumi.Output):
         return pulumi.Output.apply(member, get_member_key)
 

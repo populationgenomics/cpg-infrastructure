@@ -10,7 +10,7 @@ import os.path
 import re
 from collections import defaultdict
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Iterator
+from typing import TYPE_CHECKING, Any, Iterable, Iterator, NamedTuple
 
 import pulumi
 import pulumi_gcp as gcp
@@ -53,10 +53,16 @@ from cpg_infra.driver.constants import (
     compute_hash,
     dict_to_toml,
 )
-from cpg_infra.driver.main_upload_bucket import MainUploadBucket
-from cpg_infra.driver.sm_accessor_membership import (
-    SampleMetadataAccessorMembership,
-)
+class MainUploadBucket(NamedTuple):
+    bucket: Any
+    uploaders: list[str]
+    is_dropbox: bool = False
+
+
+class SampleMetadataAccessorMembership(NamedTuple):
+    name: str
+    member: Any
+    permissions: Iterable[str]
 
 if TYPE_CHECKING:
     from cpg_infra.driver.groups import Group, GroupProvider

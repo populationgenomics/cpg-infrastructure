@@ -36,11 +36,7 @@ from cpg_infra.driver.constants import (
 )
 from cpg_infra.driver.dataset_infrastructure import CPGDatasetInfrastructure
 
-# ``GroupMember`` is used at runtime for the ``isinstance`` check inside
-# ``finalize_groups``. ``GroupProvider`` is imported under an underscore-prefix
-# alias so the outer name is not shadowed by the ``GroupProvider`` class
-# attribute below.
-from cpg_infra.driver.groups import GroupMember, GroupProvider as _GroupProvider
+from cpg_infra.driver.groups import GroupMember, GroupProvider
 from cpg_infra.github_wif.driver import PAM_BROKER_SA_NAME
 from cpg_infra.plugin import get_plugins
 
@@ -58,9 +54,6 @@ if TYPE_CHECKING:
 class CPGInfrastructure:
     """Class for managing all CPG infrastructure"""
 
-    # Legacy nested-class access path: `CPGInfrastructure.GroupProvider`
-    GroupProvider = _GroupProvider
-
     def __init__(
         self,
         config: CPGInfrastructureConfig,
@@ -71,7 +64,7 @@ class CPGInfrastructure:
             d.dataset: d for d in dataset_configs
         }
 
-        self.group_provider = _GroupProvider(
+        self.group_provider = GroupProvider(
             group_prefix=self.config.group_prefix,
         )
 

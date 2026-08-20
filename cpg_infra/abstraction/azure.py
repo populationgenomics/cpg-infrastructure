@@ -392,9 +392,7 @@ class AzureInfra(CloudInfraBase):
 
     @staticmethod
     def _get_principal_type(obj):
-        # it's a 'cpg_infra.driver.CPGInfrastructure.GroupProvider.Group'
-        # The canonical path is now `cpg_infra.driver.group.Group`,
-        # the previous is kept for backwards compatibility
+        # it's a 'cpg_infra.driver.groups.Group'
         if hasattr(obj, 'is_group') and hasattr(obj, 'group'):
             # cheeky catch for internal group
             return AzureInfra._get_principal_type(obj.group)

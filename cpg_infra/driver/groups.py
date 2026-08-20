@@ -47,14 +47,9 @@ class GroupMember:
         return f'GroupMember({", ".join(members)})'
 
 
-_GroupMember = GroupMember
-
 
 class Group:
     """Placeholder for a Group of members"""
-
-    # Legacy nested-class access path: `Group.GroupMember`
-    GroupMember = _GroupMember
 
     # duck-type marker read by `cpg_infra/abstraction/{gcp,azure}.py`
     is_group = True
@@ -71,7 +66,7 @@ class Group:
         self.cache_members: bool = cache_members
         self.members: dict[
             str,
-            _GroupMember | Group,
+            GroupMember | Group,
         ] = members
 
     def add_member(
@@ -86,32 +81,27 @@ class Group:
         if isinstance(member, Group):
             self.members[resource_key] = member
         elif isinstance(user, CPGInfrastructureUser.Cloud):
-            self.members[resource_key] = _GroupMember(member, user)
+            self.members[resource_key] = GroupMember(member, user)
         else:
             if user:
                 raise ValueError(
                     f'Invalid user type {type(user)} ({user}) for member '
                     f'{member} for {resource_key}',
                 )
-            self.members[resource_key] = _GroupMember(member, None)
+            self.members[resource_key] = GroupMember(member, None)
 
     def __repr__(self) -> str:
         return f'Group({self.name!r})'
 
 
-_Group = Group
-
 
 class GroupProvider:
     """Provider for managing groups + memberships"""
 
-    # Legacy nested-class access paths: `GroupProvider.Group` / `GroupProvider.Group.GroupMember`
-    Group = _Group
-
     def __init__(self, group_prefix: str | None = None) -> None:
         self.groups: dict[
             CloudName,
-            dict[str, _Group],
+            dict[str, Group],
         ] = defaultdict()
 
         self.group_prefix = group_prefix or ''
@@ -127,13 +117,13 @@ class GroupProvider:
         cache_members: bool,
         members: dict | None = None,
         description: str | None = None,
-    ) -> _Group:
+    ) -> Group:
         if infra.name() not in self.groups:
             self.groups[infra.name()] = {}
         if name in self.groups[infra.name()]:
             raise ValueError(f'Group "{name}" in "{infra.name()}" already exists')
 
-        group = _Group(
+        group = Group(
             name=name,
             cache_members=cache_members,
             members=members or {},
@@ -143,7 +133,7 @@ class GroupProvider:
 
         return group
 
-    def static_group_order(self, cloud: CloudName) -> list[_Group]:
+    def static_group_order(self, cloud: CloudName) -> list[Group]:
         """
         not that it super matters because we do recursively look it up and
         cache the result, but it's nice to grab the groups in an order that
@@ -153,7 +143,7 @@ class GroupProvider:
 
         deps = {
             group.name: [
-                g.name for g in group.members.values() if isinstance(g, _Group)
+                g.name for g in group.members.values() if isinstance(g, Group)
             ]
             for group in groups.values()
         }
@@ -162,14 +152,14 @@ class GroupProvider:
 
     def resolve_group_members(
         self,
-        group: _Group,
+        group: Group,
     ) -> list[GroupMember]:
         if group.name in self._cached_resolved_members:
             return self._cached_resolved_members[group.name]
 
         resolved_members: list[GroupMember] = []
         for member in group.members.values():
-            if isinstance(member, _Group):
+            if isinstance(member, Group):
                 resolved_members.extend(self.resolve_group_members(member))
             else:
                 resolved_members.append(member)

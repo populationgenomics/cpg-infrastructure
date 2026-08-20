@@ -41,8 +41,8 @@ from cpg_infra.driver.dataset_infrastructure import (
 )
 from cpg_infra.driver.groups import Group, GroupMember, GroupProvider
 from cpg_infra.driver.infrastructure import CPGInfrastructure
-from cpg_infra.driver.main_upload_bucket import MainUploadBucket
-from cpg_infra.driver.sm_accessor_membership import (
+from cpg_infra.driver.dataset_cloud_infrastructure import (
+    MainUploadBucket,
     SampleMetadataAccessorMembership,
 )
 
