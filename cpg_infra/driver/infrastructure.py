@@ -91,13 +91,6 @@ class CPGInfrastructure:
             CPGDatasetInfrastructure,
         ] = defaultdict()
 
-        if config.seqera is not None:
-            # Initialize the Seqera API Client singleton
-            SeqeraApiClient(
-                server_url=config.seqera.api_url,
-                token_secret_name=config.seqera.token_secret_name,
-            )
-
         self.seqera_workspaces: dict[
             tuple[TeamOwnership, str],
             SeqeraWorkspace,
@@ -177,12 +170,19 @@ class CPGInfrastructure:
         # Setup PAM broker infrastructure if PAM is configured
         self.setup_pam_broker()
 
-        # set up workspace before setting up datasets.
+        # Workspaces should be created/imported before
+        # calling deploy_datasets() which setup Seqera gcp infra per dataset
         if self.config.seqera is not None:
-            # Setup Seqera infrastructure
+            # Initialize the Seqera API Client singleton
+            SeqeraApiClient(
+                server_url=self.config.seqera.api_url,
+                token_secret_name=self.config.seqera.token_secret_name,
+            )
+
+            # Setup Seqera workspaces
             self.setup_seqera_workspaces()
 
-            # Sync Seqera workspace participants
+            # Setup Seqera workspace participants
             self.setup_seqera_workspace_members()
 
         # Deploy all the assets required for each dataset. Groups, permissions
