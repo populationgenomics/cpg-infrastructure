@@ -53,7 +53,17 @@ class TestShouldSetupSeqeraGate(TestCase):
         infra.name.return_value = 'gcp' if infra_is_gcp else 'azure'
 
         infra_config = MagicMock(spec=CPGInfrastructureConfig)
-        infra_config.seqera = MagicMock() if seqera_configured else None
+        if seqera_configured:
+            seqera_mock = MagicMock()
+            # Populate workspaces so the team_ownership -> workspace check passes
+            seqera_mock.workspaces = {
+                'Rare Disease': MagicMock(),
+                'Population Genomics': MagicMock(),
+                'Shared': MagicMock(),
+            }
+            infra_config.seqera = seqera_mock
+        else:
+            infra_config.seqera = None
 
         dataset_config = _make_dataset_config(
             team_ownership=team_ownership,

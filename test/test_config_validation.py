@@ -188,24 +188,101 @@ class TestConfigValidation(TestCase):
             {
                 'org_id': 12345,
                 'wif_issuer_uri': 'https://cloud.seqera.io',
-                'workspace_ids': {
-                    'Rare Disease': 111,
-                    'Population Genomics': 222,
-                    'Shared': 333,
+                'api_url': 'https://cloud.seqera.io/api',
+                'token_secret_name' : 'secreate/path',
+                'teams': {
+                    'Rare Disease': {
+                        'workspaces': {
+                            'main': {
+                                'workspace_id': 111,
+                                'name': 'rd-main',
+                                'full_name': 'Rare Disease',
+                            },
+                            'test': {
+                                'workspace_id': 112,
+                                'name': 'rd-test',
+                                'full_name': 'Rare Disease Test',
+                            },
+                        },
+                        'members': ['alice'],
+                    },
+                    'Population Genomics': {
+                        'workspaces': {
+                            'main': {
+                                'workspace_id': 222,
+                                'name': 'pg-main',
+                                'full_name': 'PopGen',
+                            },
+                            'test': {
+                                'workspace_id': 223,
+                                'name': 'pg-test',
+                                'full_name': 'PopGen Test',
+                            },
+                        },
+                    },
+                    'Shared': {
+                        'workspaces': {
+                            'main': {
+                                'workspace_id': 333,
+                                'name': 'shared-main',
+                                'full_name': 'Shared',
+                            },
+                        },
+                    },
                 },
             },
         )
         self.assertEqual(12345, seqera.org_id)
-        self.assertEqual(111, seqera.workspace_ids['Rare Disease'])
+        rd = seqera.teams['Rare Disease']
+        self.assertEqual(111, rd.workspaces.main.workspace_id)
+        self.assertEqual('rd-main', rd.workspaces.main.name)
+        self.assertEqual('PRIVATE', rd.workspaces.main.visibility)
+        assert rd.workspaces.test is not None
+        self.assertEqual(112, rd.workspaces.test.workspace_id)
+        self.assertEqual(['alice'], rd.members)
+        # test is optional — Shared here has no test workspace.
+        self.assertIsNone(seqera.teams['Shared'].workspaces.test)
+        # participants defaults to []
+        self.assertEqual([], seqera.teams['Shared'].members)
 
-    def test_seqera_workspace_ids_reject_unknown_team(self):
-        """workspace_ids with a team key outside the Literal must raise"""
+    def test_seqera_workspaces_reject_unknown_team(self):
+        """teams with a key outside the Literal must raise"""
         with self.assertRaises(ValidationError):
             CPGInfrastructureConfig.Seqera.model_validate(
                 {
                     'org_id': 1,
                     'wif_issuer_uri': 'https://cloud.seqera.io',
-                    'workspace_ids': {'Rare-Disease': 111},  # note the hyphen typo
+                    'api_url': 'https://cloud.seqera.io/api',
+                    'teams': {
+                        'Rare-Disease': {  # hyphen typo
+                            'workspaces': {
+                                'main': {
+                                    'workspace_id': 111,
+                                    'name': 'x',
+                                    'full_name': 'x',
+                                },
+                            },
+                        },
+                    },
+                },
+            )
+
+    def test_seqera_workspace_ref_requires_metadata(self):
+        """WorkspaceRef requires id + name + full_name"""
+        with self.assertRaises(ValidationError):
+            CPGInfrastructureConfig.Seqera.model_validate(
+                {
+                    'org_id': 1,
+                    'wif_issuer_uri': 'https://cloud.seqera.io',
+                    'api_url': 'https://cloud.seqera.io/api',
+                    'teams': {
+                        'Shared': {
+                            'workspaces': {
+                                # missing name + full_name
+                                'main': {'workspace_id': 111},
+                            },
+                        },
+                    },
                 },
             )
 
