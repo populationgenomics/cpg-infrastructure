@@ -189,7 +189,7 @@ class TestConfigValidation(TestCase):
                 'org_id': 12345,
                 'wif_issuer_uri': 'https://cloud.seqera.io',
                 'api_url': 'https://cloud.seqera.io/api',
-                'token_secret_name' : 'secreate/path',
+                'token_secret_name': 'secreate/path',
                 'teams': {
                     'Rare Disease': {
                         'workspaces': {
