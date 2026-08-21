@@ -213,6 +213,8 @@ class CPGInfrastructureConfig(ConfigModel):
         wif_issuer_uri: str
         # Seqera Platform base URL used by dynamic resource providers.
         api_url: str
+        # Holds secret name of `admin` machine user's token
+        token_secret_name: str
         # Holds per team, workspaces and member information
         teams: dict[TeamOwnership, WorkspaceScope]
 

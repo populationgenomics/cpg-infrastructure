@@ -18,7 +18,7 @@ from cpg_infra.driver.dynamic_providers.seqera.inputs.compute_environment import
     GoogleBatchConfig,
 )
 from cpg_infra.driver.dynamic_providers.seqera.util.api_util import (
-    call_seqera_api,
+    SeqeraApiClient,
 )
 
 _MAX_CE_NAME_LENGTH = 100
@@ -28,7 +28,7 @@ def _create_compute_env(workspace_id: int, ce_body: dict) -> str:
     """
     https://docs.seqera.io/platform-api/create-compute-env
     """
-    result = call_seqera_api(
+    result = SeqeraApiClient().call(
         HTTPMethod.POST, f'/compute-envs?workspaceId={workspace_id}', ce_body
     )
     ce_id = result.get('computeEnvId')
@@ -41,7 +41,7 @@ def _update_compute_env_metadata(workspace_id: int, ce_id: str, name: str) -> No
     """
     https://docs.seqera.io/platform-api/update-compute-env
     """
-    call_seqera_api(
+    SeqeraApiClient().call(
         HTTPMethod.PUT,
         f'/compute-envs/{ce_id}?workspaceId={workspace_id}',
         {'name': name},
@@ -61,7 +61,7 @@ def _soft_delete_compute_env(workspace_id: int, ce_id: str, current_name: str) -
 
     # in case of a failure of this request, we don't need to rollback previous name update.
     # Unlike in the _WorkspaceParticipantProvider.create
-    call_seqera_api(
+    SeqeraApiClient().call(
         HTTPMethod.POST,
         f'/compute-envs/{ce_id}/disable?workspaceId={workspace_id}',
         {},

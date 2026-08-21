@@ -12,11 +12,12 @@ this class assumes it is only instantiated when it should run.
 from __future__ import annotations
 
 from functools import cached_property
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pulumi
 import pulumi_gcp as gcp
 
+from cpg_infra.abstraction.base import BucketMembership
 from cpg_infra.abstraction.gcp import GcpInfrastructure
 from cpg_infra.config import SeqeraAccount, SeqeraWorkspaceRef, SeqeraWorkspaceRefPair
 from cpg_infra.driver.dynamic_providers.seqera import (
@@ -36,11 +37,14 @@ _ACCESS_LEVEL_STANDARD = 'standard'
 _ACCESS_LEVEL_TEST = 'test'
 _MAIN_WORKSPACE_LEVELS = frozenset({_ACCESS_LEVEL_FULL, _ACCESS_LEVEL_STANDARD})
 
+# Included runtime SA permissions
+# https://docs.seqera.io/platform-cloud/compute-envs/google-cloud-batch#service-account-permissions
 _SEQERA_SA_PROJECT_ROLES: tuple[str, ...] = (
     'roles/batch.jobsEditor',
     'roles/batch.agentReporter',
     'roles/logging.logWriter',
-)  # TODO check permissions
+    'roles/logging.viewer',
+)
 
 
 class DatasetSeqeraInfrastructure:
@@ -168,6 +172,8 @@ class DatasetSeqeraInfrastructure:
         """
         self._grant_project_roles()
         self._bind_wif_principals()
+        self._grant_service_account_self_user()
+        self._grant_work_bucket_access()
         self._setup_seqera_credentials_and_compute_envs()
 
     def _grant_project_roles(self) -> None:
@@ -205,18 +211,45 @@ class DatasetSeqeraInfrastructure:
                 member=principal,
             )
 
-    def _work_dir_for_access_level(self, level: str) -> pulumi.Output[str]:
-        """The work dir for a compute env for this access level.
-        corresponds to seqera work directory where pipelines store scratch data
-        """
+    def _grant_service_account_self_user(self) -> None:
+        # Nextflow head job can spawn child jobs that uses the same SA
+        for level, sa in self._service_accounts.items():
+            gcp.serviceaccount.IAMMember(
+                self._infra.get_pulumi_name(f'seqera-{level}-self-user'),
+                service_account_id=sa.name,
+                role='roles/iam.serviceAccountUser',
+                member=sa.email.apply(lambda email: f'serviceAccount:{email}'),
+            )
+
+    def _work_bucket_for_access_level(self, level: str) -> Any:
         if level == _ACCESS_LEVEL_TEST:
-            # TODO is it okay to use this bucket ?
-            bucket = self._parent.test_tmp_bucket
-        else:
-            # TODO is it okay to use this bucket ?
-            bucket = self._parent.main_tmp_bucket
-        base = self._infra.bucket_output_path(bucket)
-        return pulumi.Output.concat(base, '/seqera/', level)
+            return self._parent.seqera_test_work_bucket
+        return self._parent.seqera_main_work_bucket
+
+    def _grant_work_bucket_access(self) -> None:
+        for level, sa in self._service_accounts.items():
+            self._infra.add_member_to_bucket(
+                f'seqera-{level}-work-bucket-admin',
+                self._work_bucket_for_access_level(level),
+                sa,
+                BucketMembership.MUTATE,
+            )
+
+    def _work_dir_for_access_level(self, level: str) -> pulumi.Output[str]:
+        """
+        The work dir of a compute env for this access level.
+        This directory may contain
+            Execution & Script Files - System files to set up and run tasks
+            Logs & Status Trackers - Used to monitor running tasks while or to record its final state.
+            Data Files
+                Input files - Symlinks
+                Output files - files produced by task scripts
+            Cache files - to resume, relaunch runs
+
+            https://docs.seqera.io/platform-cloud/launch/cache-resume
+        """
+        base = self._infra.bucket_output_path(self._work_bucket_for_access_level(level))
+        return pulumi.Output.concat(base, '/', level)
 
     def _setup_seqera_credentials_and_compute_envs(self) -> None:
         """Create credentials + GCP Batch compute env per access level in the relevant workspace."""
@@ -242,6 +275,7 @@ class DatasetSeqeraInfrastructure:
                 opts=pulumi.ResourceOptions(depends_on=[workspace_resource]),
             )
 
+            # TODO compute values fixed for now, should they be configurable per dataset
             SeqeraComputeEnv(
                 self._infra.get_pulumi_name(f'seqera-ce-{dataset}-{level}'),
                 workspace_id=workspace_resource.workspace_id,
@@ -252,7 +286,7 @@ class DatasetSeqeraInfrastructure:
                 config=GoogleBatchConfig(
                     location=self._infra.region,
                     work_dir=self._work_dir_for_access_level(level),
-                    service_account=sa.email,  # TODO have attached the same SA for runtime. Attach a different SA for runtime
+                    service_account=sa.email,  # TODO have attached the same SA for runtime.
                     project_id=project_id,
                     head_job_cpus=2,
                     head_job_memory_mb=4096,
@@ -261,7 +295,7 @@ class DatasetSeqeraInfrastructure:
                         'e2-medium',
                         'e2-standard-2',
                     ],
-                    spot=True,  # TODO compute values fixed for now, need to update this
+                    spot=True,
                 ),
                 opts=pulumi.ResourceOptions(depends_on=[workspace_resource]),
             )

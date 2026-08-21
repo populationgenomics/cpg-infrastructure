@@ -1246,6 +1246,26 @@ class CPGDatasetCloudInfrastructure:
             autoclass=self.dataset_config.autoclass,
         )
 
+    @cached_property
+    def seqera_main_work_bucket(self):
+        return self.infra.create_bucket(
+            'seqera-main',
+            lifecycle_rules=[self.infra.bucket_rule_temporary(days=14)],
+            versioning=False,
+            autoclass=False,
+            soft_delete_protection=False,
+        )
+
+    @cached_property
+    def seqera_test_work_bucket(self):
+        return self.infra.create_bucket(
+            'seqera-test',
+            lifecycle_rules=[self.infra.bucket_rule_temporary(days=14)],
+            versioning=False,
+            autoclass=False,
+            soft_delete_protection=False,
+        )
+
     # endregion TEST BUCKETS
     # region RELEASE BUCKETS
 

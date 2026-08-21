@@ -16,8 +16,8 @@ from cpg_infra.driver.dynamic_providers.seqera.inputs.credentials import (
     GoogleCredentialsArgs,
 )
 from cpg_infra.driver.dynamic_providers.seqera.util.api_util import (
+    SeqeraApiClient,
     SeqeraAPIError,
-    call_seqera_api,
 )
 
 
@@ -51,7 +51,7 @@ def _create_credentials(inputs: GoogleCredentialsArgs) -> str | None:
     https://docs.seqera.io/platform-api/create-credentials
     """
 
-    result = call_seqera_api(
+    result = SeqeraApiClient().call(
         HTTPMethod.POST,
         f'/credentials?workspaceId={inputs.workspace_id}',
         _build_body(inputs),
@@ -64,7 +64,7 @@ def _update_credentials(id_: str, inputs: GoogleCredentialsArgs) -> None:
     https://docs.seqera.io/platform-api/update-credentials
     """
 
-    call_seqera_api(
+    SeqeraApiClient().call(
         HTTPMethod.PUT,
         f'/credentials/{id_}?workspaceId={inputs.workspace_id}',
         _build_body(inputs, cred_id=id_),
@@ -75,7 +75,9 @@ def _delete_credentials(id_: str, workspace_id: int) -> None:
     """
     https://docs.seqera.io/platform-api/delete-credentials
     """
-    call_seqera_api(HTTPMethod.DELETE, f'/credentials/{id_}?workspaceId={workspace_id}')
+    SeqeraApiClient().call(
+        HTTPMethod.DELETE, f'/credentials/{id_}?workspaceId={workspace_id}'
+    )
 
 
 _TRACKED_KEY_FIELDS = (

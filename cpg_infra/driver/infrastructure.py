@@ -39,9 +39,7 @@ from cpg_infra.driver.dynamic_providers.seqera import (
     SeqeraWorkspace,
     SeqeraWorkspaceParticipant,
 )
-from cpg_infra.driver.dynamic_providers.seqera.util.api_util import (
-    configure as _configure_seqera_api,
-)
+from cpg_infra.driver.dynamic_providers.seqera.util.api_util import SeqeraApiClient
 
 # ``GroupMember`` is used at runtime for the ``isinstance`` check inside
 # ``finalize_groups``. ``GroupProvider`` is imported under an underscore-prefix
@@ -94,8 +92,11 @@ class CPGInfrastructure:
         ] = defaultdict()
 
         if config.seqera is not None:
-            # Wire Seqera Platform API URL
-            _configure_seqera_api(config.seqera.api_url)
+            # Initialize the Seqera API Client singleton
+            SeqeraApiClient(
+                server_url=config.seqera.api_url,
+                token_secret_name=config.seqera.token_secret_name,
+            )
 
         self.seqera_workspaces: dict[
             tuple[TeamOwnership, str],

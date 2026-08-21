@@ -14,8 +14,8 @@ from cpg_infra.driver.dynamic_providers.seqera.inputs.workspace import (
     WorkspaceParticipantArgs,
 )
 from cpg_infra.driver.dynamic_providers.seqera.util.api_util import (
+    SeqeraApiClient,
     SeqeraAPIError,
-    call_seqera_api,
 )
 
 
@@ -31,7 +31,7 @@ def _create_participant(inputs: WorkspaceParticipantArgs) -> dict:
     """
     https://docs.seqera.io/platform-api/create-workspace-participant
     """
-    created_participant = call_seqera_api(
+    created_participant = SeqeraApiClient().call(
         HTTPMethod.PUT,
         f'/orgs/{inputs.org_id}/workspaces/{inputs.workspace_id}/participants/add',
         _build_create_participant_body(inputs),
@@ -45,7 +45,7 @@ def _update_participant_role(
     """
     https://docs.seqera.io/platform-api/update-workspace-participant-role
     """
-    call_seqera_api(
+    SeqeraApiClient().call(
         HTTPMethod.PUT,
         f'/orgs/{inputs.org_id}/workspaces/{inputs.workspace_id}'
         f'/participants/{participant_id}/role',
@@ -57,8 +57,8 @@ def _delete_participant(org_id: int, workspace_id: int, participant_id: str) -> 
     """
     https://docs.seqera.io/platform-api/delete-workspace-participant
     """
-    # TODO what if the participant already deleted. Have safety handler
-    call_seqera_api(
+
+    SeqeraApiClient().call(
         HTTPMethod.DELETE,
         f'/orgs/{org_id}'
         f'/workspaces/{workspace_id}'

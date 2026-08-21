@@ -15,14 +15,14 @@ from pulumi.dynamic import (
 from cpg_infra.driver.dynamic_providers.seqera.inputs.workspace import (
     WorkspaceArgs,
 )
-from cpg_infra.driver.dynamic_providers.seqera.util.api_util import call_seqera_api
+from cpg_infra.driver.dynamic_providers.seqera.util.api_util import SeqeraApiClient
 
 
 def _describe_workspace(org_id: int, workspace_id: int) -> dict:
     """Fetch workspace information.
     https://docs.seqera.io/platform-api/describe-workspace
     """
-    result = call_seqera_api(
+    result = SeqeraApiClient().call(
         HTTPMethod.GET, f'/orgs/{org_id}/workspaces/{workspace_id}'
     )
     return result.get('workspace') or result
@@ -32,7 +32,7 @@ def _update_workspace(inputs: WorkspaceArgs) -> None:
     """Update workspace information.
     https://docs.seqera.io/platform-api/update-workspace
     """
-    call_seqera_api(
+    SeqeraApiClient().call(
         HTTPMethod.PUT,
         f'/orgs/{inputs.org_id}/workspaces/{inputs.workspace_id}',
         {
