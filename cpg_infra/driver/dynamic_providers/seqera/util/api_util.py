@@ -19,9 +19,8 @@ class SeqeraAPIError(RuntimeError):
         self.__cause__ = cause
 
 
-# TODO test
 class SeqeraApiClient:
-    """A singleton HTTP client to call Seqera Platform API - Used by Dynamic Providers."""
+    """A singleton HTTP client to call Seqera Platform API - Used by Dynamic Resource Providers."""
 
     _instance: ClassVar['SeqeraApiClient | None'] = None
     server_url: str
