@@ -59,8 +59,7 @@ from cpg_infra.driver.dataset_seqera_infrastructure import (
 )
 
 if TYPE_CHECKING:
-    from cpg_infra.driver.group import Group
-    from cpg_infra.driver.group_provider import GroupProvider
+    from cpg_infra.driver.groups import Group, GroupProvider
     from cpg_infra.driver.infrastructure import CPGInfrastructure
 
 
@@ -1119,11 +1118,13 @@ class CPGDatasetCloudInfrastructure:
         ] = {
             'main-upload': MainUploadBucket(
                 bucket=default_bucket,
-                uploaders=upload_config.default_bucket.uploaders
-                if upload_config
-                and upload_config.default_bucket
-                and upload_config.default_bucket.uploaders
-                else [],
+                uploaders=(
+                    upload_config.default_bucket.uploaders
+                    if upload_config
+                    and upload_config.default_bucket
+                    and upload_config.default_bucket.uploaders
+                    else []
+                ),
             )
         }
 
