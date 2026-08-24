@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 import pulumi
 import pulumi_gcp as gcp
+from inputs.compute_environment import GoogleWifCredentialConfig
 
 from cpg_infra.abstraction.base import BucketMembership
 from cpg_infra.abstraction.gcp import GcpInfrastructure
@@ -23,7 +24,6 @@ from cpg_infra.config import SeqeraAccount, SeqeraWorkspaceRef, SeqeraWorkspaceR
 from cpg_infra.driver.dynamic_providers.seqera import (
     GoogleBatchConfig,
     SeqeraComputeEnv,
-    SeqeraGoogleCredentials,
     SeqeraWorkspace,
 )
 
@@ -266,21 +266,15 @@ class DatasetSeqeraInfrastructure:
             sa = self._service_accounts[level]
             dataset = self._dataset_config.dataset
 
-            wif_credentials = SeqeraGoogleCredentials(
-                self._infra.get_pulumi_name(f'seqera-cred-{dataset}-{level}'),
-                workspace_id=workspace_resource.workspace_id,
-                cred_name=f'{dataset}-{level}-cred',
-                workload_identity_provider=self._wif_provider.name,
-                service_account_email=sa.email,
-                opts=pulumi.ResourceOptions(depends_on=[workspace_resource]),
-            )
-
             # TODO compute values fixed for now, should they be configurable per dataset
             SeqeraComputeEnv(
                 self._infra.get_pulumi_name(f'seqera-ce-{dataset}-{level}'),
                 workspace_id=workspace_resource.workspace_id,
                 ce_name=f'{dataset}-{level}',
-                credentials_id=wif_credentials.credentials_id,
+                credentials=GoogleWifCredentialConfig(
+                    workload_identity_provider=self._wif_provider.name,
+                    service_account_email=sa.email,
+                ),
                 platform='google-batch',
                 description=f'{dataset} {level} compute environment ',
                 config=GoogleBatchConfig(

@@ -53,7 +53,7 @@ def _compare_imported_state(ws: dict, inputs: WorkspaceArgs) -> dict:
         'visibility': ws.get('visibility'),
     }
     difference = [
-        f'{field}: imported={imported_state[field]!r} code={getattr(inputs, field)!r}'
+        f'{field}: imported={imported_state[field]} code={getattr(inputs, field)}'
         for field in ('name', 'full_name', 'description', 'visibility')
         if getattr(inputs, field) != imported_state[field]
     ]

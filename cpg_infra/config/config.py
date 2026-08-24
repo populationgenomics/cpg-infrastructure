@@ -6,7 +6,7 @@ specific dataset.
 """
 
 from enum import Enum
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 
 import pulumi
 from pydantic import Field
@@ -35,12 +35,12 @@ class SeqeraWorkspaceRef(ConfigModel):
     """Attributes of a Seqera workspace"""
 
     workspace_id: int
-    name: str
-    full_name: str
+    name: str = Field(min_length=2, max_length=40)
+    full_name: str = Field(min_length=1, max_length=100)
     visibility: Literal['PRIVATE', 'SHARED'] = (
         'PRIVATE'  # TODO check if this is the expected
     )
-    description: str | None = None
+    description: Optional[str] = Field(None, max_length=1000)
 
 
 class SeqeraWorkspaceRefPair(ConfigModel):
