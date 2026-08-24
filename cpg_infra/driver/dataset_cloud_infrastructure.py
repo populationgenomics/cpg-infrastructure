@@ -58,10 +58,6 @@ from cpg_infra.driver.dataset_seqera_infrastructure import (
     DatasetSeqeraInfrastructure,
 )
 
-if TYPE_CHECKING:
-    from cpg_infra.driver.groups import Group, GroupProvider
-    from cpg_infra.driver.infrastructure import CPGInfrastructure
-
 
 class MainUploadBucket(NamedTuple):
     bucket: Any
@@ -73,6 +69,11 @@ class SampleMetadataAccessorMembership(NamedTuple):
     name: str
     member: Any
     permissions: Iterable[str]
+
+
+if TYPE_CHECKING:
+    from cpg_infra.driver.groups import Group, GroupProvider
+    from cpg_infra.driver.infrastructure import CPGInfrastructure
 
 
 class CPGDatasetCloudInfrastructure:
