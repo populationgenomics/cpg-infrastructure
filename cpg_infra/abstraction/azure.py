@@ -392,7 +392,7 @@ class AzureInfra(CloudInfraBase):
 
     @staticmethod
     def _get_principal_type(obj):
-        # it's a 'cpg_infra.driver.CPGInfrastructure.GroupProvider.Group'
+        # duck-type for Group: a direct isinstance import would cause a circular import
         if hasattr(obj, 'is_group') and hasattr(obj, 'group'):
             # cheeky catch for internal group
             return AzureInfra._get_principal_type(obj.group)
