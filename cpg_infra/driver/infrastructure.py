@@ -5,13 +5,13 @@ CPGInfrastructure - top-level driver for CPG multi-dataset infrastructure.
 
 from __future__ import annotations
 
-import graphlib
 import json
 import os.path
 from collections import defaultdict
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Callable
 
+import graphlib
 import pulumi
 import pulumi_gcp as gcp
 
