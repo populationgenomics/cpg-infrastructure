@@ -38,12 +38,10 @@ class BucketMembershipRole(NamedTuple):
 
 
 def get_member_key(member):  # pylint: disable=too-many-return-statements
-    # it's a 'cpg_infra.driver.CPGInfrastructure.GroupProvider.Group'
-    # The canonical path is now `cpg_infra.driver.group.Group`,
-    # the previous is kept for backwards compatibility
     if isinstance(member, pulumi.Output):
         return pulumi.Output.apply(member, get_member_key)
 
+    # duck-type for Group: a direct isinstance import would cause a circular import
     if hasattr(member, 'is_group') and hasattr(member, 'group'):
         # cheeky catch for internal group
         return get_member_key(member.group)

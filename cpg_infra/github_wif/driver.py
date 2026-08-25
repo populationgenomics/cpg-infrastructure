@@ -22,6 +22,7 @@ from cpg_infra.config.base import ConfigModel
 WIF_POOL_NAME = 'github-pool'
 WIF_PROVIDER_NAME = 'github-provider'
 GITHUB_ORG = 'populationgenomics'
+GITHUB_ORG_ID = '69879407'
 
 # Service account name max length is 30 characters
 SA_NAME_MAX_LENGTH = 30
@@ -192,7 +193,7 @@ def check_or_create_wif_provider(
             'attribute.actor': 'assertion.actor',
             'attribute.repository': 'assertion.repository',
         },
-        attribute_condition=f"assertion.repository_owner == '{GITHUB_ORG}'",
+        attribute_condition=f"assertion.repository_owner_id == '{GITHUB_ORG_ID}'",
         oidc=gcp.iam.WorkloadIdentityPoolProviderOidcArgs(
             issuer_uri='https://token.actions.githubusercontent.com',
         ),

@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING, Any, Callable
 import graphlib
 import pulumi
 import pulumi_gcp as gcp
+from seqera import SeqeraWorkspace, SeqeraWorkspaceParticipant
+from util.api_util import SeqeraApiClient
 
 from cpg_infra.abstraction.azure import AzureInfra
 from cpg_infra.abstraction.base import (
@@ -35,18 +37,7 @@ from cpg_infra.driver.constants import (
     dict_to_toml,
 )
 from cpg_infra.driver.dataset_infrastructure import CPGDatasetInfrastructure
-from cpg_infra.driver.dynamic_providers.seqera import (
-    SeqeraWorkspace,
-    SeqeraWorkspaceParticipant,
-)
-from cpg_infra.driver.dynamic_providers.seqera.util.api_util import SeqeraApiClient
-
-# ``GroupMember`` is used at runtime for the ``isinstance`` check inside
-# ``finalize_groups``. ``GroupProvider`` is imported under an underscore-prefix
-# alias so the outer name is not shadowed by the ``GroupProvider`` class
-# attribute below.
-from cpg_infra.driver.group_member import GroupMember
-from cpg_infra.driver.group_provider import GroupProvider as _GroupProvider
+from cpg_infra.driver.groups import GroupMember, GroupProvider
 from cpg_infra.github_wif.driver import PAM_BROKER_SA_NAME
 from cpg_infra.plugin import get_plugins
 
@@ -59,7 +50,7 @@ if TYPE_CHECKING:
     from cpg_infra.driver.dataset_cloud_infrastructure import (
         CPGDatasetCloudInfrastructure,
     )
-    from cpg_infra.driver.group import Group
+    from cpg_infra.driver.groups import Group
 
 
 def get_formatted_team_name(team: str) -> str:
@@ -68,9 +59,6 @@ def get_formatted_team_name(team: str) -> str:
 
 class CPGInfrastructure:
     """Class for managing all CPG infrastructure"""
-
-    # Legacy nested-class access path: `CPGInfrastructure.GroupProvider`
-    GroupProvider = _GroupProvider
 
     def __init__(
         self,
@@ -82,7 +70,7 @@ class CPGInfrastructure:
             d.dataset: d for d in dataset_configs
         }
 
-        self.group_provider = _GroupProvider(
+        self.group_provider = GroupProvider(
             group_prefix=self.config.group_prefix,
         )
 

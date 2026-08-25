@@ -10,7 +10,7 @@ import os.path
 import re
 from collections import defaultdict
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Iterator
+from typing import TYPE_CHECKING, Any, Iterable, Iterator, NamedTuple
 
 import pulumi
 import pulumi_gcp as gcp
@@ -57,14 +57,22 @@ from cpg_infra.driver.constants import (
 from cpg_infra.driver.dataset_seqera_infrastructure import (
     DatasetSeqeraInfrastructure,
 )
-from cpg_infra.driver.main_upload_bucket import MainUploadBucket
-from cpg_infra.driver.sm_accessor_membership import (
-    SampleMetadataAccessorMembership,
-)
+
+
+class MainUploadBucket(NamedTuple):
+    bucket: Any
+    uploaders: list[str]
+    is_dropbox: bool = False
+
+
+class SampleMetadataAccessorMembership(NamedTuple):
+    name: str
+    member: Any
+    permissions: Iterable[str]
+
 
 if TYPE_CHECKING:
-    from cpg_infra.driver.group import Group
-    from cpg_infra.driver.group_provider import GroupProvider
+    from cpg_infra.driver.groups import Group, GroupProvider
     from cpg_infra.driver.infrastructure import CPGInfrastructure
 
 
@@ -1111,11 +1119,13 @@ class CPGDatasetCloudInfrastructure:
         ] = {
             'main-upload': MainUploadBucket(
                 bucket=default_bucket,
-                uploaders=upload_config.default_bucket.uploaders
-                if upload_config
-                and upload_config.default_bucket
-                and upload_config.default_bucket.uploaders
-                else [],
+                uploaders=(
+                    upload_config.default_bucket.uploaders
+                    if upload_config
+                    and upload_config.default_bucket
+                    and upload_config.default_bucket.uploaders
+                    else []
+                ),
             )
         }
 
