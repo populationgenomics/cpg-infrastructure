@@ -7,8 +7,8 @@ from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
 from cpg_infra.driver.dynamic_providers.seqera.util.api_util import (
-    SeqeraAPIError,
     SeqeraApiClient,
+    SeqeraAPIError,
 )
 
 
@@ -16,10 +16,10 @@ class SeqeraApiClientTestBase(TestCase):
     """Resets the class-level singleton between tests."""
 
     def setUp(self) -> None:
-        SeqeraApiClient._instance = None
+        SeqeraApiClient._instance = None  # noqa: SLF001
 
     def tearDown(self) -> None:
-        SeqeraApiClient._instance = None
+        SeqeraApiClient._instance = None  # noqa: SLF001
 
 
 class TestSingletonBehaviour(SeqeraApiClientTestBase):
@@ -32,17 +32,18 @@ class TestSingletonBehaviour(SeqeraApiClientTestBase):
     def test_first_construction_stores_config(self) -> None:
         client = SeqeraApiClient(
             server_url='https://seqera.example.com/api',
-            token_secret_name='projects/p/secrets/s/versions/latest',
+            token_secret_name='projects/p/secrets/s/versions/latest',  # noqa: S106
         )
         self.assertEqual(client.server_url, 'https://seqera.example.com/api')
         self.assertEqual(
-            client.token_secret_name, 'projects/p/secrets/s/versions/latest',
+            client.token_secret_name,
+            'projects/p/secrets/s/versions/latest',
         )
 
     def test_subsequent_construction_returns_same_instance(self) -> None:
         first = SeqeraApiClient(
             server_url='https://seqera.example.com/api',
-            token_secret_name='projects/p/secrets/s/versions/latest',
+            token_secret_name='projects/p/secrets/s/versions/latest',  # noqa: S106
         )
         second = SeqeraApiClient()
         self.assertIs(first, second)
@@ -50,25 +51,25 @@ class TestSingletonBehaviour(SeqeraApiClientTestBase):
     def test_subsequent_construction_ignores_new_args(self) -> None:
         first = SeqeraApiClient(
             server_url='https://original.example.com/api',
-            token_secret_name='projects/p/secrets/original/versions/latest',
+            token_secret_name='projects/p/secrets/original/versions/latest',  # noqa: S106
         )
         second = SeqeraApiClient(
             server_url='https://overridden.example.com/api',
-            token_secret_name='projects/p/secrets/overridden/versions/latest',
+            token_secret_name='projects/p/secrets/overridden/versions/latest',  # noqa: S106
         )
         self.assertIs(first, second)
         self.assertEqual(second.server_url, 'https://original.example.com/api')
         self.assertEqual(
-            second.token_secret_name, 'projects/p/secrets/original/versions/latest',
+            second.token_secret_name,
+            'projects/p/secrets/original/versions/latest',
         )
 
 
 class TestAccessTokenCaching(SeqeraApiClientTestBase):
-    @patch(
-        'cpg_infra.driver.dynamic_providers.seqera.util.api_util.secretmanager'
-    )
+    @patch('cpg_infra.driver.dynamic_providers.seqera.util.api_util.secretmanager')
     def test_access_token_fetches_from_secret_manager_once(
-        self, mock_sm: MagicMock,
+        self,
+        mock_sm: MagicMock,
     ) -> None:
         mock_client = MagicMock()
         mock_client.access_secret_version.return_value.payload.data = b'tok-abc'
@@ -76,23 +77,23 @@ class TestAccessTokenCaching(SeqeraApiClientTestBase):
 
         client = SeqeraApiClient(
             server_url='https://seqera.example.com/api',
-            token_secret_name='projects/p/secrets/s/versions/latest',
+            token_secret_name='projects/p/secrets/s/versions/latest',  # noqa: S106
         )
 
-        self.assertEqual(client._access_token, 'tok-abc')
+        self.assertEqual(client._access_token, 'tok-abc')  # noqa: SLF001
         # cached_property: second access returns the cached value without
         # re-fetching from Secret Manager.
-        self.assertEqual(client._access_token, 'tok-abc')
+        self.assertEqual(client._access_token, 'tok-abc')  # noqa: SLF001
         mock_client.access_secret_version.assert_called_once_with(
             request={'name': 'projects/p/secrets/s/versions/latest'},
         )
 
 
 class TestCall(SeqeraApiClientTestBase):
-    def _configured_client(self, token: str = 'token') -> SeqeraApiClient:
+    def _configured_client(self, token: str = 'token') -> SeqeraApiClient:  # noqa: S107
         client = SeqeraApiClient(
             server_url='https://seqera.example.com/api',
-            token_secret_name='projects/p/secrets/s/versions/latest',
+            token_secret_name='projects/p/secrets/s/versions/latest',  # noqa: S106
         )
 
         client.__dict__['_access_token'] = token
@@ -120,7 +121,8 @@ class TestCall(SeqeraApiClientTestBase):
 
     @patch('cpg_infra.driver.dynamic_providers.seqera.util.api_util.requests')
     def test_call_sends_json_body_when_data_provided(
-        self, mock_requests: MagicMock,
+        self,
+        mock_requests: MagicMock,
     ) -> None:
         client = self._configured_client()
         response = MagicMock()
@@ -135,7 +137,8 @@ class TestCall(SeqeraApiClientTestBase):
 
     @patch('cpg_infra.driver.dynamic_providers.seqera.util.api_util.requests')
     def test_call_returns_empty_dict_when_body_empty(
-        self, mock_requests: MagicMock,
+        self,
+        mock_requests: MagicMock,
     ) -> None:
         client = self._configured_client()
         response = MagicMock()
@@ -147,7 +150,8 @@ class TestCall(SeqeraApiClientTestBase):
 
     @patch('cpg_infra.driver.dynamic_providers.seqera.util.api_util.requests')
     def test_call_raises_seqera_api_error_on_http_error(
-        self, mock_requests: MagicMock,
+        self,
+        mock_requests: MagicMock,
     ) -> None:
         import requests as real_requests
 
