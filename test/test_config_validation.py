@@ -227,6 +227,11 @@ class TestConfigValidation(TestCase):
                                 'name': 'shared-main',
                                 'full_name': 'Shared',
                             },
+                            'test': {
+                                'workspace_id': 334,
+                                'name': 'shared-test',
+                                'full_name': 'Shared Test',
+                            },
                         },
                     },
                 },
@@ -240,8 +245,6 @@ class TestConfigValidation(TestCase):
 
         self.assertEqual(112, rd.workspaces.test.workspace_id)
         self.assertEqual(['alice'], rd.members)
-        # test is optional — Shared here has no test workspace.
-        self.assertIsNone(seqera.teams['Shared'].workspaces.test)
         # participants defaults to []
         self.assertEqual([], seqera.teams['Shared'].members)
 
