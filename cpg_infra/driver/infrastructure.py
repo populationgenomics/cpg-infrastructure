@@ -171,7 +171,7 @@ class CPGInfrastructure:
         self.setup_pam_broker()
 
         # Workspaces should be created/imported before
-        # calling deploy_datasets() which setup Seqera gcp infra per dataset
+        # calling deploy_datasets() which setup Seqera/GCP infra per dataset
         if self.config.seqera is not None:
             # Initialize the Seqera API Client singleton
             SeqeraApiClient(

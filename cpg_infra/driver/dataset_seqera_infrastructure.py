@@ -167,14 +167,14 @@ class DatasetSeqeraInfrastructure:
 
     def setup(self) -> None:
         """Materialise WIF pool, provider, SAs, and IAM bindings in the GCP end
-            and create compute environments and credentials
+            and create compute environments
         Idempotent — cached_properties gate resource creation.
         """
         self._grant_project_roles()
         self._bind_wif_principals()
         self._grant_service_account_self_user()
         self._grant_work_bucket_access()
-        self._setup_seqera_credentials_and_compute_envs()
+        self._setup_seqera_compute_environments()
 
     def _grant_project_roles(self) -> None:
         for level, sa in self._service_accounts.items():
@@ -251,8 +251,8 @@ class DatasetSeqeraInfrastructure:
         base = self._infra.bucket_output_path(self._work_bucket_for_access_level(level))
         return pulumi.Output.concat(base, '/', level)
 
-    def _setup_seqera_credentials_and_compute_envs(self) -> None:
-        """Create credentials + GCP Batch compute env per access level in the relevant workspace."""
+    def _setup_seqera_compute_environments(self) -> None:
+        """Create GCP Batch compute env per access level in the relevant workspace."""
 
         project_id = self._infra.project_id
 
