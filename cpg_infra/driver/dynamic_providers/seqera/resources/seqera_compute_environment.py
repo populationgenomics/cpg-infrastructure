@@ -42,12 +42,8 @@ def _build_credentials_body(
 ) -> dict:
     keys: dict = {
         'keyType': 'google',
-        'workloadIdentityProvider': creds.workload_identity_provider,
-        'serviceAccountEmail': creds.service_account_email,
+        **creds.model_dump(by_alias=True, exclude_none=True, exclude={'id', 'name'}),
     }
-    if creds.token_audience is not None:
-        keys['tokenAudience'] = creds.token_audience
-
     body: dict = {
         'credentials': {
             'name': name,
@@ -77,14 +73,14 @@ def _create_credentials(
     return str(cred_id)
 
 
-def _update_credentials(
-    workspace_id: int, cred_id: str, creds: GoogleWifCredentialArgs, name: str
-) -> None:
+def _update_credentials(workspace_id: int, creds: GoogleWifCredentialArgs) -> None:
     """https://docs.seqera.io/platform-api/update-credentials"""
+
+    assert creds.id is not None and creds.name is not None
     SeqeraApiClient().call(
         HTTPMethod.PUT,
-        f'/credentials/{cred_id}?workspaceId={workspace_id}',
-        _build_credentials_body(creds, name, cred_id=cred_id),
+        f'/credentials/{creds.id}?workspaceId={workspace_id}',
+        _build_credentials_body(creds, creds.name, creds.id),
     )
 
 
@@ -143,7 +139,7 @@ def _build_ce_body(inputs: ComputeEnvArgs, name_override: Optional[str] = None) 
     return body
 
 
-_CRED_USER_FIELDS = (
+_CRED_UPDATE_FIELDS = (
     'workload_identity_provider',
     'service_account_email',
     'token_audience',
@@ -189,16 +185,18 @@ class _ComputeEnvProvider(ResourceProvider):
         )
 
     def diff(self, _id: str, olds: dict[str, Any], news: dict[str, Any]) -> DiffResult:
-        replaces: list[str] = [f for f in _CE_REPLACE_FIELDS if olds.get(f) != news.get(f)]
+        replaces: list[str] = [
+            f for f in _CE_REPLACE_FIELDS if olds.get(f) != news.get(f)
+        ]
 
         old_creds = olds['credentials']
         new_creds = news['credentials']
         cred_changed = any(
-            old_creds.get(f) != new_creds.get(f) for f in _CRED_USER_FIELDS
+            old_creds.get(f) != new_creds.get(f) for f in _CRED_UPDATE_FIELDS
         )
-        name_changed = olds.get('name') != news.get('name')
+        ce_name_changed = olds.get('name') != news.get('name')
 
-        changed = bool(replaces) or cred_changed or name_changed
+        changed = bool(replaces) or cred_changed or ce_name_changed
         return DiffResult(changes=changed, replaces=replaces or None)
 
     def update(
@@ -213,15 +211,10 @@ class _ComputeEnvProvider(ResourceProvider):
         assert inputs.credentials.id and inputs.credentials.name
 
         cred_changed = any(
-            _old_creds.get(f) != news['credentials'].get(f) for f in _CRED_USER_FIELDS
+            _old_creds.get(f) != news['credentials'].get(f) for f in _CRED_UPDATE_FIELDS
         )
         if cred_changed:
-            _update_credentials(
-                inputs.workspace_id,
-                inputs.credentials.id,
-                inputs.credentials,
-                inputs.credentials.name,
-            )
+            _update_credentials(inputs.workspace_id, inputs.credentials)
 
         if olds.get('name') != news.get('name'):
             _update_compute_env_metadata(inputs.workspace_id, id_, inputs.name)

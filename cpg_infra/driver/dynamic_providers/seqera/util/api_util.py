@@ -5,18 +5,15 @@ import requests
 from google.cloud import secretmanager
 
 
-class SeqeraAPIError(RuntimeError):
+class SeqeraAPIError(Exception):
     """Exception raised when a Seqera Platform API call fails."""
 
-    def __init__(
-        self, method: str, url: str, code: int, body: str, cause: Exception
-    ) -> None:
+    def __init__(self, method: str, url: str, code: int, body: str) -> None:
         super().__init__(f'{method} {url} failed with {code}: {body}')
         self.method = method
         self.url = url
         self.status_code = code
         self.body = body
-        self.__cause__ = cause
 
 
 class SeqeraApiClient:
@@ -34,7 +31,7 @@ class SeqeraApiClient:
         instance = cls._instance
         if instance is None:
             if server_url is None or token_secret_name is None:
-                raise RuntimeError(
+                raise ValueError(
                     'SeqeraApiClient first construction requires both '
                     'server_url and token_secret_name.'
                 )
@@ -73,7 +70,6 @@ class SeqeraApiClient:
                 url,
                 response.status_code,
                 response.text,
-                e,
             ) from e
 
         return response.json() if response.content else {}

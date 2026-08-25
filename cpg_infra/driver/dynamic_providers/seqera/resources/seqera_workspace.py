@@ -49,7 +49,8 @@ def _compare_imported_state(ws: dict, inputs: WorkspaceArgs) -> dict:
     imported_state = {
         'name': ws.get('name'),
         'full_name': ws.get('fullName'),
-        'description': ws.get('description') or '',
+        'description': ws.get('description')
+        or '',  # API returns empty string if not set
         'visibility': ws.get('visibility'),
     }
     difference = [
@@ -125,8 +126,6 @@ class _WorkspaceProvider(ResourceProvider):
 class SeqeraWorkspace(Resource):
     workspace_id: pulumi.Output[int]
 
-    # Import the live workspace
-    # If the specified workspace does not exist, throws an error
     def __init__(
         self,
         name: str,

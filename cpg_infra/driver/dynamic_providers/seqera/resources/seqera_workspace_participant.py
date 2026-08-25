@@ -53,7 +53,7 @@ def _update_participant_role(
     )
 
 
-def _delete_participant(org_id: int, workspace_id: int, participant_id: str) -> None:
+def _delete_participant(org_id: int, workspace_id: int, participant_id: int) -> None:
     """
     https://docs.seqera.io/platform-api/delete-workspace-participant
     """
@@ -69,7 +69,7 @@ def _delete_participant(org_id: int, workspace_id: int, participant_id: str) -> 
 class _WorkspaceParticipantProvider(ResourceProvider):
     def create(self, props: dict[str, Any]) -> CreateResult:
         """
-        https://docs.seqera.io/platform-api/create-workspace-participant
+        Adds a participant to a workspace and assign the requested role to them.
         """
         inputs = WorkspaceParticipantArgs(**props)
 
@@ -93,7 +93,7 @@ class _WorkspaceParticipantProvider(ResourceProvider):
                 # https://docs.seqera.io/platform-api/list-workspace-participants fetches all in a workspace.
                 try:
                     _delete_participant(
-                        inputs.org_id, inputs.workspace_id, str(participant_id)
+                        inputs.org_id, inputs.workspace_id, participant_id
                     )
                 except SeqeraAPIError as e:
                     pulumi.log.warn(
@@ -117,10 +117,11 @@ class _WorkspaceParticipantProvider(ResourceProvider):
         changed = bool(replaces) or olds.get('role') != news.get('role')
         return DiffResult(changes=changed, replaces=replaces or None)
 
-    # Once added to the workspace, we can only change the role
     def update(
         self, id_: str, _olds: dict[str, Any], news: dict[str, Any]
     ) -> UpdateResult:
+        # Once added to the workspace, we can only change the role
+
         inputs = WorkspaceParticipantArgs(**news)
         participant_id = int(id_)
 
@@ -129,7 +130,9 @@ class _WorkspaceParticipantProvider(ResourceProvider):
 
     def delete(self, id_: str, props: dict[str, Any]) -> None:
         try:
-            _delete_participant(int(props['org_id']), int(props['workspace_id']), id_)
+            _delete_participant(
+                int(props['org_id']), int(props['workspace_id']), int(id_)
+            )
         except SeqeraAPIError as e:
             if e.status_code == HTTPStatus.NOT_FOUND:
                 pulumi.log.info(
