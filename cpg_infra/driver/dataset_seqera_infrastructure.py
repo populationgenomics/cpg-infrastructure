@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING, Any
 
 import pulumi
 import pulumi_gcp as gcp
-from inputs.compute_environment import GoogleWifCredentialConfig
 
 from cpg_infra.abstraction.base import BucketMembership
 from cpg_infra.abstraction.gcp import GcpInfrastructure
@@ -25,6 +24,9 @@ from cpg_infra.driver.dynamic_providers.seqera import (
     GoogleBatchConfig,
     SeqeraComputeEnv,
     SeqeraWorkspace,
+)
+from cpg_infra.driver.dynamic_providers.seqera.inputs.compute_environment import (
+    GoogleWifCredentialConfig,
 )
 
 if TYPE_CHECKING:
@@ -75,7 +77,7 @@ class DatasetSeqeraInfrastructure:
         assert self._dataset_config.team_ownership is not None
         return self._config.seqera.teams[self._dataset_config.team_ownership].workspaces
 
-    def _workspace_ref_for_access_level(self, level: str) -> SeqeraWorkspaceRef | None:
+    def _workspace_ref_for_access_level(self, level: str) -> SeqeraWorkspaceRef:
         """Returns workspace config reference for access level."""
 
         if level in _MAIN_WORKSPACE_LEVELS:
@@ -194,8 +196,6 @@ class DatasetSeqeraInfrastructure:
 
         for level, sa in self._service_accounts.items():
             ws = self._workspace_ref_for_access_level(level)
-            if ws is None:
-                continue
             workspace_id = ws.workspace_id
 
             wif_subject = f'org:{org_id}:wsp:{workspace_id}:workflow'
@@ -237,7 +237,7 @@ class DatasetSeqeraInfrastructure:
 
     def _work_dir_for_access_level(self, level: str) -> pulumi.Output[str]:
         """
-        The work dir of a compute env for this access level.
+        The work dir of a Seqera compute env for this access level.
         This directory may contain
             Execution & Script Files - System files to set up and run tasks
             Logs & Status Trackers - Used to monitor running tasks while or to record its final state.
@@ -252,7 +252,7 @@ class DatasetSeqeraInfrastructure:
         return pulumi.Output.concat(base, '/', level)
 
     def _setup_seqera_compute_environments(self) -> None:
-        """Create GCP Batch compute env per access level in the relevant workspace."""
+        """Create Seqera GCP Batch compute env per access level in the relevant workspace."""
 
         project_id = self._infra.project_id
 

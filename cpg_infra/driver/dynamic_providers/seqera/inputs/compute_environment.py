@@ -92,7 +92,7 @@ class GoogleBatchConfig:
     nextflow_config: Optional[pulumi.Input[str]] = None
     environment: Optional[list[ConfigEnvVariable]] = None
 
-    label_ids: Optional[dict[str, pulumi.Input[str]]] = None
+    labels: Optional[dict[str, pulumi.Input[str]]] = None
 
     nfs_mount: Optional[pulumi.Input[str]] = None
     nfs_target: Optional[pulumi.Input[str]] = None

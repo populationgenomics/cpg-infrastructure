@@ -237,7 +237,7 @@ class TestConfigValidation(TestCase):
         self.assertEqual(111, rd.workspaces.main.workspace_id)
         self.assertEqual('rd-main', rd.workspaces.main.name)
         self.assertEqual('PRIVATE', rd.workspaces.main.visibility)
-        assert rd.workspaces.test is not None
+
         self.assertEqual(112, rd.workspaces.test.workspace_id)
         self.assertEqual(['alice'], rd.members)
         # test is optional — Shared here has no test workspace.

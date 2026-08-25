@@ -14,8 +14,6 @@ from typing import TYPE_CHECKING, Any, Callable
 import graphlib
 import pulumi
 import pulumi_gcp as gcp
-from seqera import SeqeraWorkspace, SeqeraWorkspaceParticipant
-from util.api_util import SeqeraApiClient
 
 from cpg_infra.abstraction.azure import AzureInfra
 from cpg_infra.abstraction.base import (
@@ -37,6 +35,11 @@ from cpg_infra.driver.constants import (
     dict_to_toml,
 )
 from cpg_infra.driver.dataset_infrastructure import CPGDatasetInfrastructure
+from cpg_infra.driver.dynamic_providers.seqera import (
+    SeqeraWorkspace,
+    SeqeraWorkspaceParticipant,
+)
+from cpg_infra.driver.dynamic_providers.seqera.util.api_util import SeqeraApiClient
 from cpg_infra.driver.groups import GroupMember, GroupProvider
 from cpg_infra.github_wif.driver import PAM_BROKER_SA_NAME
 from cpg_infra.plugin import get_plugins
@@ -589,8 +592,6 @@ class CPGInfrastructure:
                 ('main', ws_pair.main),
                 ('test', ws_pair.test),
             ):
-                if ws_configs is None:
-                    continue
                 self.seqera_workspaces[(team_ownership, workspace_type)] = (
                     SeqeraWorkspace(
                         f'seqera-ws-{team_name}-{workspace_type}',
@@ -627,9 +628,7 @@ class CPGInfrastructure:
                     )
                 cloud_user = user.clouds.get(gcp_key)
                 if cloud_user is None or not cloud_user.id:
-                    raise ValueError(
-                        f'Can not find seqera member: {member_key} id; skipping.'
-                    )
+                    raise ValueError(f'Can not find seqera member: {member_key} id.')
                 member_ids.append((member_key, cloud_user.id))
 
             if not member_ids:
@@ -648,17 +647,16 @@ class CPGInfrastructure:
                     role='view',
                 )
 
-            test_ws = self.seqera_workspaces.get((team, 'test'))
+            test_ws = self.seqera_workspaces[(team, 'main')]
             # add to test workspace with `admin` permission
-            if test_ws is not None:
-                for member_key, email in member_ids:
-                    SeqeraWorkspaceParticipant(
-                        f'wsp-{team_name}-test-{member_key}',
-                        org_id=seqera_cfg.org_id,
-                        workspace_id=test_ws.workspace_id,
-                        email=email,
-                        role='admin',
-                    )
+            for member_key, email in member_ids:
+                SeqeraWorkspaceParticipant(
+                    f'wsp-{team_name}-test-{member_key}',
+                    org_id=seqera_cfg.org_id,
+                    workspace_id=test_ws.workspace_id,
+                    email=email,
+                    role='admin',
+                )
 
     # region ACCESS_CACHE
 

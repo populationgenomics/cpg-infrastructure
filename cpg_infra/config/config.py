@@ -47,7 +47,7 @@ class SeqeraWorkspaceRefPair(ConfigModel):
     """The two Seqera workspaces per team"""
 
     main: SeqeraWorkspaceRef
-    test: SeqeraWorkspaceRef | None = None
+    test: SeqeraWorkspaceRef
 
 
 class WorkspaceScope(ConfigModel):
