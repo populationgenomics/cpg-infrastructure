@@ -15,5 +15,4 @@ from cpg_infra.config.config import (
     SeqeraWorkspaceRef,
     SeqeraWorkspaceRefPair,
     TeamOwnership,
-    WorkspaceScope,
 )

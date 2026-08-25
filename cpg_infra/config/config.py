@@ -50,13 +50,6 @@ class SeqeraWorkspaceRefPair(ConfigModel):
     test: SeqeraWorkspaceRef
 
 
-class WorkspaceScope(ConfigModel):
-    """Holds workspaces (Main and Test) and members of a workspace"""
-
-    workspaces: SeqeraWorkspaceRefPair
-    members: list[MemberKey] = Field(default_factory=list)
-
-
 class CPGInfrastructureUser(ConfigModel):
     class Cloud(ConfigModel):
         id: str  # noqa: RUF100, A003
@@ -216,7 +209,7 @@ class CPGInfrastructureConfig(ConfigModel):
         # Holds secret name of `admin` machine user's token
         token_secret_name: str
         # Holds per team, workspaces and member information
-        teams: dict[TeamOwnership, WorkspaceScope]
+        teams: dict[TeamOwnership, SeqeraWorkspaceRefPair]
 
     class Billing(ConfigModel):
         class GCP(ConfigModel):

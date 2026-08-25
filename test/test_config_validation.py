@@ -192,46 +192,39 @@ class TestConfigValidation(TestCase):
                 'token_secret_name': 'secreate/path',
                 'teams': {
                     'Rare Disease': {
-                        'workspaces': {
-                            'main': {
-                                'workspace_id': 111,
-                                'name': 'rd-main',
-                                'full_name': 'Rare Disease',
-                            },
-                            'test': {
-                                'workspace_id': 112,
-                                'name': 'rd-test',
-                                'full_name': 'Rare Disease Test',
-                            },
+                        'main': {
+                            'workspace_id': 111,
+                            'name': 'rd-main',
+                            'full_name': 'Rare Disease',
                         },
-                        'members': ['alice'],
+                        'test': {
+                            'workspace_id': 112,
+                            'name': 'rd-test',
+                            'full_name': 'Rare Disease Test',
+                        },
                     },
                     'Population Genomics': {
-                        'workspaces': {
-                            'main': {
-                                'workspace_id': 222,
-                                'name': 'pg-main',
-                                'full_name': 'PopGen',
-                            },
-                            'test': {
-                                'workspace_id': 223,
-                                'name': 'pg-test',
-                                'full_name': 'PopGen Test',
-                            },
+                        'main': {
+                            'workspace_id': 222,
+                            'name': 'pg-main',
+                            'full_name': 'PopGen',
+                        },
+                        'test': {
+                            'workspace_id': 223,
+                            'name': 'pg-test',
+                            'full_name': 'PopGen Test',
                         },
                     },
                     'Shared': {
-                        'workspaces': {
-                            'main': {
-                                'workspace_id': 333,
-                                'name': 'shared-main',
-                                'full_name': 'Shared',
-                            },
-                            'test': {
-                                'workspace_id': 334,
-                                'name': 'shared-test',
-                                'full_name': 'Shared Test',
-                            },
+                        'main': {
+                            'workspace_id': 333,
+                            'name': 'shared-main',
+                            'full_name': 'Shared',
+                        },
+                        'test': {
+                            'workspace_id': 334,
+                            'name': 'shared-test',
+                            'full_name': 'Shared Test',
                         },
                     },
                 },
@@ -239,14 +232,12 @@ class TestConfigValidation(TestCase):
         )
         self.assertEqual(12345, seqera.org_id)
         rd = seqera.teams['Rare Disease']
-        self.assertEqual(111, rd.workspaces.main.workspace_id)
-        self.assertEqual('rd-main', rd.workspaces.main.name)
-        self.assertEqual('PRIVATE', rd.workspaces.main.visibility)
+        self.assertEqual(111, rd.main.workspace_id)
+        self.assertEqual('rd-main', rd.main.name)
+        self.assertEqual('PRIVATE', rd.main.visibility)
 
-        self.assertEqual(112, rd.workspaces.test.workspace_id)
-        self.assertEqual(['alice'], rd.members)
-        # participants defaults to []
-        self.assertEqual([], seqera.teams['Shared'].members)
+        self.assertEqual(112, rd.test.workspace_id)
+        self.assertEqual('rd-test', rd.test.name)
 
     def test_seqera_workspaces_reject_unknown_team(self):
         """teams with a key outside the Literal must raise"""
@@ -258,12 +249,10 @@ class TestConfigValidation(TestCase):
                     'api_url': 'https://cloud.seqera.io/api',
                     'teams': {
                         'Rare-Disease': {  # hyphen typo
-                            'workspaces': {
-                                'main': {
-                                    'workspace_id': 111,
-                                    'name': 'x',
-                                    'full_name': 'x',
-                                },
+                            'main': {
+                                'workspace_id': 111,
+                                'name': 'x',
+                                'full_name': 'x',
                             },
                         },
                     },
@@ -280,10 +269,8 @@ class TestConfigValidation(TestCase):
                     'api_url': 'https://cloud.seqera.io/api',
                     'teams': {
                         'Shared': {
-                            'workspaces': {
-                                # missing name + full_name
-                                'main': {'workspace_id': 111},
-                            },
+                            # missing name + full_name on main
+                            'main': {'workspace_id': 111},
                         },
                     },
                 },

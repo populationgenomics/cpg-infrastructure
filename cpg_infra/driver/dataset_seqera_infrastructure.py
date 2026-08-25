@@ -19,15 +19,27 @@ import pulumi_gcp as gcp
 
 from cpg_infra.abstraction.base import BucketMembership
 from cpg_infra.abstraction.gcp import GcpInfrastructure
-from cpg_infra.config import SeqeraAccount, SeqeraWorkspaceRef, SeqeraWorkspaceRefPair
+from cpg_infra.config import (
+    MemberKey,
+    SeqeraAccount,
+    SeqeraWorkspaceRef,
+    SeqeraWorkspaceRefPair,
+    TeamOwnership,
+)
 from cpg_infra.driver.dynamic_providers.seqera import (
     GoogleBatchConfig,
     SeqeraComputeEnv,
     SeqeraWorkspace,
+    SeqeraWorkspaceParticipant,
 )
 from cpg_infra.driver.dynamic_providers.seqera.inputs.compute_environment import (
     GoogleWifCredentialConfig,
 )
+
+
+def _format_team_name(team: str) -> str:
+    return team.lower().replace(' ', '-')
+
 
 if TYPE_CHECKING:
     from cpg_infra.driver.dataset_cloud_infrastructure import (
@@ -75,7 +87,7 @@ class DatasetSeqeraInfrastructure:
 
         assert self._config.seqera is not None
         assert self._dataset_config.team_ownership is not None
-        return self._config.seqera.teams[self._dataset_config.team_ownership].workspaces
+        return self._config.seqera.teams[self._dataset_config.team_ownership]
 
     def _workspace_ref_for_access_level(self, level: str) -> SeqeraWorkspaceRef:
         """Returns workspace config reference for access level."""
@@ -168,8 +180,8 @@ class DatasetSeqeraInfrastructure:
         }
 
     def setup(self) -> None:
-        """Materialise WIF pool, provider, SAs, and IAM bindings in the GCP end
-            and create compute environments
+        """Materialise WIF pool, provider, SAs, and IAM bindings in the GCP end,
+        create compute environments and add participants to workspaces
         Idempotent — cached_properties gate resource creation.
         """
         self._grant_project_roles()
@@ -177,6 +189,63 @@ class DatasetSeqeraInfrastructure:
         self._grant_service_account_self_user()
         self._grant_work_bucket_access()
         self._setup_seqera_compute_environments()
+        self._setup_workspace_participants()
+
+    @cached_property
+    def analysis_members(self) -> list[MemberKey]:
+        """Members from this dataset's `analysis` section."""
+        return list(self._dataset_config.members.get('analysis', []))
+
+    def _setup_workspace_participants(self) -> None:
+        """Add this dataset's analysis members to the team's main and test
+        workspaces.
+        """
+        assert self._config.seqera is not None
+        team = self._dataset_config.team_ownership
+        assert team is not None
+
+        seqera_cfg = self._config.seqera
+        root = self._parent.root
+        workspace_participants: set[tuple[TeamOwnership, str, MemberKey]] = (
+            root.seqera_workspace_participants
+        )
+        gcp_key = GcpInfrastructure.name()
+        team_name = _format_team_name(team)
+
+        for member_key in sorted(self.analysis_members):
+            user = self._config.users.get(member_key)
+            if user is None:
+                raise ValueError(
+                    f'Could not find the member:{member_key} in CPG users.'
+                )
+            cloud_user = user.clouds.get(gcp_key)
+            if cloud_user is None or not cloud_user.id:
+                raise ValueError(f'Can not find seqera member: {member_key} id.')
+            email = cloud_user.id
+
+            main_ws_member_key = (team, 'main', member_key)
+            if main_ws_member_key not in workspace_participants:
+                main_ws = root.seqera_workspaces[(team, 'main')]
+                SeqeraWorkspaceParticipant(
+                    f'wsp-{team_name}-main-{member_key}',
+                    org_id=seqera_cfg.org_id,
+                    workspace_id=main_ws.workspace_id,
+                    email=email,
+                    role='view',
+                )
+                workspace_participants.add(main_ws_member_key)
+
+            test_ws_member_key = (team, 'test', member_key)
+            if test_ws_member_key not in workspace_participants:
+                test_ws = root.seqera_workspaces[(team, 'test')]
+                SeqeraWorkspaceParticipant(
+                    f'wsp-{team_name}-test-{member_key}',
+                    org_id=seqera_cfg.org_id,
+                    workspace_id=test_ws.workspace_id,
+                    email=email,
+                    role='admin',
+                )
+                workspace_participants.add(test_ws_member_key)
 
     def _grant_project_roles(self) -> None:
         for level, sa in self._service_accounts.items():

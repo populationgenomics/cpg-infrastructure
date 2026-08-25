@@ -35,10 +35,7 @@ from cpg_infra.driver.constants import (
     dict_to_toml,
 )
 from cpg_infra.driver.dataset_infrastructure import CPGDatasetInfrastructure
-from cpg_infra.driver.dynamic_providers.seqera import (
-    SeqeraWorkspace,
-    SeqeraWorkspaceParticipant,
-)
+from cpg_infra.driver.dynamic_providers.seqera import SeqeraWorkspace
 from cpg_infra.driver.dynamic_providers.seqera.util.api_util import SeqeraApiClient
 from cpg_infra.driver.groups import GroupMember, GroupProvider
 from cpg_infra.github_wif.driver import PAM_BROKER_SA_NAME
@@ -48,6 +45,7 @@ if TYPE_CHECKING:
     from cpg_infra.config import (
         CPGDatasetConfig,
         CPGInfrastructureConfig,
+        MemberKey,
         TeamOwnership,
     )
     from cpg_infra.driver.dataset_cloud_infrastructure import (
@@ -86,6 +84,10 @@ class CPGInfrastructure:
             tuple[TeamOwnership, str],
             SeqeraWorkspace,
         ] = {}
+
+        self.seqera_workspace_participants: set[
+            tuple[TeamOwnership, str, MemberKey]
+        ] = set()
 
     @cached_property
     def common_dataset(self) -> CPGDatasetInfrastructure:
@@ -172,9 +174,6 @@ class CPGInfrastructure:
 
             # Setup Seqera workspaces
             self.setup_seqera_workspaces()
-
-            # Setup Seqera workspace participants
-            self.setup_seqera_workspace_members()
 
         # Deploy all the assets required for each dataset. Groups, permissions
         # storage buckets, metamist and hail users etc.
@@ -602,60 +601,6 @@ class CPGInfrastructure:
                         visibility=ws_configs.visibility,
                         description=ws_configs.description,
                     )
-                )
-
-    def setup_seqera_workspace_members(self):
-        """Add CPG members to Seqera workspaces.
-        These members should be in the Seqera CPG organization before adding them to workspaces.
-        """
-
-        seqera_cfg = self.config.seqera
-        assert seqera_cfg is not None
-
-        gcp_key = GcpInfrastructure.name()
-
-        for team, workspace_scope in seqera_cfg.teams.items():
-            member_keys = workspace_scope.members
-            if not member_keys:
-                continue
-
-            member_ids: list[tuple[str, str]] = []
-            for member_key in member_keys:
-                user = self.config.users.get(member_key)
-                if user is None:
-                    raise ValueError(
-                        f'Could not find the member:{member_key} in CPG users.'
-                    )
-                cloud_user = user.clouds.get(gcp_key)
-                if cloud_user is None or not cloud_user.id:
-                    raise ValueError(f'Can not find seqera member: {member_key} id.')
-                member_ids.append((member_key, cloud_user.id))
-
-            if not member_ids:
-                continue
-
-            team_name = get_formatted_team_name(team)
-
-            main_ws = self.seqera_workspaces[(team, 'main')]
-            # add to main workspace with `view` permission
-            for member_key, email in member_ids:
-                SeqeraWorkspaceParticipant(
-                    f'wsp-{team_name}-main-{member_key}',
-                    org_id=seqera_cfg.org_id,
-                    workspace_id=main_ws.workspace_id,
-                    email=email,
-                    role='view',
-                )
-
-            test_ws = self.seqera_workspaces[(team, 'main')]
-            # add to test workspace with `admin` permission
-            for member_key, email in member_ids:
-                SeqeraWorkspaceParticipant(
-                    f'wsp-{team_name}-test-{member_key}',
-                    org_id=seqera_cfg.org_id,
-                    workspace_id=test_ws.workspace_id,
-                    email=email,
-                    role='admin',
                 )
 
     # region ACCESS_CACHE
