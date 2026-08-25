@@ -49,7 +49,7 @@ if TYPE_CHECKING:
 _ACCESS_LEVEL_FULL = 'full'
 _ACCESS_LEVEL_STANDARD = 'standard'
 _ACCESS_LEVEL_TEST = 'test'
-_MAIN_WORKSPACE_LEVELS = frozenset({_ACCESS_LEVEL_FULL, _ACCESS_LEVEL_STANDARD})
+_MAIN_WORKSPACE_LEVELS = (_ACCESS_LEVEL_FULL, _ACCESS_LEVEL_STANDARD)
 
 # Included runtime SA permissions
 # https://docs.seqera.io/platform-cloud/compute-envs/google-cloud-batch#service-account-permissions
@@ -191,62 +191,6 @@ class DatasetSeqeraInfrastructure:
         self._setup_seqera_compute_environments()
         self._setup_workspace_participants()
 
-    @cached_property
-    def analysis_members(self) -> list[MemberKey]:
-        """Members from this dataset's `analysis` section."""
-        return list(self._dataset_config.members.get('analysis', []))
-
-    def _setup_workspace_participants(self) -> None:
-        """Add this dataset's analysis members to the team's main and test
-        workspaces.
-        """
-        assert self._config.seqera is not None
-        team = self._dataset_config.team_ownership
-        assert team is not None
-
-        seqera_cfg = self._config.seqera
-        root = self._parent.root
-        workspace_participants: set[tuple[TeamOwnership, str, MemberKey]] = (
-            root.seqera_workspace_participants
-        )
-        gcp_key = GcpInfrastructure.name()
-        team_name = _format_team_name(team)
-
-        for member_key in sorted(self.analysis_members):
-            user = self._config.users.get(member_key)
-            if user is None:
-                raise ValueError(
-                    f'Could not find the member:{member_key} in CPG users.'
-                )
-            cloud_user = user.clouds.get(gcp_key)
-            if cloud_user is None or not cloud_user.id:
-                raise ValueError(f'Can not find seqera member: {member_key} id.')
-            email = cloud_user.id
-
-            main_ws_member_key = (team, 'main', member_key)
-            if main_ws_member_key not in workspace_participants:
-                main_ws = root.seqera_workspaces[(team, 'main')]
-                SeqeraWorkspaceParticipant(
-                    f'wsp-{team_name}-main-{member_key}',
-                    org_id=seqera_cfg.org_id,
-                    workspace_id=main_ws.workspace_id,
-                    email=email,
-                    role='view',
-                )
-                workspace_participants.add(main_ws_member_key)
-
-            test_ws_member_key = (team, 'test', member_key)
-            if test_ws_member_key not in workspace_participants:
-                test_ws = root.seqera_workspaces[(team, 'test')]
-                SeqeraWorkspaceParticipant(
-                    f'wsp-{team_name}-test-{member_key}',
-                    org_id=seqera_cfg.org_id,
-                    workspace_id=test_ws.workspace_id,
-                    email=email,
-                    role='admin',
-                )
-                workspace_participants.add(test_ws_member_key)
-
     def _grant_project_roles(self) -> None:
         for level, sa in self._service_accounts.items():
             for role in _SEQERA_SA_PROJECT_ROLES:
@@ -362,3 +306,61 @@ class DatasetSeqeraInfrastructure:
                 ),
                 opts=pulumi.ResourceOptions(depends_on=[workspace_resource]),
             )
+
+    def _setup_workspace_participants(self) -> None:
+        """Add this dataset's analysis members to the team's main and test
+        workspaces.
+        """
+        assert self._config.seqera is not None
+        team = self._dataset_config.team_ownership
+        assert team is not None
+
+        seqera_cfg = self._config.seqera
+        root = self._parent.root
+
+        # reference to participants in workspaces
+        # the same member can be in different datasets (under same or different teamOwnership)
+        # but they will be added once to the respective workspace
+        workspace_participants: set[tuple[TeamOwnership, str, MemberKey]] = (
+            root.seqera_workspace_participants
+        )
+        gcp_key = GcpInfrastructure.name()
+        team_name = _format_team_name(team)
+
+        analysis_members: list[MemberKey] = self._dataset_config.members.get(
+            'analysis', []
+        )
+        for member_key in sorted(analysis_members):
+            user = self._config.users.get(member_key)
+            if user is None:
+                raise ValueError(
+                    f'Could not find the member:{member_key} in CPG users.'
+                )
+            cloud_user = user.clouds.get(gcp_key)
+            if cloud_user is None or not cloud_user.id:
+                raise ValueError(f'Can not find seqera member: {member_key} id.')
+            email = cloud_user.id
+
+            main_ws_member_key = (team, 'main', member_key)
+            if main_ws_member_key not in workspace_participants:
+                main_ws = root.seqera_workspaces[(team, 'main')]
+                SeqeraWorkspaceParticipant(
+                    f'wsp-{team_name}-main-{member_key}',
+                    org_id=seqera_cfg.org_id,
+                    workspace_id=main_ws.workspace_id,
+                    email=email,
+                    role='view',
+                )
+                workspace_participants.add(main_ws_member_key)
+
+            test_ws_member_key = (team, 'test', member_key)
+            if test_ws_member_key not in workspace_participants:
+                test_ws = root.seqera_workspaces[(team, 'test')]
+                SeqeraWorkspaceParticipant(
+                    f'wsp-{team_name}-test-{member_key}',
+                    org_id=seqera_cfg.org_id,
+                    workspace_id=test_ws.workspace_id,
+                    email=email,
+                    role='admin',
+                )
+                workspace_participants.add(test_ws_member_key)
