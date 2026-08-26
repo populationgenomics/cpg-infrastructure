@@ -1,4 +1,4 @@
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, is_dataclass
 from typing import Any, Literal, Optional
 
 import pulumi
@@ -19,9 +19,9 @@ def _to_input_dict(instance: Any) -> dict[str, Any]:
         v = getattr(instance, f.name)
         if v is None:
             continue
-        if hasattr(v, '__dataclass_fields__'):
+        if is_dataclass(v):
             v = _to_input_dict(v)
-        elif isinstance(v, list) and v and hasattr(v[0], '__dataclass_fields__'):
+        elif isinstance(v, list) and v and is_dataclass(v[0]):
             v = [_to_input_dict(item) for item in v]
         result[f.name] = v
     return result

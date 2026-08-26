@@ -1259,8 +1259,8 @@ class CPGDatasetCloudInfrastructure:
     @cached_property
     def seqera_main_work_bucket(self):
         return self.infra.create_bucket(
-            'seqera-main',
-            lifecycle_rules=[self.infra.bucket_rule_temporary(days=14)],
+            'seqera-main',  # TODO update name
+            lifecycle_rules=[],
             versioning=False,
             autoclass=False,
             soft_delete_protection=False,
@@ -1269,8 +1269,8 @@ class CPGDatasetCloudInfrastructure:
     @cached_property
     def seqera_test_work_bucket(self):
         return self.infra.create_bucket(
-            'seqera-test',
-            lifecycle_rules=[self.infra.bucket_rule_temporary(days=14)],
+            'seqera-test',  # TODO update name
+            lifecycle_rules=[],
             versioning=False,
             autoclass=False,
             soft_delete_protection=False,
