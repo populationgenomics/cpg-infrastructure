@@ -32,14 +32,9 @@ TeamOwnership = Literal['Rare Disease', 'Population Genomics', 'Shared']
 
 
 class SeqeraWorkspaceRef(ConfigModel):
-    """Attributes of a Seqera workspace"""
+    """Config attributes of a Seqera workspace"""
 
     workspace_id: int
-    name: str = Field(min_length=2, max_length=40)
-    full_name: str = Field(min_length=1, max_length=100)
-    visibility: Literal['PRIVATE', 'SHARED'] = (
-        'PRIVATE'  # TODO check if this is the expected
-    )
     description: Optional[str] = Field(None, max_length=1000)
 
 

@@ -1,6 +1,6 @@
 from typing import Literal, Optional
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from cpg_infra.config import SeqeraWorkspaceRef
 
@@ -9,6 +9,9 @@ class WorkspaceArgs(SeqeraWorkspaceRef):
     """Validate props for the workspace dynamic resource."""
 
     org_id: int
+    name: str = Field(min_length=2, max_length=40)
+    full_name: str = Field(min_length=1, max_length=100)
+    visibility: Literal['PRIVATE', 'SHARED'] = 'PRIVATE'
 
 
 WorkspaceParticipantRole = Literal[

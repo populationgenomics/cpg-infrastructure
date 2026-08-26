@@ -194,38 +194,17 @@ class TestConfigValidation(TestCase):
                     'Rare Disease': {
                         'main': {
                             'workspace_id': 111,
-                            'name': 'rd-main',
-                            'full_name': 'Rare Disease',
+                            'description': 'RD main workspace',
                         },
-                        'test': {
-                            'workspace_id': 112,
-                            'name': 'rd-test',
-                            'full_name': 'Rare Disease Test',
-                        },
+                        'test': {'workspace_id': 112},
                     },
                     'Population Genomics': {
-                        'main': {
-                            'workspace_id': 222,
-                            'name': 'pg-main',
-                            'full_name': 'PopGen',
-                        },
-                        'test': {
-                            'workspace_id': 223,
-                            'name': 'pg-test',
-                            'full_name': 'PopGen Test',
-                        },
+                        'main': {'workspace_id': 222},
+                        'test': {'workspace_id': 223},
                     },
                     'Shared': {
-                        'main': {
-                            'workspace_id': 333,
-                            'name': 'shared-main',
-                            'full_name': 'Shared',
-                        },
-                        'test': {
-                            'workspace_id': 334,
-                            'name': 'shared-test',
-                            'full_name': 'Shared Test',
-                        },
+                        'main': {'workspace_id': 333},
+                        'test': {'workspace_id': 334},
                     },
                 },
             },
@@ -233,11 +212,10 @@ class TestConfigValidation(TestCase):
         self.assertEqual(12345, seqera.org_id)
         rd = seqera.teams['Rare Disease']
         self.assertEqual(111, rd.main.workspace_id)
-        self.assertEqual('rd-main', rd.main.name)
-        self.assertEqual('PRIVATE', rd.main.visibility)
+        self.assertEqual('RD main workspace', rd.main.description)
 
         self.assertEqual(112, rd.test.workspace_id)
-        self.assertEqual('rd-test', rd.test.name)
+        self.assertIsNone(rd.test.description)
 
     def test_seqera_workspaces_reject_unknown_team(self):
         """teams with a key outside the Literal must raise"""
@@ -247,29 +225,28 @@ class TestConfigValidation(TestCase):
                     'org_id': 1,
                     'wif_issuer_uri': 'https://cloud.seqera.io',
                     'api_url': 'https://cloud.seqera.io/api',
+                    'token_secret_name': 'secret/path',
                     'teams': {
                         'Rare-Disease': {  # hyphen typo
-                            'main': {
-                                'workspace_id': 111,
-                                'name': 'x',
-                                'full_name': 'x',
-                            },
+                            'main': {'workspace_id': 111},
+                            'test': {'workspace_id': 112},
                         },
                     },
                 },
             )
 
-    def test_seqera_workspace_ref_requires_metadata(self):
-        """WorkspaceRef requires id + name + full_name"""
+    def test_seqera_workspace_pair_requires_both(self):
+        """SeqeraWorkspaceRefPair requires both main and test"""
         with self.assertRaises(ValidationError):
             CPGInfrastructureConfig.Seqera.model_validate(
                 {
                     'org_id': 1,
                     'wif_issuer_uri': 'https://cloud.seqera.io',
                     'api_url': 'https://cloud.seqera.io/api',
+                    'token_secret_name': 'secret/path',
                     'teams': {
                         'Shared': {
-                            # missing name + full_name on main
+                            # missing 'test' workspace
                             'main': {'workspace_id': 111},
                         },
                     },

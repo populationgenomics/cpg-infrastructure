@@ -58,6 +58,11 @@ def get_formatted_team_name(team: str) -> str:
     return team.lower().replace(' ', '-')
 
 
+def get_formatted_ws_name(is_test: bool, team: str) -> str:
+    ws_team = team.replace(' ', '-')
+    return f'{ws_team}-Test' if is_test else ws_team
+
+
 class CPGInfrastructure:
     """Class for managing all CPG infrastructure"""
 
@@ -585,19 +590,20 @@ class CPGInfrastructure:
         assert seqera_cfg is not None
 
         for team_ownership, ws_pair in seqera_cfg.teams.items():
-            team_name = get_formatted_team_name(team_ownership)
+            formatted_team_name = get_formatted_team_name(team_ownership)
             for workspace_type, ws_configs in (
                 ('main', ws_pair.main),
                 ('test', ws_pair.test),
             ):
+                is_test = workspace_type == 'test'
                 self.seqera_workspaces[(team_ownership, workspace_type)] = (
                     SeqeraWorkspace(
-                        f'seqera-ws-{team_name}-{workspace_type}',
+                        f'seqera-ws-{formatted_team_name}-{workspace_type}',
                         org_id=seqera_cfg.org_id,
                         workspace_id=ws_configs.workspace_id,
-                        ws_name=ws_configs.name,
-                        full_name=ws_configs.full_name,
-                        visibility=ws_configs.visibility,
+                        ws_name=get_formatted_ws_name(is_test, team_ownership),
+                        full_name=f'CPG {team_ownership}{" Test" if is_test else ""} Workspace',
+                        visibility='PRIVATE',
                         description=ws_configs.description,
                     )
                 )
