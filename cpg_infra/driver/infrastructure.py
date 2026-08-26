@@ -584,9 +584,8 @@ class CPGInfrastructure:
         seqera_cfg = self.config.seqera
         assert seqera_cfg is not None
 
-        for team_ownership, team_configs in seqera_cfg.teams.items():
+        for team_ownership, ws_pair in seqera_cfg.teams.items():
             team_name = get_formatted_team_name(team_ownership)
-            ws_pair = team_configs.workspaces
             for workspace_type, ws_configs in (
                 ('main', ws_pair.main),
                 ('test', ws_pair.test),
