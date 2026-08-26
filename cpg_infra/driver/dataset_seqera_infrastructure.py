@@ -327,18 +327,19 @@ class DatasetSeqeraInfrastructure:
         gcp_key = GcpInfrastructure.name()
         team_name = _format_team_name(team)
 
-        analysis_members: list[MemberKey] = self._dataset_config.members.get(
+        members_to_add: list[MemberKey] = self._dataset_config.members.get(
             'analysis', []
-        )
-        for member_key in sorted(analysis_members):
+        ) + self._dataset_config.members.get('data-manager', [])
+
+        for member_key in sorted(members_to_add):
             user = self._config.users.get(member_key)
             if user is None:
-                raise ValueError(
-                    f'Could not find the member:{member_key} in CPG users.'
-                )
+                pulumi.warn(f'Could not find the member:{member_key} in CPG users.')
+                continue
             cloud_user = user.clouds.get(gcp_key)
             if cloud_user is None or not cloud_user.id:
-                raise ValueError(f'Can not find seqera member: {member_key} id.')
+                pulumi.warn(f'Could not find member: {member_key} id.')
+                continue
             email = cloud_user.id
 
             main_ws_member_key = (team, 'main', member_key)
