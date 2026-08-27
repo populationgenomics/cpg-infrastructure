@@ -1257,20 +1257,20 @@ class CPGDatasetCloudInfrastructure:
         )
 
     @cached_property
-    def seqera_main_work_bucket(self):
+    def nf_main_work_bucket(self):
         return self.infra.create_bucket(
-            'seqera-main',  # TODO update name
-            lifecycle_rules=[],
+            'main-nfwork',
+            lifecycle_rules=[],  # lifecycle policy to be decided later
             versioning=False,
             autoclass=False,
             soft_delete_protection=False,
         )
 
     @cached_property
-    def seqera_test_work_bucket(self):
+    def nf_test_work_bucket(self):
         return self.infra.create_bucket(
-            'seqera-test',  # TODO update name
-            lifecycle_rules=[],
+            'test-nfwork',
+            lifecycle_rules=[],  # lifecycle policy to be decided later
             versioning=False,
             autoclass=False,
             soft_delete_protection=False,

@@ -236,8 +236,8 @@ class DatasetSeqeraInfrastructure:
 
     def _work_bucket_for_access_level(self, level: str) -> Any:
         if level == _ACCESS_LEVEL_TEST:
-            return self._parent.seqera_test_work_bucket
-        return self._parent.seqera_main_work_bucket
+            return self._parent.nf_test_work_bucket
+        return self._parent.nf_main_work_bucket
 
     def _grant_work_bucket_access(self) -> None:
         for level, sa in self._service_accounts.items():
