@@ -18,13 +18,14 @@ from __future__ import annotations
 from functools import cached_property
 from typing import TYPE_CHECKING
 
-import pulumi
 import pulumi_gcp as gcp
 
 from cpg_infra.abstraction.gcp import GcpInfrastructure
 from cpg_infra.config import SeqeraAccount
 
 if TYPE_CHECKING:
+    import pulumi
+
     from cpg_infra.driver.dataset_cloud_infrastructure import (
         CPGDatasetCloudInfrastructure,
     )
