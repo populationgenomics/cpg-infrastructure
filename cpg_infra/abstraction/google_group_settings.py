@@ -4,24 +4,24 @@ Contains pulumi.dynamic.ResourceProvider implementations for Google Groups setti
 """
 
 from functools import cache
-from typing import Literal, TypedDict
+from typing import Literal
 
 import google.auth
 import googleapiclient.discovery
 import pulumi
 import pulumi.dynamic
 from google.auth.transport.requests import Request
+from typing_extensions import TypedDict
 
 # API enums use 'true'/'false' strings, not Python bools.
 _BoolStr = Literal['true', 'false']
 
 
 class GoogleGroupSettingsDict(TypedDict, total=False):
-    """Documented (partial, non-exhaustive) Google Groups Settings API keys.
+    """Google Group Settings that cpg_infra config may set.
 
-    The keys cpg_infra sets or is likely to. `total=False`: every key is
-    optional. The `Literal` value sets are the API's enums as of writing -- see
-    the authoritative reference for the full/updated key and value lists:
+    This is a partial and non-exhaustive list used to validate settings provided in config.
+    Full settings reference is available here:
     https://developers.google.com/admin-sdk/groups-settings/v1/reference/groups
     """
 

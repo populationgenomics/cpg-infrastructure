@@ -4,6 +4,7 @@ GCP implementation for abstract infrastructure
 """
 
 import base64
+from collections.abc import Mapping
 from datetime import date
 from functools import cached_property
 from typing import Any, NamedTuple, Optional
@@ -753,7 +754,10 @@ class GcpInfrastructure(CloudInfraBase):
         name: str,
         *,
         description: str | None = None,
-        group_settings: dict[str, str] | None = None,
+        # Keys/values are validated by the config parsing against
+        # GoogleGroupSettingsDict; kept as a generic Mapping here to match the
+        # base abstraction types
+        group_settings: Mapping[str, object] | None = None,
     ) -> Any:
         mail = f'{name}@{self.config.gcp.groups_domain}'
 

@@ -11,6 +11,7 @@ from typing import Any, Literal
 import pulumi
 from pydantic import Field
 
+from cpg_infra.abstraction.google_group_settings import GoogleGroupSettingsDict
 from cpg_infra.config.base import ConfigModel
 
 MemberKey = str
@@ -45,12 +46,12 @@ class CPGInfrastructureGroup(ConfigModel):
     name: str
     description: str
     members: list[MemberKey] = Field(default_factory=list)
-    # Extra Google Groups Settings API keys merged into the group's settings,
-    # e.g. {'whoCanPostMessage': 'ANYONE_CAN_POST'} to make a group world-postable.
-    # Allowed keys are documented by GoogleGroupSettingsDict
-    # (cpg_infra.abstraction.google_group_settings); kept as a plain dict here so
-    # the config deserializer handles it (TypedDicts break its isinstance check).
-    group_settings: dict[str, str] = Field(default_factory=dict)
+    # Extra Google Groups Settings that are merged with the default settings in the
+    # create_group method of the gcp abstraction (gcp.py). Config is validated here, but
+    # typed as a Mapping in the abstraction for compatibility with base and other abstractions
+    group_settings: GoogleGroupSettingsDict = Field(
+        default_factory=GoogleGroupSettingsDict
+    )
 
 
 class CPGInfrastructureConfig(ConfigModel):
