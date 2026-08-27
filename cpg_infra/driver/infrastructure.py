@@ -33,6 +33,7 @@ from cpg_infra.driver.constants import (
     SM_TEST_WRITE,
     compute_hash,
     dict_to_toml,
+    get_formatted_team_name,
 )
 from cpg_infra.driver.dataset_infrastructure import CPGDatasetInfrastructure
 from cpg_infra.driver.dynamic_providers.seqera import SeqeraWorkspace
@@ -52,10 +53,6 @@ if TYPE_CHECKING:
         CPGDatasetCloudInfrastructure,
     )
     from cpg_infra.driver.groups import Group
-
-
-def get_formatted_team_name(team: str) -> str:
-    return team.lower().replace(' ', '-')
 
 
 def get_formatted_ws_name(is_test: bool, team: str) -> str:

@@ -49,6 +49,7 @@ class CPGInfrastructureUser(ConfigModel):
     class Cloud(ConfigModel):
         id: str  # noqa: RUF100, A003
         hail_batch_username: str | None = None
+        has_seqera_account: bool = False
 
     id: MemberKey  # noqa: RUF100, A003
     clouds: dict[CloudName, Cloud]

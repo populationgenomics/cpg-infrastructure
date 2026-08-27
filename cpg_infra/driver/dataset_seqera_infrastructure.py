@@ -26,6 +26,7 @@ from cpg_infra.config import (
     SeqeraWorkspaceRefPair,
     TeamOwnership,
 )
+from cpg_infra.driver.constants import get_formatted_team_name
 from cpg_infra.driver.dynamic_providers.seqera import (
     GoogleBatchConfig,
     SeqeraComputeEnv,
@@ -35,11 +36,6 @@ from cpg_infra.driver.dynamic_providers.seqera import (
 from cpg_infra.driver.dynamic_providers.seqera.inputs.compute_environment import (
     GoogleWifCredentialConfig,
 )
-
-
-def _format_team_name(team: str) -> str:
-    return team.lower().replace(' ', '-')
-
 
 if TYPE_CHECKING:
     from cpg_infra.driver.dataset_cloud_infrastructure import (
@@ -320,12 +316,12 @@ class DatasetSeqeraInfrastructure:
 
         # reference to participants in workspaces
         # the same member can be in different datasets (under same or different teamOwnership)
-        # but they will be added once to the respective workspace
+        # but they will be added once to respective workspaces
         workspace_participants: set[tuple[TeamOwnership, str, MemberKey]] = (
             root.seqera_workspace_participants
         )
         gcp_key = GcpInfrastructure.name()
-        team_name = _format_team_name(team)
+        team_name = get_formatted_team_name(team)
 
         members_to_add: list[MemberKey] = self._dataset_config.members.get(
             'analysis', []
@@ -339,6 +335,8 @@ class DatasetSeqeraInfrastructure:
             cloud_user = user.clouds.get(gcp_key)
             if cloud_user is None or not cloud_user.id:
                 pulumi.warn(f'Could not find member: {member_key} id.')
+                continue
+            if not cloud_user.has_seqera_account:
                 continue
             email = cloud_user.id
 
