@@ -188,15 +188,25 @@ class TestConfigValidation(TestCase):
             {
                 'org_id': 12345,
                 'wif_issuer_uri': 'https://cloud.seqera.io',
-                'workspace_ids': {
-                    'Rare Disease': 111,
-                    'Population Genomics': 222,
-                    'Shared': 333,
+                'teams': {
+                    'Rare Disease': {
+                        'main': {'workspace_id': 111},
+                        'test': {'workspace_id': 112},
+                    },
+                    'Population Genomics': {
+                        'main': {'workspace_id': 222},
+                        'test': {'workspace_id': 223},
+                    },
+                    'Shared': {
+                        'main': {'workspace_id': 333},
+                        'test': {'workspace_id': 334},
+                    },
                 },
             },
         )
         self.assertEqual(12345, seqera.org_id)
-        self.assertEqual(111, seqera.workspace_ids['Rare Disease'])
+        self.assertEqual(111, seqera.teams['Rare Disease'].main.workspace_id)
+        self.assertEqual(112, seqera.teams['Rare Disease'].test.workspace_id)
 
     def test_seqera_workspace_ids_reject_unknown_team(self):
         """workspace_ids with a team key outside the Literal must raise"""

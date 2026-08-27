@@ -179,15 +179,25 @@ class CPGInfrastructureConfig(ConfigModel):
         CPGDatasetComponents.SEQERA_ACCOUNTS.
         """
 
+        class WorkspaceConfig(ConfigModel):
+            workspace_id: int
+            description: str | None = None
+
+        class TeamWorkspaces(ConfigModel):
+            main: 'CPGInfrastructureConfig.Seqera.WorkspaceConfig'
+            test: 'CPGInfrastructureConfig.Seqera.WorkspaceConfig'
+
         org_id: int
+        api_url: str | None = None
         # Seqera Cloud OIDC issuer URI, see:
         # https://docs.seqera.io/platform-cloud/credentials/overview#google-cloud
         wif_issuer_uri: str
-        # Seqera workspace ID per dataset team_ownership value.
+        token_secret_name: str | None = None
+        # Main and test workspace IDs per dataset team_ownership value.
         # Keys MUST match the CPGDatasetConfig.team_ownership Literal.
-        workspace_ids: dict[
+        teams: dict[
             Literal['Rare Disease', 'Population Genomics', 'Shared'],
-            int,
+            'CPGInfrastructureConfig.Seqera.TeamWorkspaces',
         ]
 
     class Billing(ConfigModel):
