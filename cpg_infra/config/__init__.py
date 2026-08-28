@@ -8,6 +8,7 @@ from cpg_infra.config.config import (
     CPGInfrastructureConfig,
     CPGInfrastructureGroup,
     CPGInfrastructureUser,
+    CPGStandaloneProjectConfig,
     GroupName,
     HailAccount,
     MemberKey,
