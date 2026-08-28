@@ -1,7 +1,6 @@
 # flake8: noqa: PGH003,ANN204,C901,ERA001,ANN401,SIM102
 """
-CPGDatasetCloudInfrastructure - infrastructure for a single dataset on a
-single cloud provider.
+CPGStandaloneProjectInfrastructure - infrastructure for a single project on GCP.
 """
 
 from __future__ import annotations
