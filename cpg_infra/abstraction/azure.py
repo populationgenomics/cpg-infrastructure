@@ -8,7 +8,6 @@ If we want custom role / permissions, potentially look at:
 
 import logging
 import re
-from collections.abc import Mapping
 from datetime import date
 from functools import cached_property
 from typing import Any, Optional
@@ -446,7 +445,7 @@ class AzureInfra(CloudInfraBase):
         name: str,
         *,
         description: str | None = None,
-        group_settings: Mapping[str, object] | None = None,
+        group_settings: dict[str, str] | None = None,
     ) -> Any:
         # group_settings are Google Groups Settings keys; Azure AD has no equivalent, so ignore.
         del group_settings

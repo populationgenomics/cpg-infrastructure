@@ -4,82 +4,21 @@ Contains pulumi.dynamic.ResourceProvider implementations for Google Groups setti
 """
 
 from functools import cache
-from typing import Literal
 
 import google.auth
 import googleapiclient.discovery
 import pulumi
 import pulumi.dynamic
 from google.auth.transport.requests import Request
-from typing_extensions import TypedDict
-
-# API enums use 'true'/'false' strings, not Python bools.
-_BoolStr = Literal['true', 'false']
-
-
-class GoogleGroupSettingsDict(TypedDict, total=False):
-    """Google Group Settings that cpg_infra config may set.
-
-    This is a partial and non-exhaustive list used to validate settings provided in config.
-    Full settings reference is available here:
-    https://developers.google.com/admin-sdk/groups-settings/v1/reference/groups
-    """
-
-    allowExternalMembers: _BoolStr
-    whoCanPostMessage: Literal[
-        'NONE_CAN_POST',
-        'ALL_MANAGERS_CAN_POST',
-        'ALL_OWNERS_CAN_POST',
-        'ALL_MEMBERS_CAN_POST',
-        'ALL_IN_DOMAIN_CAN_POST',
-        'ANYONE_CAN_POST',  # world-postable
-    ]
-    whoCanJoin: Literal[
-        'ANYONE_CAN_JOIN',
-        'ALL_IN_DOMAIN_CAN_JOIN',
-        'INVITED_CAN_JOIN',
-        'CAN_REQUEST_TO_JOIN',
-    ]
-    whoCanViewGroup: Literal[
-        'ANYONE_CAN_VIEW',
-        'ALL_IN_DOMAIN_CAN_VIEW',
-        'ALL_MEMBERS_CAN_VIEW',
-        'ALL_MANAGERS_CAN_VIEW',
-        'ALL_OWNERS_CAN_VIEW',
-    ]
-    whoCanViewMembership: Literal[
-        'ALL_IN_DOMAIN_CAN_VIEW',
-        'ALL_MEMBERS_CAN_VIEW',
-        'ALL_MANAGERS_CAN_VIEW',
-        'ALL_OWNERS_CAN_VIEW',
-    ]
-    messageModerationLevel: Literal[
-        'MODERATE_ALL_MESSAGES',
-        'MODERATE_NON_MEMBERS',
-        'MODERATE_NEW_MEMBERS',
-        'MODERATE_NONE',
-    ]
-    spamModerationLevel: Literal['ALLOW', 'MODERATE', 'SILENTLY_MODERATE', 'REJECT']
-    replyTo: Literal[
-        'REPLY_TO_CUSTOM',
-        'REPLY_TO_SENDER',
-        'REPLY_TO_LIST',
-        'REPLY_TO_OWNER',
-        'REPLY_TO_IGNORE',
-        'REPLY_TO_MANAGERS',
-    ]
-    archiveOnly: _BoolStr
-    membersCanPostAsTheGroup: _BoolStr
 
 
 class GoogleGroupSettings(pulumi.dynamic.Resource):
     """A Pulumi dynamic resource for Google Groups settings."""
 
     group_email: pulumi.Output[str]
-    # Holds any Google Groups Settings API key (so typed as a plain dict, not the
-    # partial GoogleGroupSettingsDict); the common/known keys are documented by
-    # GoogleGroupSettingsDict above. Full reference:
-    # https://developers.google.com/admin-sdk/groups-settings/v1/reference/groups
+    # Holds any Google Groups Settings API key, so typed as a plain dict. Config-driven
+    # settings are validated/typed by GoogleGroupSettings in cpg_infra.config. Full
+
     settings: pulumi.Output[dict]
 
     def __init__(

@@ -16,7 +16,6 @@ Some challenges I forsee with this abstraction:
 """
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
 from datetime import date
 from enum import Enum
 from functools import cached_property
@@ -304,7 +303,7 @@ class CloudInfraBase(ABC):
         name: str,
         *,
         description: str | None = None,
-        group_settings: Mapping[str, object] | None = None,
+        group_settings: dict[str, str] | None = None,
     ) -> Any:
         """
         Create a GROUP, which is a proxy for a number of members
@@ -482,7 +481,7 @@ class DryRunInfra(CloudInfraBase):
         name: str,
         *,
         description: str | None = None,
-        group_settings: Mapping[str, object] | None = None,
+        group_settings: dict[str, str] | None = None,
     ) -> Any:
         desc = f' (description: {description})' if description else ''
         settings = f' (settings: {group_settings})' if group_settings else ''

@@ -13,8 +13,6 @@ import graphlib
 from cpg_infra.config import CPGInfrastructureUser
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
-
     from cpg_infra.abstraction.base import CloudInfraBase
     from cpg_infra.config import CloudName
 
@@ -119,7 +117,7 @@ class GroupProvider:
         *,
         members: dict | None = None,
         description: str | None = None,
-        group_settings: Mapping[str, object] | None = None,
+        group_settings: dict[str, str] | None = None,
     ) -> Group:
         if infra.name() not in self.groups:
             self.groups[infra.name()] = {}
