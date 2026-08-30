@@ -188,14 +188,9 @@ class TestConfigValidation(TestCase):
             {
                 'org_id': 12345,
                 'wif_issuer_uri': 'https://cloud.seqera.io',
-                'api_url': 'https://cloud.seqera.io/api',
-                'token_secret_name': 'secreate/path',
                 'teams': {
                     'Rare Disease': {
-                        'main': {
-                            'workspace_id': 111,
-                            'description': 'RD main workspace',
-                        },
+                        'main': {'workspace_id': 111},
                         'test': {'workspace_id': 112},
                     },
                     'Population Genomics': {
@@ -210,46 +205,17 @@ class TestConfigValidation(TestCase):
             },
         )
         self.assertEqual(12345, seqera.org_id)
-        rd = seqera.teams['Rare Disease']
-        self.assertEqual(111, rd.main.workspace_id)
-        self.assertEqual('RD main workspace', rd.main.description)
+        self.assertEqual(111, seqera.teams['Rare Disease'].main.workspace_id)
+        self.assertEqual(112, seqera.teams['Rare Disease'].test.workspace_id)
 
-        self.assertEqual(112, rd.test.workspace_id)
-        self.assertIsNone(rd.test.description)
-
-    def test_seqera_workspaces_reject_unknown_team(self):
-        """teams with a key outside the Literal must raise"""
+    def test_seqera_workspace_ids_reject_unknown_team(self):
+        """workspace_ids with a team key outside the Literal must raise"""
         with self.assertRaises(ValidationError):
             CPGInfrastructureConfig.Seqera.model_validate(
                 {
                     'org_id': 1,
                     'wif_issuer_uri': 'https://cloud.seqera.io',
-                    'api_url': 'https://cloud.seqera.io/api',
-                    'token_secret_name': 'secret/path',
-                    'teams': {
-                        'Rare-Disease': {  # hyphen typo
-                            'main': {'workspace_id': 111},
-                            'test': {'workspace_id': 112},
-                        },
-                    },
-                },
-            )
-
-    def test_seqera_workspace_pair_requires_both(self):
-        """SeqeraWorkspaceRefPair requires both main and test"""
-        with self.assertRaises(ValidationError):
-            CPGInfrastructureConfig.Seqera.model_validate(
-                {
-                    'org_id': 1,
-                    'wif_issuer_uri': 'https://cloud.seqera.io',
-                    'api_url': 'https://cloud.seqera.io/api',
-                    'token_secret_name': 'secret/path',
-                    'teams': {
-                        'Shared': {
-                            # missing 'test' workspace
-                            'main': {'workspace_id': 111},
-                        },
-                    },
+                    'workspace_ids': {'Rare-Disease': 111},  # note the hyphen typo
                 },
             )
 

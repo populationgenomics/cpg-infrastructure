@@ -196,16 +196,26 @@ class CPGInfrastructureConfig(ConfigModel):
         CPGDatasetComponents.SEQERA_ACCOUNTS.
         """
 
+        class WorkspaceConfig(ConfigModel):
+            workspace_id: int
+            description: Optional[str] = Field(None, max_length=1000)
+
+        class TeamWorkspaces(ConfigModel):
+            main: 'CPGInfrastructureConfig.Seqera.WorkspaceConfig'
+            test: 'CPGInfrastructureConfig.Seqera.WorkspaceConfig'
+
         org_id: int
+        api_url: str
         # Seqera Cloud OIDC issuer URI, see:
         # https://docs.seqera.io/platform-cloud/credentials/overview#google-cloud
         wif_issuer_uri: str
-        # Seqera Platform base URL used by dynamic resource providers.
-        api_url: str
-        # Holds secret name of `admin` machine user's token
         token_secret_name: str
-        # Holds per team, workspaces and member information
-        teams: dict[TeamOwnership, SeqeraWorkspaceRefPair]
+        # Main and test workspace IDs per dataset team_ownership value.
+        # Keys MUST match the CPGDatasetConfig.team_ownership Literal.
+        teams: dict[
+            TeamOwnership,
+            'CPGInfrastructureConfig.Seqera.TeamWorkspaces',
+        ]
 
     class Billing(ConfigModel):
         class GCP(ConfigModel):
