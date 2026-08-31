@@ -215,7 +215,6 @@ class DatasetSeqeraInfrastructure:
         """
         self._grant_project_roles()
         self._bind_wif_principals()
-        self._grant_service_account_self_user()
         self._grant_work_bucket_access()
         self._setup_seqera_compute_environments()
         self._setup_workspace_participants()
@@ -249,6 +248,15 @@ class DatasetSeqeraInfrastructure:
                 member=head_sa.email,
             )
 
+        # Nextflow head job can spawn child jobs that uses the same SA
+        for level, sa in self._service_accounts.items():
+            gcp.serviceaccount.IAMMember(
+                self._infra.get_pulumi_name(f'seqera-{level}-self-user'),
+                service_account_id=sa.name,
+                role='roles/iam.serviceAccountUser',
+                member=sa.email.apply(lambda email: f'serviceAccount:{email}'),
+            )
+
     def _bind_wif_principals(self) -> None:
         assert self._config.seqera is not None
         org_id = self._config.seqera.org_id
@@ -274,16 +282,6 @@ class DatasetSeqeraInfrastructure:
                 service_account_id=head_sa.name,
                 role='roles/iam.workloadIdentityUser',
                 member=_make_principal(ws_id),
-            )
-
-    def _grant_service_account_self_user(self) -> None:
-        # Nextflow head job can spawn child jobs that uses the same SA
-        for level, sa in self._service_accounts.items():
-            gcp.serviceaccount.IAMMember(
-                self._infra.get_pulumi_name(f'seqera-{level}-self-user'),
-                service_account_id=sa.name,
-                role='roles/iam.serviceAccountUser',
-                member=sa.email.apply(lambda email: f'serviceAccount:{email}'),
             )
 
     def _work_bucket_for_access_level(self, level: str) -> Any:
