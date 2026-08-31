@@ -351,7 +351,7 @@ class DatasetSeqeraInfrastructure:
                             value='false',
                             head=True,
                             compute=True,
-                        )  # disable Nextflow optimal vm selection logic. This is because it does not consider the actual resource availability
+                        )  # disable Nextflow optimal vm selection heuristic as it does not consider the actual resource availability
                     ],
                     spot=True,
                 ),
