@@ -12,7 +12,5 @@ from cpg_infra.config.config import (
     HailAccount,
     MemberKey,
     SeqeraAccount,
-    SeqeraWorkspaceRef,
-    SeqeraWorkspaceRefPair,
     TeamOwnership,
 )

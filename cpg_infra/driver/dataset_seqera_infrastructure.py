@@ -18,11 +18,13 @@ from __future__ import annotations
 from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
+import pulumi
 import pulumi_gcp as gcp
 
 from cpg_infra.abstraction.base import BucketMembership
 from cpg_infra.abstraction.gcp import GcpInfrastructure
 from cpg_infra.config import (
+    CPGInfrastructureConfig,
     MemberKey,
     SeqeraAccount,
     TeamOwnership,
@@ -35,12 +37,11 @@ from cpg_infra.driver.dynamic_providers.seqera import (
     SeqeraWorkspaceParticipant,
 )
 from cpg_infra.driver.dynamic_providers.seqera.inputs.compute_environment import (
+    ConfigEnvVariable,
     GoogleWifCredentialConfig,
 )
 
 if TYPE_CHECKING:
-    import pulumi
-
     from cpg_infra.driver.dataset_cloud_infrastructure import (
         CPGDatasetCloudInfrastructure,
     )
@@ -51,12 +52,13 @@ _ACCESS_LEVEL_TEST = 'test'
 # Head Job SA launches batch jobs; it does not need dataset access.
 _HEAD_JOB_ROLES: tuple[str, ...] = (
     'roles/batch.jobsEditor',
-    'roles/logging.logWriter',
+    'roles/logging.viewer',
 )
 
-# Task Job SA runs the actual compute tasks; no job-launch permission.
+# Task Job SA runs the actual compute tasks.
 _TASK_JOB_ROLES: tuple[str, ...] = (
     'roles/batch.agentReporter',
+    'roles/batch.jobsEditor',
     'roles/logging.logWriter',
 )
 
@@ -99,19 +101,29 @@ class DatasetSeqeraInfrastructure:
             'test': team_workspaces.test.workspace_id,
         }
 
-    def _workspace_ref_for_access_level(self, level: str) -> SeqeraWorkspaceRef:
+    @cached_property
+    def _team_workspace_pair(self) -> CPGInfrastructureConfig.Seqera.TeamWorkspaces:
+        """Workspace pair corresponding to the team which own this dataset."""
+
+        assert self._config.seqera is not None
+        assert self._dataset_config.team_ownership is not None
+        return self._config.seqera.teams[self._dataset_config.team_ownership]
+
+    def _workspace_for_access_level(
+        self, level: str
+    ) -> CPGInfrastructureConfig.Seqera.WorkspaceConfig:
         """Returns workspace config reference for access level."""
 
         if level in _ACCESS_LEVELS_ALWAYS:
-            return self._workspace_ref_pair.main
-        return self._workspace_ref_pair.test
+            return self._team_workspace_pair.main
+        return self._team_workspace_pair.test
 
     def _workspace_resource_for_access_level(
         self,
         level: str,
     ) -> SeqeraWorkspace | None:
         """Returns Pulumi resource."""
-        if self._workspace_ref_for_access_level(level):
+        if self._workspace_for_access_level(level):
             assert self._dataset_config.team_ownership is not None
             ws_type = 'main' if level in _ACCESS_LEVELS_ALWAYS else 'test'
             return self._parent.root.seqera_workspaces.get(
@@ -311,31 +323,35 @@ class DatasetSeqeraInfrastructure:
             if workspace_resource is None:
                 continue
 
-            sa = self._service_accounts[level]
             dataset = self._dataset_config.dataset
 
-            # TODO compute values fixed for now, should they be configurable per dataset
             SeqeraComputeEnv(
                 self._infra.get_pulumi_name(f'seqera-ce-{dataset}-{level}'),
                 workspace_id=workspace_resource.workspace_id,
                 ce_name=f'{dataset}-{level}',
                 credentials=GoogleWifCredentialConfig(
                     workload_identity_provider=self._wif_provider.name,
-                    service_account_email=sa.email,
+                    service_account_email=self._head_sa.email,
                 ),
                 platform='google-batch',
                 description=f'{dataset} {level} compute environment ',
                 config=GoogleBatchConfig(
                     location=self._infra.region,
                     work_dir=self._work_dir_for_access_level(level),
-                    service_account=sa.email,  # TODO have attached the same SA for runtime.
+                    service_account=self._service_accounts[level].email,
                     project_id=project_id,
-                    head_job_cpus=2,
-                    head_job_memory_mb=4096,
                     compute_jobs_machine_type=[
                         'e2-small',
                         'e2-medium',
                         'e2-standard-2',
+                    ],
+                    environment=[
+                        ConfigEnvVariable(
+                            name='NXF_CLOUDINFO_ENABLED',
+                            value='false',
+                            head=True,
+                            compute=True,
+                        )  # disable Nextflow optimal vm selection logic. This is because it does not consider the actual resource availability
                     ],
                     spot=True,
                 ),

@@ -31,20 +31,6 @@ GroupName = Literal[
 TeamOwnership = Literal['Rare Disease', 'Population Genomics', 'Shared']
 
 
-class SeqeraWorkspaceRef(ConfigModel):
-    """Config attributes of a Seqera workspace"""
-
-    workspace_id: int
-    description: Optional[str] = Field(None, max_length=1000)
-
-
-class SeqeraWorkspaceRefPair(ConfigModel):
-    """The two Seqera workspaces per team"""
-
-    main: SeqeraWorkspaceRef
-    test: SeqeraWorkspaceRef
-
-
 class CPGInfrastructureUser(ConfigModel):
     class Cloud(ConfigModel):
         id: str  # noqa: RUF100, A003
