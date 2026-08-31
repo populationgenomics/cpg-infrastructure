@@ -7,7 +7,11 @@ in Seqera and referenced via CPGInfrastructureConfig.seqera.teams.
 
 Two service accounts are created per access level:
   - Head Job SA (seqera-{level}-head): launches batch jobs; no dataset access.
-  - Task Job SA (seqera-{level}): executes tasks with dataset access.
+  - Task Job SA (seqera-{level}): executes tasks with dataset access  and can spawn nested jobs.
+  
+Separation of concerns:
+  - Head SA: Launches the primary workflow
+  - Task SA: Executes tasks and can launch nested subtasks (e.g., Dataproc jobs)
 
 Gating (should_setup_seqera) lives on CPGDatasetCloudInfrastructure —
 this class assumes it is only instantiated when it should run.
