@@ -7,7 +7,7 @@ in Seqera and referenced via CPGInfrastructureConfig.seqera.teams.
 
 Two service accounts are created per access level:
   - Head Job SA (seqera-{level}-head): launches batch jobs; no dataset access.
-  - Task Job SA (seqera-{level}): executes tasks with dataset access; no launch permission.
+  - Task Job SA (seqera-{level}): executes tasks with dataset access.
 
 Gating (should_setup_seqera) lives on CPGDatasetCloudInfrastructure —
 this class assumes it is only instantiated when it should run.
@@ -53,7 +53,6 @@ _ACCESS_LEVEL_TEST = 'test'
 _HEAD_JOB_ROLES: tuple[str, ...] = (
     'roles/batch.jobsEditor',
     'roles/logging.viewer',
-    'roles/iam.workloadIdentityUser',
 )
 
 # Task Job SA runs the actual compute tasks.
@@ -122,15 +121,14 @@ class DatasetSeqeraInfrastructure:
     def _workspace_resource_for_access_level(
         self,
         level: str,
-    ) -> SeqeraWorkspace | None:
+    ) -> SeqeraWorkspace:
         """Returns Pulumi resource."""
-        if self._workspace_for_access_level(level):
-            assert self._dataset_config.team_ownership is not None
-            ws_type = 'main' if level in _ACCESS_LEVELS_ALWAYS else 'test'
-            return self._parent.root.seqera_workspaces.get(
-                (self._dataset_config.team_ownership, ws_type),
-            )
-        return None
+
+        assert self._dataset_config.team_ownership is not None
+        ws_type = 'main' if level in _ACCESS_LEVELS_ALWAYS else 'test'
+        return self._parent.root.seqera_workspaces[
+            (self._dataset_config.team_ownership, ws_type)
+        ]
 
     @cached_property
     def _head_sas(self) -> dict[str, gcp.serviceaccount.Account]:
@@ -327,8 +325,6 @@ class DatasetSeqeraInfrastructure:
             workspace_resource = self._workspace_resource_for_access_level(
                 level,
             )
-            if workspace_resource is None:
-                continue
 
             dataset = self._dataset_config.dataset
             head_sa = self._head_sas.get(level)
