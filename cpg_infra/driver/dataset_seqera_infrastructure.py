@@ -62,7 +62,7 @@ _HEAD_JOB_ROLES: tuple[str, ...] = (
 # Task Job SA runs the actual compute tasks.
 _TASK_JOB_ROLES: tuple[str, ...] = (
     'roles/batch.agentReporter',
-    'roles/batch.jobsEditor',
+    'roles/batch.jobsEditor',  # Allows spawning nested jobs (e.g., Dataproc)
     'roles/logging.logWriter',
 )
 
