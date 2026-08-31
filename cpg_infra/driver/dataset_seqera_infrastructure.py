@@ -6,7 +6,7 @@ jobs on the dataset's behalf. Workspaces themselves are created manually
 in Seqera and referenced via CPGInfrastructureConfig.seqera.teams.
 
 Two service accounts are created per access level:
-  - Head Job SA (seqera-head): launches batch jobs; no dataset access.
+  - Head Job SA (seqera-{level}-head): launches batch jobs; no dataset access.
   - Task Job SA (seqera-{level}): executes tasks with dataset access; no launch permission.
 
 Gating (should_setup_seqera) lives on CPGDatasetCloudInfrastructure —
@@ -36,7 +36,8 @@ _ACCESS_LEVEL_TEST = 'test'
 # Head Job SA launches batch jobs; it does not need dataset access.
 _HEAD_JOB_ROLES: tuple[str, ...] = (
     'roles/batch.jobsEditor',
-    'roles/logging.logWriter',
+    'roles/logging.viewer',
+    'roles/iam.workloadIdentityUser',
 )
 
 # Task Job SA runs the actual compute tasks; no job-launch permission.
@@ -85,9 +86,12 @@ class DatasetSeqeraInfrastructure:
         }
 
     @cached_property
-    def _head_sa(self) -> gcp.serviceaccount.Account:
-        """Single Head Job SA that launches batch jobs; no dataset access."""
-        return self._infra.create_machine_account('seqera-head')
+    def _head_sas(self) -> dict[str, gcp.serviceaccount.Account]:
+        """Head Job SAs per access level that launch batch jobs; no dataset access."""
+        return {
+            level: self._infra.create_machine_account(f'seqera-{level}-head')
+            for level in self._access_levels
+        }
 
     @cached_property
     def _wif_pool(self) -> gcp.iam.WorkloadIdentityPool:
@@ -142,7 +146,7 @@ class DatasetSeqeraInfrastructure:
 
     @cached_property
     def accounts_by_access_level(self) -> dict[str, SeqeraAccount]:
-        """The three Seqera SAs keyed by access level.
+        """The Task Seqera SAs keyed by access level.
 
         account_id is built from the same plain string passed to
         create_machine_account() rather than read back from
@@ -168,13 +172,16 @@ class DatasetSeqeraInfrastructure:
         self._bind_wif_principals()
 
     def _grant_project_roles(self) -> None:
-        for role in _HEAD_JOB_ROLES:
-            role_slug = role.split('/')[-1].replace('.', '-')
-            self._infra.add_project_role(
-                f'seqera-head-{role_slug}',
-                member=self._head_sa,
-                role=role,
-            )
+        # Grant HEAD SA roles per access level
+        for level, head_sa in self._head_sas.items():
+            for role in _HEAD_JOB_ROLES:
+                role_slug = role.split('/')[-1].replace('.', '-')
+                self._infra.add_project_role(
+                    f'seqera-{level}-head-{role_slug}',
+                    member=head_sa,
+                    role=role,
+                )
+        # Grant TASK SA roles
         for level, sa in self._service_accounts.items():
             for role in _TASK_JOB_ROLES:
                 role_slug = role.split('/')[-1].replace('.', '-')
@@ -183,6 +190,15 @@ class DatasetSeqeraInfrastructure:
                     member=sa,
                     role=role,
                 )
+        # Grant HEAD SA roles/iam.serviceAccountUser on TASK SAs per access level
+        for level, head_sa in self._head_sas.items():
+            task_sa = self._service_accounts[level]
+            gcp.serviceaccount.IAMMember(
+                self._infra.get_pulumi_name(f'seqera-{level}-head-sa-user'),
+                service_account_id=task_sa.name,
+                role='roles/iam.serviceAccountUser',
+                member=head_sa.email,
+            )
 
     def _bind_wif_principals(self) -> None:
         assert self._config.seqera is not None
@@ -200,11 +216,13 @@ class DatasetSeqeraInfrastructure:
 
         workspace_ids = self._workspace_ids
 
-        # Head SA is bound to both workspaces so it can launch jobs in either.
-        for ws_type, ws_id in workspace_ids.items():
+        # Head SAs are bound to their respective workspace per access level.
+        for level, head_sa in self._head_sas.items():
+            ws_type = _WORKSPACE_TYPE_FOR_LEVEL[level]
+            ws_id = workspace_ids[ws_type]
             gcp.serviceaccount.IAMMember(
-                self._infra.get_pulumi_name(f'seqera-head-wif-user-{ws_type}'),
-                service_account_id=self._head_sa.name,
+                self._infra.get_pulumi_name(f'seqera-{level}-head-wif-user'),
+                service_account_id=head_sa.name,
                 role='roles/iam.workloadIdentityUser',
                 member=_make_principal(ws_id),
             )
@@ -214,7 +232,7 @@ class DatasetSeqeraInfrastructure:
             ws_type = _WORKSPACE_TYPE_FOR_LEVEL[level]
             ws_id = workspace_ids[ws_type]
             gcp.serviceaccount.IAMMember(
-                self._infra.get_pulumi_name(f'seqera-{level}-wif-user'),
+                self._infra.get_pulumi_name(f'seqera-{level}-task-wif-user'),
                 service_account_id=sa.name,
                 role='roles/iam.workloadIdentityUser',
                 member=_make_principal(ws_id),
