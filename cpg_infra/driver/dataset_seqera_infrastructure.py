@@ -226,14 +226,3 @@ class DatasetSeqeraInfrastructure:
                 role='roles/iam.workloadIdentityUser',
                 member=_make_principal(ws_id),
             )
-
-        # Task SAs are bound only to the workspace that matches their access level.
-        for level, sa in self._service_accounts.items():
-            ws_type = _WORKSPACE_TYPE_FOR_LEVEL[level]
-            ws_id = workspace_ids[ws_type]
-            gcp.serviceaccount.IAMMember(
-                self._infra.get_pulumi_name(f'seqera-{level}-task-wif-user'),
-                service_account_id=sa.name,
-                role='roles/iam.workloadIdentityUser',
-                member=_make_principal(ws_id),
-            )
