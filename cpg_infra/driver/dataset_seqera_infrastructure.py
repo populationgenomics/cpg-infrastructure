@@ -59,7 +59,9 @@ _HEAD_JOB_ROLES: tuple[str, ...] = (
     'roles/logging.viewer',
 )
 
-# Task Job SA runs the actual compute tasks.
+# Task Job SA runs the actual compute tasks and can spawn nested subtasks
+# (e.g., Dataproc jobs within a Nextflow task). Head SA launches the main workflow;
+# Task SA executes tasks and can launch nested jobs for those tasks.
 _TASK_JOB_ROLES: tuple[str, ...] = (
     'roles/batch.agentReporter',
     'roles/batch.jobsEditor',  # Allows spawning nested jobs (e.g., Dataproc)
