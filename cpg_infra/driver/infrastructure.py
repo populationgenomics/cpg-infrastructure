@@ -15,7 +15,6 @@ import graphlib
 import pulumi
 import pulumi_gcp as gcp
 
-from cpg_infra.abstraction.azure import AzureInfra
 from cpg_infra.abstraction.base import (
     BucketMembership,
     CloudInfraBase,
@@ -81,10 +80,6 @@ class CPGInfrastructure:
     @cached_property
     def common_gcp_infra(self) -> GcpInfrastructure:
         return self.common_dataset.clouds[GcpInfrastructure.name()].infra  # type: ignore
-
-    @cached_property
-    def common_azure_infra(self) -> AzureInfra:
-        return self.common_dataset.clouds[AzureInfra.name()].infra  # type: ignore
 
     @cached_property
     def internal_logs_access_group_gcp(self) -> Group:
@@ -615,9 +610,6 @@ class CPGInfrastructure:
         if isinstance(self.common_gcp_infra, GcpInfrastructure):
             assert self.config.gcp
             bucket = self.config.gcp.config_bucket_name
-        elif isinstance(self.common_gcp_infra, AzureInfra):
-            assert self.config.azure
-            bucket = self.config.azure.config_bucket_name
         else:
             raise ValueError(
                 f'Bucket could not be determined for {self.infra.name()}',
@@ -663,8 +655,7 @@ class CPGInfrastructure:
     @cached_property
     def gcp_python_registry(self):
         """
-        Create a registry for private python packages, we only need one for our org,
-        andt there's no equivalent for Azure.
+        Create a registry for private python packages, we only need one for our org.
 
         """
         assert self.config.gcp

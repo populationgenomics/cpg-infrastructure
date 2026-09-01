@@ -1,18 +1,8 @@
 # flake8: noqa: ERA001,ANN001,ANN102,ANN202,ANN205,ANN206,ANN401,ARG002
 """
-Generic Infrastructure abstraction that relies on each to be subclassed
-by an equivalent GCP / Azure implementation.
-
-Some challenges I forsee with this abstraction:
-
-- Adding users to resources OUTSIDE this dataset,
-    * BUCKETS:
-        * GCP just need bucket_name
-        * Azure need storage account + bucket name
-    * Artifact registry:
-        * GCP needs project + name
-        * Azure needs storage account + registry name
-
+Generic Infrastructure abstraction. Retained to keep the dry-run backend
+(``DryRunInfra``) pluggable alongside the concrete GCP implementation
+(``GcpInfrastructure``).
 """
 
 from abc import ABC, abstractmethod

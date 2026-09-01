@@ -17,7 +17,6 @@ import pulumi_gcp as gcp
 import toml
 
 import cpg_utils.config
-from cpg_infra.abstraction.azure import AzureInfra
 from cpg_infra.abstraction.base import (
     BucketMembership,
     CloudInfraBase,
@@ -260,7 +259,6 @@ class CPGDatasetCloudInfrastructure:
 
     def setup_billing(self):
         if not isinstance(self.infra, GcpInfrastructure):
-            # pass here for now, as budgets are not well implemented on Azure yet
             return
 
         budget = self.dataset_config.budgets.get(self.infra.name())
@@ -703,7 +701,7 @@ class CPGDatasetCloudInfrastructure:
             return
 
         _infra_to_call_function_on = None
-        infra_prefix_map = [GcpInfrastructure, AzureInfra]
+        infra_prefix_map = [GcpInfrastructure]
         for Infra in infra_prefix_map:  # noqa: N806
             if re.match(Infra.storage_url_regex(), self.config.config_destination):
                 _infra_to_call_function_on = (
@@ -1274,10 +1272,6 @@ class CPGDatasetCloudInfrastructure:
             if not self.config.hail.gcp:
                 raise ValueError('config.hail.gcp was not set to find hail_batch_url')
             return self.config.hail.gcp.hail_batch_url
-        if isinstance(self.infra, AzureInfra):
-            if not self.config.hail.azure:
-                raise ValueError('config.hail.azure was not set to find hail_batch_url')
-            return self.config.hail.azure.hail_batch_url
         if isinstance(self.infra, DryRunInfra):
             return None
 
@@ -1292,10 +1286,6 @@ class CPGDatasetCloudInfrastructure:
             if not self.config.hail.gcp:
                 raise ValueError('config.hail.gcp was not set to find hail_auth_url')
             return self.config.hail.gcp.hail_auth_url
-        if isinstance(self.infra, AzureInfra):
-            if not self.config.hail.azure:
-                raise ValueError('config.hail.azure was not set to find hail_auth_url')
-            return self.config.hail.azure.hail_auth_url
         if isinstance(self.infra, DryRunInfra):
             return None
 
@@ -1677,9 +1667,6 @@ class CPGDatasetCloudInfrastructure:
             self.setup_metamist_cloudrun_permissions()
             # setup list access for metamist to dataset bucket objects
             self.setup_metamist_dataset_storage_permissions()
-        elif isinstance(self.infra, AzureInfra):
-            # we'll do some custom stuff here :)
-            raise NotImplementedError
 
     @cached_property
     def metamist_groups(
@@ -2232,16 +2219,8 @@ class CPGDatasetCloudInfrastructure:
             # then rewrite add_member_to_bucket
             # to create a new group and add members to a group
             #
-            # if isinstance(self.infra, GcpInfrastructure):
-            #     assert self.config.gcp
-            #     bucket = self.config.gcp.config_bucket_name
-            # elif isinstance(self.infra, AzureInfra):
-            #     assert self.config.azure
-            #     bucket = self.config.azure.config_bucket_name
-            # else:
-            #     raise ValueError(
-            #         f'Bucket could not be determined for {self.infra.name()}',
-            #     )
+            # assert self.config.gcp
+            # bucket = self.config.gcp.config_bucket_name
             # self.infra.add_member_to_bucket(
             #     f'{key}-analysis-runner-config-viewer',
             #     bucket=bucket,  # ANALYSIS_RUNNER_CONFIG_BUCKET_NAME,

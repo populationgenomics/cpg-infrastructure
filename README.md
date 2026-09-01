@@ -1,6 +1,6 @@
 # CPG Infrastructure
 
-The CPG manages its cloud infrastructure through Pulumi. Specifically, we have developed an abstraction over the GCP and Azure clouds, that allow us with one `driver.py` to spin up infrastructure on both GCP and Azure. We manage all infrastructure for all datasets in one stack.
+The CPG manages its cloud infrastructure through Pulumi on GCP. A thin cloud abstraction sits between our `driver.py` and the concrete GCP implementation so a dry-run backend can be substituted for planning and tests. We manage all infrastructure for all datasets in one stack.
 
 This repository contains all the driving code to build our pulumi stack, but none of the actual configuration. In your own environment, once you have a `CPGInfrastructureConfig` and each dataset's `CPGDatasetConfig`, you can instantiate a `CPGInfrastructure` object and call `main` within a pulumi context:
 
@@ -66,7 +66,7 @@ We manage groups and memberships related to datasets in Pulumi. This allows us t
 
 There are 4 places where group memberships are stored:
 
-- In the Google / Azure groups themselves, we DON'T expand nested group members
+- In the Google groups themselves, we DON'T expand nested group members
 - Cached in a blob in a _members cache_ location. This bucket is created in the `CPGInfrastructure` driver, and exported into an infra config, and a pulumi export.
 - Provided to metamist as it uses its own [inbuilt groups](https://github.com/populationgenomics/metamist/pull/568) to manage permissions.
 - Provided to Hail batch as it uses its own billing projects to manage access.
@@ -75,11 +75,7 @@ Note, in our implementation, we create _placeholder groups_ through the majority
 
 ### Abstraction
 
-We want to _effectively_ mirror our infrastructure across GCP and Azure, to reduce code duplication we have a cloud abstraction, which provides an interface each cloud implements to achieve a desired functionality.
-
-This abstraction, and our infra model was created with GCP in mind first, then Azure partially implemented later. There may be cloud concepts in the abstraction that don't exist, or aren't reasonable to ask of this interface.
-
-For this reason, and the fact we're still primarily GCP, there are still places in each driver where we only create infrastructure on GCP, or have written cloud-specific implementations.
+We keep a cloud abstraction (`CloudInfraBase`) so the driver can target either the concrete GCP implementation (`GcpInfrastructure`) or a dry-run backend (`DryRunInfra`) used for planning and tests. There may be concepts in the abstraction that predate the GCP-only stance and no longer earn their keep.
 
 ### Plugins
 
@@ -166,11 +162,9 @@ PULUMI_EXPERIMENTAL=true PULUMI_SKIP_CHECKPOINTS=true pulumi preview \
 
 ## Context
 
-Date: August, 2022
+Date: August, 2022 (updated 2026)
 
-> The CPG’s current infrastructure has been in place for 2 years. With the addition of Azure as well as GCP, now is a good time to reconsider how we achieve certain infrastructure components for future proofing.
-
-To manage infrastructure across GCP and Azure, as suggested by Greg Smith (Microsoft), we should write an abstraction on top of Pulumi for spinning up infrastructure in GCP and Azure without having to duplicate the “infrastructure design”.
+The abstraction on top of Pulumi was originally introduced so infrastructure could be described once and spun up on more than one cloud. As of 2026 only GCP is targeted; the abstraction is retained so the dry-run backend stays pluggable.
 
 Structure:
 
@@ -178,7 +172,7 @@ Structure:
 - The `config.py` defines a dataset configuration
 - The `abstraction/` folder:
   - `base.py` declares an interface for a cloud abstraction
-  - `gcp.py` / `azure.py` - implementations for specific clouds
+  - `gcp.py` - GCP implementation
 - The `driver.py` turns this configuration in a pulumi state by calling methods on a `infra`.
 
 To develop, you can run the driver file directly, which given a config TOML, will print infrastructure to the console.
