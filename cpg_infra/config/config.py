@@ -16,7 +16,7 @@ from cpg_infra.config.base import ConfigModel
 
 MemberKey = str
 GroupType = str
-CloudName = Literal['gcp', 'azure', 'dry-run']
+CloudName = Literal['gcp', 'dry-run']
 GroupName = Literal[
     'data-manager',
     'analysis',
@@ -179,13 +179,6 @@ class CPGInfrastructureConfig(ConfigModel):
         # so allow this to be turned off to make dev deploys possible
         create_empty_groups: bool = True
 
-    class Azure(ConfigModel):
-        region: str
-        subscription: str
-        tenant: str
-        dataset_storage_prefix: str
-        config_bucket_name: str
-
     class Hail(ConfigModel):
         class GCP(ConfigModel):
             hail_batch_url: str
@@ -194,12 +187,7 @@ class CPGInfrastructureConfig(ConfigModel):
             git_credentials_secret_project: str | None = None
             wheel_bucket_name: str | None = None
 
-        class Azure(ConfigModel):
-            hail_batch_url: str
-            hail_auth_url: str
-
         gcp: GCP
-        azure: Azure | None = None
         username_prefix: str | None = None
 
     class AnalysisRunner(ConfigModel):
@@ -334,8 +322,6 @@ class CPGInfrastructureConfig(ConfigModel):
 
     # configuration options for GCP
     gcp: GCP | None = None
-    # configuration options for Azure
-    azure: Azure | None = None
 
     # configuration options for Hail Batch
     hail: Hail | None = None
@@ -393,13 +379,6 @@ class CPGDatasetComponents(Enum):
         return {
             'dry-run': list(CPGDatasetComponents),
             'gcp': list(CPGDatasetComponents),
-            'azure': [
-                CPGDatasetComponents.STORAGE,
-                CPGDatasetComponents.HAIL_ACCOUNTS,
-                CPGDatasetComponents.ANALYSIS_RUNNER,
-                CPGDatasetComponents.CONTAINER_REGISTRY,
-                # CPGDatasetComponents.METAMIST,
-            ],
         }
 
 
@@ -429,9 +408,6 @@ class CPGDatasetConfig(ConfigModel):
         # Allow for cases where the hail service accounts were created manually
         # and do not match the dataset name
         hail_service_account_dataset_name_override: str | None = None
-
-    class Azure(ConfigModel):
-        region: str | None = None
 
     class Budget(ConfigModel):
         # dollars
@@ -491,8 +467,6 @@ class CPGDatasetConfig(ConfigModel):
 
     # GCP config options, noting GCP is a required target, so you must provide this
     gcp: Gcp
-    # Azure config options
-    azure: Azure | None = None
 
     # should we setup the test namespace (buckets, accounts, etc)
     # useful if you don't want to allow debugging for a dataset

@@ -51,7 +51,7 @@ class GroupMember:
 class Group:
     """Placeholder for a Group of members"""
 
-    # duck-type marker read by `cpg_infra/abstraction/{gcp,azure}.py`
+    # duck-type marker read by `cpg_infra/abstraction/gcp.py`
     is_group = True
 
     def __init__(
