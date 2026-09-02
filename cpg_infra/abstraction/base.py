@@ -298,9 +298,19 @@ class CloudInfraBase(ABC):
     # endregion MACHINE ACCOUNTS
     # GROUPS
     @abstractmethod
-    def create_group(self, name: str, description: str | None = None) -> Any:
+    def create_group(
+        self,
+        name: str,
+        *,
+        description: str | None = None,
+        group_settings: dict[str, str] | None = None,
+    ) -> Any:
         """
         Create a GROUP, which is a proxy for a number of members
+
+        group_settings: extra provider-specific group settings (GCP: Google Groups
+        Settings API keys, e.g. whoCanPostMessage); ignored by providers without
+        an equivalent.
         """
 
     @abstractmethod
@@ -466,9 +476,16 @@ class DryRunInfra(CloudInfraBase):
     def get_credentials_for_machine_account(self, resource_key, account):
         return f'{resource_key} :: {account}.CREDENTIALS'
 
-    def create_group(self, name: str, description: str | None = None) -> Any:
+    def create_group(
+        self,
+        name: str,
+        *,
+        description: str | None = None,
+        group_settings: dict[str, str] | None = None,
+    ) -> Any:
         desc = f' (description: {description})' if description else ''
-        print(f'Creating Group: {name}{desc}')
+        settings = f' (settings: {group_settings})' if group_settings else ''
+        print(f'Creating Group: {name}{desc}{settings}')
         return f'{name}@{self.config.gcp.groups_domain}'
 
     def add_group_member(

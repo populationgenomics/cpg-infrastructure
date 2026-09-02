@@ -9,7 +9,8 @@ from enum import Enum
 from typing import Any, Literal
 
 import pulumi
-from pydantic import Field
+from pydantic import AliasGenerator, ConfigDict, Field, field_serializer
+from pydantic.alias_generators import to_camel
 
 from cpg_infra.config.base import ConfigModel
 
@@ -40,12 +41,116 @@ class CPGInfrastructureUser(ConfigModel):
     can_access_internal_dataset_logs: bool = False
 
 
+class GoogleGroupSettings(ConfigModel):
+    """Google Group Settings that cpg_infra config may set.
+
+    These settings are in snake case for consistency with other cpg-infra config.
+    This model will then convert them to the required camel case before sending
+    to the google groups API. Boolean params are also converted to strings which is
+    required by the API.
+
+    https://developers.google.com/admin-sdk/groups-settings/v1/reference/groups
+    """
+
+    # snake_case in config -> camelCase when serialised for the API. serialization_alias
+    # (not validation_alias) so config keys stay snake_case; extra='forbid' (inherited)
+    # still rejects unknown keys.
+    model_config = ConfigDict(
+        alias_generator=AliasGenerator(serialization_alias=to_camel),
+    )
+
+    allow_external_members: bool | None = None
+    who_can_post_message: (
+        Literal[
+            'NONE_CAN_POST',
+            'ALL_MANAGERS_CAN_POST',
+            'ALL_OWNERS_CAN_POST',
+            'ALL_MEMBERS_CAN_POST',
+            'ALL_IN_DOMAIN_CAN_POST',
+            'ANYONE_CAN_POST',  # world-postable
+        ]
+        | None
+    ) = None
+    who_can_join: (
+        Literal[
+            'ANYONE_CAN_JOIN',
+            'ALL_IN_DOMAIN_CAN_JOIN',
+            'INVITED_CAN_JOIN',
+            'CAN_REQUEST_TO_JOIN',
+        ]
+        | None
+    ) = None
+    who_can_view_group: (
+        Literal[
+            'ANYONE_CAN_VIEW',
+            'ALL_IN_DOMAIN_CAN_VIEW',
+            'ALL_MEMBERS_CAN_VIEW',
+            'ALL_MANAGERS_CAN_VIEW',
+            'ALL_OWNERS_CAN_VIEW',
+        ]
+        | None
+    ) = None
+    who_can_view_membership: (
+        Literal[
+            'ALL_IN_DOMAIN_CAN_VIEW',
+            'ALL_MEMBERS_CAN_VIEW',
+            'ALL_MANAGERS_CAN_VIEW',
+            'ALL_OWNERS_CAN_VIEW',
+        ]
+        | None
+    ) = None
+    message_moderation_level: (
+        Literal[
+            'MODERATE_ALL_MESSAGES',
+            'MODERATE_NON_MEMBERS',
+            'MODERATE_NEW_MEMBERS',
+            'MODERATE_NONE',
+        ]
+        | None
+    ) = None
+    spam_moderation_level: (
+        Literal['ALLOW', 'MODERATE', 'SILENTLY_MODERATE', 'REJECT'] | None
+    ) = None
+    reply_to: (
+        Literal[
+            'REPLY_TO_CUSTOM',
+            'REPLY_TO_SENDER',
+            'REPLY_TO_LIST',
+            'REPLY_TO_OWNER',
+            'REPLY_TO_IGNORE',
+            'REPLY_TO_MANAGERS',
+        ]
+        | None
+    ) = None
+    archive_only: bool | None = None
+    members_can_post_as_the_group: bool | None = None
+
+    @field_serializer(
+        'allow_external_members',
+        'archive_only',
+        'members_can_post_as_the_group',
+    )
+    def _serialise_bool(self, value: bool | None) -> str | None:
+        """The Groups Settings API uses 'true'/'false' strings, not JSON booleans."""
+        if value is None:
+            return None
+        return 'true' if value else 'false'
+
+    def to_settings_dict(self) -> dict[str, str]:
+        """camelCase settings dict of only the keys set in config, ready for the API."""
+        return self.model_dump(by_alias=True, exclude_none=True)
+
+
 class CPGInfrastructureGroup(ConfigModel):
     """Represents an additional adhoc group under infrastructure management"""
 
     name: str
     description: str
     members: list[MemberKey] = Field(default_factory=list)
+    # Extra Google Groups Settings that are merged with the default settings in the
+    # create_group method of the gcp abstraction (gcp.py). Config is validated here, but
+    # typed as a Mapping in the abstraction for compatibility with base and other abstractions
+    group_settings: GoogleGroupSettings | None = None
 
 
 class CPGInfrastructureConfig(ConfigModel):
@@ -65,11 +170,12 @@ class CPGInfrastructureConfig(ConfigModel):
         budget_notification_pubsub: str | None
         config_bucket_name: str
         dataset_storage_prefix: str
-        # This is mostly just to allow dev deploys to work, changing the setting to allow
-        # external members on a group requires a high level of access permissions which
-        # we don't want to give to all developers. Setting this to false will stop the
-        # infra code from trying to change that setting
-        allow_external_group_members: bool = True
+        # Whether this deploy may set Google Group settings (allowExternalMembers,
+        # whoCanPostMessage, ...). All of them require Workspace-admin privileges most
+        # developers lack, so dev deploys set this False to skip the group-settings
+        # resource entirely and avoid permission-denied failures. (A sibling of
+        # create_empty_groups, which gates a separate group-creation privilege.)
+        can_set_group_settings: bool = True
         # Creating groups without an initial member requires extra access permissions
         # so allow this to be turned off to make dev deploys possible
         create_empty_groups: bool = True
