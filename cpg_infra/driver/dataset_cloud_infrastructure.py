@@ -141,7 +141,7 @@ class CPGDatasetCloudInfrastructure:
             )
         return True
 
-    def create_group(self, name: str, cache_members: bool = False):
+    def create_group(self, name: str, *, cache_members: bool = False):
         """
         Create a group with the dataset name as a prefix.
 
