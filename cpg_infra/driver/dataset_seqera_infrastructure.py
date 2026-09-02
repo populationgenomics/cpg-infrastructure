@@ -11,7 +11,7 @@ Two service accounts are created per access level:
 
 Separation of concerns:
   - Head SA: Launches the primary workflow
-  - Task SA: Executes tasks and can launch nested subtasks (e.g., Dataproc jobs)
+  - Task SA: Executes tasks and can launch nested subtasks
 
 Gating (should_setup_seqera) lives on CPGDatasetCloudInfrastructure —
 this class assumes it is only instantiated when it should run.
@@ -60,11 +60,11 @@ _HEAD_JOB_ROLES: tuple[str, ...] = (
 )
 
 # Task Job SA runs the actual compute tasks and can spawn nested subtasks
-# (e.g., Dataproc jobs within a Nextflow task). Head SA launches the main workflow;
+# Head SA launches the main workflow;
 # Task SA executes tasks and can launch nested jobs for those tasks.
 _TASK_JOB_ROLES: tuple[str, ...] = (
     'roles/batch.agentReporter',
-    'roles/batch.jobsEditor',  # Allows spawning nested jobs (e.g., Dataproc)
+    'roles/batch.jobsEditor',  # Allows spawning nested jobs
     'roles/logging.logWriter',
 )
 
