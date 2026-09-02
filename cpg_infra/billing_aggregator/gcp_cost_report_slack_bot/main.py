@@ -6,10 +6,11 @@ import json
 import logging
 import os
 from collections import defaultdict
+from collections.abc import Generator
 from datetime import datetime, timedelta
 from functools import lru_cache
 from math import ceil
-from typing import Any, Generator, Tuple
+from typing import Any
 
 import flask
 import functions_framework
@@ -23,7 +24,7 @@ from pytz import timezone
 from slack.errors import SlackApiError
 
 # Custom types
-SortKey = Tuple[float, float, float]
+SortKey = tuple[float, float, float]
 
 # Environment variables
 BILLING_URL = 'https://sample-metadata.populationgenomics.org.au/billing/costByTime?groupBy=gcp_project'

@@ -5,7 +5,6 @@ import binascii
 import json
 import logging
 import os
-import socket
 from typing import Any
 
 import flask
@@ -109,7 +108,7 @@ def is_billing_enabled(project_id: str, projects: Any) -> bool:
         logging.error(f'An HTTP error occurred: {e.resp.status} {e.content}')
     except (RefreshError, TransportError) as e:
         logging.error(f'An authentication or network error occurred: {e}')
-    except socket.timeout:
+    except TimeoutError:
         logging.error('The request timed out')
 
     return False
@@ -131,7 +130,7 @@ def disable_billing_for_project(project_id: str, projects: Any):
         logging.error(f'An HTTP error occurred: {e.resp.status} {e.content}')
     except (RefreshError, TransportError) as e:
         logging.error(f'An authentication or network error occurred: {e}')
-    except socket.timeout:
+    except TimeoutError:
         logging.error('The request timed out')
 
 

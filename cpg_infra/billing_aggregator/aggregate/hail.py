@@ -29,8 +29,9 @@ import json
 import logging
 import os
 import shutil
-from datetime import datetime, timezone
-from typing import Any, Generator
+from collections.abc import Generator
+from datetime import UTC, datetime
+from typing import Any
 
 import functions_framework
 from flask import Request
@@ -145,7 +146,7 @@ def get_finalised_entries_for_batch(
             # from 2023-01-01 onwards. We've migrated that data, so we're good to go.
 
             key_components: tuple[str, ...]
-            if start_time < datetime(2023, 1, 1).astimezone(timezone.utc):
+            if start_time < datetime(2023, 1, 1).astimezone(UTC):
                 key_components = (
                     SERVICE_ID,
                     dataset,
@@ -267,10 +268,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.start and args.end:
-        start_date = datetime.strptime(args.start, '%Y-%m-%d').replace(
-            tzinfo=timezone.utc
-        )
-        end_date = datetime.strptime(args.end, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+        start_date = datetime.strptime(args.start, '%Y-%m-%d').replace(tzinfo=UTC)
+        end_date = datetime.strptime(args.end, '%Y-%m-%d').replace(tzinfo=UTC)
 
         # iterate over the period if start_date/end_date is not none
         for period in utils.date_range_iterator(start_date, end_date):

@@ -5,13 +5,13 @@ CPGInfrastructure - top-level driver for CPG multi-dataset infrastructure.
 
 from __future__ import annotations
 
+import graphlib
 import json
 import os.path
 from collections import defaultdict
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
-import graphlib
 import pulumi
 import pulumi_gcp as gcp
 
@@ -39,6 +39,8 @@ from cpg_infra.github_wif.driver import PAM_BROKER_SA_NAME
 from cpg_infra.plugin import get_plugins
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from cpg_infra.config import (
         CPGDatasetConfig,
         CPGInfrastructureConfig,
@@ -534,7 +536,7 @@ class CPGInfrastructure:
             """Build config from pulumi awaited values"""
             keys = [v[0] for v in items]
             # nest in .infrastructure
-            d = {'infrastructure': dict(zip(keys, values))}
+            d = {'infrastructure': dict(zip(keys, values, strict=False))}
 
             return dict_to_toml(d)
 
