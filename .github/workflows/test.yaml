@@ -12,7 +12,7 @@ jobs:
         shell: bash -l {0}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
 
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d #v10.0.1
         with:
@@ -36,31 +36,31 @@ jobs:
           echo "rc=$rc" >> $GITHUB_OUTPUT
 
       - name: 'Save coverage report as an Artifact'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
         with:
           name: coverage-report
           path: ./coverage.xml
 
       - name: 'Save execution report as an Artifact'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
         with:
           name: execution-report
           path: ./test-execution.xml
 
       - name: "Upload coverage report"
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f #v7.0.0
         with:
           files: ./coverage.xml
           token: ${{ secrets.CODECOV_TOKEN }} # required
 
       - name: Publish Test Results
-        uses: EnricoMi/publish-unit-test-result-action/linux@v2
+        uses: EnricoMi/publish-unit-test-result-action/linux@d0a4676d0e0b938bc201470d88276b7c74c712b3 #v2.24.0
         if: always()
         with:
           files: test-execution.xml
 
       - name: Test Report
-        uses: dorny/test-reporter@v1
+        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 #v3.0.0
         if: always()
         with:
           name: Test Results
@@ -69,7 +69,7 @@ jobs:
 
       - name: Fail if tests are not passing
         if: ${{ steps.runtests.outputs.rc != 0 }}
-        uses: actions/github-script@v6
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 #v9.0.0
         with:
           script: |
             core.setFailed('Unit tests failed with rc = ${{ steps.runtests.outputs.rc }}')
