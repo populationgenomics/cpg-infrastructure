@@ -38,11 +38,13 @@ jobs:
       - name: "push Docker image"
         run: docker push australia-southeast1-docker.pkg.dev/cpg-common/images/storage-visualization:latest
 
-      - uses: actions/setup-python@v4
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d #v10.0.1
         with:
-          python-version: "3.11"
+          activate-environment: true
+          enable-cache: false
+          version: 0.11.21 #uv version
 
-      - run: pip install analysis-runner
+      - run: uv pip install analysis-runner
 
       - name: "Submit batch"
         # Automatically confirm to run with "full" access level.

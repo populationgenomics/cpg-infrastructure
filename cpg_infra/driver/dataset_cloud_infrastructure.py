@@ -10,7 +10,7 @@ import os.path
 import re
 from collections import defaultdict
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Iterable, Iterator, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import pulumi
 import pulumi_gcp as gcp
@@ -52,6 +52,9 @@ from cpg_infra.driver.constants import (
     compute_hash,
     dict_to_toml,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Iterator
 
 
 class MainUploadBucket(NamedTuple):
