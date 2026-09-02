@@ -16,6 +16,7 @@ from cpg_infra.config.base import ConfigModel
 MemberKey = str
 GroupType = str
 CloudName = Literal['gcp', 'azure', 'dry-run']
+TeamOwnership = Literal['Rare Disease', 'Population Genomics', 'Shared']
 GroupName = Literal[
     'data-manager',
     'analysis',
@@ -194,9 +195,8 @@ class CPGInfrastructureConfig(ConfigModel):
         wif_issuer_uri: str
         token_secret_name: str | None = None
         # Main and test workspace IDs per dataset team_ownership value.
-        # Keys MUST match the CPGDatasetConfig.team_ownership Literal.
         teams: dict[
-            Literal['Rare Disease', 'Population Genomics', 'Shared'],
+            TeamOwnership,
             'CPGInfrastructureConfig.Seqera.TeamWorkspaces',
         ]
 
@@ -427,9 +427,7 @@ class CPGDatasetConfig(ConfigModel):
     description: str | None = None
 
     # Metamist dataset's team ownership
-    team_ownership: Literal['Rare Disease', 'Population Genomics', 'Shared'] | None = (
-        None
-    )
+    team_ownership: TeamOwnership | None = None
 
     # Metamist dataset's Billing group
     billing_groups: list[str] = Field(default_factory=list)
