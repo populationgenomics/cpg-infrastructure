@@ -257,11 +257,11 @@ class DatasetSeqeraInfrastructure:
 
         # Nextflow head job can spawn child jobs that uses the same SA
         for level, sa in self._service_accounts.items():
-            gcp.serviceaccount.IAMMember(
-                self._infra.get_pulumi_name(f'seqera-{level}-self-user'),
-                service_account_id=sa.name,
-                role='roles/iam.serviceAccountUser',
-                member=sa.email.apply(lambda email: f'serviceAccount:{email}'),
+            self._infra.add_member_to_machine_account_role(
+                f'seqera-{level}-self-user',
+                machine_account=sa,
+                member=sa,
+                role=MachineAccountRole.ACCESS,
             )
 
     def _bind_wif_principals(self) -> None:
