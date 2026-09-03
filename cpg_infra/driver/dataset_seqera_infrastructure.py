@@ -96,13 +96,15 @@ class DatasetSeqeraInfrastructure:
 
     @cached_property
     def _wif_pool(self) -> gcp.iam.WorkloadIdentityPool:
-        pool_id = f'seqera-{self._dataset_config.dataset}'
+        # display_name and pool_id share GCP's 32-char cap, so mirror them:
+        # if the pool_id would fit, so does display_name. The Pulumi resource
+        # name skips get_pulumi_name() to avoid the `{dataset}-gcp-` prefix
+        # duplicating the dataset segment.
+        pool_id = f'{self._dataset_config.dataset}-sqwif'
         return gcp.iam.WorkloadIdentityPool(
-            self._infra.get_pulumi_name(
-                f'seqera-wif-pool-{self._dataset_config.dataset}'
-            ),
+            pool_id,
             workload_identity_pool_id=pool_id,
-            display_name=f'Seqera WIF pool for {self._dataset_config.dataset}',
+            display_name=pool_id,
             description=(
                 'Federates Seqera Cloud OIDC tokens to per-dataset GCP '
                 'service accounts.'
