@@ -37,7 +37,6 @@ from cpg_infra.driver.constants import (
 )
 from cpg_infra.driver.dataset_infrastructure import CPGDatasetInfrastructure
 from cpg_infra.driver.dynamic_providers.seqera import SeqeraWorkspace
-from cpg_infra.driver.dynamic_providers.seqera.util.api_util import SeqeraApiClient
 from cpg_infra.driver.groups import GroupMember, GroupProvider
 from cpg_infra.github_wif.driver import PAM_BROKER_SA_NAME
 from cpg_infra.plugin import get_plugins
@@ -168,13 +167,7 @@ class CPGInfrastructure:
         # Workspaces should be created/imported before
         # calling deploy_datasets() which setup Seqera/GCP infra per dataset
         if self.config.seqera is not None:
-            # Initialize the Seqera API Client singleton
-            SeqeraApiClient(
-                server_url=self.config.seqera.api_url,
-                token_secret_name=self.config.seqera.token_secret_name,
-            )
-
-            # Setup Seqera workspaces
+            self.config.seqera.export_env()
             self.setup_seqera_workspaces()
 
         # Deploy all the assets required for each dataset. Groups, permissions

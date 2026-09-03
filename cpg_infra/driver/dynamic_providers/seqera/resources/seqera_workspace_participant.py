@@ -31,7 +31,7 @@ def _create_participant(inputs: WorkspaceParticipantArgs) -> dict:
     """
     https://docs.seqera.io/platform-api/create-workspace-participant
     """
-    created_participant = SeqeraApiClient().call(
+    created_participant = SeqeraApiClient.call(
         HTTPMethod.PUT,
         f'/orgs/{inputs.org_id}/workspaces/{inputs.workspace_id}/participants/add',
         _build_create_participant_body(inputs),
@@ -45,7 +45,7 @@ def _update_participant_role(
     """
     https://docs.seqera.io/platform-api/update-workspace-participant-role
     """
-    SeqeraApiClient().call(
+    SeqeraApiClient.call(
         HTTPMethod.PUT,
         f'/orgs/{inputs.org_id}/workspaces/{inputs.workspace_id}'
         f'/participants/{participant_id}/role',
@@ -58,7 +58,7 @@ def _delete_participant(org_id: int, workspace_id: int, participant_id: int) -> 
     https://docs.seqera.io/platform-api/delete-workspace-participant
     """
 
-    SeqeraApiClient().call(
+    SeqeraApiClient.call(
         HTTPMethod.DELETE,
         f'/orgs/{org_id}'
         f'/workspaces/{workspace_id}'

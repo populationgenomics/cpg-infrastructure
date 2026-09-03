@@ -5,11 +5,17 @@ describe the CPG infrastructure, including what's required from a
 specific dataset.
 """
 
+import os
 from enum import Enum
 from typing import Any, Literal, Optional
 
 import pulumi
-from pydantic import AliasGenerator, ConfigDict, Field, field_serializer
+from pydantic import (
+    AliasGenerator,
+    ConfigDict,
+    Field,
+    field_serializer,
+)
 from pydantic.alias_generators import to_camel
 
 from cpg_infra.config.base import ConfigModel
@@ -306,6 +312,12 @@ class CPGInfrastructureConfig(ConfigModel):
             TeamOwnership,
             'CPGInfrastructureConfig.Seqera.TeamWorkspaces',
         ]
+
+        def export_env(self) -> None:
+            """Set as environment variables so that these parameters are available for pulumi subprocesses"""
+
+            os.environ['SEQERA_SERVER_URL'] = self.api_url
+            os.environ['SEQERA_TOKEN_SECRET_NAME'] = self.token_secret_name
 
     class Billing(ConfigModel):
         class GCP(ConfigModel):

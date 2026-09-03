@@ -60,7 +60,7 @@ def _create_credentials(
     workspace_id: int, creds: GoogleWifCredentialArgs, name: str
 ) -> str:
     """https://docs.seqera.io/platform-api/create-credentials"""
-    result = SeqeraApiClient().call(
+    result = SeqeraApiClient.call(
         HTTPMethod.POST,
         f'/credentials?workspaceId={workspace_id}',
         _build_credentials_body(creds, name),
@@ -77,7 +77,7 @@ def _update_credentials(workspace_id: int, creds: GoogleWifCredentialArgs) -> No
     """https://docs.seqera.io/platform-api/update-credentials"""
 
     assert creds.id is not None and creds.name is not None
-    SeqeraApiClient().call(
+    SeqeraApiClient.call(
         HTTPMethod.PUT,
         f'/credentials/{creds.id}?workspaceId={workspace_id}',
         _build_credentials_body(creds, creds.name, creds.id),
@@ -86,7 +86,7 @@ def _update_credentials(workspace_id: int, creds: GoogleWifCredentialArgs) -> No
 
 def _create_compute_env(workspace_id: int, ce_body: dict) -> str:
     """https://docs.seqera.io/platform-api/create-compute-env"""
-    result = SeqeraApiClient().call(
+    result = SeqeraApiClient.call(
         HTTPMethod.POST, f'/compute-envs?workspaceId={workspace_id}', ce_body
     )
     ce_id = result.get('computeEnvId')
@@ -97,7 +97,7 @@ def _create_compute_env(workspace_id: int, ce_body: dict) -> str:
 
 def _update_compute_env_metadata(workspace_id: int, ce_id: str, name: str) -> None:
     """https://docs.seqera.io/platform-api/update-compute-env"""
-    SeqeraApiClient().call(
+    SeqeraApiClient.call(
         HTTPMethod.PUT,
         f'/compute-envs/{ce_id}?workspaceId={workspace_id}',
         {'name': name},
@@ -117,7 +117,7 @@ def _soft_delete_compute_env(workspace_id: int, ce_id: str, current_name: str) -
 
     # in case of a failure of this request, we don't need to rollback previous name update.
     # Unlike in the _WorkspaceParticipantProvider.create
-    SeqeraApiClient().call(
+    SeqeraApiClient.call(
         HTTPMethod.POST,
         f'/compute-envs/{ce_id}/disable?workspaceId={workspace_id}',
         {},

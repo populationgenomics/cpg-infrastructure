@@ -1,8 +1,12 @@
+import os
 from functools import cached_property
 from typing import ClassVar, Optional
 
 import requests
 from google.cloud import secretmanager
+
+_SERVER_URL_ENV = 'SEQERA_SERVER_URL'
+_TOKEN_SECRET_NAME_ENV = 'SEQERA_TOKEN_SECRET_NAME'  # noqa: S105
 
 
 class SeqeraAPIError(Exception):
@@ -20,29 +24,27 @@ class SeqeraApiClient:
     """A singleton HTTP client to call Seqera Platform API - Used by Dynamic Resource Providers."""
 
     _instance: ClassVar['SeqeraApiClient | None'] = None
-    server_url: str
-    token_secret_name: str
 
-    def __new__(
-        cls,
-        server_url: Optional[str] = None,
-        token_secret_name: Optional[str] = None,
-    ) -> 'SeqeraApiClient':
-        instance = cls._instance
-        if instance is None:
-            if server_url is None or token_secret_name is None:
-                raise ValueError(
-                    'SeqeraApiClient first construction requires both '
-                    'server_url and token_secret_name.'
+    def __init__(self, server_url: str, token_secret_name: str) -> None:
+        self.server_url = server_url
+        self.token_secret_name = token_secret_name
+
+    @classmethod
+    def _get(cls: type['SeqeraApiClient']) -> 'SeqeraApiClient':
+        """Return the process-wide singleton, building it from env vars if needed."""
+        if cls._instance is None:
+            server_url = os.environ.get(_SERVER_URL_ENV)
+            token_secret_name = os.environ.get(_TOKEN_SECRET_NAME_ENV)
+            if not server_url or not token_secret_name:
+                raise RuntimeError(
+                    f'{_SERVER_URL_ENV} and {_TOKEN_SECRET_NAME_ENV} '
+                    'must be set before using SeqeraApiClient.'
                 )
-            instance = super().__new__(cls)
-            instance.server_url = server_url
-            instance.token_secret_name = token_secret_name
-            cls._instance = instance
-        return instance
-
-    def __init__(self, *_args: object, **_kwargs: object) -> None:
-        pass
+            cls._instance = cls(
+                server_url=server_url, token_secret_name=token_secret_name
+            )
+        assert cls._instance is not None
+        return cls._instance
 
     @cached_property
     def _access_token(self) -> str:
@@ -50,15 +52,17 @@ class SeqeraApiClient:
         resp = client.access_secret_version(request={'name': self.token_secret_name})
         return resp.payload.data.decode('utf-8')
 
+    @classmethod
     def call(
-        self,
+        cls: type['SeqeraApiClient'],
         method: str,
         path: str,
         data: Optional[dict] = None,
     ) -> dict:
         """Call Seqera Platform API."""
-        url = f'{self.server_url}{path}'
-        headers = {'Authorization': f'Bearer {self._access_token}'}
+        client = cls._get()
+        url = f'{client.server_url}{path}'
+        headers = {'Authorization': f'Bearer {client._access_token}'}  # noqa: SLF001
 
         response = requests.request(method, url, headers=headers, json=data, timeout=60)
 
