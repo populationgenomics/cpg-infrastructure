@@ -188,8 +188,6 @@ class TestConfigValidation(TestCase):
             {
                 'org_id': 12345,
                 'wif_issuer_uri': 'https://cloud.seqera.io',
-                'api_url': 'https://cloud.seqera.io/api',
-                'token_secret_name': 'secret/path',
                 'teams': {
                     'Rare Disease': {
                         'main': {'workspace_id': 111},
@@ -217,8 +215,6 @@ class TestConfigValidation(TestCase):
                 {
                     'org_id': 1,
                     'wif_issuer_uri': 'https://cloud.seqera.io',
-                    'api_url': 'https://cloud.seqera.io/api',
-                    'token_secret_name': 'secret/path',
                     'teams': {
                         'Rare-Disease': {  # note the hyphen typo
                             'main': {'workspace_id': 111},
@@ -227,6 +223,38 @@ class TestConfigValidation(TestCase):
                     },
                 },
             )
+
+    def test_seqera_rejects_api_url_and_token_secret_name(self):
+        """api_url and token_secret_name were moved to env vars — the model
+        must reject them so config-vs-env drift fails fast at validation."""
+        for extra_field, value in (
+            ('api_url', 'https://cloud.seqera.io/api'),
+            ('token_secret_name', 'secret/path'),
+        ):
+            with self.subTest(field=extra_field):
+                with self.assertRaises(ValidationError) as ctx:
+                    CPGInfrastructureConfig.Seqera.model_validate(
+                        {
+                            'org_id': 1,
+                            'wif_issuer_uri': 'https://cloud.seqera.io',
+                            extra_field: value,
+                            'teams': {
+                                'Rare Disease': {
+                                    'main': {'workspace_id': 1},
+                                    'test': {'workspace_id': 2},
+                                },
+                                'Population Genomics': {
+                                    'main': {'workspace_id': 3},
+                                    'test': {'workspace_id': 4},
+                                },
+                                'Shared': {
+                                    'main': {'workspace_id': 5},
+                                    'test': {'workspace_id': 6},
+                                },
+                            },
+                        },
+                    )
+                self.assertIn(extra_field, str(ctx.exception))
 
     def test_seqera_optional_on_infrastructure_config(self):
         """CPGInfrastructureConfig.seqera defaults to None"""

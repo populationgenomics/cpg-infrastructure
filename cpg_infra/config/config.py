@@ -5,7 +5,6 @@ describe the CPG infrastructure, including what's required from a
 specific dataset.
 """
 
-import os
 from enum import Enum
 from typing import Any, Literal, Optional
 
@@ -302,22 +301,14 @@ class CPGInfrastructureConfig(ConfigModel):
             test: 'CPGInfrastructureConfig.Seqera.WorkspaceConfig'
 
         org_id: int
-        api_url: str
         # Seqera Cloud OIDC issuer URI, see:
         # https://docs.seqera.io/platform-cloud/credentials/overview#google-cloud
         wif_issuer_uri: str
-        token_secret_name: str
         # Main and test workspace IDs per dataset team_ownership value.
         teams: dict[
             TeamOwnership,
             'CPGInfrastructureConfig.Seqera.TeamWorkspaces',
         ]
-
-        def export_env(self) -> None:
-            """Set as environment variables so that these parameters are available for pulumi subprocesses"""
-
-            os.environ['SEQERA_SERVER_URL'] = self.api_url
-            os.environ['SEQERA_TOKEN_SECRET_NAME'] = self.token_secret_name
 
     class Billing(ConfigModel):
         class GCP(ConfigModel):

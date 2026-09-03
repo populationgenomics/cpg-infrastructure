@@ -64,6 +64,33 @@ class TestSingletonResolution(SeqeraApiClientTestBase):
         with self.assertRaises(RuntimeError):
             SeqeraApiClient._get()  # noqa: SLF001
 
+    @patch('cpg_infra.driver.dynamic_providers.seqera.util.api_util.secretmanager')
+    @patch('cpg_infra.driver.dynamic_providers.seqera.util.api_util.requests')
+    def test_call_lazy_initializes_singleton_from_env(
+        self,
+        mock_requests: MagicMock,
+        mock_sm: MagicMock,
+    ) -> None:
+        """The classmethod facade must build the singleton on first use — no
+        prior _get() required. This is what makes the Pulumi dynamic-provider
+        subprocess work end-to-end: fresh interpreter -> bare
+        SeqeraApiClient.call(...) resolves via env vars."""
+        mock_sm_client = MagicMock()
+        mock_sm_client.access_secret_version.return_value.payload.data = b'tok'
+        mock_sm.SecretManagerServiceClient.return_value = mock_sm_client
+        response = MagicMock()
+        response.content = b'{}'
+        response.json.return_value = {}
+        response.raise_for_status.return_value = None
+        mock_requests.request.return_value = response
+
+        self.assertIsNone(SeqeraApiClient._instance)  # noqa: SLF001
+        SeqeraApiClient.call(HTTPMethod.GET, '/orgs/1')
+
+        self.assertIsNotNone(SeqeraApiClient._instance)  # noqa: SLF001
+        # And _get() returns the same instance the classmethod built.
+        self.assertIs(SeqeraApiClient._instance, SeqeraApiClient._get())  # noqa: SLF001
+
 
 class TestAccessTokenCaching(SeqeraApiClientTestBase):
     @patch('cpg_infra.driver.dynamic_providers.seqera.util.api_util.secretmanager')

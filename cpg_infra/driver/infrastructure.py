@@ -167,7 +167,6 @@ class CPGInfrastructure:
         # Workspaces should be created/imported before
         # calling deploy_datasets() which setup Seqera/GCP infra per dataset
         if self.config.seqera is not None:
-            self.config.seqera.export_env()
             self.setup_seqera_workspaces()
 
         # Deploy all the assets required for each dataset. Groups, permissions
