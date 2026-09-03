@@ -629,3 +629,15 @@ class CPGDatasetConfig(ConfigModel):
             meta['billing_groups'] = sorted(self.billing_groups)
 
         return meta
+
+
+class CPGStandaloneProjectConfig(ConfigModel):
+    """
+    Configuration that describes the minimum information
+    required to construct a standalone GCP project
+    """
+
+    name: str
+    project_id: str
+    owner: MemberKey
+    monthly_budget: int

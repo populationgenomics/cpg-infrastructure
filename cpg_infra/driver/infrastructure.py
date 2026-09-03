@@ -36,6 +36,7 @@ from cpg_infra.driver.constants import (
 )
 from cpg_infra.driver.dataset_infrastructure import CPGDatasetInfrastructure
 from cpg_infra.driver.groups import GroupMember, GroupProvider
+from cpg_infra.driver.standalone_project_infrastructure import CPGStandaloneProjectInfrastructure
 from cpg_infra.github_wif.driver import PAM_BROKER_SA_NAME
 from cpg_infra.plugin import get_plugins
 
@@ -43,6 +44,7 @@ if TYPE_CHECKING:
     from cpg_infra.config import (
         CPGDatasetConfig,
         CPGInfrastructureConfig,
+        CPGStandaloneProjectConfig,
     )
     from cpg_infra.driver.dataset_cloud_infrastructure import (
         CPGDatasetCloudInfrastructure,
@@ -57,10 +59,14 @@ class CPGInfrastructure:
         self,
         config: CPGInfrastructureConfig,
         dataset_configs: list[CPGDatasetConfig],
+        standalone_project_configs: list[CPGStandaloneProjectConfig],
     ) -> None:
         self.config = config
         self.dataset_configs: dict[str, CPGDatasetConfig] = {
             d.dataset: d for d in dataset_configs
+        }
+        self.standalone_project_configs: dict[str, CPGStandaloneProjectConfig] = {
+            p.name: p for p in standalone_project_configs
         }
 
         self.group_provider = GroupProvider(
@@ -70,6 +76,10 @@ class CPGInfrastructure:
         self.dataset_infrastructures: dict[
             str,
             CPGDatasetInfrastructure,
+        ] = defaultdict()
+        self.standalone_project_infrastructures: dict[
+            str,
+            CPGStandaloneProjectInfrastructure
         ] = defaultdict()
 
     @cached_property
@@ -197,6 +207,20 @@ class CPGInfrastructure:
     def deploy_datasets(self):
         for cloud_dataset in self.dataset_infrastructures.values():
             cloud_dataset.main()
+
+    def setup_standalone_projects(self):
+        if self.standalone_project_infrastructures:
+            # don't do this repeatedly
+            return
+        for name, project_config in self.standalone_project_configs.items():
+            self.standalone_project_infrastructures[name] = CPGStandaloneProjectInfrastructure(
+                config=self.config,
+                project_config=project_config
+            )
+
+    def deploy_standalone_projects(self):
+        for standalone_project in self.standalone_project_infrastructures.values():
+            standalone_project.main()
 
     def deploy_adhoc(self):
         infra = self.common_gcp_infra
