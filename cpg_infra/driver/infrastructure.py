@@ -33,8 +33,11 @@ from cpg_infra.driver.constants import (
     SM_TEST_WRITE,
     compute_hash,
     dict_to_toml,
+    get_formatted_team_name,
 )
 from cpg_infra.driver.dataset_infrastructure import CPGDatasetInfrastructure
+from cpg_infra.driver.dynamic_providers.seqera import SeqeraWorkspace
+from cpg_infra.driver.dynamic_providers.seqera.util.api_util import SeqeraApiClient
 from cpg_infra.driver.groups import GroupMember, GroupProvider
 from cpg_infra.github_wif.driver import PAM_BROKER_SA_NAME
 from cpg_infra.plugin import get_plugins
@@ -43,11 +46,18 @@ if TYPE_CHECKING:
     from cpg_infra.config import (
         CPGDatasetConfig,
         CPGInfrastructureConfig,
+        MemberKey,
+        TeamOwnership,
     )
     from cpg_infra.driver.dataset_cloud_infrastructure import (
         CPGDatasetCloudInfrastructure,
     )
     from cpg_infra.driver.groups import Group
+
+
+def get_formatted_ws_name(is_test: bool, team: str) -> str:
+    ws_team = team.replace(' ', '-')
+    return f'{ws_team}-Test' if is_test else ws_team
 
 
 class CPGInfrastructure:
@@ -71,6 +81,15 @@ class CPGInfrastructure:
             str,
             CPGDatasetInfrastructure,
         ] = defaultdict()
+
+        self.seqera_workspaces: dict[
+            tuple[TeamOwnership, str],
+            SeqeraWorkspace,
+        ] = {}
+
+        self.seqera_workspace_participants: set[
+            tuple[TeamOwnership, str, MemberKey]
+        ] = set()
 
     @cached_property
     def common_dataset(self) -> CPGDatasetInfrastructure:
@@ -145,6 +164,18 @@ class CPGInfrastructure:
 
         # Setup PAM broker infrastructure if PAM is configured
         self.setup_pam_broker()
+
+        # Workspaces should be created/imported before
+        # calling deploy_datasets() which setup Seqera/GCP infra per dataset
+        if self.config.seqera is not None:
+            # Initialize the Seqera API Client singleton
+            SeqeraApiClient(
+                server_url=self.config.seqera.api_url,
+                token_secret_name=self.config.seqera.token_secret_name,
+            )
+
+            # Setup Seqera workspaces
+            self.setup_seqera_workspaces()
 
         # Deploy all the assets required for each dataset. Groups, permissions
         # storage buckets, metamist and hail users etc.
@@ -553,6 +584,31 @@ class CPGInfrastructure:
             contents=infra_config,
             output_name=os.path.join(suffix, 'infrastructure.toml'),
         )
+
+    def setup_seqera_workspaces(self):
+        """Import Seqera workspaces to pulumi state - created manually"""
+
+        seqera_cfg = self.config.seqera
+        assert seqera_cfg is not None
+
+        for team_ownership, ws_pair in seqera_cfg.teams.items():
+            formatted_team_name = get_formatted_team_name(team_ownership)
+            for workspace_type, ws_configs in (
+                ('main', ws_pair.main),
+                ('test', ws_pair.test),
+            ):
+                is_test = workspace_type == 'test'
+                self.seqera_workspaces[(team_ownership, workspace_type)] = (
+                    SeqeraWorkspace(
+                        f'seqera-ws-{formatted_team_name}-{workspace_type}',
+                        org_id=seqera_cfg.org_id,
+                        workspace_id=ws_configs.workspace_id,
+                        ws_name=get_formatted_ws_name(is_test, team_ownership),
+                        full_name=f'CPG {team_ownership}{" Test" if is_test else ""} Workspace',
+                        visibility='PRIVATE',
+                        description=ws_configs.description,
+                    )
+                )
 
     # region ACCESS_CACHE
 

@@ -188,6 +188,8 @@ class TestConfigValidation(TestCase):
             {
                 'org_id': 12345,
                 'wif_issuer_uri': 'https://cloud.seqera.io',
+                'api_url': 'https://cloud.seqera.io/api',
+                'token_secret_name': 'secret/path',
                 'teams': {
                     'Rare Disease': {
                         'main': {'workspace_id': 111},
@@ -208,14 +210,21 @@ class TestConfigValidation(TestCase):
         self.assertEqual(111, seqera.teams['Rare Disease'].main.workspace_id)
         self.assertEqual(112, seqera.teams['Rare Disease'].test.workspace_id)
 
-    def test_seqera_workspace_ids_reject_unknown_team(self):
-        """workspace_ids with a team key outside the Literal must raise"""
+    def test_seqera_teams_reject_unknown_team(self):
+        """teams with a key outside the TeamOwnership Literal must raise"""
         with self.assertRaises(ValidationError):
             CPGInfrastructureConfig.Seqera.model_validate(
                 {
                     'org_id': 1,
                     'wif_issuer_uri': 'https://cloud.seqera.io',
-                    'workspace_ids': {'Rare-Disease': 111},  # note the hyphen typo
+                    'api_url': 'https://cloud.seqera.io/api',
+                    'token_secret_name': 'secret/path',
+                    'teams': {
+                        'Rare-Disease': {  # note the hyphen typo
+                            'main': {'workspace_id': 111},
+                            'test': {'workspace_id': 112},
+                        },
+                    },
                 },
             )
 

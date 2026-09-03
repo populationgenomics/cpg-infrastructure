@@ -1254,6 +1254,26 @@ class CPGDatasetCloudInfrastructure:
             autoclass=self.dataset_config.autoclass,
         )
 
+    @cached_property
+    def nf_main_work_bucket(self):
+        return self.infra.create_bucket(
+            'main-nfwork',
+            lifecycle_rules=[],  # lifecycle policy to be decided later
+            versioning=False,
+            autoclass=False,
+            soft_delete_protection=False,
+        )
+
+    @cached_property
+    def nf_test_work_bucket(self):
+        return self.infra.create_bucket(
+            'test-nfwork',
+            lifecycle_rules=[],  # lifecycle policy to be decided later
+            versioning=False,
+            autoclass=False,
+            soft_delete_protection=False,
+        )
+
     # endregion TEST BUCKETS
     # region RELEASE BUCKETS
 

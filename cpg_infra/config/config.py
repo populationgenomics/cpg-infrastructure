@@ -6,7 +6,7 @@ specific dataset.
 """
 
 from enum import Enum
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 
 import pulumi
 from pydantic import AliasGenerator, ConfigDict, Field, field_serializer
@@ -35,6 +35,7 @@ class CPGInfrastructureUser(ConfigModel):
     class Cloud(ConfigModel):
         id: str  # noqa: RUF100, A003
         hail_batch_username: str | None = None
+        has_seqera_account: bool = False
 
     id: MemberKey  # noqa: RUF100, A003
     clouds: dict[CloudName, Cloud]
@@ -288,18 +289,18 @@ class CPGInfrastructureConfig(ConfigModel):
 
         class WorkspaceConfig(ConfigModel):
             workspace_id: int
-            description: str | None = None
+            description: Optional[str] = Field(None, max_length=1000)
 
         class TeamWorkspaces(ConfigModel):
             main: 'CPGInfrastructureConfig.Seqera.WorkspaceConfig'
             test: 'CPGInfrastructureConfig.Seqera.WorkspaceConfig'
 
         org_id: int
-        api_url: str | None = None
+        api_url: str
         # Seqera Cloud OIDC issuer URI, see:
         # https://docs.seqera.io/platform-cloud/credentials/overview#google-cloud
         wif_issuer_uri: str
-        token_secret_name: str | None = None
+        token_secret_name: str
         # Main and test workspace IDs per dataset team_ownership value.
         teams: dict[
             TeamOwnership,
