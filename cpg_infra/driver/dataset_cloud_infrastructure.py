@@ -1652,6 +1652,14 @@ class CPGDatasetCloudInfrastructure:
                 account,
             )
 
+            # Allow the Cromwell service accounts to write logs from the Google
+            # Batch jobs they run in the dataset project.
+            self.infra.add_project_role(
+                f'cromwell-service-account-{access_level}-log-writer',
+                member=account,
+                role='roles/logging.logWriter',
+            )
+
         # Give the Cromwell runner the batch job editor role
         self.infra.add_batch_jobs_editor_role(
             'cromwell-runner-batch-jobs-editor',

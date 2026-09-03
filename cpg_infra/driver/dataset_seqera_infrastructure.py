@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Any
 import pulumi
 import pulumi_gcp as gcp
 
-from cpg_infra.abstraction.base import BucketMembership
+from cpg_infra.abstraction.base import BucketMembership, MachineAccountRole
 from cpg_infra.abstraction.gcp import GcpInfrastructure
 from cpg_infra.config import (
     CPGInfrastructureConfig,
@@ -57,6 +57,7 @@ _ACCESS_LEVEL_TEST = 'test'
 _HEAD_JOB_ROLES: tuple[str, ...] = (
     'roles/batch.jobsEditor',
     'roles/logging.viewer',
+    'roles/iam.workloadIdentityUser',
 )
 
 # Task Job SA runs the actual compute tasks and can spawn nested subtasks
@@ -247,11 +248,11 @@ class DatasetSeqeraInfrastructure:
         # Grant HEAD SA roles/iam.serviceAccountUser on TASK SAs per access level
         for level, head_sa in self._head_sas.items():
             task_sa = self._service_accounts[level]
-            gcp.serviceaccount.IAMMember(
-                self._infra.get_pulumi_name(f'seqera-{level}-head-sa-user'),
-                service_account_id=task_sa.name,
-                role='roles/iam.serviceAccountUser',
-                member=head_sa.email,
+            self._infra.add_member_to_machine_account_role(
+                f'seqera-{level}-head-sa-user',
+                machine_account=task_sa,
+                member=head_sa,
+                role=MachineAccountRole.ACCESS,
             )
 
         # Nextflow head job can spawn child jobs that uses the same SA
