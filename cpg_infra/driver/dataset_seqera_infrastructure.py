@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 
 import pulumi_gcp as gcp
 
+from cpg_infra.abstraction.base import MachineAccountRole
 from cpg_infra.abstraction.gcp import GcpInfrastructure
 from cpg_infra.config import SeqeraAccount
 
@@ -193,11 +194,11 @@ class DatasetSeqeraInfrastructure:
         # Grant HEAD SA roles/iam.serviceAccountUser on TASK SAs per access level
         for level, head_sa in self._head_sas.items():
             task_sa = self._service_accounts[level]
-            gcp.serviceaccount.IAMMember(
-                self._infra.get_pulumi_name(f'seqera-{level}-head-sa-user'),
-                service_account_id=task_sa.name,
-                role='roles/iam.serviceAccountUser',
-                member=head_sa.email,
+            self._infra.add_member_to_machine_account_role(
+                f'seqera-{level}-head-sa-user',
+                machine_account=task_sa,
+                member=head_sa,
+                role=MachineAccountRole.ACCESS,
             )
 
     def _bind_wif_principals(self) -> None:
