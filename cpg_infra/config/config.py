@@ -17,6 +17,7 @@ from cpg_infra.config.base import ConfigModel
 MemberKey = str
 GroupType = str
 CloudName = Literal['gcp', 'azure', 'dry-run']
+TeamOwnership = Literal['Rare Disease', 'Population Genomics', 'Shared']
 GroupName = Literal[
     'data-manager',
     'analysis',
@@ -278,6 +279,33 @@ class CPGInfrastructureConfig(ConfigModel):
         etl: ETLConfiguration | None = None
         slack_channel: str | None = None
 
+    class Seqera(ConfigModel):
+        """Global Seqera Platform configuration.
+
+        Set to enable Seqera integration for any dataset that opts in via
+        CPGDatasetComponents.SEQERA_ACCOUNTS.
+        """
+
+        class WorkspaceConfig(ConfigModel):
+            workspace_id: int
+            description: str | None = None
+
+        class TeamWorkspaces(ConfigModel):
+            main: 'CPGInfrastructureConfig.Seqera.WorkspaceConfig'
+            test: 'CPGInfrastructureConfig.Seqera.WorkspaceConfig'
+
+        org_id: int
+        api_url: str | None = None
+        # Seqera Cloud OIDC issuer URI, see:
+        # https://docs.seqera.io/platform-cloud/credentials/overview#google-cloud
+        wif_issuer_uri: str
+        token_secret_name: str | None = None
+        # Main and test workspace IDs per dataset team_ownership value.
+        teams: dict[
+            TeamOwnership,
+            'CPGInfrastructureConfig.Seqera.TeamWorkspaces',
+        ]
+
     class Billing(ConfigModel):
         class GCP(ConfigModel):
             """Details of the BILLING account"""
@@ -352,6 +380,8 @@ class CPGInfrastructureConfig(ConfigModel):
     cromwell: Cromwell | None = None
     # configuration options for our metamist service
     metamist: Metamist | None = None
+    # configuration options for Seqera platform
+    seqera: Seqera | None = None
     # configuration options for billing + billing aggregation
     billing: Billing | None = None
     # list of additional adhoc groups under infrastructure management
@@ -385,14 +415,27 @@ class CPGDatasetComponents(Enum):
     METAMIST = 'metamist'
     CONTAINER_REGISTRY = 'container-registry'
     ANALYSIS_RUNNER = 'analysis-runner'
+    SEQERA_ACCOUNTS = 'seqera-accounts'
 
     @staticmethod
     def default_component_for_infrastructure() -> (
         dict[str, list['CPGDatasetComponents']]
     ):
+        # Explicit lists so that opt-in components (e.g. SEQERA_ACCOUNTS)
+        # can be added to the enum without silently enabling them fleet-wide.
+        _default_gcp: list[CPGDatasetComponents] = [
+            CPGDatasetComponents.STORAGE,
+            CPGDatasetComponents.SPARK,
+            CPGDatasetComponents.CROMWELL,
+            CPGDatasetComponents.NOTEBOOKS,
+            CPGDatasetComponents.HAIL_ACCOUNTS,
+            CPGDatasetComponents.METAMIST,
+            CPGDatasetComponents.CONTAINER_REGISTRY,
+            CPGDatasetComponents.ANALYSIS_RUNNER,
+        ]
         return {
-            'dry-run': list(CPGDatasetComponents),
-            'gcp': list(CPGDatasetComponents),
+            'dry-run': list(_default_gcp),
+            'gcp': list(_default_gcp),
             'azure': [
                 CPGDatasetComponents.STORAGE,
                 CPGDatasetComponents.HAIL_ACCOUNTS,
@@ -414,6 +457,19 @@ class HailAccount(ConfigModel):
     model_config = ConfigModel.model_config | {'arbitrary_types_allowed': True}
 
     username: str
+    cloud_id: str | pulumi.Output[str]
+
+
+class SeqeraAccount(ConfigModel):
+    """A Seqera-facing GCP service account for one dataset+access-level.
+
+    cloud_id holds the SA email; may be a pulumi.Output at construction time
+    (same reason as HailAccount — pydantic isn't aware of pulumi types).
+    """
+
+    model_config = ConfigModel.model_config | {'arbitrary_types_allowed': True}
+
+    account_id: str
     cloud_id: str | pulumi.Output[str]
 
 
@@ -477,9 +533,7 @@ class CPGDatasetConfig(ConfigModel):
     description: str | None = None
 
     # Metamist dataset's team ownership
-    team_ownership: Literal['Rare Disease', 'Population Genomics', 'Shared'] | None = (
-        None
-    )
+    team_ownership: TeamOwnership | None = None
 
     # Metamist dataset's Billing group
     billing_groups: list[str] = Field(default_factory=list)
