@@ -302,11 +302,9 @@ class CPGInfrastructureConfig(ConfigModel):
             test: 'CPGInfrastructureConfig.Seqera.WorkspaceConfig'
 
         org_id: int
-        api_url: str
         # Seqera Cloud OIDC issuer URI, see:
         # https://docs.seqera.io/platform-cloud/credentials/overview#google-cloud
         wif_issuer_uri: str
-        token_secret_name: str
         # Main and test workspace IDs per dataset team_ownership value.
         teams: dict[
             TeamOwnership,
