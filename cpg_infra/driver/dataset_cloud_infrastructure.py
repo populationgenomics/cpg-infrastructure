@@ -154,7 +154,9 @@ class CPGDatasetCloudInfrastructure:
             return None
         if self.config.igv_proxy is None:
             return None
-        if not self.dataset_config.members.get(IGV_DESKTOP_ACCESS):
+        if not self.dataset_config.members.get(
+            IGV_DESKTOP_ACCESS,  # type: ignore[call-overload]
+        ):
             return None
         return self.config.igv_proxy
 

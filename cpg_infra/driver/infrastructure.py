@@ -560,7 +560,9 @@ class CPGInfrastructure:
         prefix = self.config.gcp.dataset_storage_prefix
 
         for dataset, dataset_config in self.dataset_configs.items():
-            member_keys = dataset_config.members.get(IGV_DESKTOP_ACCESS)
+            member_keys = dataset_config.members.get(
+                IGV_DESKTOP_ACCESS,  # type: ignore[call-overload]
+            )
             if not member_keys:
                 continue
 
