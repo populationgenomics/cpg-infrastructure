@@ -3,7 +3,8 @@
 Design and implementation plan for [SET-1249](https://cpg-populationanalysis.atlassian.net/browse/SET-1249),
 a child of epic SET-1248 ("IGV Desktop Proxy External User Access").
 
-**Status:** design settled, no code written yet.
+**Status:** implemented. See the first note under "Notes for review" for the one
+correction the implementation forced on this design.
 
 ## Problem
 
@@ -69,7 +70,10 @@ supersede it: access is now per-stack, prod→main and dev→test.
 ### 1. `cpg_infra/config/config.py`
 
 New `IgvProxy(ConfigModel)` beside `DataDropbox`, plus a top-level
-`igv_proxy: IgvProxy | None = None` field beside `data_dropbox`.
+`igv_proxy: IgvProxy | None = None` field beside `data_dropbox`, and
+`'igv-desktop-access'` added to the module-level `GroupName` `Literal` that types
+`CPGDatasetConfig.members` (see the first note under "Notes for review" — this was not in
+the original design).
 
 ```python
 class IgvProxy(ConfigModel):
@@ -116,22 +120,38 @@ Two notes on the shape:
   `config.users[key].clouds['gcp'].id` and append
   `f'{config.gcp.dataset_storage_prefix}{dataset}-main'` to that email's list. Raise
   `ValueError` on an unknown key or a missing gcp entry (D8).
-- **Prod payload** = the base map, plus — only if `gcp.prod.include_test_buckets` — the
-  matching `-test` name appended to each email's list.
-- **Dev payload** is derived from the **base map, not the prod payload**. Rewriting the prod
-  payload would give dev duplicate `-test` entries whenever `include_test_buckets` is on.
-  Rewrite with `name.removesuffix('-main') + '-test'`, **not**
-  `name.replace('-main', '-test')` — a dataset whose own name contains `-main` would be
-  corrupted by `replace`.
+- **Two base maps, one per namespace** — `-main` names for every participating dataset, and
+  `-test` names for those participating datasets that also have `setup_test` on. *(Revised
+  during implementation. The original plan built one `-main` map and rewrote it with
+  `removesuffix('-main') + '-test'` for dev. Deriving each namespace's name from the dataset
+  directly is equivalent, drops the `removesuffix`-vs-`replace` trap entirely, and — the
+  reason for the change — lets the `-test` names be gated on `setup_test`.
+  `setup_storage_test_buckets_permissions` only runs when `setup_test` is on, so a
+  `setup_test: false` dataset would otherwise be handed a `-test` bucket that has neither a
+  binding nor an existence.)*
+- **Prod payload** = the main map, plus the test map merged in only if
+  `gcp.prod.include_test_buckets`.
+- **Dev payload** = the test map on its own — never the prod payload with its names
+  rewritten, which would double up the `-test` entries when `include_test_buckets` is on.
 - Bucket names are **derived plain strings**, not read off Pulumi resources, so the payload
-  stays a static string with no `Output` interpolation.
+  stays a static string with no `Output` interpolation. They repeat the naming scheme
+  `create_bucket` uses; the driver tests pin the resulting names, which is what would catch
+  a drift.
 - **Sort** the user keys and each bucket list before `json.dumps`, otherwise dict ordering
-  churns a new secret version on every deploy.
+  churns a new secret version on every deploy. **Sort only — no `set()`**: de-duplicating at
+  serialisation time would mask a payload that wrongly repeats a bucket, which is exactly
+  the regression the dev-payload test above exists to catch.
 - Write each secret with `create_secret(...)` → `add_secret_version(...)` →
   `add_secret_member(..., SecretMembership.ACCESSOR)`, using each stack's own project and SA.
-- Emit **one** `pulumi.warn` per deploy (D7) noting that the dev secret was written with
-  `-main` rewritten to `-test` for N datasets, and that the dev proxy never receives access
-  to main-namespace data.
+- Emit **one** `pulumi.warn` per deploy (D7), **iff the dev secret grants the dev proxy
+  something** — stating the access level it walks away with (read on `cpg-<dataset>-test`,
+  never main-namespace data) and naming those datasets. The message deliberately describes
+  the *grant*, not a `-main`→`-test` transformation: the implementation derives each
+  namespace's bucket name from the dataset directly, so no rewrite step exists to describe.
+  A grant of nothing means nothing to flag, so there is no warning on a prod-only deploy
+  (including with `include_test_buckets: true`), nor on a dev deploy where no participating
+  dataset has a test namespace. The datasets named are only the dev-readable ones, not
+  every participating one.
 
 > **Pass an explicit `resource_key` to both `create_secret` and `add_secret_version` for
 > each stack.** Both secrets are created on `common_gcp_infra`, and `get_pulumi_name`
@@ -152,8 +172,29 @@ non-empty `dataset_config.members.get(IGV_DESKTOP_ACCESS)`:
   - `gcp.dev is not None` ⇒ bind the dev SA;
   - `gcp.prod.include_test_buckets` ⇒ bind the prod SA (D4).
 
-Bind the **SA email directly**, not via `main_read_group` — that group also covers
-`main-tmp` and `main-analysis`, which would over-grant.
+Bind the **SA email directly**, not via an existing group. Reusing a group was considered
+and rejected on the evidence below; the original note here cited only `main-tmp` and
+`main-analysis`, which undersold the gap.
+
+| Group | Read-only on data? | Metamist | Transitive via `depends_on`? |
+|---|---|---|---|
+| `main_read_group` | **No** — `APPEND` (`StorageViewerAndCreator`) on `main-web`; also READ on `main-tmp`, `main-analysis`, every `main-upload` | `SM_MAIN_READ` | **Yes** |
+| `test_read_group` | Yes on buckets (all five `test-*`) | **`SM_TEST_WRITE`** | **Yes** (when `setup_test`) |
+| `external_repository_reader_group` | **Yes** — READ on `main` and nothing else | none | No |
+
+`external_repository_reader_group` is the only group that is read-only on data with no write
+anywhere and no transitivity, and it covers `main` only — there is no test-namespace
+equivalent, so it could not serve the dev stack. It is also populated from the
+`external-repository-reader` key in `members.yaml`, so putting a service identity in it
+would conflate the proxy with the humans granted external-repository read access, and would
+tie the proxy's access to a group whose membership changes for unrelated reasons.
+
+Group membership is also transitive *upward*: `<dataset>-main-read` is added as a member of
+`<dependency>-main-read` (`dataset_cloud_infrastructure.py:2506`), so joining it would grant
+the proxy read across every `depends_on` / `depends_on_readonly` dataset and the common
+dataset — contradicting the "no `depends_on` transitivity" decision above, and weakening the
+allow-list secret as a bound on effective access while proxy-side enforcement (SET-1248)
+does not yet exist.
 
 The two test-bucket `resource_key`s must differ from each other: same dataset, same bucket,
 two members. Dataset scoping is automatic via `get_pulumi_name`, so keys only need to be
@@ -171,6 +212,12 @@ distinct within a dataset.
 New driver tests, in the style of `test/test_seqera_infrastructure.py`:
 
 - prod payload matches the ticket's shape with `-main` names (`include_test_buckets` off);
+- a `setup_test: false` dataset contributes `-main` but never `-test`, in either payload;
+- exactly one `pulumi.warn` per deploy, stating the access granted and naming only the
+  dev-readable datasets; and **no** warning when the dev proxy is granted nothing — a
+  prod-only deploy (with `include_test_buckets` both off and on), a dev deploy where no
+  participating dataset has a test namespace, and a deploy where no dataset participates
+  at all;
 - `include_test_buckets` on ⇒ prod payload gains the `-test` names and a prod test-bucket
   binding is emitted;
 - `include_test_buckets` on **and** `gcp.dev` set ⇒ the dev payload still contains only
@@ -184,11 +231,15 @@ New driver tests, in the style of `test/test_seqera_infrastructure.py`:
 
 ## Notes for review
 
-- Adding `igv-desktop-access` to `members.yaml` in `cpg-infrastructure-private` is safe
-  independently of this change: `CPGDatasetConfig.members` is free-form and
-  `setup_externally_specified_members` reads a hardcoded list of group names, so an
-  unrecognised key is ignored until this lands. There is no ordering constraint between the
-  two PRs.
+- **Corrected during implementation — this PR must land first.** The design assumed
+  `CPGDatasetConfig.members` was free-form. It is not: it is typed
+  `dict[GroupName, list[MemberKey]]`, and `GroupName` is a `Literal` of the nine existing
+  group names, so pydantic rejects an unrecognised key outright (verified: an unknown
+  member key raises `ValidationError`). `igv-desktop-access` therefore had to be added to
+  that `Literal`, and adding the key to `members.yaml` in `cpg-infrastructure-private`
+  **fails validation until this change is deployed**. The rest of the original reasoning
+  still holds: `setup_externally_specified_members` iterates a hardcoded list of group
+  objects, so the new key creates no Google Group and grants no IAM by itself.
 - `cpg-infrastructure-private`'s membership check workflow already validates the new group
   with no change needed — it is group-name-agnostic and blocks the config PR. It only checks
   that a key exists in `users.yaml`; it does **not** check for a `clouds['gcp']` entry, which

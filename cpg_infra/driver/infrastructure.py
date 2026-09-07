@@ -25,6 +25,7 @@ from cpg_infra.abstraction.gcp import GcpInfrastructure
 from cpg_infra.abstraction.hailbatch import HailBatchBillingProjectMembership
 from cpg_infra.abstraction.metamist import MetamistProjectMembers
 from cpg_infra.driver.constants import (
+    IGV_DESKTOP_ACCESS,
     SM_MAIN_CONTRIBUTE,
     SM_MAIN_READ,
     SM_MAIN_WRITE,
@@ -201,6 +202,7 @@ class CPGInfrastructure:
 
         # Generate data dropbox config from dataset upload configs
         self.generate_dropbox_config()
+        self.generate_igv_proxy_config()
 
         # Store the deployed infrastructure config on gcp storage
         self.output_infrastructure_config()
@@ -530,6 +532,159 @@ class CPGInfrastructure:
             secret=secret,
             project=self.config.data_dropbox.gcp.project,
             member=self.config.data_dropbox.gcp.server_machine_account,
+            membership=SecretMembership.ACCESSOR,
+        )
+
+    def generate_igv_proxy_config(self):
+        """Write the IGV desktop proxy allow-list secret for each proxy stack.
+
+        The proxy forwards objects to users who hold no IAM of their own on the
+        dataset buckets, so it needs an allow-list of who may read what. The prod
+        and dev proxies run in separate GCP projects, so this writes one secret
+        per stack, each into that stack's own project.
+        """
+        if not self.config.igv_proxy:
+            return
+
+        igv_proxy_gcp = self.config.igv_proxy.gcp
+
+        # Two base maps of proxy user email -> the buckets they may reach, one per
+        # namespace. Bucket names are derived strings rather than read off the
+        # pulumi bucket resources, so the payload stays a static string with no
+        # Output in it.
+        main_buckets_by_user: dict[str, list[str]] = defaultdict(list)
+        test_buckets_by_user: dict[str, list[str]] = defaultdict(list)
+        # the datasets the dev proxy ends up with test-namespace read access to;
+        # the only thing worth warning about (see below)
+        dev_readable_datasets: list[str] = []
+        prefix = self.config.gcp.dataset_storage_prefix
+
+        for dataset, dataset_config in self.dataset_configs.items():
+            member_keys = dataset_config.members.get(IGV_DESKTOP_ACCESS)
+            if not member_keys:
+                continue
+
+            if dataset_config.setup_test:
+                dev_readable_datasets.append(dataset)
+            main_bucket = f'{prefix}{dataset}-main'
+            test_bucket = f'{prefix}{dataset}-test'
+
+            for member_key in member_keys:
+                member = self.config.users.get(member_key)
+                if not member:
+                    raise ValueError(
+                        f'IGV proxy: member {member_key} of dataset {dataset} was '
+                        'not found in config',
+                    )
+                cloud_user = member.clouds.get(GcpInfrastructure.name())
+                if not cloud_user:
+                    raise ValueError(
+                        f'IGV proxy: member {member_key} of dataset {dataset} does '
+                        'not have a gcp id specified',
+                    )
+
+                main_buckets_by_user[cloud_user.id].append(main_bucket)
+                # A dataset can opt out of the test namespace entirely. There is
+                # then no -test bucket to hand out and no binding to match it, so
+                # listing one would put the allow-list and IAM out of step.
+                if dataset_config.setup_test:
+                    test_buckets_by_user[cloud_user.id].append(test_bucket)
+
+        # prod reads the main namespace, and the test namespace too when opted in.
+        # IAM without a matching allow-list entry would be inert, so the flag has
+        # to move the payload as well as the bucket bindings.
+        prod_buckets_by_user = main_buckets_by_user
+        if igv_proxy_gcp.prod.include_test_buckets:
+            prod_buckets_by_user = {
+                user: [*buckets, *test_buckets_by_user.get(user, [])]
+                for user, buckets in main_buckets_by_user.items()
+            }
+
+        self._write_igv_proxy_secret(
+            resource_key='igv-proxy-config-prod',
+            project=igv_proxy_gcp.prod.project,
+            member=igv_proxy_gcp.prod.server_machine_account,
+            contents=self._igv_proxy_secret_contents(prod_buckets_by_user),
+        )
+
+        if not igv_proxy_gcp.dev:
+            return
+
+        # The dev proxy serves the test namespace and only the test namespace, so it
+        # gets the test map on its own — never the prod payload with the names
+        # rewritten, which would double up the -test entries when
+        # include_test_buckets is on. Deriving the names here keeps the dev secret
+        # self-consistent, so the proxy needs no per-stack special-casing.
+        self._write_igv_proxy_secret(
+            resource_key='igv-proxy-config-dev',
+            project=igv_proxy_gcp.dev.project,
+            member=igv_proxy_gcp.dev.server_machine_account,
+            contents=self._igv_proxy_secret_contents(test_buckets_by_user),
+        )
+
+        if dev_readable_datasets:
+            # One summary warning per deploy, rather than one per dataset or bucket,
+            # and only when the dev secret actually grants something: it states the
+            # access level the dev proxy service account walks away with. A
+            # prod-only deploy — or a dev deploy where no participating dataset has
+            # a test namespace — grants nothing, so it stays silent.
+            pulumi.warn(
+                'IGV proxy: the dev proxy service account was granted read access '
+                f'to the test-namespace buckets of {len(dev_readable_datasets)} '
+                f'dataset(s): {", ".join(sorted(dev_readable_datasets))}. Its '
+                'access is limited to cpg-<dataset>-test; the dev proxy never '
+                'receives access to main-namespace data.',
+            )
+
+    @staticmethod
+    def _igv_proxy_secret_contents(buckets_by_user: dict[str, list[str]]) -> str:
+        """Serialise the allow-list, sorted so the output is deterministic.
+
+        Without the sort, dict and list ordering would churn a new secret version
+        on every deploy. Note the deliberate absence of a set(): de-duplicating
+        here would mask a payload that wrongly repeats a bucket.
+        """
+        return json.dumps(
+            {
+                'users': {
+                    user: sorted(buckets_by_user[user])
+                    for user in sorted(buckets_by_user)
+                },
+            },
+        )
+
+    def _write_igv_proxy_secret(
+        self,
+        *,
+        resource_key: str,
+        project: str,
+        member: str,
+        contents: str,
+    ) -> None:
+        """Create one proxy config secret, its version, and its accessor binding.
+
+        Both stacks use the same secret_id in different projects, and
+        get_pulumi_name only prefixes '{dataset}-{cloud}-', so each stack must
+        pass its own explicit resource_key or the two secrets collide on the
+        pulumi resource name.
+        """
+        secret = self.common_gcp_infra.create_secret(
+            name='igv-proxy-config',
+            project=project,
+            resource_key=self.common_gcp_infra.get_pulumi_name(resource_key),
+        )
+
+        self.common_gcp_infra.add_secret_version(
+            f'{resource_key}-latest',
+            secret=secret,
+            contents=contents,
+        )
+
+        self.common_gcp_infra.add_secret_member(
+            f'{resource_key}-accessor',
+            secret=secret,
+            project=project,
+            member=member,
             membership=SecretMembership.ACCESSOR,
         )
 

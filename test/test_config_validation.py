@@ -263,3 +263,94 @@ class TestConfigValidation(TestCase):
         # inspects the model field definition.
         field = CPGInfrastructureConfig.model_fields['seqera']
         self.assertIsNone(field.default)
+
+    def test_igv_proxy_config_parses(self):
+        """CPGInfrastructureConfig.IgvProxy parses a block with both stacks"""
+        igv_proxy = CPGInfrastructureConfig.IgvProxy.model_validate(
+            {
+                'gcp': {
+                    'prod': {
+                        'project': 'igv-proxy-prod',
+                        'server_machine_account': 'igv-prod@igv-proxy-prod.iam.gserviceaccount.com',
+                    },
+                    'dev': {
+                        'project': 'igv-proxy-dev',
+                        'server_machine_account': 'igv-dev@igv-proxy-dev.iam.gserviceaccount.com',
+                    },
+                },
+            },
+        )
+        self.assertEqual('igv-proxy-prod', igv_proxy.gcp.prod.project)
+        assert igv_proxy.gcp.dev is not None
+        self.assertEqual('igv-proxy-dev', igv_proxy.gcp.dev.project)
+
+    def test_igv_proxy_dev_optional(self):
+        """gcp.dev is optional — a prod-only block is valid"""
+        igv_proxy = CPGInfrastructureConfig.IgvProxy.model_validate(
+            {
+                'gcp': {
+                    'prod': {
+                        'project': 'igv-proxy-prod',
+                        'server_machine_account': 'igv-prod@igv-proxy-prod.iam.gserviceaccount.com',
+                    },
+                },
+            },
+        )
+        self.assertIsNone(igv_proxy.gcp.dev)
+
+    def test_igv_proxy_include_test_buckets_defaults_false(self):
+        """include_test_buckets is opt-in, defaulting to False on prod"""
+        igv_proxy = CPGInfrastructureConfig.IgvProxy.model_validate(
+            {
+                'gcp': {
+                    'prod': {
+                        'project': 'igv-proxy-prod',
+                        'server_machine_account': 'igv-prod@igv-proxy-prod.iam.gserviceaccount.com',
+                    },
+                },
+            },
+        )
+        self.assertFalse(igv_proxy.gcp.prod.include_test_buckets)
+
+    def test_igv_proxy_dev_cannot_include_test_buckets(self):
+        """The dev stack has no include_test_buckets field, so setting it fails.
+
+        This pins the safety property that the dev proxy can never be granted
+        main-namespace access through config: the prod/dev asymmetry is what makes
+        `dev: {include_test_buckets: ...}` inexpressible rather than merely
+        discouraged. Do not delete this test.
+        """
+        with self.assertRaises(ValidationError) as ctx:
+            CPGInfrastructureConfig.IgvProxy.model_validate(
+                {
+                    'gcp': {
+                        'prod': {
+                            'project': 'igv-proxy-prod',
+                            'server_machine_account': 'igv-prod@igv-proxy-prod.iam.gserviceaccount.com',
+                        },
+                        'dev': {
+                            'project': 'igv-proxy-dev',
+                            'server_machine_account': 'igv-dev@igv-proxy-dev.iam.gserviceaccount.com',
+                            'include_test_buckets': True,
+                        },
+                    },
+                },
+            )
+        self.assertIn('include_test_buckets', str(ctx.exception))
+
+    def test_igv_proxy_optional_on_infrastructure_config(self):
+        """CPGInfrastructureConfig.igv_proxy defaults to None"""
+        field = CPGInfrastructureConfig.model_fields['igv_proxy']
+        self.assertIsNone(field.default)
+
+    def test_igv_desktop_access_member_key_parses(self):
+        """A dataset can list members under the igv-desktop-access key"""
+        config = CPGDatasetConfig.model_validate(
+            {
+                'dataset': 'DATASET',
+                'budgets': {},
+                'gcp': {'project': 'dataset-1234'},
+                'members': {'igv-desktop-access': ['alice']},
+            },
+        )
+        self.assertEqual(['alice'], config.members['igv-desktop-access'])

@@ -6,11 +6,14 @@ Constants and helper functions used across the driver package.
 from __future__ import annotations
 
 import re
-from typing import Iterable
+from typing import TYPE_CHECKING, Iterable
 
 import toml
 import xxhash
 from toml_sort import TomlSort
+
+if TYPE_CHECKING:
+    from cpg_infra.config import GroupName
 
 AccessLevel = str
 
@@ -21,6 +24,13 @@ SM_TEST_CONTRIBUTE = 'test-contribute'
 SM_MAIN_READ = 'main-read'
 SM_MAIN_WRITE = 'main-write'
 SM_MAIN_CONTRIBUTE = 'main-contribute'
+# The members.yaml key listing users who may reach dataset buckets through the
+# IGV desktop proxy. No group is created for it: these users hold no IAM of
+# their own, the proxy serves them with its own identity.
+# Typed as GroupName, not str, so it satisfies the .get() overloads on
+# CPGDatasetConfig.members — and so dropping the key from that Literal fails here.
+IGV_DESKTOP_ACCESS: GroupName = 'igv-desktop-access'
+
 METAMIST_PERMISSIONS = [
     SM_TEST_READ,
     SM_TEST_WRITE,

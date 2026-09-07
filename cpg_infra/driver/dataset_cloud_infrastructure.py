@@ -40,6 +40,7 @@ from cpg_infra.config import (
     SeqeraAccount,
 )
 from cpg_infra.driver.constants import (
+    IGV_DESKTOP_ACCESS,
     METAMIST_PERMISSIONS,
     NON_NAME_REGEX,
     SM_MAIN_CONTRIBUTE,
@@ -140,6 +141,22 @@ class CPGDatasetCloudInfrastructure:
                 'enabled but CPGInfrastructureConfig.seqera is not set.',
             )
         return True
+
+    @cached_property
+    def igv_proxy_config(self) -> CPGInfrastructureConfig.IgvProxy | None:
+        """The IGV desktop proxy config, if this dataset takes part in the proxy.
+
+        Participation needs all three of: GCP, a global igv_proxy block, and at
+        least one member listed under the igv-desktop-access key. Returns None
+        otherwise, so the proxy bindings no-op.
+        """
+        if not isinstance(self.infra, GcpInfrastructure):
+            return None
+        if self.config.igv_proxy is None:
+            return None
+        if not self.dataset_config.members.get(IGV_DESKTOP_ACCESS):
+            return None
+        return self.config.igv_proxy
 
     def create_group(self, name: str, *, cache_members: bool = False):
         """
@@ -896,6 +913,19 @@ class CPGDatasetCloudInfrastructure:
             BucketMembership.MUTATE,
         )
 
+        # IGV desktop proxy (prod stack). It serves users listed under
+        # igv-desktop-access, who hold no personal IAM here, using its own
+        # identity. Bind the service account directly rather than through
+        # main_read_group: that group also covers main-tmp and main-analysis,
+        # which would over-grant.
+        if igv_proxy := self.igv_proxy_config:
+            self.infra.add_member_to_bucket(
+                'igv-proxy-prod-main-bucket-read',
+                self.main_bucket,
+                igv_proxy.gcp.prod.server_machine_account,
+                BucketMembership.READ,
+            )
+
     def setup_storage_main_tmp_bucket(self):
         self.infra.add_member_to_bucket(
             'main-read-main-tmp-bucket-read',
@@ -1211,6 +1241,27 @@ class CPGDatasetCloudInfrastructure:
                 member=self.config.web_service.gcp.server_machine_account,  # WEB_SERVER_SERVICE_ACCOUNT,
                 membership=BucketMembership.READ,
             )
+
+        # IGV desktop proxy. The dev proxy serves the test namespace and only the
+        # test namespace; the prod proxy also reaches it when opted in. Both
+        # bindings are on the same bucket for the same dataset, so their resource
+        # keys have to differ from each other.
+        if igv_proxy := self.igv_proxy_config:
+            if igv_proxy.gcp.dev is not None:
+                self.infra.add_member_to_bucket(
+                    'igv-proxy-dev-test-bucket-read',
+                    bucket=self.test_bucket,
+                    member=igv_proxy.gcp.dev.server_machine_account,
+                    membership=BucketMembership.READ,
+                )
+
+            if igv_proxy.gcp.prod.include_test_buckets:
+                self.infra.add_member_to_bucket(
+                    'igv-proxy-prod-test-bucket-read',
+                    bucket=self.test_bucket,
+                    member=igv_proxy.gcp.prod.server_machine_account,
+                    membership=BucketMembership.READ,
+                )
 
     @cached_property
     def test_bucket(self):

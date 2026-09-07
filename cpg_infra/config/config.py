@@ -34,6 +34,7 @@ GroupName = Literal[
     'release-access',
     'tmp-main-read-access',
     'external-repository-reader',
+    'igv-desktop-access',
 ]
 
 
@@ -227,6 +228,35 @@ class CPGInfrastructureConfig(ConfigModel):
 
         gcp: GCP
 
+    class IgvProxy(ConfigModel):
+        """Global IGV desktop proxy configuration.
+
+        The proxy runs as two independent stacks in two separate GCP projects
+        (prod and dev), each with its own runtime service account. Setting this
+        grants each proxy service account read access to the buckets of datasets
+        that list members under the 'igv-desktop-access' member key, and writes
+        the proxy's allow-list secret into each stack's own project.
+        """
+
+        class GCPDeployment(ConfigModel):
+            project: str
+            server_machine_account: str
+
+        class GCPProdDeployment(GCPDeployment):
+            # When True, the prod proxy service account additionally gets READ on
+            # cpg-<dataset>-test, and the prod secret lists the '-test' buckets
+            # alongside the '-main' ones.
+            # Deliberately NOT on the base class: ConfigModel is extra='forbid', so
+            # a dev: block setting this fails validation. The dev proxy can never
+            # be granted main-namespace access through config.
+            include_test_buckets: bool = False
+
+        class GCP(ConfigModel):
+            prod: 'CPGInfrastructureConfig.IgvProxy.GCPProdDeployment'
+            dev: 'CPGInfrastructureConfig.IgvProxy.GCPDeployment | None' = None
+
+        gcp: GCP
+
     class WebService(ConfigModel):
         """
         This is a CPG-specific configuration that allows a
@@ -382,6 +412,8 @@ class CPGInfrastructureConfig(ConfigModel):
     analysis_runner: AnalysisRunner | None = None
     # configuration options for the data dropbox server
     data_dropbox: DataDropbox | None = None
+    # configuration options for the IGV desktop proxy
+    igv_proxy: IgvProxy | None = None
     # configuration options for the web service, a server that serves static files
     # from a bucket
     web_service: WebService | None = None
