@@ -20,10 +20,20 @@ Usage
     # 1. Dry-run against a fresh download (reports what would be removed):
     python scripts/remove_azure_resources.py
 
-    # 2. Write the trimmed state to production.json (input backup preserved):
+    # 2. Write the trimmed state:
+    #    production.json         -- full checkpoint, for gsutil-cp fallback
+    #    production-import.json  -- deployment envelope, for pulumi stack import
     python scripts/remove_azure_resources.py --apply
 
-    # 3. Out-of-band, upload the trimmed state back:
+    # 3. RECOMMENDED upload path -- pulumi validates and re-hashes the state:
+    pulumi stack select datasets/production
+    pulumi stack import --file production-import.json
+
+    # 3b. FALLBACK upload path -- direct GCS write. This bypasses
+    #     `pulumi stack import`, so Snapshot.VerifyIntegrity() runs only on
+    #     the next `pulumi up/refresh`. If manifest.magic or the checkpoint
+    #     schema ever drifts, this path can surface as an integrity error
+    #     that only clears with `--disable-integrity-checking`. Prefer 3.
     gsutil cp production.json \
         gs://cpg-pulumi-state/.pulumi/stacks/datasets/production.json
 
@@ -50,6 +60,7 @@ GCS_BUCKET = 'cpg-pulumi-state'
 GCS_BLOB = '.pulumi/stacks/datasets/production.json'
 BACKUP_PATH = 'production-old.json'
 OUTPUT_PATH = 'production.json'
+IMPORT_PATH = 'production-import.json'
 
 
 def is_azure_resource(resource: dict) -> bool:
@@ -342,21 +353,44 @@ def main() -> int:
     args = parser.parse_args()
 
     data = load_state(args.gcs_blob)
-    resources = data['checkpoint']['latest']['resources']
+    latest = data['checkpoint']['latest']
+    resources = latest['resources']
 
     azure = [r for r in resources if is_azure_resource(r)]
     non_azure = [r for r in resources if not is_azure_resource(r)]
     azure_urns = {r.get('urn', '') for r in azure}
 
+    # `pending_operations` records in-flight create/update/delete ops from an
+    # interrupted `pulumi up`. An entry referencing an Azure URN that is no
+    # longer in `resources` blocks the next `pulumi up` with 'the following
+    # resources have pending operations... run pulumi cancel', so filter it
+    # alongside the resources list.
+    pending = latest.get('pending_operations') or []
+    azure_pending = [
+        op for op in pending if (op.get('resource') or {}).get('urn') in azure_urns
+    ]
+    kept_pending = [op for op in pending if op not in azure_pending]
+
     print(f'\nLoaded {len(resources)} resources.')
     print(f'  Azure resources to remove: {len(azure)}')
     print(f'  Non-Azure resources kept:  {len(non_azure)}')
+    if pending:
+        print(f'  Pending operations total:  {len(pending)}')
+        print(f'    Azure pending to remove: {len(azure_pending)}')
+        print(f'    Non-Azure pending kept:  {len(kept_pending)}')
 
     if not azure:
         print('\nNo Azure resources found. Nothing to do.')
         return 0
 
     summarise(azure)
+
+    if azure_pending:
+        print('\nAzure pending operations to drop:')
+        for op in azure_pending:
+            op_type = op.get('type', '<unknown>')
+            urn = (op.get('resource') or {}).get('urn', '<unknown>')
+            print(f'  {op_type:>8}  {urn}')
 
     problems = find_cross_cloud_refs(azure_urns, non_azure)
     if problems:
@@ -385,19 +419,54 @@ def main() -> int:
         return 0
 
     refs_stripped = sum(strip_azure_refs(r, azure_urns) for r in non_azure)
-    data['checkpoint']['latest']['resources'] = non_azure
+    latest['resources'] = non_azure
+    if 'pending_operations' in latest:
+        if kept_pending:
+            latest['pending_operations'] = kept_pending
+        else:
+            del latest['pending_operations']
     with open(OUTPUT_PATH, 'w', encoding='utf-8') as f:
         f.write(json.dumps(data, indent=4))
 
+    # `pulumi stack import` expects the deployment envelope, not the GCS
+    # checkpoint wrapper. Emit that shape too so the operator can use the
+    # safer upload path -- pulumi validates references and re-hashes
+    # manifest.magic during import, which a direct gsutil cp does not.
+    import_doc = {
+        'version': data.get('version', 3),
+        'deployment': latest,
+    }
+    with open(IMPORT_PATH, 'w', encoding='utf-8') as f:
+        f.write(json.dumps(import_doc, indent=4))
+
     print(f'\nWrote {len(non_azure)} resources to {OUTPUT_PATH}.')
+    print(f'Wrote pulumi-import envelope to {IMPORT_PATH}.')
     print(
         f'Stripped {refs_stripped} dangling Azure URN(s) from surviving ' 'resources.'
     )
+    if azure_pending:
+        print(
+            f'Dropped {len(azure_pending)} Azure pending operation(s); '
+            f'{len(kept_pending)} pending operation(s) kept.'
+        )
     print(
-        'This script did NOT touch Azure. The Azure resources themselves '
-        f'still exist in Azure; they are simply no longer tracked in the '
-        f'checkpoint. Upload {OUTPUT_PATH} back to '
-        f'gs://{GCS_BUCKET}/{args.gcs_blob} to make the change take effect.'
+        '\nThis script did NOT touch Azure. The Azure resources themselves '
+        'still exist in Azure; they are simply no longer tracked in the '
+        'checkpoint. To make the change take effect, upload the trimmed '
+        'state via ONE of:'
+    )
+    print(
+        f'  RECOMMENDED: pulumi stack select datasets/production && '
+        f'pulumi stack import --file {IMPORT_PATH}'
+    )
+    print(
+        f'  FALLBACK:    gsutil cp {OUTPUT_PATH} '
+        f'gs://{GCS_BUCKET}/{args.gcs_blob}'
+    )
+    print(
+        '  The RECOMMENDED path runs Pulumi integrity checks and re-hashes '
+        'manifest.magic; the FALLBACK skips both and can surface as an '
+        'integrity error on the next `pulumi up`.'
     )
     return 0
 
