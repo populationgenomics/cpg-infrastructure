@@ -101,6 +101,55 @@ def _extract_provider_urn(provider_ref: str) -> str:
     return provider_ref
 
 
+def _add_single_field_refs(
+    res: dict, azure_urns: set[str], refs: list[tuple[str, str]]
+) -> None:
+    """Collect refs from fields holding a single URN or provider reference."""
+    parent = res.get('parent')
+    if parent and parent in azure_urns:
+        refs.append(('parent', parent))
+
+    deleted_with = res.get('deletedWith')
+    if deleted_with and deleted_with in azure_urns:
+        refs.append(('deletedWith', deleted_with))
+
+    provider = res.get('provider')
+    if provider and _extract_provider_urn(provider) in azure_urns:
+        refs.append(('provider', provider))
+
+
+def _add_list_field_refs(
+    res: dict, azure_urns: set[str], refs: list[tuple[str, str]]
+) -> None:
+    """Collect refs from fields holding a flat list of URNs / alias entries."""
+    for dep in res.get('dependencies') or []:
+        if dep in azure_urns:
+            refs.append(('dependency', dep))
+
+    for alias in res.get('aliases') or []:
+        if isinstance(alias, str) and alias in azure_urns:
+            refs.append(('alias', alias))
+
+
+def _add_property_dependency_refs(
+    res: dict, azure_urns: set[str], refs: list[tuple[str, str]]
+) -> None:
+    """Collect refs from `propertyDependencies` (map of property -> URN list)."""
+    for prop, deps in (res.get('propertyDependencies') or {}).items():
+        for dep in deps or []:
+            if dep in azure_urns:
+                refs.append((f'propertyDependency[{prop}]', dep))
+
+
+def _add_provider_map_refs(
+    res: dict, azure_urns: set[str], refs: list[tuple[str, str]]
+) -> None:
+    """Collect refs from `providers` (map of package -> provider reference)."""
+    for pkg, prov_ref in (res.get('providers') or {}).items():
+        if prov_ref and _extract_provider_urn(prov_ref) in azure_urns:
+            refs.append((f'providers[{pkg}]', prov_ref))
+
+
 def find_cross_cloud_refs(
     azure_urns: set[str], non_azure: list[dict]
 ) -> list[tuple[str, str, str]]:
@@ -114,47 +163,23 @@ def find_cross_cloud_refs(
 
     Covers every field Pulumi uses to point at another resource's URN:
     parent, dependencies, propertyDependencies, provider, providers,
-    deletedWith, aliases.
+    deletedWith, aliases. Field-family helpers are split out to keep this
+    function's cyclomatic complexity in check.
     """
     problems: list[tuple[str, str, str]] = []
     for res in non_azure:
         urn = res.get('urn', '<unknown>')
-
-        parent = res.get('parent')
-        if parent and parent in azure_urns:
-            problems.append((urn, 'parent', parent))
-
-        for dep in res.get('dependencies') or []:
-            if dep in azure_urns:
-                problems.append((urn, 'dependency', dep))
-
-        for prop, deps in (res.get('propertyDependencies') or {}).items():
-            for dep in deps or []:
-                if dep in azure_urns:
-                    problems.append((urn, f'propertyDependency[{prop}]', dep))
-
-        provider = res.get('provider')
-        if provider and _extract_provider_urn(provider) in azure_urns:
-            problems.append((urn, 'provider', provider))
-
-        for pkg, prov_ref in (res.get('providers') or {}).items():
-            if prov_ref and _extract_provider_urn(prov_ref) in azure_urns:
-                problems.append((urn, f'providers[{pkg}]', prov_ref))
-
-        deleted_with = res.get('deletedWith')
-        if deleted_with and deleted_with in azure_urns:
-            problems.append((urn, 'deletedWith', deleted_with))
-
-        for alias in res.get('aliases') or []:
-            if isinstance(alias, str) and alias in azure_urns:
-                problems.append((urn, 'alias', alias))
-
+        refs: list[tuple[str, str]] = []
+        _add_single_field_refs(res, azure_urns, refs)
+        _add_list_field_refs(res, azure_urns, refs)
+        _add_property_dependency_refs(res, azure_urns, refs)
+        _add_provider_map_refs(res, azure_urns, refs)
+        for kind, target in refs:
+            problems.append((urn, kind, target))
     return problems
 
 
-def sort_urns_leaves_first(
-    azure: list[dict], azure_urns: set[str]
-) -> list[str]:
+def sort_urns_leaves_first(azure: list[dict], azure_urns: set[str]) -> list[str]:
     """Return Azure URNs in leaf-first order (children before parents) using
     the `parent` graph restricted to the Azure subset. Deleting leaves first
     minimises Pulumi's warnings about outstanding child references and keeps
@@ -198,13 +223,19 @@ def pulumi_state_remove(
     confirm so the loop can run unattended.
     """
     cmd = [
-        'pulumi', 'state', 'remove',
-        '--force', '--yes',
-        '--stack', stack,
+        'pulumi',
+        'state',
+        'remove',
+        '--force',
+        '--yes',
+        '--stack',
+        stack,
         urn,
     ]
     try:
-        result = subprocess.run(
+        # cmd is a fixed argv (no shell); stack + urn come from Pulumi state,
+        # not from untrusted input. Safe to call subprocess.run directly.
+        result = subprocess.run(  # noqa: S603
             cmd,
             cwd=pulumi_dir,
             capture_output=True,
@@ -369,7 +400,6 @@ def apply_via_pulumi(
 
 
 def print_post_run_report(
-    successes: list[str],
     failures: list[tuple[str, str]],
     problems: list[tuple[str, str, str]],
     azure_pending: list[dict],
@@ -562,15 +592,21 @@ def main() -> int:
         f'via `pulumi state remove --force --yes` (leaves first)...'
     )
     successes, failures = apply_via_pulumi(
-        azure, azure_urns, args.stack, args.pulumi_dir, args.limit,
+        azure,
+        azure_urns,
+        args.stack,
+        args.pulumi_dir,
+        args.limit,
     )
     print(
-        f'\nDeletion summary: {len(successes)} succeeded, '
-        f'{len(failures)} failed.'
+        f'\nDeletion summary: {len(successes)} succeeded, ' f'{len(failures)} failed.'
     )
 
     print_post_run_report(
-        successes, failures, problems, azure_pending, args.stack,
+        failures,
+        problems,
+        azure_pending,
+        args.stack,
     )
     return 0
 
