@@ -5,7 +5,7 @@ against resources it can no longer authenticate to.
 
 APPROACH
 --------
-Under --apply, this script invokes `pulumi state delete --force --yes` for
+Under --apply, this script invokes `pulumi state remove --force --yes` for
 each Azure URN identified in the checkpoint. It does NOT edit state JSON
 directly (see NOTE below). --force is required because non-Azure resources
 routinely hold references to Azure URNs (parent / dependencies / provider /
@@ -14,7 +14,7 @@ etc.); Pulumi would otherwise refuse to remove those Azure resources.
 SAFETY
 ------
 The script makes no calls to any Azure API, requires no Azure credentials,
-and never invokes `pulumi up / refresh / destroy`. `pulumi state delete`
+and never invokes `pulumi up / refresh / destroy`. `pulumi state remove`
 mutates only Pulumi's own record of the world -- the resources themselves
 remain in Azure until removed out-of-band.
 
@@ -28,7 +28,7 @@ Usage
     python scripts/remove_azure_resources.py
 
     # 2. From inside the Pulumi program directory (contains Pulumi.yaml),
-    #    remove every Azure URN via `pulumi state delete --force`:
+    #    remove every Azure URN via `pulumi state remove --force`:
     python scripts/remove_azure_resources.py --apply \
         --stack datasets/production --pulumi-dir .
 
@@ -41,7 +41,7 @@ defaults to `datasets/production` and --pulumi-dir to the current directory.
 
 NOTE: We intentionally do NOT edit the state JSON directly, and we do NOT
 use `pulumi stack import` -- both have burned this codebase (JSON syntax
-corruption / broken dependency trees). `pulumi state delete --force` is the
+corruption / broken dependency trees). `pulumi state remove --force` is the
 supported Pulumi command for removing a resource from state without touching
 the underlying cloud, and it correctly maintains manifest.magic, integrity
 metadata, and Pulumi's local backup chain in `.pulumi/backups/`.
@@ -107,7 +107,7 @@ def find_cross_cloud_refs(
     """Return (dependent_urn, ref_kind, azure_urn) for every non-Azure
     resource that references an Azure URN.
 
-    These edges are what `pulumi state delete --force` deliberately leaves
+    These edges are what `pulumi state remove --force` deliberately leaves
     behind: Pulumi removes the target Azure resource from state but does NOT
     walk back and prune the pointers held by survivors. Every edge reported
     here becomes a manual cleanup task before the next `pulumi up`.
@@ -158,7 +158,7 @@ def sort_urns_leaves_first(
     """Return Azure URNs in leaf-first order (children before parents) using
     the `parent` graph restricted to the Azure subset. Deleting leaves first
     minimises Pulumi's warnings about outstanding child references and keeps
-    each `pulumi state delete --force` call closer to a "clean" removal.
+    each `pulumi state remove --force` call closer to a "clean" removal.
     """
     parent_of: dict[str, str | None] = {}
     for r in azure:
@@ -189,16 +189,16 @@ def sort_urns_leaves_first(
     return order
 
 
-def pulumi_state_delete(
+def pulumi_state_remove(
     stack: str, urn: str, pulumi_dir: str | None
 ) -> tuple[bool, str]:
-    """Invoke `pulumi state delete --force --yes --stack <stack> <urn>` and
+    """Invoke `pulumi state remove --force --yes --stack <stack> <urn>` and
     return (success, captured_output). --force acknowledges dangling
     references (Pulumi warns but proceeds); --yes skips the interactive
     confirm so the loop can run unattended.
     """
     cmd = [
-        'pulumi', 'state', 'delete',
+        'pulumi', 'state', 'remove',
         '--force', '--yes',
         '--stack', stack,
         urn,
@@ -225,7 +225,7 @@ def load_state(gcs_blob: str) -> dict:
 
     The download is purely for enumeration -- the script never uploads state
     back. `.pulumi/backups/` under the Pulumi program directory is the
-    authoritative rollback path if a `pulumi state delete` run needs undoing.
+    authoritative rollback path if a `pulumi state remove` run needs undoing.
     """
     if os.path.exists(BACKUP_PATH):
         print(f'Reading existing backup {BACKUP_PATH}')
@@ -346,7 +346,7 @@ def apply_via_pulumi(
     pulumi_dir: str | None,
     limit: int | None,
 ) -> tuple[list[str], list[tuple[str, str]]]:
-    """Run `pulumi state delete --force --yes` for each Azure URN in
+    """Run `pulumi state remove --force --yes` for each Azure URN in
     leaves-first order. Returns (successes, failures). Failures are captured
     with their combined stdout/stderr so the operator can triage individual
     URNs without re-running the whole batch."""
@@ -358,7 +358,7 @@ def apply_via_pulumi(
     failures: list[tuple[str, str]] = []
     for i, urn in enumerate(ordered, 1):
         print(f'  [{i:>4}/{total}] {urn}')
-        ok, out = pulumi_state_delete(stack, urn, pulumi_dir)
+        ok, out = pulumi_state_remove(stack, urn, pulumi_dir)
         if ok:
             successes.append(urn)
         else:
@@ -389,7 +389,7 @@ def print_post_run_report(
             f'\n{step}. {len(failures)} URN(s) failed to delete. Inspect the '
             f'errors above and either re-run this script (successful '
             f'deletes are idempotent for URNs already absent) or handle '
-            f'each URN individually with `pulumi state delete --force --yes '
+            f'each URN individually with `pulumi state remove --force --yes '
             f'--stack {stack} <urn>`.'
         )
         step += 1
@@ -407,7 +407,7 @@ def print_post_run_report(
             '     (a) For each surviving URN, use targeted `pulumi state` '
             'subcommands to detach the reference where possible '
             '(`pulumi state unprotect`, `pulumi state rename`, or '
-            '`pulumi state delete --target-dependents` when the survivor '
+            '`pulumi state remove --target-dependents` when the survivor '
             'itself is disposable).'
         )
         print(
@@ -431,7 +431,7 @@ def print_post_run_report(
     if azure_pending:
         print(
             f'\n{step}. {len(azure_pending)} pending operation(s) referenced '
-            f'Azure URNs at download time. `pulumi state delete` clears the '
+            f'Azure URNs at download time. `pulumi state remove` clears the '
             f'resource but does not always drop related pending ops. If '
             f'`pulumi up` complains about pending operations on removed '
             f'URNs, run `pulumi cancel --stack {stack}`.'
@@ -460,7 +460,7 @@ def main() -> int:
     parser.add_argument(
         '--apply',
         action='store_true',
-        help='Invoke `pulumi state delete --force --yes` for each Azure '
+        help='Invoke `pulumi state remove --force --yes` for each Azure '
         'URN. Without this flag, the script only reports what would be '
         'deleted and which cross-cloud edges would be left dangling.',
     )
@@ -475,7 +475,7 @@ def main() -> int:
         '--stack',
         default=DEFAULT_STACK,
         help=f'Pulumi stack name passed via --stack to each '
-        f'`pulumi state delete` call. Default: {DEFAULT_STACK}',
+        f'`pulumi state remove` call. Default: {DEFAULT_STACK}',
     )
     parser.add_argument(
         '--pulumi-dir',
@@ -502,7 +502,7 @@ def main() -> int:
     azure_urns = {r.get('urn', '') for r in azure}
 
     # `pending_operations` records in-flight create/update/delete ops from an
-    # interrupted `pulumi up`. `pulumi state delete` does not always drop
+    # interrupted `pulumi up`. `pulumi state remove` does not always drop
     # related pending ops, so we surface any Azure ones so the operator can
     # follow up with `pulumi cancel` if needed.
     pending = latest.get('pending_operations') or []
@@ -539,7 +539,7 @@ def main() -> int:
             f'after --apply: {len(distinct_dependents)} surviving '
             f'resource(s) reference {len(distinct_targets)} Azure URN(s) '
             'via parent / dependencies / propertyDependencies / provider / '
-            'providers / deletedWith / aliases. `pulumi state delete '
+            'providers / deletedWith / aliases. `pulumi state remove '
             '--force` deliberately leaves these edges in place; they must '
             'be resolved manually before the next `pulumi up`. Full edge '
             'list:'
@@ -552,14 +552,14 @@ def main() -> int:
     if not args.apply:
         print(
             f'\nDry-run only. Re-run with --apply to invoke '
-            f'`pulumi state delete --force --yes --stack {args.stack} <urn>` '
+            f'`pulumi state remove --force --yes --stack {args.stack} <urn>` '
             f'for each Azure URN (leaves first).'
         )
         return 0
 
     print(
         f'\nDeleting {len(azure)} Azure URN(s) from stack {args.stack} '
-        f'via `pulumi state delete --force --yes` (leaves first)...'
+        f'via `pulumi state remove --force --yes` (leaves first)...'
     )
     successes, failures = apply_via_pulumi(
         azure, azure_urns, args.stack, args.pulumi_dir, args.limit,
