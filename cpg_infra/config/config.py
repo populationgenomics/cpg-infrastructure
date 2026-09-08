@@ -5,11 +5,17 @@ describe the CPG infrastructure, including what's required from a
 specific dataset.
 """
 
+import os
 from enum import Enum
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 
 import pulumi
-from pydantic import AliasGenerator, ConfigDict, Field, field_serializer
+from pydantic import (
+    AliasGenerator,
+    ConfigDict,
+    Field,
+    field_serializer,
+)
 from pydantic.alias_generators import to_camel
 
 from cpg_infra.config.base import ConfigModel
@@ -17,6 +23,7 @@ from cpg_infra.config.base import ConfigModel
 MemberKey = str
 GroupType = str
 CloudName = Literal['gcp', 'azure', 'dry-run']
+TeamOwnership = Literal['Rare Disease', 'Population Genomics', 'Shared']
 GroupName = Literal[
     'data-manager',
     'analysis',
@@ -34,6 +41,7 @@ class CPGInfrastructureUser(ConfigModel):
     class Cloud(ConfigModel):
         id: str  # noqa: RUF100, A003
         hail_batch_username: str | None = None
+        has_seqera_account: bool = False
 
     id: MemberKey  # noqa: RUF100, A003
     clouds: dict[CloudName, Cloud]
@@ -278,6 +286,37 @@ class CPGInfrastructureConfig(ConfigModel):
         etl: ETLConfiguration | None = None
         slack_channel: str | None = None
 
+    class Seqera(ConfigModel):
+        """Global Seqera Platform configuration.
+
+        Set to enable Seqera integration for any dataset that opts in via
+        CPGDatasetComponents.SEQERA_ACCOUNTS.
+        """
+
+        class WorkspaceConfig(ConfigModel):
+            workspace_id: int
+            description: Optional[str] = Field(None, max_length=1000)
+
+        class TeamWorkspaces(ConfigModel):
+            main: 'CPGInfrastructureConfig.Seqera.WorkspaceConfig'
+            test: 'CPGInfrastructureConfig.Seqera.WorkspaceConfig'
+
+        org_id: int
+        # Seqera Cloud OIDC issuer URI, see:
+        # https://docs.seqera.io/platform-cloud/credentials/overview#google-cloud
+        wif_issuer_uri: str
+        # Main and test workspace IDs per dataset team_ownership value.
+        teams: dict[
+            TeamOwnership,
+            'CPGInfrastructureConfig.Seqera.TeamWorkspaces',
+        ]
+
+        def export_env(self) -> None:
+            """Set as environment variables so that these parameters are available for pulumi subprocesses"""
+
+            os.environ['SEQERA_SERVER_URL'] = self.api_url
+            os.environ['SEQERA_TOKEN_SECRET_NAME'] = self.token_secret_name
+
     class Billing(ConfigModel):
         class GCP(ConfigModel):
             """Details of the BILLING account"""
@@ -352,6 +391,8 @@ class CPGInfrastructureConfig(ConfigModel):
     cromwell: Cromwell | None = None
     # configuration options for our metamist service
     metamist: Metamist | None = None
+    # configuration options for Seqera platform
+    seqera: Seqera | None = None
     # configuration options for billing + billing aggregation
     billing: Billing | None = None
     # list of additional adhoc groups under infrastructure management
@@ -385,14 +426,27 @@ class CPGDatasetComponents(Enum):
     METAMIST = 'metamist'
     CONTAINER_REGISTRY = 'container-registry'
     ANALYSIS_RUNNER = 'analysis-runner'
+    SEQERA_ACCOUNTS = 'seqera-accounts'
 
     @staticmethod
     def default_component_for_infrastructure() -> (
         dict[str, list['CPGDatasetComponents']]
     ):
+        # Explicit lists so that opt-in components (e.g. SEQERA_ACCOUNTS)
+        # can be added to the enum without silently enabling them fleet-wide.
+        _default_gcp: list[CPGDatasetComponents] = [
+            CPGDatasetComponents.STORAGE,
+            CPGDatasetComponents.SPARK,
+            CPGDatasetComponents.CROMWELL,
+            CPGDatasetComponents.NOTEBOOKS,
+            CPGDatasetComponents.HAIL_ACCOUNTS,
+            CPGDatasetComponents.METAMIST,
+            CPGDatasetComponents.CONTAINER_REGISTRY,
+            CPGDatasetComponents.ANALYSIS_RUNNER,
+        ]
         return {
-            'dry-run': list(CPGDatasetComponents),
-            'gcp': list(CPGDatasetComponents),
+            'dry-run': list(_default_gcp),
+            'gcp': list(_default_gcp),
             'azure': [
                 CPGDatasetComponents.STORAGE,
                 CPGDatasetComponents.HAIL_ACCOUNTS,
@@ -414,6 +468,19 @@ class HailAccount(ConfigModel):
     model_config = ConfigModel.model_config | {'arbitrary_types_allowed': True}
 
     username: str
+    cloud_id: str | pulumi.Output[str]
+
+
+class SeqeraAccount(ConfigModel):
+    """A Seqera-facing GCP service account for one dataset+access-level.
+
+    cloud_id holds the SA email; may be a pulumi.Output at construction time
+    (same reason as HailAccount — pydantic isn't aware of pulumi types).
+    """
+
+    model_config = ConfigModel.model_config | {'arbitrary_types_allowed': True}
+
+    account_id: str
     cloud_id: str | pulumi.Output[str]
 
 
@@ -477,9 +544,7 @@ class CPGDatasetConfig(ConfigModel):
     description: str | None = None
 
     # Metamist dataset's team ownership
-    team_ownership: Literal['Rare Disease', 'Population Genomics', 'Shared'] | None = (
-        None
-    )
+    team_ownership: TeamOwnership | None = None
 
     # Metamist dataset's Billing group
     billing_groups: list[str] = Field(default_factory=list)
