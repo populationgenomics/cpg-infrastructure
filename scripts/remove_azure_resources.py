@@ -58,9 +58,26 @@ def is_azure_resource(resource: dict) -> bool:
         return True
     # cpg_infra builds resource names as `{dataset}-{cloud}-{key}` where
     # AzureInfra.name() returns 'azure'. Component resources without an
-    # azure-native/azuread type can still be identified by URN segment.
+    # azure-native/azuread type can still be identified by the terminal
+    # name segment of the URN containing 'azure' as a hyphen-delimited word
+    # (e.g. `dataset-azure-key`). The URN separator is '::' so we peel the
+    # name off with rsplit and match on token boundaries -- '::azure::' as a
+    # substring never appears under this naming convention.
     urn = resource.get('urn', '')
-    return '::azure::' in urn
+    if not urn:
+        return False
+    name = urn.rsplit('::', 1)[-1]
+    return 'azure' in name.split('-')
+
+
+def _extract_provider_urn(provider_ref: str) -> str:
+    """Pulumi provider references stored on a resource are `<urn>::<id>` --
+    the URN itself contains `::` separators, so peel off the trailing `::<id>`
+    with rsplit to recover just the URN portion.
+    """
+    if '::' in provider_ref:
+        return provider_ref.rsplit('::', 1)[0]
+    return provider_ref
 
 
 def find_cross_cloud_refs(
@@ -69,7 +86,14 @@ def find_cross_cloud_refs(
     """Return (dependent_urn, ref_kind, azure_urn) for every non-Azure
     resource that references an Azure URN. These references become dangling
     once the Azure resources are removed; strip_azure_refs() cleans them up
-    at --apply time."""
+    at --apply time.
+
+    Covers every field Pulumi uses to point at another resource's URN:
+    parent, dependencies, propertyDependencies, provider, providers,
+    deletedWith, aliases. Missing any of these lets a dangling URN survive
+    into the trimmed state and fails Snapshot.VerifyIntegrity() on the next
+    `pulumi refresh` / `pulumi up`.
+    """
     problems: list[tuple[str, str, str]] = []
     for res in non_azure:
         urn = res.get('urn', '<unknown>')
@@ -87,16 +111,34 @@ def find_cross_cloud_refs(
                 if dep in azure_urns:
                     problems.append((urn, f'propertyDependency[{prop}]', dep))
 
+        provider = res.get('provider')
+        if provider and _extract_provider_urn(provider) in azure_urns:
+            problems.append((urn, 'provider', provider))
+
+        for pkg, prov_ref in (res.get('providers') or {}).items():
+            if prov_ref and _extract_provider_urn(prov_ref) in azure_urns:
+                problems.append((urn, f'providers[{pkg}]', prov_ref))
+
+        deleted_with = res.get('deletedWith')
+        if deleted_with and deleted_with in azure_urns:
+            problems.append((urn, 'deletedWith', deleted_with))
+
+        for alias in res.get('aliases') or []:
+            if isinstance(alias, str) and alias in azure_urns:
+                problems.append((urn, 'alias', alias))
+
     return problems
 
 
 def strip_azure_refs(resource: dict, azure_urns: set[str]) -> int:
-    """Remove Azure URNs from this resource's parent / dependencies /
-    propertyDependencies fields in-place. Returns the count of URNs removed.
+    """Remove Azure URNs from this resource's DAG-bookkeeping fields
+    in-place. Returns the count of URNs removed.
 
-    Does not touch `type`, `inputs`, `outputs`, or any other field describing
-    the resource itself -- only the Pulumi DAG-bookkeeping fields that point
-    at the URNs of other resources.
+    Covers parent, dependencies, propertyDependencies, provider, providers,
+    deletedWith, and aliases. Does not touch `type`, `inputs`, `outputs`, or
+    any other field describing the resource itself -- only fields that point
+    at the URNs of other resources. Kept in lockstep with
+    find_cross_cloud_refs so the dry-run report matches what --apply does.
     """
     removed = 0
 
@@ -126,6 +168,36 @@ def strip_azure_refs(resource: dict, azure_urns: set[str]) -> int:
                 del prop_deps[prop]
         if not prop_deps:
             del resource['propertyDependencies']
+
+    provider = resource.get('provider')
+    if provider and _extract_provider_urn(provider) in azure_urns:
+        del resource['provider']
+        removed += 1
+
+    providers = resource.get('providers')
+    if providers:
+        for pkg, prov_ref in list(providers.items()):
+            if prov_ref and _extract_provider_urn(prov_ref) in azure_urns:
+                del providers[pkg]
+                removed += 1
+        if not providers:
+            del resource['providers']
+
+    deleted_with = resource.get('deletedWith')
+    if deleted_with and deleted_with in azure_urns:
+        del resource['deletedWith']
+        removed += 1
+
+    aliases = resource.get('aliases')
+    if aliases:
+        kept_aliases = [
+            a for a in aliases if not (isinstance(a, str) and a in azure_urns)
+        ]
+        removed += len(aliases) - len(kept_aliases)
+        if kept_aliases:
+            resource['aliases'] = kept_aliases
+        else:
+            del resource['aliases']
 
     return removed
 
@@ -241,6 +313,7 @@ def report_affected(
     for info in details:
         print(f'  URN: {info["urn"]}')
         print(f'    type:      {info["type"]}')
+        print(f'    object:    {info["object"]}')
         print(f'    gs_url:    {info["gs_url"]}')
         print(f'    project:   {info["project"]}')
         print(f'    location:  {info["location"]}')
@@ -293,8 +366,9 @@ def main() -> int:
             f'\n{len(problems)} dangling reference edge(s) found: '
             f'{len(distinct_dependents)} surviving resource(s) reference '
             f'{len(distinct_targets)} Azure URN(s) via '
-            'parent / dependencies / propertyDependencies. These are Pulumi '
-            'DAG bookkeeping fields; --apply strips the Azure URNs from them '
+            'parent / dependencies / propertyDependencies / provider / '
+            'providers / deletedWith / aliases. These are Pulumi DAG '
+            'bookkeeping fields; --apply strips the Azure URNs from them '
             'in-place, leaving the depending resource itself untouched. '
             'Full edge list:'
         )
