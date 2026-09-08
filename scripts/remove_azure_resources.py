@@ -142,7 +142,7 @@ def load_state(gcs_blob: str) -> dict:
             return json.loads(f.read())
 
     print(f'Downloading gs://{GCS_BUCKET}/{gcs_blob} -> {BACKUP_PATH}')
-    from google.cloud import storage  # noqa: PLC0415 - only needed on download
+    from google.cloud import storage  # - only needed on download
 
     client = storage.Client()
     bucket = client.bucket(GCS_BUCKET)
@@ -316,8 +316,9 @@ def main() -> int:
         f.write(json.dumps(data, indent=4))
 
     print(f'\nWrote {len(non_azure)} resources to {OUTPUT_PATH}.')
-    print(f'Stripped {refs_stripped} dangling Azure URN(s) from surviving '
-          'resources.')
+    print(
+        f'Stripped {refs_stripped} dangling Azure URN(s) from surviving ' 'resources.'
+    )
     print(
         'This script did NOT touch Azure. The Azure resources themselves '
         f'still exist in Azure; they are simply no longer tracked in the '
