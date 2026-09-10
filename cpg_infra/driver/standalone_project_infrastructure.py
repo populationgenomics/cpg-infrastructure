@@ -10,6 +10,7 @@ from cpg_infra.config import (
     CPGDatasetConfig,
     CPGInfrastructureConfig,
     CPGStandaloneProjectConfig,
+    infra_context_from_standalone_config,
 )
 
 
@@ -22,22 +23,9 @@ class CPGStandaloneProjectInfrastructure:
         self.config = config
         self.project_config = project_config
 
-        # GcpInfrastructure has useful functions for creating and managing GCP projects
-        # but it requires a CPGDatasetConfig.
-        # We opt to create a synthetic CPGDatasetConfig with the minimum required fields.
-        synthetic_dataset_config = CPGDatasetConfig(
-            dataset=project_config.project_id,
-            gcp=CPGDatasetConfig.Gcp(project=project_config.project_id),
-            budgets={
-                'gcp': CPGDatasetConfig.Budget(
-                    monthly_budget=project_config.monthly_budget,
-                ),
-            },
-        )
-
         self.infra = GcpInfrastructure(
             config=config,
-            dataset_config=synthetic_dataset_config,
+            context=infra_context_from_standalone_config(project_config),
         )
 
     def main(self):

@@ -11,5 +11,7 @@ from cpg_infra.config.config import (
     CPGStandaloneProjectConfig,
     GroupName,
     HailAccount,
+    infra_context_from_dataset_config,
+    infra_context_from_standalone_config,
     MemberKey,
 )

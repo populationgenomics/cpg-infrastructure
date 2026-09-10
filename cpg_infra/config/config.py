@@ -11,6 +11,7 @@ from typing import Any, Literal
 import pulumi
 from pydantic import Field
 
+from cpg_infra.abstraction.context import InfraContext
 from cpg_infra.config.base import ConfigModel
 
 MemberKey = str
@@ -481,3 +482,17 @@ class CPGStandaloneProjectConfig(ConfigModel):
     project_id: str
     owner: MemberKey
     monthly_budget: int
+
+
+def infra_context_from_dataset_config(dc: CPGDatasetConfig) -> InfraContext:
+    return InfraContext(
+        name_prefix=dc.dataset,
+        gcp_project_id=dc.gcp.project,
+        gcp_region=dc.gcp.region,
+    )
+
+def infra_context_from_standalone_config(pc: CPGStandaloneProjectConfig) -> InfraContext:
+    return InfraContext(
+        name_prefix=pc.project_id,
+        gcp_project_id=pc.project_id,
+    )

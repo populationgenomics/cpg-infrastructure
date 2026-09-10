@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING
 # instantiate the deploy location.
 from cpg_infra.abstraction.azure import AzureInfra
 from cpg_infra.abstraction.base import CloudInfraBase, DryRunInfra
+from cpg_infra.abstraction.context import InfraContext
 from cpg_infra.abstraction.gcp import GcpInfrastructure
 from cpg_infra.abstraction.metamist import MetamistProject
 from cpg_infra.driver.dataset_cloud_infrastructure import (
@@ -30,6 +31,7 @@ if TYPE_CHECKING:
         CloudName,
         CPGDatasetConfig,
         CPGInfrastructureConfig,
+        infra_context_from_dataset_config,
     )
     from cpg_infra.driver.groups import GroupProvider
     from cpg_infra.driver.infrastructure import CPGInfrastructure
@@ -69,7 +71,7 @@ class CPGDatasetInfrastructure:
                 group_provider=self.group_provider,
                 infra=NAME_TO_INFRA_CLASS[deploy_location](
                     config=self.config,
-                    dataset_config=self.dataset_config,
+                    context=infra_context_from_dataset_config(self.dataset_config),
                 ),
                 dataset_config=self.dataset_config,
             )

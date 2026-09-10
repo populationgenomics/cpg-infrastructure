@@ -24,6 +24,7 @@ from cpg_infra.abstraction.base import (
     SecretMembership,
     TemporaryBucketAccessType,
 )
+from cpg_infra.abstraction.context import InfraContext
 from cpg_infra.abstraction.google_group_membership import (
     GoogleGroupMembership,
     GoogleGroupMembershipInputs,
@@ -104,13 +105,13 @@ class GcpInfrastructure(CloudInfraBase):
     def __init__(
         self,
         config: CPGInfrastructureConfig,
-        dataset_config: CPGDatasetConfig,
+        context: InfraContext,
     ) -> None:
         assert config.gcp
-        super().__init__(config=config, dataset_config=dataset_config)
+        super().__init__(config=config, context=context)
         self.region = config.gcp.region
-        if dataset_config and dataset_config.gcp.region:
-            self.region = dataset_config.gcp.region
+        if context and context.gcp_region:
+            self.region = context.gcp_region
 
     @cached_property
     def organization(self):
@@ -119,7 +120,7 @@ class GcpInfrastructure(CloudInfraBase):
     def get_project(self):
         return self.create_project(
             resource_key='project',
-            name=self.dataset_config.gcp.project or self.dataset,
+            name=self.context.gcp_project_id or self.context.name_prefix,
         )
 
     def get_project_id(self):
@@ -286,7 +287,7 @@ class GcpInfrastructure(CloudInfraBase):
             opts = pulumi.ResourceOptions(
                 aliases=[
                     pulumi.Alias(
-                        name=f'gcp-{self.dataset_config.gcp.project}-shared-project',
+                        name=f'gcp-{self.context.gcp_project_id}-shared-project',
                     ),
                 ],
             )
@@ -439,7 +440,7 @@ class GcpInfrastructure(CloudInfraBase):
         unique_bucket_name = name
         if not unique:
             unique_bucket_name = (
-                f'{self.config.gcp.dataset_storage_prefix}{self.dataset}-{name}'
+                f'{self.config.gcp.dataset_storage_prefix}{self.context.name_prefix or self.context.gcp_project_id}-{name}'
             )
 
         def autoclass_args():
@@ -602,7 +603,7 @@ class GcpInfrastructure(CloudInfraBase):
             raise ValueError(f'Unsupported access type: {access_type}')
 
         # Create entitlement ID from dataset and access type
-        entitlement_id = f'pam-{self.dataset}-{access_type.value}'
+        entitlement_id = f'pam-{self.context.name_prefix or self.context.gcp_project_id}-{access_type.value}'
 
         # IAM condition for bucket access (both bucket-level and object-level operations)
         # Note: bucket_name could be a pulumi.Output, so we handle both cases
