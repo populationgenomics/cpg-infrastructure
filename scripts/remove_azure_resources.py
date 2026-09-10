@@ -6,10 +6,11 @@ against resources it can no longer authenticate to.
 APPROACH
 --------
 Under --apply, this script invokes `pulumi state remove --force --yes` for
-each Azure URN identified in the checkpoint. It does NOT edit state JSON
-directly (see NOTE below). --force is required because non-Azure resources
-routinely hold references to Azure URNs (parent / dependencies / provider /
-etc.); Pulumi would otherwise refuse to remove those Azure resources.
+each Azure URN identified in the checkpoint, batched by --batch-size for
+throughput. It does NOT edit state JSON directly. --force is required
+because non-Azure resources routinely hold references to Azure URNs
+(parent / dependencies / provider / etc.); Pulumi would otherwise refuse
+to remove those Azure resources.
 
 SAFETY
 ------
@@ -18,9 +19,9 @@ and never invokes `pulumi up / refresh / destroy`. `pulumi state remove`
 mutates only Pulumi's own record of the world -- the resources themselves
 remain in Azure until removed out-of-band.
 
-Default is dry-run. Under dry-run the script downloads the checkpoint from
-GCS purely to enumerate what would be removed and which cross-cloud edges
-would be left dangling.
+Default is dry-run. The script downloads the checkpoint fresh from GCS on
+every invocation (pass --use-cached-backup to reuse an existing local copy;
+you rarely want this outside of iteration).
 
 Usage
 -----
@@ -39,19 +40,12 @@ The GCS blob path defaults to `.pulumi/stacks/datasets/production.json`; pass
 `--gcs-blob <path>` if your stack lives elsewhere in the bucket. --stack
 defaults to `datasets/production` and --pulumi-dir to the current directory.
 
-NOTE: We intentionally do NOT edit the state JSON directly, and we do NOT
-use `pulumi stack import` -- both have burned this codebase (JSON syntax
-corruption / broken dependency trees). `pulumi state remove --force` is the
-supported Pulumi command for removing a resource from state without touching
-the underlying cloud, and it correctly maintains manifest.magic, integrity
-metadata, and Pulumi's local backup chain in `.pulumi/backups/`.
-
-The tradeoff: `--force` deliberately leaves behind dangling references from
-surviving non-Azure resources to the deleted Azure URNs. Pulumi will REJECT
-the next `pulumi up` with a Snapshot.VerifyIntegrity() error until those
-references are resolved. The post-run report at the end of --apply lists
-every surviving resource that still needs manual attention; see
-"POST-RUN MANUAL FIXES REQUIRED" in the output.
+The tradeoff of `pulumi state remove --force`: it deliberately leaves behind
+dangling references from surviving non-Azure resources to the removed Azure
+URNs. Pulumi will REJECT the next `pulumi up` with a
+Snapshot.VerifyIntegrity() error until those references are resolved. The
+post-run report at the end of --apply lists every surviving resource that
+still needs manual attention.
 """
 
 import argparse
@@ -67,28 +61,47 @@ AZURE_TYPE_PREFIXES = (
     'pulumi:providers:azuread',
 )
 
+# Explicit non-Azure blocklist so the URN-name heuristic below can never
+# mis-classify a well-typed GCP/AWS/K8s resource as Azure, even if the name
+# happens to contain the substring 'azure'.
+NON_AZURE_TYPE_PREFIXES = (
+    'gcp:',
+    'google-native:',
+    'pulumi:providers:gcp',
+    'pulumi:providers:google-native',
+    'aws:',
+    'aws-native:',
+    'pulumi:providers:aws',
+    'pulumi:providers:aws-native',
+    'kubernetes:',
+    'pulumi:providers:kubernetes',
+)
+
 GCS_BUCKET = 'cpg-pulumi-state'
 GCS_BLOB = '.pulumi/stacks/datasets/production.json'
-BACKUP_PATH = 'production-old.json'
 DEFAULT_STACK = 'datasets/production'
+DEFAULT_BATCH_SIZE = 50
 
 
 def is_azure_resource(resource: dict) -> bool:
     resource_type = resource.get('type', '')
     if resource_type.startswith(AZURE_TYPE_PREFIXES):
         return True
-    # cpg_infra builds resource names as `{dataset}-{cloud}-{key}` where
-    # AzureInfra.name() returns 'azure'. Component resources without an
-    # azure-native/azuread type can still be identified by the terminal
-    # name segment of the URN containing 'azure' as a hyphen-delimited word
-    # (e.g. `dataset-azure-key`). The URN separator is '::' so we peel the
-    # name off with rsplit and match on token boundaries -- '::azure::' as a
-    # substring never appears under this naming convention.
+    # A well-typed non-Azure resource is never Azure regardless of what its
+    # name happens to contain.
+    if resource_type.startswith(NON_AZURE_TYPE_PREFIXES):
+        return False
+    # cpg_infra names component resources without an azure-native/azuread
+    # type as `{dataset}-azure-{key}`, i.e. with `azure` as a hyphen-token
+    # strictly in the middle of the terminal URN name segment. Match on
+    # `-azure-` to require an interior position: a name starting with
+    # `azure-` (dataset literally named "azure") or ending with `-azure`
+    # (key literally "azure") is not a component built by AzureInfra.
     urn = resource.get('urn', '')
     if not urn:
         return False
     name = urn.rsplit('::', 1)[-1]
-    return 'azure' in name.split('-')
+    return '-azure-' in name
 
 
 def _extract_provider_urn(provider_ref: str) -> str:
@@ -121,14 +134,24 @@ def _add_single_field_refs(
 def _add_list_field_refs(
     res: dict, azure_urns: set[str], refs: list[tuple[str, str]]
 ) -> None:
-    """Collect refs from fields holding a flat list of URNs / alias entries."""
+    """Collect refs from fields holding a flat list of URNs / alias entries.
+
+    Aliases can appear either as bare URN strings (legacy form) or as
+    alias-spec dicts carrying a `parent` URN field (modern form); both are
+    checked.
+    """
     for dep in res.get('dependencies') or []:
         if dep in azure_urns:
             refs.append(('dependency', dep))
 
     for alias in res.get('aliases') or []:
-        if isinstance(alias, str) and alias in azure_urns:
-            refs.append(('alias', alias))
+        if isinstance(alias, str):
+            if alias in azure_urns:
+                refs.append(('alias', alias))
+        elif isinstance(alias, dict):
+            alias_parent = alias.get('parent')
+            if alias_parent and alias_parent in azure_urns:
+                refs.append(('alias.parent', alias_parent))
 
 
 def _add_property_dependency_refs(
@@ -163,8 +186,8 @@ def find_cross_cloud_refs(
 
     Covers every field Pulumi uses to point at another resource's URN:
     parent, dependencies, propertyDependencies, provider, providers,
-    deletedWith, aliases. Field-family helpers are split out to keep this
-    function's cyclomatic complexity in check.
+    deletedWith, aliases (both string and dict forms). Field-family helpers
+    are split out to keep this function's cyclomatic complexity in check.
     """
     problems: list[tuple[str, str, str]] = []
     for res in non_azure:
@@ -181,7 +204,7 @@ def find_cross_cloud_refs(
 
 def sort_urns_leaves_first(azure: list[dict], azure_urns: set[str]) -> list[str]:
     """Return Azure URNs in leaf-first order (children before parents) using
-    the `parent` graph restricted to the Azure subset. Deleting leaves first
+    the `parent` graph restricted to the Azure subset. Removing leaves first
     minimises Pulumi's warnings about outstanding child references and keeps
     each `pulumi state remove --force` call closer to a "clean" removal.
     """
@@ -214,13 +237,24 @@ def sort_urns_leaves_first(azure: list[dict], azure_urns: set[str]) -> list[str]
     return order
 
 
+def _classify_file_not_found(err: FileNotFoundError, pulumi_dir: str | None) -> str:
+    """Return a human-readable error string that distinguishes 'pulumi
+    binary not on PATH' from 'the cwd we tried to run in doesn't exist'."""
+    if pulumi_dir and getattr(err, 'filename', None) == pulumi_dir:
+        return f'--pulumi-dir does not exist: {pulumi_dir}'
+    return 'pulumi CLI not found on PATH'
+
+
 def pulumi_state_remove(
-    stack: str, urn: str, pulumi_dir: str | None
+    stack: str,
+    urns: list[str],
+    pulumi_dir: str | None,
+    timeout: int = 300,
 ) -> tuple[bool, str]:
-    """Invoke `pulumi state remove --force --yes --stack <stack> <urn>` and
-    return (success, captured_output). --force acknowledges dangling
-    references (Pulumi warns but proceeds); --yes skips the interactive
-    confirm so the loop can run unattended.
+    """Invoke `pulumi state remove --force --yes --stack <stack> <urn>...`
+    with one or more URNs and return (success, captured_output). --force
+    acknowledges dangling references (Pulumi warns but proceeds); --yes
+    skips the interactive confirm so the loop can run unattended.
     """
     cmd = [
         'pulumi',
@@ -230,48 +264,57 @@ def pulumi_state_remove(
         '--yes',
         '--stack',
         stack,
-        urn,
+        *urns,
     ]
     try:
-        # cmd is a fixed argv (no shell); stack + urn come from Pulumi state,
-        # not from untrusted input. Safe to call subprocess.run directly.
+        # cmd is a fixed argv (no shell); stack + urns come from Pulumi
+        # state, not from untrusted input. Safe to call subprocess.run.
         result = subprocess.run(  # noqa: S603
             cmd,
             cwd=pulumi_dir,
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=timeout,
             check=False,
         )
-    except FileNotFoundError:
-        return False, 'pulumi CLI not found on PATH'
+    except FileNotFoundError as err:
+        return False, _classify_file_not_found(err, pulumi_dir)
     except subprocess.TimeoutExpired:
-        return False, 'timeout after 120s'
+        return False, f'timeout after {timeout}s'
     combined = ((result.stderr or '') + (result.stdout or '')).strip()
     return result.returncode == 0, combined
 
 
-def load_state(gcs_blob: str) -> dict:
-    """Load state from local backup if present; otherwise download from GCS.
+def _default_backup_path(gcs_blob: str) -> str:
+    """Derive the local backup filename from the GCS blob's basename so a
+    subsequent invocation against a different stack doesn't collide with an
+    earlier stack's cached download."""
+    base = os.path.basename(gcs_blob) or 'stack.json'
+    stem, ext = os.path.splitext(base)
+    return f'{stem}-old{ext or ".json"}'
 
-    The download is purely for enumeration -- the script never uploads state
-    back. `.pulumi/backups/` under the Pulumi program directory is the
-    authoritative rollback path if a `pulumi state remove` run needs undoing.
+
+def load_state(gcs_blob: str, backup_path: str, use_cached: bool) -> dict:
+    """Load state from GCS. If use_cached is set and backup_path exists,
+    reuse the local copy; otherwise download fresh (default). The default
+    always-download behaviour prevents a script re-run from operating on a
+    snapshot that has drifted from the live checkpoint (e.g. after another
+    engineer's `pulumi up` in the interim).
     """
-    if os.path.exists(BACKUP_PATH):
-        print(f'Reading existing backup {BACKUP_PATH}')
-        with open(BACKUP_PATH, encoding='utf-8') as f:
+    if use_cached and os.path.exists(backup_path):
+        print(f'Reusing cached backup {backup_path} (--use-cached-backup set)')
+        with open(backup_path, encoding='utf-8') as f:
             return json.loads(f.read())
 
-    print(f'Downloading gs://{GCS_BUCKET}/{gcs_blob} -> {BACKUP_PATH}')
-    from google.cloud import storage  # - only needed on download
+    print(f'Downloading gs://{GCS_BUCKET}/{gcs_blob} -> {backup_path}')
+    from google.cloud import storage  # only needed on download
 
     client = storage.Client()
     bucket = client.bucket(GCS_BUCKET)
     blob = bucket.blob(gcs_blob)
     data_str = blob.download_as_text()
 
-    with open(BACKUP_PATH, 'w', encoding='utf-8') as f:
+    with open(backup_path, 'w', encoding='utf-8') as f:
         f.write(data_str)
 
     return json.loads(data_str)
@@ -296,7 +339,10 @@ def describe_affected(res: dict) -> dict[str, str]:
     combined = {**outputs, **inputs}
 
     type_name = res.get('type', '<unknown>')
-    if 'bucket' in combined:
+    # Truthy check rather than key presence: a null `bucket` input on a
+    # :Bucket-typed resource should fall through to the name-based branch,
+    # not silently drop the bucket identity from the report.
+    if combined.get('bucket'):
         bucket = combined.get('bucket')
     elif type_name.endswith(':Bucket'):
         bucket = combined.get('name')
@@ -370,32 +416,66 @@ def report_affected(
             print(f'    selfLink:  {info["self_link"]}')
 
 
+def _run_batch(
+    stack: str,
+    batch: list[str],
+    pulumi_dir: str | None,
+    successes: list[str],
+    failures: list[tuple[str, str]],
+) -> None:
+    """Try the batch as one call; on failure retry per-URN so we can isolate
+    which URN(s) actually broke and let the rest through. Per-URN retries
+    can report a URN as "already removed" if the batch call succeeded on
+    that URN before failing later; those are benign and can be ignored."""
+    ok, out = pulumi_state_remove(stack, batch, pulumi_dir)
+    if ok:
+        successes.extend(batch)
+        return
+    first = out.splitlines()[0] if out else '(no output)'
+    print(f'    Batch FAILED ({first}); retrying per-URN...')
+    for urn in batch:
+        ok2, out2 = pulumi_state_remove(stack, [urn], pulumi_dir)
+        if ok2:
+            successes.append(urn)
+        else:
+            failures.append((urn, out2))
+            first2 = out2.splitlines()[0] if out2 else '(no output)'
+            print(f'      FAILED {urn}: {first2}')
+
+
 def apply_via_pulumi(
     azure: list[dict],
     azure_urns: set[str],
     stack: str,
     pulumi_dir: str | None,
     limit: int | None,
+    batch_size: int,
 ) -> tuple[list[str], list[tuple[str, str]]]:
-    """Run `pulumi state remove --force --yes` for each Azure URN in
-    leaves-first order. Returns (successes, failures). Failures are captured
-    with their combined stdout/stderr so the operator can triage individual
-    URNs without re-running the whole batch."""
+    """Remove Azure URNs via `pulumi state remove --force --yes` in
+    leaves-first, batched calls. Returns (successes, failures). On any batch
+    failure, the batch is retried per-URN so failures pinpoint the offending
+    URN(s) rather than blaming a whole batch.
+    """
+    # Pre-validate pulumi_dir so a subsequent FileNotFoundError from
+    # subprocess.run unambiguously means the pulumi binary is missing.
+    if pulumi_dir is not None and not os.path.isdir(pulumi_dir):
+        msg = f'--pulumi-dir does not exist or is not a directory: {pulumi_dir}'
+        print(f'ERROR: {msg}', file=sys.stderr)
+        return [], [('<pre-flight>', msg)]
+
     ordered = sort_urns_leaves_first(azure, azure_urns)
     if limit is not None:
         ordered = ordered[:limit]
     total = len(ordered)
     successes: list[str] = []
     failures: list[tuple[str, str]] = []
-    for i, urn in enumerate(ordered, 1):
-        print(f'  [{i:>4}/{total}] {urn}')
-        ok, out = pulumi_state_remove(stack, urn, pulumi_dir)
-        if ok:
-            successes.append(urn)
-        else:
-            failures.append((urn, out))
-            first = out.splitlines()[0] if out else '(no output)'
-            print(f'    FAILED: {first}')
+
+    for start in range(0, total, batch_size):
+        batch = ordered[start : start + batch_size]
+        end = start + len(batch)
+        print(f'  Batch [{start + 1:>4}-{end:>4}/{total}]: {len(batch)} URN(s)')
+        _run_batch(stack, batch, pulumi_dir, successes, failures)
+
     return successes, failures
 
 
@@ -407,7 +487,8 @@ def print_post_run_report(
 ) -> None:
     """Emit the manual-cleanup checklist. --force leaves several loose ends
     the operator MUST address before the next `pulumi up`; this block is the
-    single place they're enumerated."""
+    single place they're enumerated. `problems` and `azure_pending` here are
+    scoped to URNs that were ACTUALLY removed (not the full dry-run set)."""
     print('\n' + '=' * 72)
     print('POST-RUN MANUAL FIXES REQUIRED')
     print('=' * 72)
@@ -416,9 +497,9 @@ def print_post_run_report(
 
     if failures:
         print(
-            f'\n{step}. {len(failures)} URN(s) failed to delete. Inspect the '
+            f'\n{step}. {len(failures)} URN(s) failed to remove. Inspect the '
             f'errors above and either re-run this script (successful '
-            f'deletes are idempotent for URNs already absent) or handle '
+            f'removals are idempotent for URNs already absent) or handle '
             f'each URN individually with `pulumi state remove --force --yes '
             f'--stack {stack} <urn>`.'
         )
@@ -428,10 +509,10 @@ def print_post_run_report(
         distinct_dependents = sorted({urn for urn, _, _ in problems})
         print(
             f'\n{step}. {len(distinct_dependents)} surviving non-Azure '
-            f'resource(s) hold dangling references to the now-deleted Azure '
-            f"URNs. Pulumi's Snapshot.VerifyIntegrity() will REJECT the "
-            f'next `pulumi up` until these are cleared. Options, in order '
-            f'of preference:'
+            f'resource(s) hold dangling references to Azure URNs that were '
+            f"successfully removed. Pulumi's Snapshot.VerifyIntegrity() "
+            f'will REJECT the next `pulumi up` until these are cleared. '
+            f'Options, in order of preference:'
         )
         print(
             '     (a) For each surviving URN, use targeted `pulumi state` '
@@ -461,7 +542,7 @@ def print_post_run_report(
     if azure_pending:
         print(
             f'\n{step}. {len(azure_pending)} pending operation(s) referenced '
-            f'Azure URNs at download time. `pulumi state remove` clears the '
+            f'Azure URNs that were removed. `pulumi state remove` clears the '
             f'resource but does not always drop related pending ops. If '
             f'`pulumi up` complains about pending operations on removed '
             f'URNs, run `pulumi cancel --stack {stack}`.'
@@ -482,7 +563,7 @@ def print_post_run_report(
         )
 
 
-def main() -> int:
+def _build_argparser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -492,13 +573,12 @@ def main() -> int:
         action='store_true',
         help='Invoke `pulumi state remove --force --yes` for each Azure '
         'URN. Without this flag, the script only reports what would be '
-        'deleted and which cross-cloud edges would be left dangling.',
+        'removed and which cross-cloud edges would be left dangling.',
     )
     parser.add_argument(
         '--gcs-blob',
         default=GCS_BLOB,
-        help=f'Blob path within gs://{GCS_BUCKET}/ to download when '
-        f'{BACKUP_PATH} is not already present locally. '
+        help=f'Blob path within gs://{GCS_BUCKET}/ to download. '
         f'Default: {GCS_BLOB}',
     )
     parser.add_argument(
@@ -518,18 +598,86 @@ def main() -> int:
         '--limit',
         type=int,
         default=None,
-        help='If set, delete only the first N Azure URNs (leaves-first '
+        help='If set, remove only the first N Azure URNs (leaves-first '
         'order). Useful for staged rollouts or smoke tests.',
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        '--batch-size',
+        type=int,
+        default=DEFAULT_BATCH_SIZE,
+        help=f'Number of URNs per `pulumi state remove` invocation. Higher '
+        f'is faster but on failure a full batch is retried per-URN to '
+        f'isolate the culprit. Use 1 to force strict per-URN removals. '
+        f'Default: {DEFAULT_BATCH_SIZE}',
+    )
+    parser.add_argument(
+        '--backup-path',
+        default=None,
+        help='Where to write the downloaded checkpoint locally. Defaults '
+        'to `<gcs-blob-basename>-old.json` in the current directory, so '
+        'different stacks/blobs get different backup files.',
+    )
+    parser.add_argument(
+        '--use-cached-backup',
+        action='store_true',
+        help='Reuse an existing local backup file instead of re-downloading '
+        'from GCS. Default is to always download fresh so the script never '
+        'operates on a snapshot that has drifted from live state. Only set '
+        'this for tight iteration on the report itself.',
+    )
+    return parser
 
-    data = load_state(args.gcs_blob)
-    latest = data['checkpoint']['latest']
-    resources = latest['resources']
 
+def _collect_azure(
+    resources: list[dict],
+) -> tuple[list[dict], list[dict], set[str]]:
     azure = [r for r in resources if is_azure_resource(r)]
     non_azure = [r for r in resources if not is_azure_resource(r)]
     azure_urns = {r.get('urn', '') for r in azure}
+    return azure, non_azure, azure_urns
+
+
+def _print_dry_run_findings(
+    azure_urns: set[str],
+    non_azure: list[dict],
+    azure_pending: list[dict],
+) -> list[tuple[str, str, str]]:
+    if azure_pending:
+        print('\nAzure pending operations to review post-run:')
+        for op in azure_pending:
+            op_type = op.get('type', '<unknown>')
+            urn = (op.get('resource') or {}).get('urn', '<unknown>')
+            print(f'  {op_type:>8}  {urn}')
+
+    problems = find_cross_cloud_refs(azure_urns, non_azure)
+    if problems:
+        distinct_dependents = {urn for urn, _, _ in problems}
+        distinct_targets = {target for _, _, target in problems}
+        print(
+            f'\n{len(problems)} dangling reference edge(s) would remain '
+            f'if all Azure URNs are removed: {len(distinct_dependents)} '
+            f'surviving resource(s) reference {len(distinct_targets)} '
+            f'Azure URN(s) via parent / dependencies / propertyDependencies '
+            f'/ provider / providers / deletedWith / aliases. `pulumi state '
+            f'remove --force` leaves these edges in place; they must be '
+            f'resolved manually before the next `pulumi up`. Full edge list:'
+        )
+        for dep_urn, kind, azure_urn in problems:
+            print(f'  {dep_urn}\n    {kind} -> {azure_urn}')
+
+        report_affected(problems, non_azure)
+    return problems
+
+
+def main() -> int:
+    args = _build_argparser().parse_args()
+
+    backup_path = args.backup_path or _default_backup_path(args.gcs_blob)
+    data = load_state(args.gcs_blob, backup_path, args.use_cached_backup)
+    latest = data['checkpoint']['latest']
+    resources = latest['resources']
+
+    azure, non_azure, azure_urns = _collect_azure(resources)
 
     # `pending_operations` records in-flight create/update/delete ops from an
     # interrupted `pulumi up`. `pulumi state remove` does not always drop
@@ -552,44 +700,20 @@ def main() -> int:
         return 0
 
     summarise(azure)
-
-    if azure_pending:
-        print('\nAzure pending operations to review post-run:')
-        for op in azure_pending:
-            op_type = op.get('type', '<unknown>')
-            urn = (op.get('resource') or {}).get('urn', '<unknown>')
-            print(f'  {op_type:>8}  {urn}')
-
-    problems = find_cross_cloud_refs(azure_urns, non_azure)
-    if problems:
-        distinct_dependents = {urn for urn, _, _ in problems}
-        distinct_targets = {target for _, _, target in problems}
-        print(
-            f'\n{len(problems)} dangling reference edge(s) will remain '
-            f'after --apply: {len(distinct_dependents)} surviving '
-            f'resource(s) reference {len(distinct_targets)} Azure URN(s) '
-            'via parent / dependencies / propertyDependencies / provider / '
-            'providers / deletedWith / aliases. `pulumi state remove '
-            '--force` deliberately leaves these edges in place; they must '
-            'be resolved manually before the next `pulumi up`. Full edge '
-            'list:'
-        )
-        for dep_urn, kind, azure_urn in problems:
-            print(f'  {dep_urn}\n    {kind} -> {azure_urn}')
-
-        report_affected(problems, non_azure)
+    problems = _print_dry_run_findings(azure_urns, non_azure, azure_pending)
 
     if not args.apply:
         print(
             f'\nDry-run only. Re-run with --apply to invoke '
-            f'`pulumi state remove --force --yes --stack {args.stack} <urn>` '
-            f'for each Azure URN (leaves first).'
+            f'`pulumi state remove --force --yes --stack {args.stack}` '
+            f'in batches of {args.batch_size} (leaves first).'
         )
         return 0
 
     print(
-        f'\nDeleting {len(azure)} Azure URN(s) from stack {args.stack} '
-        f'via `pulumi state remove --force --yes` (leaves first)...'
+        f'\nRemoving {len(azure)} Azure URN(s) from stack {args.stack} '
+        f'via `pulumi state remove --force --yes` (leaves first, '
+        f'batches of {args.batch_size})...'
     )
     successes, failures = apply_via_pulumi(
         azure,
@@ -597,18 +721,32 @@ def main() -> int:
         args.stack,
         args.pulumi_dir,
         args.limit,
+        args.batch_size,
     )
-    print(
-        f'\nDeletion summary: {len(successes)} succeeded, ' f'{len(failures)} failed.'
-    )
+    print(f'\nRemoval summary: {len(successes)} succeeded, ' f'{len(failures)} failed.')
+
+    # Post-run reporting must reflect what ACTUALLY happened, not the
+    # dry-run scope: under --limit or partial failure, most surviving-side
+    # "problems" from the dry-run aren't dangling because their targets
+    # weren't removed. Recompute using only successfully-removed URNs.
+    removed_urns = set(successes)
+    actual_problems = find_cross_cloud_refs(removed_urns, non_azure)
+    actual_pending = [
+        op for op in pending if (op.get('resource') or {}).get('urn') in removed_urns
+    ]
 
     print_post_run_report(
         failures,
-        problems,
-        azure_pending,
+        actual_problems,
+        actual_pending,
         args.stack,
     )
-    return 0
+    # Non-zero exit on any failure so CI wrappers don't mark a partial run
+    # as green. `problems` here is intentionally the pre-flight set; we only
+    # gate exit on subprocess failures, not on dangling-refs (those are
+    # expected under --force and require operator judgement, not CI retry).
+    _ = problems
+    return 1 if failures else 0
 
 
 if __name__ == '__main__':
