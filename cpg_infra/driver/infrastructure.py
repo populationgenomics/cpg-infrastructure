@@ -139,6 +139,7 @@ class CPGInfrastructure:
         # Go through each dataset and instantiate the CPGDatasetInfrastructure class
         # for that dataset.
         self.setup_datasets()
+        self.setup_standalone_projects()
 
         # create a bucket and attach accessor members to it. The bucket itself is
         # created by accessing the property `self.gcp_members_cache_bucket`
@@ -159,6 +160,7 @@ class CPGInfrastructure:
         # Deploy all the assets required for each dataset. Groups, permissions
         # storage buckets, metamist and hail users etc.
         self.deploy_datasets()
+        self.deploy_standalone_projects()
 
         # Deploy managed adhoc assets that are not associated with datasets.
         self.deploy_adhoc()

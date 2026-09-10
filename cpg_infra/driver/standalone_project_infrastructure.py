@@ -46,13 +46,21 @@ class CPGStandaloneProjectInfrastructure:
         # for all subsequent accesses.
         self.infra.create_monthly_budget(
             resource_key='budget', 
-            project=self.infra.project_id,
+            project=self.infra.project,
             budget=self.project_config.monthly_budget
         )
+
+        owner_user = self.config.users.get(self.project_config.owner)
+        if not owner_user:
+            raise ValueError(f'Owner {self.project_config.owner} not found in config')
+
+        gcp_cloud = owner_user.clouds.get('gcp')
+        if not gcp_cloud:
+            raise ValueError(f'Owner {self.project_config.owner} has no gcp cloud id')
 
         self.infra.add_project_role(
             resource_key='project-owner',
             project=self.infra.project_id,
-            member=self.project_config.owner,
+            member=gcp_cloud.id,
             role='roles/owner'
         )
