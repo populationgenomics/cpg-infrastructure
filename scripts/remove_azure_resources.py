@@ -34,7 +34,7 @@ Usage
         --stack datasets/production --pulumi-dir .
 
     # 3. Verify from the consuming Pulumi program:
-    pulumi refresh --preview   # should not surface any Azure URNs
+    pulumi refresh --preview-only   # should not surface any Azure URNs
 
 The GCS blob path defaults to `.pulumi/stacks/datasets/production.json`; pass
 `--gcs-blob <path>` if your stack lives elsewhere in the bucket. --stack
@@ -62,8 +62,9 @@ AZURE_TYPE_PREFIXES = (
 )
 
 # Explicit non-Azure blocklist so the URN-name heuristic below can never
-# mis-classify a well-typed GCP/AWS/K8s resource as Azure, even if the name
-# happens to contain the substring 'azure'.
+# mis-classify a well-typed resource as Azure, even if the name happens to
+# contain 'azure'. Includes cloud providers, Pulumi's own resource types,
+# and the first-party dynamic providers this repo defines.
 NON_AZURE_TYPE_PREFIXES = (
     'gcp:',
     'google-native:',
@@ -75,6 +76,23 @@ NON_AZURE_TYPE_PREFIXES = (
     'pulumi:providers:aws-native',
     'kubernetes:',
     'pulumi:providers:kubernetes',
+    'pulumi:providers:pulumi',
+    'pulumi:providers:hailbatch',
+    'pulumi:providers:metamist',
+    'pulumi:providers:seqera',
+)
+
+# The URN-name heuristic only fires for types that carry no cloud identity
+# in their schema. Any other typed resource is trusted to self-identify via
+# AZURE_TYPE_PREFIXES / NON_AZURE_TYPE_PREFIXES / the `azure in type` check
+# below -- we DON'T fall back to `-azure-` in the URN name for arbitrarily
+# typed components, since a future non-Azure component named
+# `dataset-azure-cost-report` would otherwise be swept up along with its
+# non-Azure children via leaves-first ordering.
+_NAME_HEURISTIC_TYPE_ALLOWLIST = (
+    '',
+    'pulumi:pulumi:Component',
+    'pulumi:pulumi:Stack',
 )
 
 GCS_BUCKET = 'cpg-pulumi-state'
@@ -91,12 +109,19 @@ def is_azure_resource(resource: dict) -> bool:
     # name happens to contain.
     if resource_type.startswith(NON_AZURE_TYPE_PREFIXES):
         return False
+    # First-party component types (e.g. `cpg_infra:datasets:AzureDatasetInfra`)
+    # self-identify via 'azure' in their type string. This handles the case
+    # where the type namespace tells us the cloud even though the schema
+    # doesn't match AZURE_TYPE_PREFIXES.
+    if 'azure' in resource_type.lower():
+        return True
     # cpg_infra names component resources without an azure-native/azuread
-    # type as `{dataset}-azure-{key}`, i.e. with `azure` as a hyphen-token
-    # strictly in the middle of the terminal URN name segment. Match on
-    # `-azure-` to require an interior position: a name starting with
-    # `azure-` (dataset literally named "azure") or ending with `-azure`
-    # (key literally "azure") is not a component built by AzureInfra.
+    # type as `{dataset}-azure-{key}`. Fall back to the URN-name heuristic
+    # ONLY for types that don't self-identify at all -- bare Pulumi
+    # component/stack types -- so a future non-Azure component doesn't get
+    # misclassified by name alone.
+    if resource_type not in _NAME_HEURISTIC_TYPE_ALLOWLIST:
+        return False
     urn = resource.get('urn', '')
     if not urn:
         return False
@@ -332,11 +357,16 @@ def summarise(azure: list[dict]) -> None:
 
 def describe_affected(res: dict) -> dict[str, str]:
     """Extract human-useful identifying info from a Pulumi state resource.
-    Merges outputs then inputs (inputs win) so we see the actual configured
-    values."""
+
+    Merges inputs first, then outputs override -- outputs are always
+    concrete resolved values from the provider, while inputs may still
+    contain Pulumi's unresolved Output marker dicts (recognisable by their
+    `4dabf18193072939515e22adb298388d` key) that would garble the display
+    if they clobbered a resolved bucket/name/project value from outputs.
+    """
     inputs = res.get('inputs') or {}
     outputs = res.get('outputs') or {}
-    combined = {**outputs, **inputs}
+    combined = {**inputs, **outputs}
 
     type_name = res.get('type', '<unknown>')
     # Truthy check rather than key presence: a null `bucket` input on a
@@ -416,6 +446,19 @@ def report_affected(
             print(f'    selfLink:  {info["self_link"]}')
 
 
+def _looks_like_already_removed(out: str) -> bool:
+    """Recognise `pulumi state remove` errors that mean 'that URN is not in
+    state' -- typically 'no such resource ... exists in the current state'
+    or 'resource ... not found'. These happen during per-URN retry after a
+    partial batch: the batch call already removed the URN before failing on
+    a later one, so seeing the URN gone is the SUCCESS case, not a failure.
+    """
+    if not out:
+        return False
+    lower = out.lower()
+    return 'no such resource' in lower or 'not found' in lower
+
+
 def _run_batch(
     stack: str,
     batch: list[str],
@@ -425,8 +468,8 @@ def _run_batch(
 ) -> None:
     """Try the batch as one call; on failure retry per-URN so we can isolate
     which URN(s) actually broke and let the rest through. Per-URN retries
-    can report a URN as "already removed" if the batch call succeeded on
-    that URN before failing later; those are benign and can be ignored."""
+    that hit an "already removed" error are counted as successes since the
+    batch call must have removed them before failing on a later URN."""
     ok, out = pulumi_state_remove(stack, batch, pulumi_dir)
     if ok:
         successes.extend(batch)
@@ -435,7 +478,7 @@ def _run_batch(
     print(f'    Batch FAILED ({first}); retrying per-URN...')
     for urn in batch:
         ok2, out2 = pulumi_state_remove(stack, [urn], pulumi_dir)
-        if ok2:
+        if ok2 or _looks_like_already_removed(out2):
             successes.append(urn)
         else:
             failures.append((urn, out2))
@@ -550,7 +593,7 @@ def print_post_run_report(
         step += 1
 
     print(
-        f'\n{step}. Verify: `pulumi refresh --preview --stack {stack}` '
+        f'\n{step}. Verify: `pulumi refresh --preview-only --stack {stack}` '
         f'should surface no Azure URNs. If it does, they were skipped by '
         f'--limit or listed in the failures above.'
     )
@@ -642,6 +685,10 @@ def _print_dry_run_findings(
     non_azure: list[dict],
     azure_pending: list[dict],
 ) -> list[tuple[str, str, str]]:
+    """Print the pre-flight scan (pending ops + full edge list). Does NOT
+    call report_affected -- the caller renders that with the appropriate
+    scope (full set for dry-run; only successfully-removed URNs post-apply)
+    so the survivor detail block always matches the numbers around it."""
     if azure_pending:
         print('\nAzure pending operations to review post-run:')
         for op in azure_pending:
@@ -664,8 +711,6 @@ def _print_dry_run_findings(
         )
         for dep_urn, kind, azure_urn in problems:
             print(f'  {dep_urn}\n    {kind} -> {azure_urn}')
-
-        report_affected(problems, non_azure)
     return problems
 
 
@@ -703,6 +748,10 @@ def main() -> int:
     problems = _print_dry_run_findings(azure_urns, non_azure, azure_pending)
 
     if not args.apply:
+        # Dry-run: survivor detail is scoped to the full pre-flight problem
+        # set since we're previewing the full removal.
+        if problems:
+            report_affected(problems, non_azure)
         print(
             f'\nDry-run only. Re-run with --apply to invoke '
             f'`pulumi state remove --force --yes --stack {args.stack}` '
@@ -734,6 +783,11 @@ def main() -> int:
     actual_pending = [
         op for op in pending if (op.get('resource') or {}).get('urn') in removed_urns
     ]
+
+    # Render the survivor detail scoped to what was actually removed, so the
+    # post-run checklist's "list above" reference is the correct list.
+    if actual_problems:
+        report_affected(actual_problems, non_azure)
 
     print_post_run_report(
         failures,
