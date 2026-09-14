@@ -177,12 +177,16 @@ Structure:
 
 To develop, you can run the driver file directly, which given a config TOML, will print infrastructure to the console.
 
-### Motiviations
+### Motivations
 
 This abstraction is still trying to address a number of difficult problems:
 
-- How do you manage the same (ish) infrastructure across two clouds?
-- How do you elegantly handle different code pathways for different clouds?
+- How do you keep the cloud API surface hidden behind a stable per-cloud
+  interface (`CloudInfraBase`) so datasets don't reach into provider SDKs
+  directly? Historically we ran GCP + Azure through the same abstraction;
+  Azure has since been retired but the seam is preserved so a future
+  backend (e.g. Seqera / Nextflow) can be added without rewriting driver
+  code.
 - Can we modularise our deployment for each dataset a bit more?
 
 Still to solve problems:
