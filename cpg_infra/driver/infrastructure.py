@@ -607,13 +607,8 @@ class CPGInfrastructure:
             name='analysis-runner-config-viewers-group',
         )
 
-        if isinstance(self.common_gcp_infra, GcpInfrastructure):
-            assert self.config.gcp
-            bucket = self.config.gcp.config_bucket_name
-        else:
-            raise ValueError(
-                f'Bucket could not be determined for {self.infra.name()}',
-            )
+        assert self.config.gcp
+        bucket = self.config.gcp.config_bucket_name
 
         # create on parent analysis-runner-config-viewer-group
         # and assign bucket READ permissions to it
