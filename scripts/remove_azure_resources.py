@@ -90,7 +90,6 @@ NON_AZURE_TYPE_PREFIXES = (
 # `dataset-azure-cost-report` would otherwise be swept up along with its
 # non-Azure children via leaves-first ordering.
 _NAME_HEURISTIC_TYPE_ALLOWLIST = (
-    '',
     'pulumi:pulumi:Component',
     'pulumi:pulumi:Stack',
 )
@@ -109,11 +108,14 @@ def is_azure_resource(resource: dict) -> bool:
     # name happens to contain.
     if resource_type.startswith(NON_AZURE_TYPE_PREFIXES):
         return False
-    # First-party component types (e.g. `cpg_infra:datasets:AzureDatasetInfra`)
-    # self-identify via 'azure' in their type string. This handles the case
-    # where the type namespace tells us the cloud even though the schema
-    # doesn't match AZURE_TYPE_PREFIXES.
-    if 'azure' in resource_type.lower():
+    # First-party component types living under an Azure namespace segment
+    # (e.g. `cpg_infra:azure:AzureInfra`, `cpg_infra:azure:datasets:...`)
+    # self-identify via `:azure:` in their type. Require the colons on both
+    # sides so that unrelated-but-Azure-adjacent types like
+    # `cpg_infra:reports:AzureCostAudit` (a GCP-side audit of retired Azure
+    # spend) or `pulumi:providers:azurerm-mirror` (a proxy shim) don't get
+    # swept up along with their non-Azure children.
+    if ':azure:' in resource_type.lower():
         return True
     # cpg_infra names component resources without an azure-native/azuread
     # type as `{dataset}-azure-{key}`. Fall back to the URN-name heuristic
@@ -355,36 +357,54 @@ def summarise(azure: list[dict]) -> None:
         print(f'  {n:>5}  {t}')
 
 
+def _display_string(value: object) -> str | None:
+    """Return `value` if it's a non-empty plain string suitable for display,
+    else None. Filters out Pulumi's Output marker dicts (recognisable by the
+    `4dabf18193072939515e22adb298388d` signature key) and any other non-str
+    payload that would render as a garbled dict/None in the report."""
+    if isinstance(value, str) and value:
+        return value
+    return None
+
+
+def _first_display_string(source: dict, *keys: str) -> str | None:
+    """Return the first key's value from `source` that's a display-safe
+    string; skip missing keys, empty strings, and Output markers."""
+    for key in keys:
+        cleaned = _display_string(source.get(key))
+        if cleaned is not None:
+            return cleaned
+    return None
+
+
 def describe_affected(res: dict) -> dict[str, str]:
     """Extract human-useful identifying info from a Pulumi state resource.
 
     Merges inputs first, then outputs override -- outputs are always
     concrete resolved values from the provider, while inputs may still
-    contain Pulumi's unresolved Output marker dicts (recognisable by their
-    `4dabf18193072939515e22adb298388d` key) that would garble the display
-    if they clobbered a resolved bucket/name/project value from outputs.
+    contain Pulumi's unresolved Output marker dicts that would garble the
+    display if they clobbered a resolved bucket/name/project. Values are
+    additionally filtered through _display_string so a marker dict that
+    only exists in inputs (with no matching outputs key) is dropped rather
+    than rendered as `{'4dabf...': ...}` in the operator report.
     """
     inputs = res.get('inputs') or {}
     outputs = res.get('outputs') or {}
     combined = {**inputs, **outputs}
 
     type_name = res.get('type', '<unknown>')
-    # Truthy check rather than key presence: a null `bucket` input on a
-    # :Bucket-typed resource should fall through to the name-based branch,
-    # not silently drop the bucket identity from the report.
-    if combined.get('bucket'):
-        bucket = combined.get('bucket')
-    elif type_name.endswith(':Bucket'):
-        bucket = combined.get('name')
-    else:
-        bucket = None
+    # Prefer an explicit bucket field; otherwise, for :Bucket-typed
+    # resources, fall back to the `name` field. Both go through
+    # _display_string so unresolved Output markers or None never leak into
+    # the printed URL.
+    bucket = _first_display_string(combined, 'bucket')
+    if bucket is None and type_name.endswith(':Bucket'):
+        bucket = _first_display_string(combined, 'name')
 
-    obj_name = combined.get('name')
-    project = combined.get('project')
-    location = combined.get('location') or combined.get('region')
-    self_link = (
-        combined.get('selfLink') or combined.get('url') or combined.get('mediaLink')
-    )
+    obj_name = _first_display_string(combined, 'name')
+    project = _first_display_string(combined, 'project')
+    location = _first_display_string(combined, 'location', 'region')
+    self_link = _first_display_string(combined, 'selfLink', 'url', 'mediaLink')
 
     if bucket and obj_name and bucket != obj_name:
         gs_url = f'gs://{bucket}/{obj_name}'
@@ -446,17 +466,17 @@ def report_affected(
             print(f'    selfLink:  {info["self_link"]}')
 
 
-def _looks_like_already_removed(out: str) -> bool:
+def _looks_like_already_removed(out: str, urn: str) -> bool:
     """Recognise `pulumi state remove` errors that mean 'that URN is not in
-    state' -- typically 'no such resource ... exists in the current state'
-    or 'resource ... not found'. These happen during per-URN retry after a
-    partial batch: the batch call already removed the URN before failing on
-    a later one, so seeing the URN gone is the SUCCESS case, not a failure.
-    """
-    if not out:
+    state' -- Pulumi's specific per-URN phrasing is 'No such resource "<urn>"
+    exists in the current state'. Match narrowly on that exact substring
+    AND require the URN to appear in the output, so unrelated failures
+    ('stack not found', 'no project found', 'unknown flag', backend
+    resolution errors, etc.) don't get silently rescued as successes."""
+    if not out or not urn:
         return False
     lower = out.lower()
-    return 'no such resource' in lower or 'not found' in lower
+    return 'no such resource' in lower and urn.lower() in lower
 
 
 def _run_batch(
@@ -478,7 +498,7 @@ def _run_batch(
     print(f'    Batch FAILED ({first}); retrying per-URN...')
     for urn in batch:
         ok2, out2 = pulumi_state_remove(stack, [urn], pulumi_dir)
-        if ok2 or _looks_like_already_removed(out2):
+        if ok2 or _looks_like_already_removed(out2, urn):
             successes.append(urn)
         else:
             failures.append((urn, out2))
@@ -674,9 +694,19 @@ def _build_argparser() -> argparse.ArgumentParser:
 def _collect_azure(
     resources: list[dict],
 ) -> tuple[list[dict], list[dict], set[str]]:
-    azure = [r for r in resources if is_azure_resource(r)]
-    non_azure = [r for r in resources if not is_azure_resource(r)]
-    azure_urns = {r.get('urn', '') for r in azure}
+    """Partition resources into (azure, non_azure) and collect the set of
+    Azure URNs. Rows without a `urn` key are dropped from `azure` entirely
+    so an empty string never poisons downstream membership tests or gets
+    passed as a positional to `pulumi state remove`."""
+    azure: list[dict] = []
+    non_azure: list[dict] = []
+    for r in resources:
+        if is_azure_resource(r):
+            if r.get('urn'):
+                azure.append(r)
+        else:
+            non_azure.append(r)
+    azure_urns = {r['urn'] for r in azure}
     return azure, non_azure, azure_urns
 
 
