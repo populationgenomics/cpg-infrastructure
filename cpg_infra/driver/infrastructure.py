@@ -629,7 +629,6 @@ class CPGInfrastructure:
         )
 
     def setup_gcp_metamist_cloudrun_invoker(self):
-        # pylint: disable
         infra = self.common_gcp_infra
 
         assert self.config.metamist
