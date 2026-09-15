@@ -40,6 +40,7 @@ from cpg_infra.config import (
     SeqeraAccount,
 )
 from cpg_infra.driver.constants import (
+    IGV_DESKTOP_ACCESS,
     METAMIST_PERMISSIONS,
     NON_NAME_REGEX,
     SM_MAIN_CONTRIBUTE,
@@ -140,6 +141,19 @@ class CPGDatasetCloudInfrastructure:
                 'enabled but CPGInfrastructureConfig.seqera is not set.',
             )
         return True
+
+    @cached_property
+    def igv_proxy_config(self) -> CPGInfrastructureConfig.IgvProxy | None:
+        """The IGV desktop proxy config, or None if this dataset does not take part."""
+        if not isinstance(self.infra, GcpInfrastructure):
+            return None
+        if self.config.igv_proxy is None:
+            return None
+        if not self.dataset_config.members.get(
+            IGV_DESKTOP_ACCESS,  # type: ignore[call-overload]
+        ):
+            return None
+        return self.config.igv_proxy
 
     def create_group(self, name: str, *, cache_members: bool = False):
         """
@@ -895,6 +909,16 @@ class CPGDatasetCloudInfrastructure:
             self.full_group,
             BucketMembership.MUTATE,
         )
+
+        # IGV desktop proxy. Bind the service account directly rather than
+        # main_read_group, which also covers main-tmp and main-analysis.
+        if igv_proxy := self.igv_proxy_config:
+            self.infra.add_member_to_bucket(
+                'igv-proxy-main-bucket-read',
+                self.main_bucket,
+                igv_proxy.server_machine_account,
+                BucketMembership.READ,
+            )
 
     def setup_storage_main_tmp_bucket(self):
         self.infra.add_member_to_bucket(
