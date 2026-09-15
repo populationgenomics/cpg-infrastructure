@@ -709,11 +709,12 @@ class CPGDatasetCloudInfrastructure:
                 f'Could not find infra to save blob to for config_destination: '
                 f'{self.config.config_destination}',
             )
-        # Post-Azure, CloudName is Literal['gcp', 'dry-run'] and DryRunInfra
-        # is handled by the early-return above, so self.infra is always
-        # GcpInfrastructure here. The assert makes that invariant explicit
-        # for readers and static analysis; if CloudName is ever extended,
-        # this will trip loudly rather than silently mis-dispatching.
+        # DryRunInfra returned above and the regex check just rejected any
+        # non-`gs://` destination, so at this point self.infra is always
+        # GcpInfrastructure. The assert is a static-type nudge for the
+        # `_infra_to_call_function_on = self.infra` narrowing below -- it
+        # would only ever fire if a future backend chose the `gs://` scheme
+        # and slipped past the regex, which isn't a realistic scenario.
         assert isinstance(self.infra, GcpInfrastructure)
         _infra_to_call_function_on = self.infra
 
