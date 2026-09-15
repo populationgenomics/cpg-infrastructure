@@ -36,6 +36,7 @@ from cpg_infra.config import (
     CPGDatasetConfig,
     CPGInfrastructureConfig,
     HailAccount,
+    SeqeraAccount,
 )
 from cpg_infra.driver.constants import (
     METAMIST_PERMISSIONS,
@@ -51,6 +52,9 @@ from cpg_infra.driver.constants import (
     access_levels,
     compute_hash,
     dict_to_toml,
+)
+from cpg_infra.driver.dataset_seqera_infrastructure import (
+    DatasetSeqeraInfrastructure,
 )
 
 
@@ -110,9 +114,31 @@ class CPGDatasetCloudInfrastructure:
         self.should_setup_analysis_runner = (
             CPGDatasetComponents.ANALYSIS_RUNNER in self.components
         )
+        self.should_setup_seqera = self._resolve_should_setup_seqera()
 
         # outputs
         self.storage_tomls: dict = {}
+
+    def _resolve_should_setup_seqera(self) -> bool:
+        component_enabled = CPGDatasetComponents.SEQERA_ACCOUNTS in self.components
+        if not component_enabled:
+            return False
+        if not isinstance(self.infra, GcpInfrastructure):
+            # Defence-in-depth: SEQERA_ACCOUNTS on non-GCP is silently ignored.
+            return False
+        if self.dataset_config.team_ownership is None:
+            raise ValueError(
+                f'{self.dataset_config.dataset}: SEQERA_ACCOUNTS component is '
+                'enabled but team_ownership is not set. Seqera integration '
+                'requires a team_ownership value to bind the WIF principal '
+                'to a Seqera workspace.',
+            )
+        if self.config.seqera is None:
+            raise ValueError(
+                f'{self.dataset_config.dataset}: SEQERA_ACCOUNTS component is '
+                'enabled but CPGInfrastructureConfig.seqera is not set.',
+            )
+        return True
 
     def create_group(self, name: str, *, cache_members: bool = False):
         """
@@ -141,6 +167,8 @@ class CPGDatasetCloudInfrastructure:
             self.setup_metamist()
         if self.should_setup_hail:
             self.setup_hail()
+        if self.should_setup_seqera:
+            self.setup_seqera()
         if self.should_setup_cromwell:
             self.setup_cromwell()
         if self.should_setup_spark:
@@ -178,6 +206,8 @@ class CPGDatasetCloudInfrastructure:
 
         for access_level, account in self.hail_accounts_by_access_level.items():
             machine_accounts['hail'].append((access_level, account.cloud_id))
+        for access_level, account in self.seqera_accounts_by_access_level.items():
+            machine_accounts['seqera'].append((access_level, account.cloud_id))
         for access_level, account in self.deployment_accounts_by_access_level.items():
             machine_accounts['deployment'].append((access_level, account))
         for (
@@ -1215,6 +1245,26 @@ class CPGDatasetCloudInfrastructure:
             autoclass=self.dataset_config.autoclass,
         )
 
+    @cached_property
+    def nf_main_work_bucket(self):
+        return self.infra.create_bucket(
+            'main-nfwork',
+            lifecycle_rules=[],  # lifecycle policy to be decided later
+            versioning=False,
+            autoclass=False,
+            soft_delete_protection=False,
+        )
+
+    @cached_property
+    def nf_test_work_bucket(self):
+        return self.infra.create_bucket(
+            'test-nfwork',
+            lifecycle_rules=[],  # lifecycle policy to be decided later
+            versioning=False,
+            autoclass=False,
+            soft_delete_protection=False,
+        )
+
     # endregion TEST BUCKETS
     # region RELEASE BUCKETS
 
@@ -1417,6 +1467,22 @@ class CPGDatasetCloudInfrastructure:
         )
 
     # endregion HAIL
+    # region SEQERA
+
+    @cached_property
+    def seqera(self) -> DatasetSeqeraInfrastructure:
+        return DatasetSeqeraInfrastructure(self)
+
+    def setup_seqera(self) -> None:
+        self.seqera.setup()
+
+    @cached_property
+    def seqera_accounts_by_access_level(self) -> dict[str, SeqeraAccount]:
+        if not self.should_setup_seqera:
+            return {}
+        return self.seqera.accounts_by_access_level
+
+    # endregion SEQERA
     # region CROMWELL
 
     def setup_cromwell(self):
@@ -1565,6 +1631,14 @@ class CPGDatasetCloudInfrastructure:
             self.infra.add_batch_agent_reporter_role(
                 f'cromwell-service-account-{access_level}-workflows-runner',
                 account,
+            )
+
+            # Allow the Cromwell service accounts to write logs from the Google
+            # Batch jobs they run in the dataset project.
+            self.infra.add_project_role(
+                f'cromwell-service-account-{access_level}-log-writer',
+                member=account,
+                role='roles/logging.logWriter',
             )
 
         # Give the Cromwell runner the batch job editor role

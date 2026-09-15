@@ -62,3 +62,10 @@ def compute_hash(dataset: str, member: str, cloud: str) -> str:
     msg = dataset + member + cloud
     computed_hash = xxhash.xxh32(msg.encode()).hexdigest()
     return initials + '-' + computed_hash
+
+
+def get_formatted_team_name(team: str) -> str:
+    """
+    Convert TeamOwnership to Seqera friendly format
+    """
+    return team.lower().replace(' ', '-')
