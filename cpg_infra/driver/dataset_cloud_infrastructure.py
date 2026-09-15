@@ -1278,8 +1278,7 @@ class CPGDatasetCloudInfrastructure:
             return None
 
         raise ValueError(
-            f'Unknown infra type {type(self.infra)} for '
-            'building hail_batch_billing_project',
+            f'Unknown infra type {type(self.infra)} for resolving hail_batch_url',
         )
 
     @cached_property
@@ -1292,8 +1291,7 @@ class CPGDatasetCloudInfrastructure:
             return None
 
         raise ValueError(
-            f'Unknown infra type {type(self.infra)} for '
-            'building hail_batch_billing_project',
+            f'Unknown infra type {type(self.infra)} for resolving hail_auth_url',
         )
 
     @cached_property
