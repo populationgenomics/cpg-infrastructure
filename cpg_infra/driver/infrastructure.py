@@ -632,12 +632,6 @@ class CPGInfrastructure:
         # pylint: disable
         infra = self.common_gcp_infra
 
-        if not isinstance(infra, GcpInfrastructure):
-            raise ValueError(
-                f'Dataset_infrastructure for {self.config.common_dataset!r} was not of '
-                f'type GCPInfrastructure, this is probably a bug',
-            )
-
         assert self.config.metamist
 
         infra.add_cloudrun_invoker(
