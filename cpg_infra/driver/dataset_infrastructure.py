@@ -21,8 +21,9 @@ from typing import TYPE_CHECKING
 # When adding a new backend you MUST also extend ``CloudName`` in
 # ``cpg_infra/config/config.py`` (currently ``Literal['gcp', 'dry-run']``) --
 # without that, consumer configs referring to the new backend's ``name()``
-# under ``deploy_locations`` / ``budgets`` / ``components`` will fail
-# Pydantic validation before any Pulumi program runs.
+# under ANY of ``deploy_locations`` / ``budgets`` / ``components`` /
+# ``users[*].clouds`` will fail Pydantic validation before any Pulumi
+# program runs.
 from cpg_infra.abstraction.base import CloudInfraBase, DryRunInfra
 from cpg_infra.abstraction.gcp import GcpInfrastructure
 from cpg_infra.abstraction.metamist import MetamistProject
