@@ -258,6 +258,8 @@ class CPGDatasetCloudInfrastructure:
     # region BILLING
 
     def setup_billing(self):
+        # Post-Azure the only non-GCP backend in CloudName is DryRunInfra,
+        # which doesn't track a real project -- skip budget wiring for it.
         if not isinstance(self.infra, GcpInfrastructure):
             return
 
