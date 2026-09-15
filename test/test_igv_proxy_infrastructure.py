@@ -130,6 +130,61 @@ def _users(root: CPGInfrastructure, stack: str) -> dict[str, list[str]]:
     return json.loads(payload)['users']
 
 
+class TestIgvProxyConfigValidation(TestCase):
+    """Parsing and validation of the IgvProxy config models."""
+
+    def test_igv_proxy_config_parses(self):
+        """CPGInfrastructureConfig.IgvProxy parses a block with both stacks"""
+        igv_proxy = CPGInfrastructureConfig.IgvProxy.model_validate(
+            {
+                'gcp': {
+                    'prod': {
+                        'project': 'igv-proxy-prod',
+                        'server_machine_account': 'igv-prod@igv-proxy-prod.iam.gserviceaccount.com',
+                    },
+                    'dev': {
+                        'project': 'igv-proxy-dev',
+                        'server_machine_account': 'igv-dev@igv-proxy-dev.iam.gserviceaccount.com',
+                    },
+                },
+            },
+        )
+        self.assertEqual('igv-proxy-prod', igv_proxy.gcp.prod.project)
+        assert igv_proxy.gcp.dev is not None
+        self.assertEqual('igv-proxy-dev', igv_proxy.gcp.dev.project)
+
+    def test_igv_proxy_dev_optional(self):
+        """gcp.dev is optional — a prod-only block is valid"""
+        igv_proxy = CPGInfrastructureConfig.IgvProxy.model_validate(
+            {
+                'gcp': {
+                    'prod': {
+                        'project': 'igv-proxy-prod',
+                        'server_machine_account': 'igv-prod@igv-proxy-prod.iam.gserviceaccount.com',
+                    },
+                },
+            },
+        )
+        self.assertIsNone(igv_proxy.gcp.dev)
+
+    def test_igv_proxy_optional_on_infrastructure_config(self):
+        """CPGInfrastructureConfig.igv_proxy defaults to None"""
+        field = CPGInfrastructureConfig.model_fields['igv_proxy']
+        self.assertIsNone(field.default)
+
+    def test_igv_desktop_access_member_key_parses(self):
+        """A dataset can list members under the igv-desktop-access key"""
+        config = CPGDatasetConfig.model_validate(
+            {
+                'dataset': 'DATASET',
+                'budgets': {},
+                'gcp': {'project': 'dataset-1234'},
+                'members': {'igv-desktop-access': ['alice']},
+            },
+        )
+        self.assertEqual(['alice'], config.members['igv-desktop-access'])
+
+
 class TestIgvProxySecretGeneration(TestCase):
     """The prod and dev allow-list secrets written by the driver."""
 
