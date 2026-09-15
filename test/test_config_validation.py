@@ -313,13 +313,7 @@ class TestConfigValidation(TestCase):
         self.assertFalse(igv_proxy.gcp.prod.include_test_buckets)
 
     def test_igv_proxy_dev_cannot_include_test_buckets(self):
-        """The dev stack has no include_test_buckets field, so setting it fails.
-
-        This pins the safety property that the dev proxy can never be granted
-        main-namespace access through config: the prod/dev asymmetry is what makes
-        `dev: {include_test_buckets: ...}` inexpressible rather than merely
-        discouraged. Do not delete this test.
-        """
+        """The dev stack has no include_test_buckets field, so setting it fails."""
         with self.assertRaises(ValidationError) as ctx:
             CPGInfrastructureConfig.IgvProxy.model_validate(
                 {

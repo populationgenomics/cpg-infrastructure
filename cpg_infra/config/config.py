@@ -231,11 +231,8 @@ class CPGInfrastructureConfig(ConfigModel):
     class IgvProxy(ConfigModel):
         """Global IGV desktop proxy configuration.
 
-        The proxy runs as two independent stacks in two separate GCP projects
-        (prod and dev), each with its own runtime service account. Setting this
-        grants each proxy service account read access to the buckets of datasets
-        that list members under the 'igv-desktop-access' member key, and writes
-        the proxy's allow-list secret into each stack's own project.
+        Two independent stacks in separate projects. Setting this grants each read
+        on the buckets of datasets listing members under 'igv-desktop-access'.
         """
 
         class GCPDeployment(ConfigModel):

@@ -20,9 +20,8 @@ if TYPE_CHECKING:
     )
     from cpg_infra.driver.infrastructure import CPGInfrastructure
 
-# Deliberately fictitious. The real proxy projects and runtime service accounts
-# live in cpg-infrastructure-private and must not be mirrored here: a reader
-# should never be able to mistake a fixture for a deployable value.
+# Deliberately fictitious. The real proxy projects and service accounts live in
+# cpg-infrastructure-private and must not be mirrored here.
 PROD_SA = 'not-a-real-sa@nonexistent-prod-project.iam.gserviceaccount.com'
 DEV_SA = 'not-a-real-sa@nonexistent-dev-project.iam.gserviceaccount.com'
 PROD_PROJECT = 'nonexistent-prod-project'
@@ -189,13 +188,7 @@ class TestIgvProxySecretGeneration(TestCase):
         )
 
     def test_dev_payload_lists_test_buckets_only(self):
-        """The dev secret never carries a main-namespace name.
-
-        Run with include_test_buckets on, which is when deriving dev from the
-        prod payload rather than from its own map would double the entries. The
-        '-main' inside a dataset name would also be corrupted by a str.replace
-        rewrite, so exact equality pins both.
-        """
+        """The dev secret never carries a main-namespace name."""
         root = _make_root(
             igv_proxy=_make_igv_proxy_config(
                 include_test_buckets=True,
@@ -220,12 +213,7 @@ class TestIgvProxySecretGeneration(TestCase):
         )
 
     def test_dataset_without_test_namespace_is_left_out_of_test_entries(self):
-        """A setup_test=False dataset has no -test bucket, so it gets no entry.
-
-        The test-bucket bindings are only emitted when setup_test is on, so
-        listing a -test name here would put the allow-list and IAM out of step.
-        A user reachable only through such a dataset drops out of dev entirely.
-        """
+        """A setup_test=False dataset has no -test bucket, so it gets no entry."""
         root = _make_root(
             igv_proxy=_make_igv_proxy_config(
                 include_test_buckets=True,
@@ -466,11 +454,7 @@ class TestIgvProxyBucketBindings(TestCase):
         self.assertEqual([PROD_SA], list(self._bindings(driver).values()))
 
     def test_test_bucket_bindings_follow_the_stack_config(self):
-        """dev SA when dev is configured, prod SA when it opts in, or both.
-
-        Both bindings land on the same bucket for the same dataset, so getting
-        two entries back also proves their resource keys differ.
-        """
+        """dev SA when dev is configured, prod SA when it opts in, or both."""
         cases: list[tuple[bool, bool, set[str]]] = [
             (False, False, set()),
             (True, False, {DEV_SA}),

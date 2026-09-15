@@ -538,24 +538,20 @@ class CPGInfrastructure:
     def generate_igv_proxy_config(self):
         """Write the IGV desktop proxy allow-list secret for each proxy stack.
 
-        The proxy forwards objects to users who hold no IAM of their own on the
-        dataset buckets, so it needs an allow-list of who may read what. The prod
-        and dev proxies run in separate GCP projects, so this writes one secret
-        per stack, each into that stack's own project.
+        The proxy forwards objects to users who hold no IAM of their own, so it
+        needs an allow-list of who may read what. One secret per stack, since prod
+        and dev run in separate projects.
         """
         if not self.config.igv_proxy:
             return
 
         igv_proxy_gcp = self.config.igv_proxy.gcp
 
-        # Two base maps of proxy user email -> the buckets they may reach, one per
-        # namespace. Bucket names are derived strings rather than read off the
-        # pulumi bucket resources, so the payload stays a static string with no
-        # Output in it.
+        # Bucket names are derived strings rather than read off the pulumi bucket
+        # resources, so the payload stays a static string with no Output in it.
         main_buckets_by_user: dict[str, list[str]] = defaultdict(list)
         test_buckets_by_user: dict[str, list[str]] = defaultdict(list)
-        # the datasets the dev proxy ends up with test-namespace read access to;
-        # the only thing worth warning about (see below)
+        # datasets the dev proxy ends up with test-namespace read access to
         dev_readable_datasets: list[str] = []
         prefix = self.config.gcp.dataset_storage_prefix
 
@@ -592,7 +588,6 @@ class CPGInfrastructure:
                 if dataset_config.setup_test:
                     test_buckets_by_user[cloud_user.id].append(test_bucket)
 
-        # prod reads the main namespace, and the test namespace too when opted in.
         # IAM without a matching allow-list entry would be inert, so the flag has
         # to move the payload as well as the bucket bindings.
         prod_buckets_by_user = main_buckets_by_user
@@ -612,11 +607,9 @@ class CPGInfrastructure:
         if not igv_proxy_gcp.dev:
             return
 
-        # The dev proxy serves the test namespace and only the test namespace, so it
-        # gets the test map on its own — never the prod payload with the names
-        # rewritten, which would double up the -test entries when
-        # include_test_buckets is on. Deriving the names here keeps the dev secret
-        # self-consistent, so the proxy needs no per-stack special-casing.
+        # The dev proxy gets the test map on its own — never the prod payload with
+        # the names rewritten, which would double up '-test' entries when
+        # include_test_buckets is on.
         self._write_igv_proxy_secret(
             resource_key='igv-proxy-config-dev',
             project=igv_proxy_gcp.dev.project,
@@ -625,11 +618,9 @@ class CPGInfrastructure:
         )
 
         if dev_readable_datasets:
-            # One summary warning per deploy, rather than one per dataset or bucket,
-            # and only when the dev secret actually grants something: it states the
-            # access level the dev proxy service account walks away with. A
-            # prod-only deploy — or a dev deploy where no participating dataset has
-            # a test namespace — grants nothing, so it stays silent.
+            # One summary warning per deploy, and only when the dev secret actually
+            # grants something, so a prod-only deploy — or one where no
+            # participating dataset has a test namespace — stays silent.
             pulumi.warn(
                 'IGV proxy: the dev proxy service account was granted read access '
                 f'to the test-namespace buckets of {len(dev_readable_datasets)} '
@@ -642,9 +633,8 @@ class CPGInfrastructure:
     def _igv_proxy_secret_contents(buckets_by_user: dict[str, list[str]]) -> str:
         """Serialise the allow-list, sorted so the output is deterministic.
 
-        Without the sort, dict and list ordering would churn a new secret version
-        on every deploy. Note the deliberate absence of a set(): de-duplicating
-        here would mask a payload that wrongly repeats a bucket.
+        Without the sort, ordering would churn a new secret version on every deploy.
+        No set(): de-duplicating would mask a payload that wrongly repeats a bucket.
         """
         return json.dumps(
             {

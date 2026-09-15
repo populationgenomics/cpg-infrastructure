@@ -144,12 +144,7 @@ class CPGDatasetCloudInfrastructure:
 
     @cached_property
     def igv_proxy_config(self) -> CPGInfrastructureConfig.IgvProxy | None:
-        """The IGV desktop proxy config, if this dataset takes part in the proxy.
-
-        Participation needs all three of: GCP, a global igv_proxy block, and at
-        least one member listed under the igv-desktop-access key. Returns None
-        otherwise, so the proxy bindings no-op.
-        """
+        """The IGV desktop proxy config, or None if this dataset does not take part."""
         if not isinstance(self.infra, GcpInfrastructure):
             return None
         if self.config.igv_proxy is None:
@@ -915,11 +910,8 @@ class CPGDatasetCloudInfrastructure:
             BucketMembership.MUTATE,
         )
 
-        # IGV desktop proxy (prod stack). It serves users listed under
-        # igv-desktop-access, who hold no personal IAM here, using its own
-        # identity. Bind the service account directly rather than through
-        # main_read_group: that group also covers main-tmp and main-analysis,
-        # which would over-grant.
+        # IGV desktop proxy (prod stack). Bind the service account directly rather
+        # than main_read_group, which also covers main-tmp and main-analysis.
         if igv_proxy := self.igv_proxy_config:
             self.infra.add_member_to_bucket(
                 'igv-proxy-prod-main-bucket-read',
@@ -1244,10 +1236,8 @@ class CPGDatasetCloudInfrastructure:
                 membership=BucketMembership.READ,
             )
 
-        # IGV desktop proxy. The dev proxy serves the test namespace and only the
-        # test namespace; the prod proxy also reaches it when opted in. Both
-        # bindings are on the same bucket for the same dataset, so their resource
-        # keys have to differ from each other.
+        # IGV desktop proxy. Both bindings are on the same bucket for the same
+        # dataset, so their resource keys have to differ from each other.
         if igv_proxy := self.igv_proxy_config:
             if igv_proxy.gcp.dev is not None:
                 self.infra.add_member_to_bucket(
