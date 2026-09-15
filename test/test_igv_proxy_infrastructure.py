@@ -20,30 +20,19 @@ if TYPE_CHECKING:
     )
     from cpg_infra.driver.infrastructure import CPGInfrastructure
 
-# Deliberately fictitious. The real proxy projects and service accounts live in
+# Deliberately fictitious. The real proxy project and service account live in
 # cpg-infrastructure-private and must not be mirrored here.
-PROD_SA = 'not-a-real-sa@nonexistent-prod-project.iam.gserviceaccount.com'
-DEV_SA = 'not-a-real-sa@nonexistent-dev-project.iam.gserviceaccount.com'
-PROD_PROJECT = 'nonexistent-prod-project'
-DEV_PROJECT = 'nonexistent-dev-project'
+PROXY_SA = 'not-a-real-sa@nonexistent-proxy-project.iam.gserviceaccount.com'
+PROXY_PROJECT = 'nonexistent-proxy-project'
 
 
-def _make_igv_proxy_config(
-    *,
-    with_dev: bool = False,
-) -> CPGInfrastructureConfig.IgvProxy:
-    gcp: dict[str, Any] = {
-        'prod': {
-            'project': PROD_PROJECT,
-            'server_machine_account': PROD_SA,
+def _make_igv_proxy_config() -> CPGInfrastructureConfig.IgvProxy:
+    return CPGInfrastructureConfig.IgvProxy.model_validate(
+        {
+            'project': PROXY_PROJECT,
+            'server_machine_account': PROXY_SA,
         },
-    }
-    if with_dev:
-        gcp['dev'] = {
-            'project': DEV_PROJECT,
-            'server_machine_account': DEV_SA,
-        }
-    return CPGInfrastructureConfig.IgvProxy.model_validate({'gcp': gcp})
+    )
 
 
 def _make_user(key: str, *, gcp_id: str | None) -> CPGInfrastructureUser:
@@ -104,7 +93,7 @@ def _make_root(
 
     common_gcp_infra = MagicMock(spec=GcpInfrastructure)
     # mirror the real get_pulumi_name, which prefixes '{dataset}-{cloud}-';
-    # a constant stub would hide resource-name collisions between the stacks
+    # a constant stub would hide resource-name collisions
     common_gcp_infra.get_pulumi_name.side_effect = lambda key: f'common-gcp-{key}'
     # common_gcp_infra is a cached_property; seed the cache with the mock
     root.__dict__['common_gcp_infra'] = common_gcp_infra
@@ -124,9 +113,9 @@ def _raw_payloads(root: CPGInfrastructure) -> dict[str, str]:
     }
 
 
-def _users(root: CPGInfrastructure, stack: str) -> dict[str, list[str]]:
-    """The allow-list written for one proxy stack, as {email: [buckets]}."""
-    payload = _raw_payloads(root)[f'igv-proxy-config-{stack}-latest']
+def _users(root: CPGInfrastructure) -> dict[str, list[str]]:
+    """The allow-list written for the proxy, as {email: [buckets]}."""
+    payload = _raw_payloads(root)['igv-proxy-config-latest']
     return json.loads(payload)['users']
 
 
@@ -134,38 +123,18 @@ class TestIgvProxyConfigValidation(TestCase):
     """Parsing and validation of the IgvProxy config models."""
 
     def test_igv_proxy_config_parses(self):
-        """CPGInfrastructureConfig.IgvProxy parses a block with both stacks"""
+        """CPGInfrastructureConfig.IgvProxy parses a project and service account"""
         igv_proxy = CPGInfrastructureConfig.IgvProxy.model_validate(
             {
-                'gcp': {
-                    'prod': {
-                        'project': 'igv-proxy-prod',
-                        'server_machine_account': 'igv-prod@igv-proxy-prod.iam.gserviceaccount.com',
-                    },
-                    'dev': {
-                        'project': 'igv-proxy-dev',
-                        'server_machine_account': 'igv-dev@igv-proxy-dev.iam.gserviceaccount.com',
-                    },
-                },
+                'project': 'igv-proxy-prod',
+                'server_machine_account': 'igv-prod@igv-proxy-prod.iam.gserviceaccount.com',
             },
         )
-        self.assertEqual('igv-proxy-prod', igv_proxy.gcp.prod.project)
-        assert igv_proxy.gcp.dev is not None
-        self.assertEqual('igv-proxy-dev', igv_proxy.gcp.dev.project)
-
-    def test_igv_proxy_dev_optional(self):
-        """gcp.dev is optional — a prod-only block is valid"""
-        igv_proxy = CPGInfrastructureConfig.IgvProxy.model_validate(
-            {
-                'gcp': {
-                    'prod': {
-                        'project': 'igv-proxy-prod',
-                        'server_machine_account': 'igv-prod@igv-proxy-prod.iam.gserviceaccount.com',
-                    },
-                },
-            },
+        self.assertEqual('igv-proxy-prod', igv_proxy.project)
+        self.assertEqual(
+            'igv-prod@igv-proxy-prod.iam.gserviceaccount.com',
+            igv_proxy.server_machine_account,
         )
-        self.assertIsNone(igv_proxy.gcp.dev)
 
     def test_igv_proxy_optional_on_infrastructure_config(self):
         """CPGInfrastructureConfig.igv_proxy defaults to None"""
@@ -186,9 +155,9 @@ class TestIgvProxyConfigValidation(TestCase):
 
 
 class TestIgvProxySecretGeneration(TestCase):
-    """The prod and dev allow-list secrets written by the driver."""
+    """The allow-list secret written by the driver."""
 
-    def test_prod_payload_lists_main_buckets(self):
+    def test_payload_lists_main_buckets(self):
         """Maps user email -> the '-main' buckets they may read, sorted"""
         root = _make_root(
             igv_proxy=_make_igv_proxy_config(),
@@ -205,11 +174,11 @@ class TestIgvProxySecretGeneration(TestCase):
                 'alice@example.com': ['cpg-dataset-a-main', 'cpg-dataset-b-main'],
                 'bob@example.com': ['cpg-dataset-b-main'],
             },
-            _users(root, 'prod'),
+            _users(root),
         )
 
-    def test_prod_secret_written_to_prod_project_only(self):
-        """One secret, in the prod project, readable by the prod SA"""
+    def test_secret_written_to_proxy_project_only(self):
+        """One secret, in the proxy project, readable by the proxy SA"""
         root = _make_root(
             igv_proxy=_make_igv_proxy_config(),
             dataset_configs=[_make_dataset_config('dataset-a', igv_members=['alice'])],
@@ -219,42 +188,30 @@ class TestIgvProxySecretGeneration(TestCase):
         gcp_infra = _gcp_infra(root)
         gcp_infra.create_secret.assert_called_once()
         self.assertEqual(
-            PROD_PROJECT,
+            PROXY_PROJECT,
             gcp_infra.create_secret.call_args.kwargs['project'],
+        )
+        self.assertEqual(
+            'igv-proxy-config',
+            gcp_infra.create_secret.call_args.kwargs['name'],
         )
         gcp_infra.add_secret_member.assert_called_once()
         self.assertEqual(
-            PROD_SA,
+            PROXY_SA,
             gcp_infra.add_secret_member.call_args.kwargs['member'],
         )
-
-    def test_dev_payload_matches_prod_payload(self):
-        """Both stacks read the same '-main' buckets, so they share a payload."""
-        root = _make_root(
-            igv_proxy=_make_igv_proxy_config(with_dev=True),
-            dataset_configs=[
-                _make_dataset_config('dataset-a', igv_members=['alice', 'bob']),
-                _make_dataset_config('cohort-main-study', igv_members=['alice']),
-            ],
+        self.assertEqual(
+            PROXY_PROJECT,
+            gcp_infra.add_secret_member.call_args.kwargs['project'],
         )
-        root.generate_igv_proxy_config()
-
-        expected = {
-            'alice@example.com': [
-                'cpg-cohort-main-study-main',
-                'cpg-dataset-a-main',
-            ],
-            'bob@example.com': ['cpg-dataset-a-main'],
-        }
-        self.assertEqual(expected, _users(root, 'prod'))
-        self.assertEqual(expected, _users(root, 'dev'))
 
     def test_no_test_bucket_is_ever_listed(self):
         """A dataset's test namespace is irrelevant: only '-main' is handed out."""
         root = _make_root(
-            igv_proxy=_make_igv_proxy_config(with_dev=True),
+            igv_proxy=_make_igv_proxy_config(),
             dataset_configs=[
-                _make_dataset_config('dataset-a', igv_members=['alice']),
+                _make_dataset_config('dataset-a', igv_members=['alice', 'bob']),
+                _make_dataset_config('cohort-main-study', igv_members=['alice']),
                 _make_dataset_config(
                     'dataset-b',
                     igv_members=['bob'],
@@ -264,12 +221,16 @@ class TestIgvProxySecretGeneration(TestCase):
         )
         root.generate_igv_proxy_config()
 
-        expected = {
-            'alice@example.com': ['cpg-dataset-a-main'],
-            'bob@example.com': ['cpg-dataset-b-main'],
-        }
-        self.assertEqual(expected, _users(root, 'prod'))
-        self.assertEqual(expected, _users(root, 'dev'))
+        self.assertEqual(
+            {
+                'alice@example.com': [
+                    'cpg-cohort-main-study-main',
+                    'cpg-dataset-a-main',
+                ],
+                'bob@example.com': ['cpg-dataset-a-main', 'cpg-dataset-b-main'],
+            },
+            _users(root),
+        )
         for payload in _raw_payloads(root).values():
             self.assertNotIn('-test', payload)
 
@@ -282,7 +243,7 @@ class TestIgvProxySecretGeneration(TestCase):
 
         def run(datasets: list[CPGDatasetConfig]) -> dict[str, str]:
             root = _make_root(
-                igv_proxy=_make_igv_proxy_config(with_dev=True),
+                igv_proxy=_make_igv_proxy_config(),
                 dataset_configs=datasets,
             )
             root.generate_igv_proxy_config()
@@ -291,31 +252,6 @@ class TestIgvProxySecretGeneration(TestCase):
         a = _make_dataset_config('dataset-a', igv_members=['alice', 'bob'])
         b = _make_dataset_config('dataset-b', igv_members=['bob', 'alice'])
         self.assertEqual(run([a, b]), run([b, a]))
-
-    def test_secrets_use_distinct_pulumi_resource_keys(self):
-        """Both secrets share a secret_id, so they need distinct resource keys"""
-        root = _make_root(
-            igv_proxy=_make_igv_proxy_config(with_dev=True),
-            dataset_configs=[_make_dataset_config('dataset-a', igv_members=['alice'])],
-        )
-        root.generate_igv_proxy_config()
-
-        gcp_infra = _gcp_infra(root)
-        for call_list in (
-            gcp_infra.create_secret.call_args_list,
-            gcp_infra.add_secret_version.call_args_list,
-            gcp_infra.add_secret_member.call_args_list,
-        ):
-            keys = [
-                call.kwargs.get('resource_key') or call.args[0] for call in call_list
-            ]
-            self.assertEqual(2, len(keys))
-            self.assertEqual(len(keys), len(set(keys)))
-
-        self.assertEqual(
-            {'igv-proxy-config'},
-            {c.kwargs['name'] for c in gcp_infra.create_secret.call_args_list},
-        )
 
     def test_empty_allow_list_is_still_written(self):
         """No participating datasets still writes an empty allow-list.
@@ -329,7 +265,7 @@ class TestIgvProxySecretGeneration(TestCase):
         )
         root.generate_igv_proxy_config()
 
-        self.assertEqual({}, _users(root, 'prod'))
+        self.assertEqual({}, _users(root))
 
     def test_no_op_when_igv_proxy_absent(self):
         root = _make_root(
@@ -367,7 +303,7 @@ class TestIgvProxySecretGeneration(TestCase):
 
 
 class TestIgvProxyBucketBindings(TestCase):
-    """The per-dataset bucket IAM bindings for the proxy service accounts."""
+    """The per-dataset bucket IAM binding for the proxy service account."""
 
     def _make_driver(
         self,
@@ -410,31 +346,21 @@ class TestIgvProxyBucketBindings(TestCase):
             bindings[key] = positional[1]
         return bindings
 
-    def test_main_bucket_bindings_follow_the_stack_config(self):
-        """The prod SA always, the dev SA too once a dev stack is configured.
+    def test_main_bucket_binds_the_proxy_service_account(self):
+        driver = self._make_driver(
+            igv_proxy=_make_igv_proxy_config(),
+            igv_members=['alice'],
+        )
+        driver.setup_storage_main_bucket_permissions()
 
-        Both bindings are on the same bucket, so their resource keys must differ.
-        """
-        cases: list[tuple[bool, set[str]]] = [
-            (False, {PROD_SA}),
-            (True, {DEV_SA, PROD_SA}),
-        ]
-        for with_dev, expected in cases:
-            with self.subTest(with_dev=with_dev):
-                driver = self._make_driver(
-                    igv_proxy=_make_igv_proxy_config(with_dev=with_dev),
-                    igv_members=['alice'],
-                )
-                driver.setup_storage_main_bucket_permissions()
-
-                bindings = self._bindings(driver)
-                self.assertEqual(expected, set(bindings.values()))
-                self.assertEqual(len(expected), len(bindings))
+        self.assertEqual(
+            {'igv-proxy-main-bucket-read': PROXY_SA}, self._bindings(driver)
+        )
 
     def test_no_bindings_on_the_test_buckets(self):
-        """Neither stack gets test-namespace access."""
+        """The proxy gets no test-namespace access."""
         driver = self._make_driver(
-            igv_proxy=_make_igv_proxy_config(with_dev=True),
+            igv_proxy=_make_igv_proxy_config(),
             igv_members=['alice'],
         )
         driver.setup_storage_test_buckets_permissions()
@@ -444,12 +370,12 @@ class TestIgvProxyBucketBindings(TestCase):
         """Participation needs GCP, an igv_proxy block, and listed members"""
         cases = {
             'no members listed': {
-                'igv_proxy': _make_igv_proxy_config(with_dev=True),
+                'igv_proxy': _make_igv_proxy_config(),
                 'igv_members': None,
             },
             'igv_proxy absent': {'igv_proxy': None, 'igv_members': ['alice']},
             'non-gcp infrastructure': {
-                'igv_proxy': _make_igv_proxy_config(with_dev=True),
+                'igv_proxy': _make_igv_proxy_config(),
                 'igv_members': ['alice'],
                 'infra_is_gcp': False,
             },

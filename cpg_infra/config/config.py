@@ -231,20 +231,12 @@ class CPGInfrastructureConfig(ConfigModel):
     class IgvProxy(ConfigModel):
         """Global IGV desktop proxy configuration.
 
-        Two independent stacks in separate projects. Setting this grants each read
-        on the '-main' buckets of datasets listing members under
-        'igv-desktop-access'.
+        Setting this grants the proxy read on the '-main' buckets of datasets
+        listing members under 'igv-desktop-access'.
         """
 
-        class GCPDeployment(ConfigModel):
-            project: str
-            server_machine_account: str
-
-        class GCP(ConfigModel):
-            prod: 'CPGInfrastructureConfig.IgvProxy.GCPDeployment'
-            dev: 'CPGInfrastructureConfig.IgvProxy.GCPDeployment | None' = None
-
-        gcp: GCP
+        project: str
+        server_machine_account: str
 
     class WebService(ConfigModel):
         """

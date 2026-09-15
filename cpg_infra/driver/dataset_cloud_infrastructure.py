@@ -910,24 +910,15 @@ class CPGDatasetCloudInfrastructure:
             BucketMembership.MUTATE,
         )
 
-        # IGV desktop proxy. Bind the service accounts directly rather than
-        # main_read_group, which also covers main-tmp and main-analysis. Both
-        # stacks serve the same data, so both read the same bucket.
+        # IGV desktop proxy. Bind the service account directly rather than
+        # main_read_group, which also covers main-tmp and main-analysis.
         if igv_proxy := self.igv_proxy_config:
             self.infra.add_member_to_bucket(
-                'igv-proxy-prod-main-bucket-read',
+                'igv-proxy-main-bucket-read',
                 self.main_bucket,
-                igv_proxy.gcp.prod.server_machine_account,
+                igv_proxy.server_machine_account,
                 BucketMembership.READ,
             )
-
-            if igv_proxy.gcp.dev is not None:
-                self.infra.add_member_to_bucket(
-                    'igv-proxy-dev-main-bucket-read',
-                    self.main_bucket,
-                    igv_proxy.gcp.dev.server_machine_account,
-                    BucketMembership.READ,
-                )
 
     def setup_storage_main_tmp_bucket(self):
         self.infra.add_member_to_bucket(

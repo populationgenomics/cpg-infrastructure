@@ -536,16 +536,15 @@ class CPGInfrastructure:
         )
 
     def generate_igv_proxy_config(self):
-        """Write the IGV desktop proxy allow-list secret for each proxy stack.
+        """Write the IGV desktop proxy allow-list secret.
 
         The proxy forwards objects to users who hold no IAM of their own, so it
-        needs an allow-list of who may read what. One secret per stack, since prod
-        and dev run in separate projects.
+        needs an allow-list of who may read what.
         """
         if not self.config.igv_proxy:
             return
 
-        igv_proxy_gcp = self.config.igv_proxy.gcp
+        igv_proxy = self.config.igv_proxy
 
         # Bucket names are derived strings rather than read off the pulumi bucket
         # resources, so the payload stays a static string with no Output in it.
@@ -577,24 +576,24 @@ class CPGInfrastructure:
 
                 main_buckets_by_user[cloud_user.id].append(main_bucket)
 
-        contents = self._igv_proxy_secret_contents(main_buckets_by_user)
-
-        self._write_igv_proxy_secret(
-            resource_key='igv-proxy-config-prod',
-            project=igv_proxy_gcp.prod.project,
-            member=igv_proxy_gcp.prod.server_machine_account,
-            contents=contents,
+        secret = self.common_gcp_infra.create_secret(
+            name='igv-proxy-config',
+            project=igv_proxy.project,
+            resource_key=self.common_gcp_infra.get_pulumi_name('igv-proxy-config'),
         )
 
-        if not igv_proxy_gcp.dev:
-            return
+        self.common_gcp_infra.add_secret_version(
+            'igv-proxy-config-latest',
+            secret=secret,
+            contents=self._igv_proxy_secret_contents(main_buckets_by_user),
+        )
 
-        # Both stacks read the same '-main' buckets, so they share a payload.
-        self._write_igv_proxy_secret(
-            resource_key='igv-proxy-config-dev',
-            project=igv_proxy_gcp.dev.project,
-            member=igv_proxy_gcp.dev.server_machine_account,
-            contents=contents,
+        self.common_gcp_infra.add_secret_member(
+            'igv-proxy-config-accessor',
+            secret=secret,
+            project=igv_proxy.project,
+            member=igv_proxy.server_machine_account,
+            membership=SecretMembership.ACCESSOR,
         )
 
     @staticmethod
@@ -611,41 +610,6 @@ class CPGInfrastructure:
                     for user in sorted(buckets_by_user)
                 },
             },
-        )
-
-    def _write_igv_proxy_secret(
-        self,
-        *,
-        resource_key: str,
-        project: str,
-        member: str,
-        contents: str,
-    ) -> None:
-        """Create one proxy config secret, its version, and its accessor binding.
-
-        Both stacks use the same secret_id in different projects, and
-        get_pulumi_name only prefixes '{dataset}-{cloud}-', so each stack must
-        pass its own explicit resource_key or the two secrets collide on the
-        pulumi resource name.
-        """
-        secret = self.common_gcp_infra.create_secret(
-            name='igv-proxy-config',
-            project=project,
-            resource_key=self.common_gcp_infra.get_pulumi_name(resource_key),
-        )
-
-        self.common_gcp_infra.add_secret_version(
-            f'{resource_key}-latest',
-            secret=secret,
-            contents=contents,
-        )
-
-        self.common_gcp_infra.add_secret_member(
-            f'{resource_key}-accessor',
-            secret=secret,
-            project=project,
-            member=member,
-            membership=SecretMembership.ACCESSOR,
         )
 
     # dataset agnostic infrastructure
