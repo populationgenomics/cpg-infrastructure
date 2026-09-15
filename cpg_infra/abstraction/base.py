@@ -379,6 +379,12 @@ class DryRunInfra(CloudInfraBase):
     def get_dataset_project_id(self):
         return self.dataset
 
+    def get_project(self):
+        return self.create_project(resource_key='project', name=self.dataset)
+
+    def get_project_id(self):
+        return self.dataset
+
     @staticmethod
     def member_id(member) -> str | pulumi.Output[str]:
         return member
