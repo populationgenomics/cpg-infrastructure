@@ -707,15 +707,13 @@ class CPGDatasetCloudInfrastructure:
                 f'Could not find infra to save blob to for config_destination: '
                 f'{self.config.config_destination}',
             )
-        # Preserve the fallback semantics from the old multi-cloud dispatch:
-        # when the active deploy infra isn't GCP (a future non-GCP backend),
-        # spin up a bare GcpInfrastructure just to write the config blob to
-        # the gs:// destination -- the deploy target itself is unchanged.
-        _infra_to_call_function_on = (
-            self.infra
-            if isinstance(self.infra, GcpInfrastructure)
-            else GcpInfrastructure(self.config, self.dataset_config)
-        )
+        # Post-Azure, CloudName is Literal['gcp', 'dry-run'] and DryRunInfra
+        # is handled by the early-return above, so self.infra is always
+        # GcpInfrastructure here. The assert makes that invariant explicit
+        # for readers and static analysis; if CloudName is ever extended,
+        # this will trip loudly rather than silently mis-dispatching.
+        assert isinstance(self.infra, GcpInfrastructure)
+        _infra_to_call_function_on = self.infra
 
         bucket_name, suffix = self.config.config_destination.removeprefix(
             'gs://',
