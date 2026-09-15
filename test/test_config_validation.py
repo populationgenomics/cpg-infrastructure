@@ -298,40 +298,6 @@ class TestConfigValidation(TestCase):
         )
         self.assertIsNone(igv_proxy.gcp.dev)
 
-    def test_igv_proxy_include_test_buckets_defaults_false(self):
-        """include_test_buckets is opt-in, defaulting to False on prod"""
-        igv_proxy = CPGInfrastructureConfig.IgvProxy.model_validate(
-            {
-                'gcp': {
-                    'prod': {
-                        'project': 'igv-proxy-prod',
-                        'server_machine_account': 'igv-prod@igv-proxy-prod.iam.gserviceaccount.com',
-                    },
-                },
-            },
-        )
-        self.assertFalse(igv_proxy.gcp.prod.include_test_buckets)
-
-    def test_igv_proxy_dev_cannot_include_test_buckets(self):
-        """The dev stack has no include_test_buckets field, so setting it fails."""
-        with self.assertRaises(ValidationError) as ctx:
-            CPGInfrastructureConfig.IgvProxy.model_validate(
-                {
-                    'gcp': {
-                        'prod': {
-                            'project': 'igv-proxy-prod',
-                            'server_machine_account': 'igv-prod@igv-proxy-prod.iam.gserviceaccount.com',
-                        },
-                        'dev': {
-                            'project': 'igv-proxy-dev',
-                            'server_machine_account': 'igv-dev@igv-proxy-dev.iam.gserviceaccount.com',
-                            'include_test_buckets': True,
-                        },
-                    },
-                },
-            )
-        self.assertIn('include_test_buckets', str(ctx.exception))
-
     def test_igv_proxy_optional_on_infrastructure_config(self):
         """CPGInfrastructureConfig.igv_proxy defaults to None"""
         field = CPGInfrastructureConfig.model_fields['igv_proxy']

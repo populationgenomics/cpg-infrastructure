@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any, cast
 from unittest import TestCase
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from cpg_infra.config import (
     CPGDatasetConfig,
@@ -30,14 +30,12 @@ DEV_PROJECT = 'nonexistent-dev-project'
 
 def _make_igv_proxy_config(
     *,
-    include_test_buckets: bool = False,
     with_dev: bool = False,
 ) -> CPGInfrastructureConfig.IgvProxy:
     gcp: dict[str, Any] = {
         'prod': {
             'project': PROD_PROJECT,
             'server_machine_account': PROD_SA,
-            'include_test_buckets': include_test_buckets,
         },
     }
     if with_dev:
@@ -175,25 +173,10 @@ class TestIgvProxySecretGeneration(TestCase):
             gcp_infra.add_secret_member.call_args.kwargs['member'],
         )
 
-    def test_include_test_buckets_adds_test_names_to_prod_payload(self):
+    def test_dev_payload_matches_prod_payload(self):
+        """Both stacks read the same '-main' buckets, so they share a payload."""
         root = _make_root(
-            igv_proxy=_make_igv_proxy_config(include_test_buckets=True),
-            dataset_configs=[_make_dataset_config('dataset-a', igv_members=['alice'])],
-        )
-        root.generate_igv_proxy_config()
-
-        self.assertEqual(
-            {'alice@example.com': ['cpg-dataset-a-main', 'cpg-dataset-a-test']},
-            _users(root, 'prod'),
-        )
-
-    def test_dev_payload_lists_test_buckets_only(self):
-        """The dev secret never carries a main-namespace name."""
-        root = _make_root(
-            igv_proxy=_make_igv_proxy_config(
-                include_test_buckets=True,
-                with_dev=True,
-            ),
+            igv_proxy=_make_igv_proxy_config(with_dev=True),
             dataset_configs=[
                 _make_dataset_config('dataset-a', igv_members=['alice', 'bob']),
                 _make_dataset_config('cohort-main-study', igv_members=['alice']),
@@ -201,24 +184,20 @@ class TestIgvProxySecretGeneration(TestCase):
         )
         root.generate_igv_proxy_config()
 
-        self.assertEqual(
-            {
-                'alice@example.com': [
-                    'cpg-cohort-main-study-test',
-                    'cpg-dataset-a-test',
-                ],
-                'bob@example.com': ['cpg-dataset-a-test'],
-            },
-            _users(root, 'dev'),
-        )
+        expected = {
+            'alice@example.com': [
+                'cpg-cohort-main-study-main',
+                'cpg-dataset-a-main',
+            ],
+            'bob@example.com': ['cpg-dataset-a-main'],
+        }
+        self.assertEqual(expected, _users(root, 'prod'))
+        self.assertEqual(expected, _users(root, 'dev'))
 
-    def test_dataset_without_test_namespace_is_left_out_of_test_entries(self):
-        """A setup_test=False dataset has no -test bucket, so it gets no entry."""
+    def test_no_test_bucket_is_ever_listed(self):
+        """A dataset's test namespace is irrelevant: only '-main' is handed out."""
         root = _make_root(
-            igv_proxy=_make_igv_proxy_config(
-                include_test_buckets=True,
-                with_dev=True,
-            ),
+            igv_proxy=_make_igv_proxy_config(with_dev=True),
             dataset_configs=[
                 _make_dataset_config('dataset-a', igv_members=['alice']),
                 _make_dataset_config(
@@ -230,17 +209,14 @@ class TestIgvProxySecretGeneration(TestCase):
         )
         root.generate_igv_proxy_config()
 
-        self.assertEqual(
-            {
-                'alice@example.com': ['cpg-dataset-a-main', 'cpg-dataset-a-test'],
-                'bob@example.com': ['cpg-dataset-b-main'],
-            },
-            _users(root, 'prod'),
-        )
-        self.assertEqual(
-            {'alice@example.com': ['cpg-dataset-a-test']},
-            _users(root, 'dev'),
-        )
+        expected = {
+            'alice@example.com': ['cpg-dataset-a-main'],
+            'bob@example.com': ['cpg-dataset-b-main'],
+        }
+        self.assertEqual(expected, _users(root, 'prod'))
+        self.assertEqual(expected, _users(root, 'dev'))
+        for payload in _raw_payloads(root).values():
+            self.assertNotIn('-test', payload)
 
     def test_payloads_are_deterministic(self):
         """The same input twice serialises byte-identically.
@@ -312,71 +288,6 @@ class TestIgvProxySecretGeneration(TestCase):
         gcp_infra.add_secret_version.assert_not_called()
         gcp_infra.add_secret_member.assert_not_called()
 
-    def test_warning_states_the_grant_and_names_dev_readable_datasets(self):
-        """One warning per deploy, naming only the datasets dev can now read"""
-        root = _make_root(
-            igv_proxy=_make_igv_proxy_config(with_dev=True),
-            dataset_configs=[
-                _make_dataset_config('dataset-a', igv_members=['alice']),
-                _make_dataset_config('dataset-b', igv_members=['bob']),
-                _make_dataset_config(
-                    'dataset-c',
-                    igv_members=['alice'],
-                    setup_test=False,
-                ),
-            ],
-        )
-        with patch('cpg_infra.driver.infrastructure.pulumi.warn') as warn:
-            root.generate_igv_proxy_config()
-
-        warn.assert_called_once()
-        message = warn.call_args.args[0]
-        self.assertIn('granted read access', message)
-        self.assertIn('2 dataset(s): dataset-a, dataset-b', message)
-        self.assertNotIn('dataset-c', message)
-        self.assertIn('never receives access to main-namespace data', message)
-
-    def test_no_warning_when_dev_is_granted_nothing(self):
-        """Nothing granted to the dev proxy means nothing to flag"""
-        cases = {
-            'prod-only deploy': _make_igv_proxy_config(),
-            'prod-only, include_test_buckets on': _make_igv_proxy_config(
-                include_test_buckets=True,
-            ),
-        }
-        for label, igv_proxy in cases.items():
-            with self.subTest(label):
-                root = _make_root(
-                    igv_proxy=igv_proxy,
-                    dataset_configs=[
-                        _make_dataset_config('dataset-a', igv_members=['alice']),
-                    ],
-                )
-                with patch('cpg_infra.driver.infrastructure.pulumi.warn') as warn:
-                    root.generate_igv_proxy_config()
-                warn.assert_not_called()
-
-        dev_cases = {
-            # dev secret is written, but empty: no dataset has a test namespace
-            'no participating dataset has a test namespace': [
-                _make_dataset_config(
-                    'dataset-a',
-                    igv_members=['alice'],
-                    setup_test=False,
-                ),
-            ],
-            'no dataset participates at all': [_make_dataset_config('dataset-a')],
-        }
-        for label, datasets in dev_cases.items():
-            with self.subTest(label):
-                root = _make_root(
-                    igv_proxy=_make_igv_proxy_config(with_dev=True),
-                    dataset_configs=datasets,
-                )
-                with patch('cpg_infra.driver.infrastructure.pulumi.warn') as warn:
-                    root.generate_igv_proxy_config()
-                warn.assert_not_called()
-
     def test_unknown_member_key_raises(self):
         root = _make_root(
             igv_proxy=_make_igv_proxy_config(),
@@ -440,41 +351,39 @@ class TestIgvProxyBucketBindings(TestCase):
             key, *positional = call.args
             if 'igv' not in key:
                 continue
-            # main-bucket bindings pass bucket/member/membership positionally,
-            # test-bucket bindings pass them as keywords
-            bindings[key] = positional[1] if positional else call.kwargs['member']
+            # bucket/member/membership are passed positionally
+            bindings[key] = positional[1]
         return bindings
 
-    def test_prod_sa_gets_read_on_main_bucket(self):
-        driver = self._make_driver(
-            igv_proxy=_make_igv_proxy_config(),
-            igv_members=['alice'],
-        )
-        driver.setup_storage_main_bucket_permissions()
-        self.assertEqual([PROD_SA], list(self._bindings(driver).values()))
+    def test_main_bucket_bindings_follow_the_stack_config(self):
+        """The prod SA always, the dev SA too once a dev stack is configured.
 
-    def test_test_bucket_bindings_follow_the_stack_config(self):
-        """dev SA when dev is configured, prod SA when it opts in, or both."""
-        cases: list[tuple[bool, bool, set[str]]] = [
-            (False, False, set()),
-            (True, False, {DEV_SA}),
-            (False, True, {PROD_SA}),
-            (True, True, {DEV_SA, PROD_SA}),
+        Both bindings are on the same bucket, so their resource keys must differ.
+        """
+        cases: list[tuple[bool, set[str]]] = [
+            (False, {PROD_SA}),
+            (True, {DEV_SA, PROD_SA}),
         ]
-        for with_dev, include_test_buckets, expected in cases:
-            with self.subTest(with_dev=with_dev, opted_in=include_test_buckets):
+        for with_dev, expected in cases:
+            with self.subTest(with_dev=with_dev):
                 driver = self._make_driver(
-                    igv_proxy=_make_igv_proxy_config(
-                        include_test_buckets=include_test_buckets,
-                        with_dev=with_dev,
-                    ),
+                    igv_proxy=_make_igv_proxy_config(with_dev=with_dev),
                     igv_members=['alice'],
                 )
-                driver.setup_storage_test_buckets_permissions()
+                driver.setup_storage_main_bucket_permissions()
 
                 bindings = self._bindings(driver)
                 self.assertEqual(expected, set(bindings.values()))
                 self.assertEqual(len(expected), len(bindings))
+
+    def test_no_bindings_on_the_test_buckets(self):
+        """Neither stack gets test-namespace access."""
+        driver = self._make_driver(
+            igv_proxy=_make_igv_proxy_config(with_dev=True),
+            igv_members=['alice'],
+        )
+        driver.setup_storage_test_buckets_permissions()
+        self.assertEqual({}, self._bindings(driver))
 
     def test_no_bindings_when_dataset_does_not_participate(self):
         """Participation needs GCP, an igv_proxy block, and listed members"""

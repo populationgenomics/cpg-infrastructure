@@ -910,8 +910,9 @@ class CPGDatasetCloudInfrastructure:
             BucketMembership.MUTATE,
         )
 
-        # IGV desktop proxy (prod stack). Bind the service account directly rather
-        # than main_read_group, which also covers main-tmp and main-analysis.
+        # IGV desktop proxy. Bind the service accounts directly rather than
+        # main_read_group, which also covers main-tmp and main-analysis. Both
+        # stacks serve the same data, so both read the same bucket.
         if igv_proxy := self.igv_proxy_config:
             self.infra.add_member_to_bucket(
                 'igv-proxy-prod-main-bucket-read',
@@ -919,6 +920,14 @@ class CPGDatasetCloudInfrastructure:
                 igv_proxy.gcp.prod.server_machine_account,
                 BucketMembership.READ,
             )
+
+            if igv_proxy.gcp.dev is not None:
+                self.infra.add_member_to_bucket(
+                    'igv-proxy-dev-main-bucket-read',
+                    self.main_bucket,
+                    igv_proxy.gcp.dev.server_machine_account,
+                    BucketMembership.READ,
+                )
 
     def setup_storage_main_tmp_bucket(self):
         self.infra.add_member_to_bucket(
@@ -1235,25 +1244,6 @@ class CPGDatasetCloudInfrastructure:
                 member=self.config.web_service.gcp.server_machine_account,  # WEB_SERVER_SERVICE_ACCOUNT,
                 membership=BucketMembership.READ,
             )
-
-        # IGV desktop proxy. Both bindings are on the same bucket for the same
-        # dataset, so their resource keys have to differ from each other.
-        if igv_proxy := self.igv_proxy_config:
-            if igv_proxy.gcp.dev is not None:
-                self.infra.add_member_to_bucket(
-                    'igv-proxy-dev-test-bucket-read',
-                    bucket=self.test_bucket,
-                    member=igv_proxy.gcp.dev.server_machine_account,
-                    membership=BucketMembership.READ,
-                )
-
-            if igv_proxy.gcp.prod.include_test_buckets:
-                self.infra.add_member_to_bucket(
-                    'igv-proxy-prod-test-bucket-read',
-                    bucket=self.test_bucket,
-                    member=igv_proxy.gcp.prod.server_machine_account,
-                    membership=BucketMembership.READ,
-                )
 
     @cached_property
     def test_bucket(self):

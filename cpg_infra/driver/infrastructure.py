@@ -550,9 +550,6 @@ class CPGInfrastructure:
         # Bucket names are derived strings rather than read off the pulumi bucket
         # resources, so the payload stays a static string with no Output in it.
         main_buckets_by_user: dict[str, list[str]] = defaultdict(list)
-        test_buckets_by_user: dict[str, list[str]] = defaultdict(list)
-        # datasets the dev proxy ends up with test-namespace read access to
-        dev_readable_datasets: list[str] = []
         prefix = self.config.gcp.dataset_storage_prefix
 
         for dataset, dataset_config in self.dataset_configs.items():
@@ -562,10 +559,7 @@ class CPGInfrastructure:
             if not member_keys:
                 continue
 
-            if dataset_config.setup_test:
-                dev_readable_datasets.append(dataset)
             main_bucket = f'{prefix}{dataset}-main'
-            test_bucket = f'{prefix}{dataset}-test'
 
             for member_key in member_keys:
                 member = self.config.users.get(member_key)
@@ -582,52 +576,26 @@ class CPGInfrastructure:
                     )
 
                 main_buckets_by_user[cloud_user.id].append(main_bucket)
-                # A dataset can opt out of the test namespace entirely. There is
-                # then no -test bucket to hand out and no binding to match it, so
-                # listing one would put the allow-list and IAM out of step.
-                if dataset_config.setup_test:
-                    test_buckets_by_user[cloud_user.id].append(test_bucket)
 
-        # IAM without a matching allow-list entry would be inert, so the flag has
-        # to move the payload as well as the bucket bindings.
-        prod_buckets_by_user = main_buckets_by_user
-        if igv_proxy_gcp.prod.include_test_buckets:
-            prod_buckets_by_user = {
-                user: [*buckets, *test_buckets_by_user.get(user, [])]
-                for user, buckets in main_buckets_by_user.items()
-            }
+        contents = self._igv_proxy_secret_contents(main_buckets_by_user)
 
         self._write_igv_proxy_secret(
             resource_key='igv-proxy-config-prod',
             project=igv_proxy_gcp.prod.project,
             member=igv_proxy_gcp.prod.server_machine_account,
-            contents=self._igv_proxy_secret_contents(prod_buckets_by_user),
+            contents=contents,
         )
 
         if not igv_proxy_gcp.dev:
             return
 
-        # The dev proxy gets the test map on its own — never the prod payload with
-        # the names rewritten, which would double up '-test' entries when
-        # include_test_buckets is on.
+        # Both stacks read the same '-main' buckets, so they share a payload.
         self._write_igv_proxy_secret(
             resource_key='igv-proxy-config-dev',
             project=igv_proxy_gcp.dev.project,
             member=igv_proxy_gcp.dev.server_machine_account,
-            contents=self._igv_proxy_secret_contents(test_buckets_by_user),
+            contents=contents,
         )
-
-        if dev_readable_datasets:
-            # One summary warning per deploy, and only when the dev secret actually
-            # grants something, so a prod-only deploy — or one where no
-            # participating dataset has a test namespace — stays silent.
-            pulumi.warn(
-                'IGV proxy: the dev proxy service account was granted read access '
-                f'to the test-namespace buckets of {len(dev_readable_datasets)} '
-                f'dataset(s): {", ".join(sorted(dev_readable_datasets))}. Its '
-                'access is limited to cpg-<dataset>-test; the dev proxy never '
-                'receives access to main-namespace data.',
-            )
 
     @staticmethod
     def _igv_proxy_secret_contents(buckets_by_user: dict[str, list[str]]) -> str:

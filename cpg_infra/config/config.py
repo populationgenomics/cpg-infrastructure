@@ -232,24 +232,16 @@ class CPGInfrastructureConfig(ConfigModel):
         """Global IGV desktop proxy configuration.
 
         Two independent stacks in separate projects. Setting this grants each read
-        on the buckets of datasets listing members under 'igv-desktop-access'.
+        on the '-main' buckets of datasets listing members under
+        'igv-desktop-access'.
         """
 
         class GCPDeployment(ConfigModel):
             project: str
             server_machine_account: str
 
-        class GCPProdDeployment(GCPDeployment):
-            # When True, the prod proxy service account additionally gets READ on
-            # cpg-<dataset>-test, and the prod secret lists the '-test' buckets
-            # alongside the '-main' ones.
-            # Deliberately NOT on the base class: ConfigModel is extra='forbid', so
-            # a dev: block setting this fails validation. The dev proxy can never
-            # be granted main-namespace access through config.
-            include_test_buckets: bool = False
-
         class GCP(ConfigModel):
-            prod: 'CPGInfrastructureConfig.IgvProxy.GCPProdDeployment'
+            prod: 'CPGInfrastructureConfig.IgvProxy.GCPDeployment'
             dev: 'CPGInfrastructureConfig.IgvProxy.GCPDeployment | None' = None
 
         gcp: GCP
