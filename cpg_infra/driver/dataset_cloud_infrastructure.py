@@ -700,21 +700,22 @@ class CPGDatasetCloudInfrastructure:
             # so skip this step
             return
 
-        _infra_to_call_function_on = None
-        infra_prefix_map = [GcpInfrastructure]
-        for Infra in infra_prefix_map:  # noqa: N806
-            if re.match(Infra.storage_url_regex(), self.config.config_destination):
-                _infra_to_call_function_on = (
-                    self.infra
-                    if isinstance(self.infra, Infra)
-                    else Infra(self.config, self.dataset_config)
-                )
-                break
-        else:
+        if not re.match(
+            GcpInfrastructure.storage_url_regex(), self.config.config_destination
+        ):
             raise ValueError(
                 f'Could not find infra to save blob to for config_destination: '
                 f'{self.config.config_destination}',
             )
+        # Preserve the fallback semantics from the old multi-cloud dispatch:
+        # when the active deploy infra isn't GCP (a future non-GCP backend),
+        # spin up a bare GcpInfrastructure just to write the config blob to
+        # the gs:// destination -- the deploy target itself is unchanged.
+        _infra_to_call_function_on = (
+            self.infra
+            if isinstance(self.infra, GcpInfrastructure)
+            else GcpInfrastructure(self.config, self.dataset_config)
+        )
 
         bucket_name, suffix = self.config.config_destination.removeprefix(
             'gs://',
