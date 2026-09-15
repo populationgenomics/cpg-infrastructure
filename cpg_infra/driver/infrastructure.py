@@ -79,7 +79,20 @@ class CPGInfrastructure:
 
     @cached_property
     def common_gcp_infra(self) -> GcpInfrastructure:
-        return self.common_dataset.clouds[GcpInfrastructure.name()].infra  # type: ignore
+        # Many callers (deploy_adhoc, setup_gcp_metamist_cloudrun_invoker,
+        # output_infrastructure_config, gcp_members_cache_bucket,
+        # config_viewer_group, ...) assume the common dataset always has a
+        # GCP deploy target. Post-Azure the only alternative in CloudName is
+        # 'dry-run'; a common dataset configured with only ['dry-run'] would
+        # otherwise KeyError deep inside those helpers with no hint of why.
+        gcp_name = GcpInfrastructure.name()
+        if gcp_name not in self.common_dataset.clouds:
+            raise ValueError(
+                f'Common dataset {self.config.common_dataset!r} has no {gcp_name!r} '
+                f'deploy target; every stack needs a real GCP deploy location. '
+                f"Add {gcp_name!r} to the common dataset's deploy_locations."
+            )
+        return self.common_dataset.clouds[gcp_name].infra  # type: ignore
 
     @cached_property
     def internal_logs_access_group_gcp(self) -> Group:
