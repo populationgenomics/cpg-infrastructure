@@ -89,6 +89,9 @@ class DatasetSeqeraInfrastructure:
         self._config = parent.config
         self._dataset_config = parent.dataset_config
         self._infra: GcpInfrastructure = parent.infra
+        # Populated by create_compute_environments() during setup(); keyed by
+        # access level.
+        self._compute_envs: dict[str, SeqeraComputeEnv] = {}
 
     @cached_property
     def _access_levels(self) -> list[str]:
@@ -322,8 +325,14 @@ class DatasetSeqeraInfrastructure:
         return pulumi.Output.concat(base, '/', level)
 
     def _setup_seqera_compute_environments(self) -> None:
-        """Create Seqera GCP Batch compute env per access level in the relevant workspace."""
+        """Create a Seqera GCP Batch compute env per access level in the relevant
+        workspace, storing them keyed by access level in ``self._compute_envs``.
 
+        """
+        if self._compute_envs:
+            return
+
+        assert self._config.seqera is not None
         project_id = self._infra.project_id
 
         for level in self._access_levels:
@@ -335,7 +344,7 @@ class DatasetSeqeraInfrastructure:
             head_sa = self._head_sas.get(level)
             assert head_sa is not None
 
-            SeqeraComputeEnv(
+            self._compute_envs[level] = SeqeraComputeEnv(
                 self._infra.get_pulumi_name(f'seqera-ce-{dataset}-{level}'),
                 workspace_id=workspace_resource.workspace_id,
                 ce_name=f'{dataset}-{level}',
@@ -367,6 +376,27 @@ class DatasetSeqeraInfrastructure:
                 ),
                 opts=pulumi.ResourceOptions(depends_on=[workspace_resource]),
             )
+
+    @property
+    def analysis_runner_config(self) -> dict[str, dict[str, Any]]:
+        """Per access level workspace + compute env details for analysis-runner lookup.
+
+        Returns config for each access level so the analysis-runner server can resolve
+        from dataset and access level to all the info it needs to start a run in Seqera.
+
+        compute_env_id is an unresolved pulumi output at this point so this needs to be
+        run through pulumi.Output.json_dumps before use
+        """
+        return {
+            level: {
+                'workspace_id': self._workspace_ids[_WORKSPACE_TYPE_FOR_LEVEL[level]],
+                'compute_env_id': ce.compute_env_id,
+                'launch_token_secret_name': self._workspace_for_access_level(
+                    level,
+                ).launch_token_secret_name,
+            }
+            for level, ce in self._compute_envs.items()
+        }
 
     def _setup_workspace_participants(self) -> None:
         """Add this dataset's analysis members to the team's main and test

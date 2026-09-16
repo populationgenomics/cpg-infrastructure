@@ -202,6 +202,9 @@ class CPGInfrastructure:
         # Generate data dropbox config from dataset upload configs
         self.generate_dropbox_config()
 
+        # Publish the Seqera workspace/compute-env lookup for analysis-runner
+        self.generate_seqera_platform_config()
+
         # Store the deployed infrastructure config on gcp storage
         self.output_infrastructure_config()
 
@@ -530,6 +533,59 @@ class CPGInfrastructure:
             secret=secret,
             project=self.config.data_dropbox.gcp.project,
             member=self.config.data_dropbox.gcp.server_machine_account,
+            membership=SecretMembership.ACCESSOR,
+        )
+
+    def generate_seqera_platform_config(self):
+        """Save the Seqera workspace + compute-env lookup for analysis-runner to a secret.
+
+        When users submit a job to analysis-runner they provide a dataset and an
+        access level. The analysis-runner server reads this secret to resolve that
+        pair to the Seqera workspace and compute environment to launch the run in.
+        """
+        if self.config.seqera is None or self.config.analysis_runner is None:
+            return
+
+        # dataset -> access_level -> entry
+        datasets_config: dict[str, dict[str, dict[str, Any]]] = {}
+
+        for dataset_infra in self.dataset_infrastructures.values():
+            cloud_infra = dataset_infra.clouds.get(GcpInfrastructure.name())
+            if cloud_infra is None or not cloud_infra.should_setup_seqera:
+                continue
+
+            dataset = dataset_infra.dataset
+            for level, entry in cloud_infra.seqera.analysis_runner_config.items():
+                datasets_config.setdefault(dataset, {})[level] = entry
+
+        if not datasets_config:
+            return
+
+        contents = pulumi.Output.json_dumps(
+            {
+                'org_id': self.config.seqera.org_id,
+                'api_url': self.config.seqera.api_url,
+                'datasets': datasets_config,
+            },
+        )
+
+        secret_name = 'seqera-platform-config'  # noqa: S105
+        secret = self.common_gcp_infra.create_secret(
+            name=secret_name,
+            project=self.config.analysis_runner.gcp.project,
+        )
+
+        self.common_gcp_infra.add_secret_version(
+            'seqera-platform-config-latest',
+            secret=secret,
+            contents=contents,
+        )
+
+        self.common_gcp_infra.add_secret_member(
+            'seqera-platform-config-accessor',
+            secret=secret,
+            project=self.config.analysis_runner.gcp.project,
+            member=self.config.analysis_runner.gcp.server_machine_account,
             membership=SecretMembership.ACCESSOR,
         )
 
