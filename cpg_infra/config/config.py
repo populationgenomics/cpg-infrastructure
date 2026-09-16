@@ -5,7 +5,6 @@ describe the CPG infrastructure, including what's required from a
 specific dataset.
 """
 
-import os
 from enum import Enum
 from typing import Any, Literal, Optional
 
@@ -296,12 +295,18 @@ class CPGInfrastructureConfig(ConfigModel):
         class WorkspaceConfig(ConfigModel):
             workspace_id: int
             description: Optional[str] = Field(None, max_length=1000)
+            # Secret Manager secret name holding the Seqera launch token for this
+            # workspace. This is published in the analysis-runner Seqera config so the
+            # analysis-runner server knows which secret to use to launch a run.
+            launch_token_secret_name: str
 
         class TeamWorkspaces(ConfigModel):
             main: 'CPGInfrastructureConfig.Seqera.WorkspaceConfig'
             test: 'CPGInfrastructureConfig.Seqera.WorkspaceConfig'
 
         org_id: int
+        # Base URL of the Seqera Platform API
+        api_url: str
         # Seqera Cloud OIDC issuer URI, see:
         # https://docs.seqera.io/platform-cloud/credentials/overview#google-cloud
         wif_issuer_uri: str
@@ -310,12 +315,6 @@ class CPGInfrastructureConfig(ConfigModel):
             TeamOwnership,
             'CPGInfrastructureConfig.Seqera.TeamWorkspaces',
         ]
-
-        def export_env(self) -> None:
-            """Set as environment variables so that these parameters are available for pulumi subprocesses"""
-
-            os.environ['SEQERA_SERVER_URL'] = self.api_url
-            os.environ['SEQERA_TOKEN_SECRET_NAME'] = self.token_secret_name
 
     class Billing(ConfigModel):
         class GCP(ConfigModel):
