@@ -105,6 +105,30 @@ class CPGInfrastructure:
         return self.common_dataset.clouds[AzureInfra.name()].infra  # type: ignore
 
     @cached_property
+    def common_seqera_autoscaling_policy_user_role(self) -> gcp.projects.IAMCustomRole:
+        """Custom project role on cpg-common granting `dataproc.autoscalingPolicies.use`.
+
+        The predefined `roles/dataproc.autoscalingPolicyUser` role cannot be
+        bound at project scope (Google rejects it as "not supported for this
+        resource"); it is only assignable per-policy. We define an equivalent
+        custom role at the cpg-common project level once, so any Seqera Task
+        SA can be granted it project-wide and automatically cover every
+        current and future autoscaling policy in the project.
+        """
+        common_project_id = self.common_gcp_infra.project_id
+        return gcp.projects.IAMCustomRole(
+            'seqera-autoscaling-policy-user',
+            project=common_project_id,
+            role_id='seqeraAutoscalingPolicyUser',
+            title='Seqera Autoscaling Policy User',
+            description=(
+                'Allows using Dataproc autoscaling policies in this project. '
+                'Granted to Seqera Task SAs across datasets.'
+            ),
+            permissions=['dataproc.autoscalingPolicies.use'],
+        )
+
+    @cached_property
     def internal_logs_access_group_gcp(self) -> Group:
         g = self.group_provider.create_group(
             self.common_gcp_infra,
