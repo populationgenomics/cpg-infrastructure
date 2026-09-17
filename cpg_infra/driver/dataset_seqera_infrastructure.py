@@ -267,6 +267,19 @@ class DatasetSeqeraInfrastructure:
                 role=MachineAccountRole.ACCESS,
             )
 
+        # Task SAs (all access levels, all datasets) need to use the Dataproc
+        # autoscaling policies defined centrally in the common project
+        # (projects/cpg-common/regions/*/autoscalingPolicies/*) when Nextflow
+        # tasks spin up Dataproc clusters that reference those policies.
+        common_project_id = self._parent.root.common_gcp_infra.project_id
+        for level, sa in self._service_accounts.items():
+            self._infra.add_project_role(
+                f'seqera-{level}-common-dataproc-autoscalingpolicyuser',
+                member=sa,
+                role='roles/dataproc.autoscalingPolicyUser',
+                project=common_project_id,
+            )
+
     def _bind_wif_principals(self) -> None:
         assert self._config.seqera is not None
         org_id = self._config.seqera.org_id
