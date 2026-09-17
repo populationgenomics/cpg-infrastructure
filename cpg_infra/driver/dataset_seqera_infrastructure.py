@@ -67,6 +67,9 @@ _TASK_JOB_ROLES: tuple[str, ...] = (
     'roles/batch.agentReporter',
     'roles/batch.jobsEditor',  # Allows spawning nested jobs
     'roles/logging.logWriter',
+    'roles/logging.viewer',  # Read Batch job logs from Nextflow tail-follow
+    'roles/dataproc.editor',  # Create/manage Dataproc clusters
+    'roles/dataproc.worker',  # Cluster SA (same SA) acts as Dataproc worker
 )
 
 # Maps each access level to the workspace type that holds it.
