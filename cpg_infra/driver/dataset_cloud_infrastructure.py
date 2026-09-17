@@ -1774,7 +1774,7 @@ class CPGDatasetCloudInfrastructure:
         # this group gives list access to the dataset buckets but grants no ability
         # to read the actual contents of objects
         self.main_list_group.add_member(
-            self.infra.get_pulumi_name('metamist-service-account-in-main-list'),
+            self.infra.get_pulumi_name('metamist-new-service-account-in-main-list'),
             self.infra.config.metamist.gcp.machine_account,
         )
 
