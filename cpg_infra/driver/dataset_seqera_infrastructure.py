@@ -275,9 +275,7 @@ class DatasetSeqeraInfrastructure:
         # bound at project scope, so we bind an equivalent custom role
         # defined once on cpg-common.
         common_project_id = self._parent.root.common_gcp_infra.project_id
-        autoscaling_role = (
-            self._parent.root.common_seqera_autoscaling_policy_user_role
-        )
+        autoscaling_role = self._parent.root.common_seqera_autoscaling_policy_user_role
         for level, sa in self._service_accounts.items():
             self._infra.add_project_role(
                 f'seqera-{level}-common-dataproc-autoscalingpolicyuser',
