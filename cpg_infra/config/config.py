@@ -33,6 +33,7 @@ GroupName = Literal[
     'release-access',
     'tmp-main-read-access',
     'external-repository-reader',
+    'igv-desktop-access',
 ]
 
 
@@ -226,6 +227,16 @@ class CPGInfrastructureConfig(ConfigModel):
 
         gcp: GCP
 
+    class IgvProxy(ConfigModel):
+        """Global IGV desktop proxy configuration.
+
+        Setting this grants the proxy read on the '-main' buckets of datasets
+        listing members under 'igv-desktop-access'.
+        """
+
+        project: str
+        server_machine_account: str
+
     class WebService(ConfigModel):
         """
         This is a CPG-specific configuration that allows a
@@ -381,6 +392,8 @@ class CPGInfrastructureConfig(ConfigModel):
     analysis_runner: AnalysisRunner | None = None
     # configuration options for the data dropbox server
     data_dropbox: DataDropbox | None = None
+    # configuration options for the IGV desktop proxy
+    igv_proxy: IgvProxy | None = None
     # configuration options for the web service, a server that serves static files
     # from a bucket
     web_service: WebService | None = None

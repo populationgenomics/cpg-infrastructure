@@ -25,6 +25,7 @@ from cpg_infra.abstraction.gcp import GcpInfrastructure
 from cpg_infra.abstraction.hailbatch import HailBatchBillingProjectMembership
 from cpg_infra.abstraction.metamist import MetamistProjectMembers
 from cpg_infra.driver.constants import (
+    IGV_DESKTOP_ACCESS,
     SM_MAIN_CONTRIBUTE,
     SM_MAIN_READ,
     SM_MAIN_WRITE,
@@ -225,6 +226,7 @@ class CPGInfrastructure:
 
         # Generate data dropbox config from dataset upload configs
         self.generate_dropbox_config()
+        self.generate_igv_proxy_config()
 
         # Publish the Seqera workspace/compute-env lookup for analysis-runner
         self.generate_seqera_platform_config()
@@ -558,6 +560,83 @@ class CPGInfrastructure:
             project=self.config.data_dropbox.gcp.project,
             member=self.config.data_dropbox.gcp.server_machine_account,
             membership=SecretMembership.ACCESSOR,
+        )
+
+    def generate_igv_proxy_config(self):
+        """Write the IGV desktop proxy allow-list secret.
+
+        The proxy forwards objects to users who hold no IAM of their own, so it
+        needs an allow-list of who may read what.
+        """
+        if not self.config.igv_proxy:
+            return
+
+        igv_proxy = self.config.igv_proxy
+
+        # Bucket names are derived strings rather than read off the pulumi bucket
+        # resources, so the payload stays a static string with no Output in it.
+        main_buckets_by_user: dict[str, list[str]] = defaultdict(list)
+        prefix = self.config.gcp.dataset_storage_prefix
+
+        for dataset, dataset_config in self.dataset_configs.items():
+            member_keys = dataset_config.members.get(
+                IGV_DESKTOP_ACCESS,  # type: ignore[call-overload]
+            )
+            if not member_keys:
+                continue
+
+            main_bucket = f'{prefix}{dataset}-main'
+
+            for member_key in member_keys:
+                member = self.config.users.get(member_key)
+                if not member:
+                    raise ValueError(
+                        f'IGV proxy: member {member_key} of dataset {dataset} was '
+                        'not found in config',
+                    )
+                cloud_user = member.clouds.get(GcpInfrastructure.name())
+                if not cloud_user:
+                    raise ValueError(
+                        f'IGV proxy: member {member_key} of dataset {dataset} does '
+                        'not have a gcp id specified',
+                    )
+
+                main_buckets_by_user[cloud_user.id].append(main_bucket)
+
+        secret = self.common_gcp_infra.create_secret(
+            name='igv-proxy-config',
+            project=igv_proxy.project,
+            resource_key=self.common_gcp_infra.get_pulumi_name('igv-proxy-config'),
+        )
+
+        self.common_gcp_infra.add_secret_version(
+            'igv-proxy-config-latest',
+            secret=secret,
+            contents=self._igv_proxy_secret_contents(main_buckets_by_user),
+        )
+
+        self.common_gcp_infra.add_secret_member(
+            'igv-proxy-config-accessor',
+            secret=secret,
+            project=igv_proxy.project,
+            member=igv_proxy.server_machine_account,
+            membership=SecretMembership.ACCESSOR,
+        )
+
+    @staticmethod
+    def _igv_proxy_secret_contents(buckets_by_user: dict[str, list[str]]) -> str:
+        """Serialise the allow-list, sorted so the output is deterministic.
+
+        Without the sort, ordering would churn a new secret version on every deploy.
+        No set(): de-duplicating would mask a payload that wrongly repeats a bucket.
+        """
+        return json.dumps(
+            {
+                'users': {
+                    user: sorted(buckets_by_user[user])
+                    for user in sorted(buckets_by_user)
+                },
+            },
         )
 
     def generate_seqera_platform_config(self):
