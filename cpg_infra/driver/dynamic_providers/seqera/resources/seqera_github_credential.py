@@ -38,7 +38,7 @@ def _resolve_latest_version(secret_name: str) -> str:
     # Therefore, secret version is cached
     client = secretmanager.SecretManagerServiceClient()
     version = client.get_secret_version(request={'name': _latest_ref(secret_name)})
-    pulumi.log.info(f"Secret Manager version resolved")
+    pulumi.log.info('Secret Manager version resolved')
     return version.name
 
 
