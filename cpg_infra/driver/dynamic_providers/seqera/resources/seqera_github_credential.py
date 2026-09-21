@@ -1,5 +1,6 @@
 """Dynamic provider for a Seqera GitHub credential."""
 
+from functools import lru_cache
 from http import HTTPStatus
 from typing import Any, Optional
 
@@ -30,17 +31,22 @@ def _latest_ref(secret_name: str) -> str:
     return f'{secret_name}/versions/latest'
 
 
+@lru_cache
 def _resolve_latest_version(secret_name: str) -> str:
     """Return the resource name of the latest version"""
     # This metadata request is invoked for every pulumi preview/up.
-    # During a preview/up, this API will be called per each Seqera workspace.
+    # Therefore, secret version is cached
     client = secretmanager.SecretManagerServiceClient()
     version = client.get_secret_version(request={'name': _latest_ref(secret_name)})
+    pulumi.log.info(f"Secret Manager version resolved")
     return version.name
 
 
+@lru_cache
 def _access_latest_token(secret_name: str) -> tuple[str, str]:
-    """Return the secret payload"""
+    """Return the secret payload and the resolved version resource name."""
+    # This function is invoked during every resource creation or update
+    # Therefore, secret value is cached
     client = secretmanager.SecretManagerServiceClient()
     resp = client.access_secret_version(request={'name': _latest_ref(secret_name)})
     return resp.payload.data.decode('utf-8'), resp.name
