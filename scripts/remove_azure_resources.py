@@ -6,13 +6,14 @@ reference removed Azure URNs. Default is dry-run. State via `pulumi stack export
 """
 
 from __future__ import annotations
+
 import argparse
 import json
 import shlex
 import subprocess
 import sys
 
-DEFAULT_STACK = 'datasets/production'
+DEFAULT_STACK = 'organization/datasets/production'
 
 AZURE_TYPE_PREFIXES = (
     'azure-native:',
@@ -132,8 +133,8 @@ def build_manual_commands(
         kinds = ', '.join(sorted(kinds_by_urn[urn]))
         lines.append(f'# {urn}  (refs: {kinds})')
         lines.append(
-            f"pulumi state delete --target-dependents --force --yes "
-            f"--stack {shlex.quote(stack)} {shlex.quote(urn)}"
+            f'pulumi state delete --target-dependents --force --yes '
+            f'--stack {shlex.quote(stack)} {shlex.quote(urn)}'
         )
     return lines
 
@@ -146,7 +147,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--stack', default=DEFAULT_STACK)
     parser.add_argument('--pulumi-dir', default=None)
+    parser.add_argument(
+        '--state-file',
+        default=None,
+        help='Read state from this JSON file (produced by `pulumi stack '
+        'export`) instead of shelling out. Dry-run only; --apply still '
+        'requires a working `pulumi` login for `pulumi state remove`.',
+    )
     return parser.parse_args()
+
+
+def load_state_from_file(path: str) -> dict:
+    """Return the parsed state from a local `pulumi stack export` dump."""
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print(f'ERROR: --state-file not found: {path}', file=sys.stderr)
+        sys.exit(2)
+    except json.JSONDecodeError as err:
+        print(f'ERROR: --state-file is not valid JSON ({err}): {path}', file=sys.stderr)
+        sys.exit(2)
 
 
 def load_state(stack: str, pulumi_dir: str | None) -> dict:
@@ -157,7 +178,7 @@ def load_state(stack: str, pulumi_dir: str | None) -> dict:
     """
     try:
         result = subprocess.run(  # noqa: S603
-            ['pulumi', 'stack', 'export', '--stack', stack],
+            ['pulumi', 'stack', 'export', '--stack', stack],  # noqa: S607
             cwd=pulumi_dir,
             capture_output=True,
             text=True,
@@ -174,7 +195,9 @@ def load_state(stack: str, pulumi_dir: str | None) -> dict:
         print(
             f'ERROR: `pulumi stack export --stack {stack}` failed '
             f'(exit {err.returncode}). Run from a Pulumi program dir or pass '
-            f'--pulumi-dir; verify `pulumi login` and stack access.\n'
+            f"--pulumi-dir; verify `pulumi login` and stack access. For CPG's "
+            f'self-managed backend the stack must be fully qualified as '
+            f'`organization/<project>/<stack>` (org literal is `organization`).\n'
             f'stderr:\n{err.stderr}',
             file=sys.stderr,
         )
@@ -190,9 +213,7 @@ def load_state(stack: str, pulumi_dir: str | None) -> dict:
         sys.exit(2)
 
 
-def leaves_first_order(
-    urns_to_remove: set[str], resources: list[dict]
-) -> list[str]:
+def leaves_first_order(urns_to_remove: set[str], resources: list[dict]) -> list[str]:
     """Order URNs so children come before their parents. Only parent edges
     within the removal set count; ties broken alphabetically for determinism."""
     parent_of = {r['urn']: r.get('parent') for r in resources if r.get('urn')}
@@ -208,9 +229,7 @@ def leaves_first_order(
     return sorted(urns_to_remove, key=lambda u: (-depth(u), u))
 
 
-def pulumi_state_remove_one(
-    stack: str, urn: str, pulumi_dir: str | None
-) -> None:
+def pulumi_state_remove_one(stack: str, urn: str, pulumi_dir: str | None) -> None:
     """`pulumi state remove --force --yes --stack <stack> <urn>` for a single URN.
 
     --force lets Pulumi proceed even when non-Azure survivors still hold
@@ -220,83 +239,91 @@ def pulumi_state_remove_one(
     Raises CalledProcessError on non-zero exit -- the caller reports it.
     """
     cmd = [
-        'pulumi', 'state', 'remove',
-        '--force', '--yes',
-        '--stack', stack,
+        'pulumi',
+        'state',
+        'remove',
+        '--force',
+        '--yes',
+        '--stack',
+        stack,
         urn,
     ]
     subprocess.run(cmd, cwd=pulumi_dir, check=True)  # noqa: S603
 
 
-def main() -> int:
-    args = parse_args()
-    state = load_state(args.stack, args.pulumi_dir)
-    resources = state.get('deployment', {}).get('resources') or []
+def _load_resources(args: argparse.Namespace) -> list[dict]:
+    """Load state from --state-file or the live stack and return its resources."""
+    if args.state_file:
+        state = load_state_from_file(args.state_file)
+    else:
+        state = load_state(args.stack, args.pulumi_dir)
+    # `pulumi stack export` wraps resources in `deployment.resources`; a raw
+    # backend checkpoint (e.g. downloaded straight from GCS) wraps them in
+    # `checkpoint.latest.resources`. Accept either.
+    resources = (
+        state.get('deployment', {}).get('resources')
+        or state.get('checkpoint', {}).get('latest', {}).get('resources')
+        or []
+    )
     if not resources:
         print(
             f'ERROR: stack {args.stack!r} has no resources in export '
             f'(empty stack, wrong stack, or export format changed).',
             file=sys.stderr,
         )
-        return 2
-    azure = [r for r in resources if is_azure_resource(r) and r.get('urn')]
-    non_azure = [r for r in resources if not is_azure_resource(r)]
-    azure_urns = {r['urn'] for r in azure}
-    print(f'Azure URNs to remove: {len(azure_urns)}')
-    for urn in sorted(azure_urns):
-        print(f'  {urn}')
-    problems = find_cross_cloud_refs(azure_urns, non_azure)
-    commands = build_manual_commands(problems, args.stack)
-    if commands:
-        survivor_count = sum(1 for line in commands if line.startswith('# '))
-        print(
-            f'\nAfter `pulumi state remove`, {survivor_count} non-Azure '
-            f'resource(s) will hold dangling references to removed Azure '
-            f'URNs. Review the block below and paste it into the PR summary; '
-            f'run each command from {args.pulumi_dir or "."}.'
-        )
-        print(
-            '\n# WARNING: `pulumi state delete --target-dependents` removes '
-            'the survivor AND every resource under it from state. Only run it '
-            'as-is when the survivor is disposable. For load-bearing '
-            'survivors, prefer:\n'
-            '#   (a) narrower `pulumi state` commands (unprotect / rename) '
-            'that detach only the dangling edge,\n'
-            '#   (b) `pulumi refresh --disable-integrity-checking` once, '
-            'then let `pulumi up` re-serialize state without the broken edges,\n'
-            '#   (c) hand-edit the surviving resource in state to drop the '
-            'dangling parent / dependencies / provider / providers / '
-            'deletedWith / aliases entry.'
-        )
-        print('\n'.join(commands))
-    else:
+        sys.exit(2)
+    return resources
+
+
+def _print_survivor_block(commands: list[str], pulumi_dir: str | None) -> None:
+    """Print the manual-command block for surviving non-Azure cross-cloud refs."""
+    if not commands:
         print('\nNo surviving non-Azure resources reference Azure URNs.')
+        return
+    survivor_count = sum(1 for line in commands if line.startswith('# '))
+    print(
+        f'\nAfter `pulumi state remove`, {survivor_count} non-Azure '
+        f'resource(s) will hold dangling references to removed Azure '
+        f'URNs. Review the block below and paste it into the PR summary; '
+        f'run each command from {pulumi_dir or "."}.'
+    )
+    print(
+        '\n# WARNING: `pulumi state delete --target-dependents` removes '
+        'the survivor AND every resource under it from state. Only run it '
+        'as-is when the survivor is disposable. For load-bearing '
+        'survivors, prefer:\n'
+        '#   (a) narrower `pulumi state` commands (unprotect / rename) '
+        'that detach only the dangling edge,\n'
+        '#   (b) `pulumi refresh --disable-integrity-checking` once, '
+        'then let `pulumi up` re-serialize state without the broken edges,\n'
+        '#   (c) hand-edit the surviving resource in state to drop the '
+        'dangling parent / dependencies / provider / providers / '
+        'deletedWith / aliases entry.'
+    )
+    print('\n'.join(commands))
 
-    if not args.apply:
-        print(
-            f'\nDry-run only. Re-run with --apply to invoke '
-            f'`pulumi state remove --force --yes --stack {args.stack}`.'
-        )
-        return 0
 
+def _apply_removals(
+    azure_urns: set[str],
+    resources: list[dict],
+    stack: str,
+    pulumi_dir: str | None,
+) -> int:
+    """Run `pulumi state remove` per URN leaves-first; return exit code."""
     if not azure_urns:
         print('\nNothing to remove.')
         return 0
-
     ordered = leaves_first_order(azure_urns, resources)
     print(f'\nRemoving {len(ordered)} URN(s) leaves-first...')
     succeeded: list[str] = []
     failed: list[tuple[str, int]] = []
     for urn in ordered:
         try:
-            pulumi_state_remove_one(args.stack, urn, args.pulumi_dir)
+            pulumi_state_remove_one(stack, urn, pulumi_dir)
             succeeded.append(urn)
         except subprocess.CalledProcessError as err:
             failed.append((urn, err.returncode))
-            print(
-                f'  FAILED (exit {err.returncode}): {urn}',
-                file=sys.stderr,
-            )
+            print(f'  FAILED (exit {err.returncode}): {urn}', file=sys.stderr)
     print(f'\nDone. {len(succeeded)} removed, {len(failed)} failed.')
     if failed:
         print('Failed URNs:', file=sys.stderr)
@@ -305,6 +332,36 @@ def main() -> int:
     if succeeded:
         print('Run the manual-command block above.')
     return 1 if failed else 0
+
+
+def main() -> int:
+    args = parse_args()
+    if args.state_file and args.apply:
+        print(
+            'ERROR: --state-file is dry-run only; drop --apply or point '
+            'the script at a live stack.',
+            file=sys.stderr,
+        )
+        return 2
+    resources = _load_resources(args)
+    azure = [r for r in resources if is_azure_resource(r) and r.get('urn')]
+    non_azure = [r for r in resources if not is_azure_resource(r)]
+    azure_urns = {r['urn'] for r in azure}
+    print(f'Azure URNs to remove: {len(azure_urns)}')
+    for urn in sorted(azure_urns):
+        print(f'  {urn}')
+    commands = build_manual_commands(
+        find_cross_cloud_refs(azure_urns, non_azure),
+        args.stack,
+    )
+    _print_survivor_block(commands, args.pulumi_dir)
+    if not args.apply:
+        print(
+            f'\nDry-run only. Re-run with --apply to invoke '
+            f'`pulumi state remove --force --yes --stack {args.stack}`.'
+        )
+        return 0
+    return _apply_removals(azure_urns, resources, args.stack, args.pulumi_dir)
 
 
 if __name__ == '__main__':
