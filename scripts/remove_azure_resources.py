@@ -133,7 +133,7 @@ def build_manual_commands(
         lines.append(f'# {urn}  (refs: {kinds})')
         lines.append(
             f"pulumi state delete --target-dependents --force --yes "
-            f"--stack {stack} {shlex.quote(urn)}"
+            f"--stack {shlex.quote(stack)} {shlex.quote(urn)}"
         )
     return lines
 
@@ -150,25 +150,72 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_state(stack: str, pulumi_dir: str | None) -> dict:
-    """Return the parsed output of `pulumi stack export --stack <stack>`."""
-    result = subprocess.run(  # noqa: S603
-        ['pulumi', 'stack', 'export', '--stack', stack],
-        cwd=pulumi_dir,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return json.loads(result.stdout)
+    """Return the parsed output of `pulumi stack export --stack <stack>`.
+
+    On failure, print pulumi's stderr (or a targeted hint for missing binary /
+    non-JSON stdout) and exit non-zero instead of raising an opaque traceback.
+    """
+    try:
+        result = subprocess.run(  # noqa: S603
+            ['pulumi', 'stack', 'export', '--stack', stack],
+            cwd=pulumi_dir,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except FileNotFoundError:
+        print(
+            'ERROR: `pulumi` not on PATH. Install the Pulumi CLI '
+            '(https://www.pulumi.com/docs/install/).',
+            file=sys.stderr,
+        )
+        sys.exit(127)
+    except subprocess.CalledProcessError as err:
+        print(
+            f'ERROR: `pulumi stack export --stack {stack}` failed '
+            f'(exit {err.returncode}). Run from a Pulumi program dir or pass '
+            f'--pulumi-dir; verify `pulumi login` and stack access.\n'
+            f'stderr:\n{err.stderr}',
+            file=sys.stderr,
+        )
+        sys.exit(err.returncode)
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError as err:
+        print(
+            f'ERROR: `pulumi stack export` produced non-JSON output '
+            f'({err}). First 500 bytes of stdout:\n{result.stdout[:500]}',
+            file=sys.stderr,
+        )
+        sys.exit(2)
 
 
-def pulumi_state_remove(
-    stack: str, urns: list[str], pulumi_dir: str | None
+def leaves_first_order(
+    urns_to_remove: set[str], resources: list[dict]
+) -> list[str]:
+    """Order URNs so children come before their parents. Only parent edges
+    within the removal set count; ties broken alphabetically for determinism."""
+    parent_of = {r['urn']: r.get('parent') for r in resources if r.get('urn')}
+
+    def depth(urn: str) -> int:
+        d = 0
+        cur = parent_of.get(urn)
+        while cur in urns_to_remove:
+            d += 1
+            cur = parent_of.get(cur)
+        return d
+
+    return sorted(urns_to_remove, key=lambda u: (-depth(u), u))
+
+
+def pulumi_state_remove_one(
+    stack: str, urn: str, pulumi_dir: str | None
 ) -> None:
-    """One `pulumi state remove --force --yes --stack <stack> <urn>...` call.
+    """`pulumi state remove --force --yes --stack <stack> <urn>` for a single URN.
 
     --force lets Pulumi proceed even when non-Azure survivors still hold
-    references to the removed URNs (those refs are what the manual-command
-    block below is for). --yes skips the interactive prompt.
+    references to the removed URN (those refs are what the manual-command
+    block above is for). --yes skips the interactive prompt.
 
     Raises CalledProcessError on non-zero exit -- the caller reports it.
     """
@@ -176,7 +223,7 @@ def pulumi_state_remove(
         'pulumi', 'state', 'remove',
         '--force', '--yes',
         '--stack', stack,
-        *urns,
+        urn,
     ]
     subprocess.run(cmd, cwd=pulumi_dir, check=True)  # noqa: S603
 
@@ -184,7 +231,14 @@ def pulumi_state_remove(
 def main() -> int:
     args = parse_args()
     state = load_state(args.stack, args.pulumi_dir)
-    resources = state['deployment']['resources']
+    resources = state.get('deployment', {}).get('resources') or []
+    if not resources:
+        print(
+            f'ERROR: stack {args.stack!r} has no resources in export '
+            f'(empty stack, wrong stack, or export format changed).',
+            file=sys.stderr,
+        )
+        return 2
     azure = [r for r in resources if is_azure_resource(r) and r.get('urn')]
     non_azure = [r for r in resources if not is_azure_resource(r)]
     azure_urns = {r['urn'] for r in azure}
@@ -229,14 +283,28 @@ def main() -> int:
         print('\nNothing to remove.')
         return 0
 
-    print(f'\nRemoving {len(azure_urns)} URN(s)...')
-    try:
-        pulumi_state_remove(args.stack, sorted(azure_urns), args.pulumi_dir)
-    except subprocess.CalledProcessError as err:
-        print(f'ERROR: pulumi state remove exited {err.returncode}', file=sys.stderr)
-        return err.returncode
-    print('Done. Run the manual-command block above.')
-    return 0
+    ordered = leaves_first_order(azure_urns, resources)
+    print(f'\nRemoving {len(ordered)} URN(s) leaves-first...')
+    succeeded: list[str] = []
+    failed: list[tuple[str, int]] = []
+    for urn in ordered:
+        try:
+            pulumi_state_remove_one(args.stack, urn, args.pulumi_dir)
+            succeeded.append(urn)
+        except subprocess.CalledProcessError as err:
+            failed.append((urn, err.returncode))
+            print(
+                f'  FAILED (exit {err.returncode}): {urn}',
+                file=sys.stderr,
+            )
+    print(f'\nDone. {len(succeeded)} removed, {len(failed)} failed.')
+    if failed:
+        print('Failed URNs:', file=sys.stderr)
+        for urn, rc in failed:
+            print(f'  (exit {rc}) {urn}', file=sys.stderr)
+    if succeeded:
+        print('Run the manual-command block above.')
+    return 1 if failed else 0
 
 
 if __name__ == '__main__':
