@@ -1,8 +1,17 @@
 """Strip Azure resources from a Pulumi stack.
 
-Reports URNs to remove, (with --apply) issues one `pulumi state remove --force --yes`
-call, and prints manual `pulumi state delete` commands for non-Azure survivors that
-reference removed Azure URNs. Default is dry-run. State via `pulumi stack export`.
+Reports the Azure URNs to remove and, for every non-Azure survivor that still
+references one, prints a ready-to-run `pulumi state delete --target-dependents`
+command plus a WARNING block explaining safer alternatives (`unprotect` /
+`rename`, `refresh --disable-integrity-checking`, or a narrow hand-edit).
+
+With `--apply`, iterates the URNs leaves-first and shells out
+`pulumi state remove --force --yes` once per URN, tallying successes and
+failures. Default is dry-run.
+
+State is read from `pulumi stack export --stack <stack>` by default, or from
+a local JSON dump via `--state-file` (accepts both a `pulumi stack export`
+output and a raw backend checkpoint).
 """
 
 from __future__ import annotations
@@ -266,9 +275,15 @@ def _load_resources(args: argparse.Namespace) -> list[dict]:
         or []
     )
     if not resources:
+        source = (
+            f'--state-file {args.state_file}'
+            if args.state_file
+            else f'stack {args.stack!r}'
+        )
         print(
-            f'ERROR: stack {args.stack!r} has no resources in export '
-            f'(empty stack, wrong stack, or export format changed).',
+            f'ERROR: no resources found in {source} '
+            f'(empty stack, wrong stack, or unrecognised export layout: '
+            f'expected `deployment.resources` or `checkpoint.latest.resources`).',
             file=sys.stderr,
         )
         sys.exit(2)
@@ -308,6 +323,7 @@ def _apply_removals(
     resources: list[dict],
     stack: str,
     pulumi_dir: str | None,
+    has_survivor_block: bool,
 ) -> int:
     """Run `pulumi state remove` per URN leaves-first; return exit code."""
     if not azure_urns:
@@ -329,7 +345,7 @@ def _apply_removals(
         print('Failed URNs:', file=sys.stderr)
         for urn, rc in failed:
             print(f'  (exit {rc}) {urn}', file=sys.stderr)
-    if succeeded:
+    if succeeded and has_survivor_block:
         print('Run the manual-command block above.')
     return 1 if failed else 0
 
@@ -361,7 +377,13 @@ def main() -> int:
             f'`pulumi state remove --force --yes --stack {args.stack}`.'
         )
         return 0
-    return _apply_removals(azure_urns, resources, args.stack, args.pulumi_dir)
+    return _apply_removals(
+        azure_urns,
+        resources,
+        args.stack,
+        args.pulumi_dir,
+        has_survivor_block=bool(commands),
+    )
 
 
 if __name__ == '__main__':
