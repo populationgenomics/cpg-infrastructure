@@ -189,6 +189,9 @@ class TestConfigValidation(TestCase):
                 'org_id': 12345,
                 'api_url': 'https://api.cloud.seqera.io',
                 'wif_issuer_uri': 'https://cloud.seqera.io',
+                'github_auth_token_secret_name': 'projects/1/secrets/gh-pat',
+                'github_auth_token_username': 'cpg-bot',
+                'github_auth_token_base_url': 'https://github.com/organizations/test',
                 'teams': {
                     'Rare Disease': {
                         'main': {
@@ -240,6 +243,9 @@ class TestConfigValidation(TestCase):
                     'org_id': 1,
                     'api_url': 'https://api.cloud.seqera.io',
                     'wif_issuer_uri': 'https://cloud.seqera.io',
+                    'github_auth_token_secret_name': 'projects/1/secrets/gh-pat',
+                    'github_auth_token_username': 'cpg-bot',
+                    'github_auth_token_base_url': 'https://github.com/organizations/test',
                     'teams': {
                         'Rare-Disease': {  # note the hyphen typo
                             'main': {
