@@ -1,9 +1,9 @@
 """Strip Azure resources from a Pulumi stack.
 
 Reports the Azure URNs to remove and, for every non-Azure survivor that still
-references one, prints a ready-to-run `pulumi state delete --target-dependents`
-command plus a WARNING block explaining safer alternatives (`unprotect` /
-`rename`, `refresh --disable-integrity-checking`, or a narrow hand-edit).
+references one, prints the affected URN and reference fields. It does not
+generate an automatic survivor-delete command because that can remove the
+survivor and its descendants from state.
 
 With `--apply`, iterates the URNs leaves-first and shells out
 `pulumi state remove --force --yes` once per URN, tallying successes and
@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import shlex
 import subprocess
 import sys
 
@@ -128,11 +127,14 @@ def find_cross_cloud_refs(
 
 
 def build_manual_commands(
-    problems: list[tuple[str, str, str]], stack: str
+    problems: list[tuple[str, str, str]],
 ) -> list[str]:
-    """Return shell lines, two per surviving URN: a `#`-comment listing ref
-    kinds, then a `pulumi state delete --target-dependents` command. URNs are
-    shell-quoted via shlex.quote()."""
+    """Return non-executable report lines for each surviving resource.
+
+    Do not generate `pulumi state delete --target-dependents` commands here:
+    that command removes the survivor and its descendants, rather than just
+    clearing the dangling Azure reference.
+    """
     kinds_by_urn: dict[str, set[str]] = {}
     for dep_urn, kind, _ in problems:
         kinds_by_urn.setdefault(dep_urn, set()).add(kind)
@@ -141,10 +143,6 @@ def build_manual_commands(
     for urn in sorted(kinds_by_urn):
         kinds = ', '.join(sorted(kinds_by_urn[urn]))
         lines.append(f'# {urn}  (refs: {kinds})')
-        lines.append(
-            f'pulumi state delete --target-dependents --force --yes '
-            f'--stack {shlex.quote(stack)} {shlex.quote(urn)}'
-        )
     return lines
 
 
@@ -291,7 +289,7 @@ def _load_resources(args: argparse.Namespace) -> list[dict]:
 
 
 def _print_survivor_block(commands: list[str], pulumi_dir: str | None) -> None:
-    """Print the manual-command block for surviving non-Azure cross-cloud refs."""
+    """Print the report for surviving non-Azure cross-cloud references."""
     if not commands:
         print('\nNo surviving non-Azure resources reference Azure URNs.')
         return
@@ -299,21 +297,15 @@ def _print_survivor_block(commands: list[str], pulumi_dir: str | None) -> None:
     print(
         f'\nAfter `pulumi state remove`, {survivor_count} non-Azure '
         f'resource(s) will hold dangling references to removed Azure '
-        f'URNs. Review the block below and paste it into the PR summary; '
-        f'run each command from {pulumi_dir or "."}.'
+        f'URNs. Review the affected resources below before repairing state '
+        f'from {pulumi_dir or "."}.'
     )
     print(
-        '\n# WARNING: `pulumi state delete --target-dependents` removes '
-        'the survivor AND every resource under it from state. Only run it '
-        'as-is when the survivor is disposable. For load-bearing '
-        'survivors, prefer:\n'
-        '#   (a) narrower `pulumi state` commands (unprotect / rename) '
-        'that detach only the dangling edge,\n'
-        '#   (b) `pulumi refresh --disable-integrity-checking` once, '
-        'then let `pulumi up` re-serialize state without the broken edges,\n'
-        '#   (c) hand-edit the surviving resource in state to drop the '
-        'dangling parent / dependencies / provider / providers / '
-        'deletedWith / aliases entry.'
+        '\n# No automatic delete command is provided: '
+        '`pulumi state delete --target-dependents` removes the survivor '
+        'and its descendants from state. Repair only the listed dangling '
+        'fields using a reviewed state edit or a targeted Pulumi workflow; '
+        'then verify with `pulumi preview`.'
     )
     print('\n'.join(commands))
 
@@ -366,10 +358,7 @@ def main() -> int:
     print(f'Azure URNs to remove: {len(azure_urns)}')
     for urn in sorted(azure_urns):
         print(f'  {urn}')
-    commands = build_manual_commands(
-        find_cross_cloud_refs(azure_urns, non_azure),
-        args.stack,
-    )
+    commands = build_manual_commands(find_cross_cloud_refs(azure_urns, non_azure))
     _print_survivor_block(commands, args.pulumi_dir)
     if not args.apply:
         print(
