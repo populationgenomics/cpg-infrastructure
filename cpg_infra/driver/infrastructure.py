@@ -673,21 +673,22 @@ class CPGInfrastructure:
                 ('test', ws_pair.test),
             ):
                 is_test = workspace_type == 'test'
-                workspace = SeqeraWorkspace(
-                    f'seqera-ws-{formatted_team_name}-{workspace_type}',
-                    org_id=seqera_cfg.org_id,
-                    workspace_id=ws_configs.workspace_id,
-                    ws_name=get_formatted_ws_name(is_test, team_ownership),
-                    full_name=f'CPG {team_ownership}{" Test" if is_test else ""} Workspace',
-                    visibility='PRIVATE',
-                    description=ws_configs.description,
+                self.seqera_workspaces[(team_ownership, workspace_type)] = (
+                    SeqeraWorkspace(
+                        f'seqera-ws-{formatted_team_name}-{workspace_type}',
+                        org_id=seqera_cfg.org_id,
+                        workspace_id=ws_configs.workspace_id,
+                        ws_name=get_formatted_ws_name(is_test, team_ownership),
+                        full_name=f'CPG {team_ownership}{" Test" if is_test else ""} Workspace',
+                        visibility='PRIVATE',
+                        description=ws_configs.description,
+                    )
                 )
-                self.seqera_workspaces[(team_ownership, workspace_type)] = workspace
 
                 # Credential per workspace to access private GitHub repositories
                 SeqeraGithubCredential(
                     f'seqera-github-cred-{formatted_team_name}-{workspace_type}',
-                    workspace_id=workspace.workspace_id,
+                    workspace_id=ws_configs.workspace_id,
                     cred_name='cpg-github-auth-token',
                     username=seqera_cfg.github_auth_token_username,
                     access_token_secret_name=seqera_cfg.github_auth_token_secret_name,
