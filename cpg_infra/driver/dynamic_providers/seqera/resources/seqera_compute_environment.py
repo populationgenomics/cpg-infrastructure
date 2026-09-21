@@ -146,7 +146,8 @@ class _ComputeEnvProvider(ResourceProvider):
 
         cred_name = _generate_credentials_name(inputs.name)
         cred_id = create_credentials(
-            inputs.workspace_id, _build_credentials_body(inputs.credentials, cred_name),
+            inputs.workspace_id,
+            _build_credentials_body(inputs.credentials, cred_name),
         )
 
         inputs.credentials.id = cred_id
@@ -192,7 +193,10 @@ class _ComputeEnvProvider(ResourceProvider):
             _old_creds.get(f) != news['credentials'].get(f) for f in _CRED_UPDATE_FIELDS
         )
         if cred_changed:
-            assert inputs.credentials.id is not None and inputs.credentials.name is not None
+            assert (
+                inputs.credentials.id is not None
+                and inputs.credentials.name is not None
+            )
             update_credentials(
                 inputs.workspace_id,
                 inputs.credentials.id,

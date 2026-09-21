@@ -315,7 +315,7 @@ class CPGInfrastructureConfig(ConfigModel):
             TeamOwnership,
             'CPGInfrastructureConfig.Seqera.TeamWorkspaces',
         ]
-        # For private repo access
+        # For private GitHub repo access
         github_auth_token_secret_name: str
         github_auth_token_username: str
         github_auth_token_base_url: str

@@ -61,7 +61,9 @@ def _build_body(
 
 
 def _outs(
-    inputs: GithubCredentialArgs, cred_id: str, resolved_secret_version: str,
+    inputs: GithubCredentialArgs,
+    cred_id: str,
+    resolved_secret_version: str,
 ) -> dict[str, Any]:
     return {
         'workspace_id': inputs.workspace_id,
@@ -102,12 +104,17 @@ class _GithubCredentialProvider(ResourceProvider):
         return DiffResult(changes=changed, replaces=replaces or None)
 
     def update(
-        self, id_: str, _olds: dict[str, Any], news: dict[str, Any],
+        self,
+        id_: str,
+        _olds: dict[str, Any],
+        news: dict[str, Any],
     ) -> UpdateResult:
         inputs = GithubCredentialArgs(**news)
         token, resolved_version = _access_latest_token(inputs.access_token_secret_name)
         update_credentials(
-            inputs.workspace_id, id_, _build_body(inputs, token, cred_id=id_),
+            inputs.workspace_id,
+            id_,
+            _build_body(inputs, token, cred_id=id_),
         )
         return UpdateResult(outs=_outs(inputs, id_, resolved_version))
 

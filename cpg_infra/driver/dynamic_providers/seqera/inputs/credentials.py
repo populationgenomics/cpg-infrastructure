@@ -48,7 +48,7 @@ class GithubCredentialArgs(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
     workspace_id: int
-    name: str = Field(min_length=1,max_length=MAX_CRED_NAME_LENGTH)
+    name: str = Field(min_length=1, max_length=MAX_CRED_NAME_LENGTH)
     username: str
     access_token_secret_name: str
     base_url: str
