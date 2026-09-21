@@ -2,6 +2,8 @@ import importlib
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'scripts'))
 
@@ -15,7 +17,7 @@ def test_module_imports_without_third_party_deps():
     assert hasattr(mod, 'parse_args')
 
 
-import remove_azure_resources as rar
+import remove_azure_resources as rar  # noqa: E402
 
 
 def test_is_azure_by_type_prefix():
@@ -25,8 +27,10 @@ def test_is_azure_by_type_prefix():
 
 def test_is_not_azure_for_gcp_bucket_named_azure():
     assert not rar.is_azure_resource(
-        {'type': 'gcp:storage/bucket:Bucket',
-         'urn': 'urn:pulumi:prod::infra::gcp:storage/bucket:Bucket::dataset-azure-archive'}
+        {
+            'type': 'gcp:storage/bucket:Bucket',
+            'urn': 'urn:pulumi:prod::infra::gcp:storage/bucket:Bucket::dataset-azure-archive',
+        }
     )
 
 
@@ -36,16 +40,20 @@ def test_is_not_azure_for_component_by_urn_name_alone():
     # components self-identify via type (`:azure:` namespace or
     # `azure-native:` / `azuread:` prefix); the URN name is not consulted.
     assert not rar.is_azure_resource(
-        {'type': 'pulumi:pulumi:Component',
-         'urn': 'urn:pulumi:prod::infra::pulumi:pulumi:Component::dataset-azure-storage'}
+        {
+            'type': 'pulumi:pulumi:Component',
+            'urn': 'urn:pulumi:prod::infra::pulumi:pulumi:Component::dataset-azure-storage',
+        }
     )
 
 
 def test_is_not_azure_for_unknown_typed_component_named_azure():
     # Sanity: an unrelated type whose name contains `Azure` is not Azure.
     assert not rar.is_azure_resource(
-        {'type': 'cpg_infra:reports:AzureCostAudit',
-         'urn': 'urn:pulumi:prod::infra::cpg_infra:reports:AzureCostAudit::dataset-azure-cost'}
+        {
+            'type': 'cpg_infra:reports:AzureCostAudit',
+            'urn': 'urn:pulumi:prod::infra::cpg_infra:reports:AzureCostAudit::dataset-azure-cost',
+        }
     )
 
 
@@ -55,7 +63,7 @@ def test_is_azure_for_namespaced_component_type():
 
 def test_finds_parent_dependency_and_provider_refs():
     azure_urn = 'urn:pulumi:prod::infra::azure-native:storage:StorageAccount::acct'
-    non_azure = [
+    non_azure: list[dict] = [
         {
             'urn': 'urn:pulumi:prod::infra::gcp:x:Y::a',
             'parent': azure_urn,
@@ -96,7 +104,9 @@ def test_manual_commands_empty_when_no_problems():
     assert rar.build_manual_commands([]) == []
 
 
-def test_main_dry_run_prints_urns_and_commands(monkeypatch, capsys):
+def test_main_dry_run_prints_urns_and_commands(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
     azure_urn = 'urn:pulumi:prod::infra::azure-native:storage:StorageAccount::acct'
     survivor_urn = 'urn:pulumi:prod::infra::gcp:x:Y::a'
     fake_state = {
@@ -107,7 +117,7 @@ def test_main_dry_run_prints_urns_and_commands(monkeypatch, capsys):
             ],
         },
     }
-    monkeypatch.setattr(rar, 'load_state', lambda stack, pulumi_dir: fake_state)
+    monkeypatch.setattr(rar, 'load_state', lambda _stack, _pulumi_dir: fake_state)
     monkeypatch.setattr(sys, 'argv', ['remove_azure_resources.py'])
 
     rc = rar.main()
