@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Literal, Optional
+from typing import Literal, Optional
 
 import pulumi
 from pydantic import BaseModel, ConfigDict, Field
@@ -7,9 +7,6 @@ from pydantic.alias_generators import to_camel
 
 from cpg_infra.driver.dynamic_providers.seqera.inputs.credentials import (
     GoogleWifCredentialArgs,
-)
-from cpg_infra.driver.dynamic_providers.seqera.util.dataclass_util import (
-    to_input_dict as _to_input_dict,
 )
 
 MAX_CE_NAME_LENGTH = 100
@@ -23,9 +20,6 @@ class ConfigEnvVariable:
     value: pulumi.Input[str]
     compute: Optional[pulumi.Input[bool]] = None
     head: Optional[pulumi.Input[bool]] = None
-
-    def to_input_dict(self) -> dict[str, Any]:
-        return _to_input_dict(self)
 
 
 @dataclass
@@ -73,9 +67,6 @@ class GoogleBatchConfig:
     ssh_daemon: Optional[pulumi.Input[bool]] = None
     ssh_image: Optional[pulumi.Input[str]] = None
     copy_image: Optional[pulumi.Input[str]] = None
-
-    def to_input_dict(self) -> dict[str, Any]:
-        return _to_input_dict(self)
 
 
 class ConfigEnvVariableArgs(BaseModel):

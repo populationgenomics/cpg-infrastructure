@@ -1,7 +1,7 @@
 """Input models for Seqera credential resources."""
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Optional
 
 import pulumi
 from pydantic import BaseModel, ConfigDict, Field
@@ -9,9 +9,6 @@ from pydantic.alias_generators import to_camel
 
 from cpg_infra.driver.dynamic_providers.seqera.util.credentials_util import (
     MAX_CRED_NAME_LENGTH,
-)
-from cpg_infra.driver.dynamic_providers.seqera.util.dataclass_util import (
-    to_input_dict as _to_input_dict,
 )
 
 
@@ -25,9 +22,6 @@ class GoogleWifCredentialConfig:
     workload_identity_provider: pulumi.Input[str]
     service_account_email: pulumi.Input[str]
     token_audience: Optional[pulumi.Input[str]] = None
-
-    def to_input_dict(self) -> dict[str, Any]:
-        return _to_input_dict(self)
 
 
 class GoogleWifCredentialArgs(BaseModel):

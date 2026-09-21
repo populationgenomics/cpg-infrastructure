@@ -31,6 +31,9 @@ from cpg_infra.driver.dynamic_providers.seqera.util.credentials_util import (
     create_credentials,
     update_credentials,
 )
+from cpg_infra.driver.dynamic_providers.seqera.util.dataclass_util import (
+    to_input_dict,
+)
 
 _CRED_UUID_LEN = 8
 
@@ -43,9 +46,7 @@ def _generate_credentials_name(ce_name: str) -> str:
     return combined
 
 
-def _build_credentials_body(
-    creds: GoogleWifCredentialArgs, name: str, cred_id: Optional[str] = None
-) -> dict:
+def _build_credentials_body(creds: GoogleWifCredentialArgs, name: str) -> dict:
     keys: dict = {
         'keyType': 'google',
         **creds.model_dump(by_alias=True, exclude_none=True, exclude={'id', 'name'}),
@@ -57,8 +58,8 @@ def _build_credentials_body(
             'keys': keys,
         }
     }
-    if cred_id:
-        body['credentials']['id'] = cred_id
+    if creds.id is not None:
+        body['credentials']['id'] = creds.id
     return body
 
 
@@ -200,11 +201,7 @@ class _ComputeEnvProvider(ResourceProvider):
             update_credentials(
                 inputs.workspace_id,
                 inputs.credentials.id,
-                _build_credentials_body(
-                    inputs.credentials,
-                    inputs.credentials.name,
-                    inputs.credentials.id,
-                ),
+                _build_credentials_body(inputs.credentials, inputs.credentials.name),
             )
 
         if olds.get('name') != news.get('name'):
@@ -252,8 +249,8 @@ class SeqeraComputeEnv(Resource):
             {
                 'workspace_id': workspace_id,
                 'name': ce_name,
-                'credentials': credentials.to_input_dict(),
-                'config': config.to_input_dict(),
+                'credentials': to_input_dict(credentials),
+                'config': to_input_dict(config),
                 'description': description,
                 'platform': platform,
                 'label_ids': label_ids,

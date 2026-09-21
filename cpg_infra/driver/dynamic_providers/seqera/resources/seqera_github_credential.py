@@ -32,6 +32,8 @@ def _latest_ref(secret_name: str) -> str:
 
 def _resolve_latest_version(secret_name: str) -> str:
     """Return the resource name of the latest version"""
+    # This metadata request is invoked for every pulumi preview/up.
+    # During a preview/up, this API will be called per each Seqera workspace.
     client = secretmanager.SecretManagerServiceClient()
     version = client.get_secret_version(request={'name': _latest_ref(secret_name)})
     return version.name
@@ -47,7 +49,6 @@ def _access_latest_token(secret_name: str) -> tuple[str, str]:
 def _build_body(
     inputs: GithubCredentialArgs,
     token: str,
-    cred_id: Optional[str] = None,
 ) -> dict:
     credentials: dict = {
         'name': inputs.name,
@@ -55,12 +56,17 @@ def _build_body(
         'keys': {'username': inputs.username, 'password': token},
         'baseUrl': inputs.base_url,
     }
-    if cred_id:
-        credentials['id'] = cred_id
+    if inputs.credentials_id is not None:
+        credentials['id'] = inputs.credentials_id
     return {'credentials': credentials}
 
 
-def _outs(
+# The GitHub token is not stored in pulumi state.
+# Instead, the token is stored in secret manager and the secret value is fetched
+# during resource creation or token rotation (secret updated).
+# In order to identify token rotation, additionally the secret version and access_token_secret_name
+# are stored in the pulumi state.
+def _get_output_state(
     inputs: GithubCredentialArgs,
     cred_id: str,
     resolved_secret_version: str,
@@ -89,7 +95,7 @@ class _GithubCredentialProvider(ResourceProvider):
         cred_id = create_credentials(inputs.workspace_id, _build_body(inputs, token))
         return CreateResult(
             id_=cred_id,
-            outs=_outs(inputs, cred_id, resolved_version),
+            outs=_get_output_state(inputs, cred_id, resolved_version),
         )
 
     def diff(self, _id: str, olds: dict[str, Any], news: dict[str, Any]) -> DiffResult:
@@ -111,12 +117,15 @@ class _GithubCredentialProvider(ResourceProvider):
     ) -> UpdateResult:
         inputs = GithubCredentialArgs(**news)
         token, resolved_version = _access_latest_token(inputs.access_token_secret_name)
+
+        assert inputs.credentials_id is not None
+
         update_credentials(
             inputs.workspace_id,
             id_,
-            _build_body(inputs, token, cred_id=id_),
+            _build_body(inputs, token),
         )
-        return UpdateResult(outs=_outs(inputs, id_, resolved_version))
+        return UpdateResult(outs=_get_output_state(inputs, id_, resolved_version))
 
     def delete(self, id_: str, props: dict[str, Any]) -> None:
         try:
