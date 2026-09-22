@@ -44,7 +44,9 @@ class GithubCredentialArgs(BaseModel):
     workspace_id: int
     name: str = Field(min_length=1, max_length=MAX_CRED_NAME_LENGTH)
     username: str
-    access_token_secret_name: str
     base_url: str
-    resolved_secret_version: Optional[str] = None
     credentials_id: Optional[str] = None
+
+    # Additional properties to support token rotation
+    access_token_secret_name: str
+    resolved_secret_version: Optional[str] = None
