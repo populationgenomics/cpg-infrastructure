@@ -1,6 +1,6 @@
 """Dynamic provider for a Seqera GitHub credential."""
 
-from functools import lru_cache
+from functools import cache
 from http import HTTPStatus
 from typing import Any, Optional
 
@@ -31,7 +31,7 @@ def _latest_ref(secret_name: str) -> str:
     return f'{secret_name}/versions/latest'
 
 
-@lru_cache
+@cache
 def _resolve_latest_version(secret_name: str) -> str:
     """Return the resource name of the latest version"""
     # This metadata request is invoked for every pulumi preview/up.
@@ -41,7 +41,7 @@ def _resolve_latest_version(secret_name: str) -> str:
     return version.name
 
 
-@lru_cache
+@cache
 def _access_latest_token(secret_name: str) -> tuple[str, str]:
     """Return the secret payload and the resolved version resource name."""
     # This function is invoked during every resource creation or update
