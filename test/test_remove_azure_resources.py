@@ -104,6 +104,50 @@ def test_manual_commands_empty_when_no_problems():
     assert rar.build_manual_commands([]) == []
 
 
+def test_leaves_first_order_uses_dependency_edges():
+    provider = 'urn:pulumi:prod::infra::pulumi:providers:azure-native::default'
+    resource = 'urn:pulumi:prod::infra::azure-native:x:Y::resource'
+    resources = [
+        {'urn': provider, 'type': 'pulumi:providers:azure-native'},
+        {'urn': resource, 'type': 'azure-native:x:Y', 'provider': f'{provider}::id'},
+    ]
+
+    assert rar.leaves_first_order({provider, resource}, resources) == [
+        resource,
+        provider,
+    ]
+
+
+def test_leaves_first_order_rejects_cycles():
+    resources = [
+        {'urn': 'urn:a', 'parent': 'urn:b'},
+        {'urn': 'urn:b', 'parent': 'urn:a'},
+    ]
+
+    with pytest.raises(ValueError, match='cyclic'):
+        rar.leaves_first_order({'urn:a', 'urn:b'}, resources)
+
+
+def test_apply_reports_process_start_failure(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    error = FileNotFoundError(2, 'No such file or directory')
+
+    def fail_remove(_stack: str, _urn: str, _pulumi_dir: str | None) -> None:
+        raise error
+
+    monkeypatch.setattr(rar, 'pulumi_state_remove_one', fail_remove)
+
+    rc = rar._apply_removals(  # noqa: SLF001
+        {'urn:a'}, [{'urn': 'urn:a'}], 'stack', None, False
+    )
+    captured = capsys.readouterr()
+
+    assert rc == 1
+    assert 'Done. 0 removed, 1 failed.' in captured.out
+    assert 'FileNotFoundError' in captured.err
+
+
 def test_main_dry_run_prints_urns_and_commands(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ):

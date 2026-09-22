@@ -221,19 +221,43 @@ def load_state(stack: str, pulumi_dir: str | None) -> dict:
 
 
 def leaves_first_order(urns_to_remove: set[str], resources: list[dict]) -> list[str]:
-    """Order URNs so children come before their parents. Only parent edges
-    within the removal set count; ties broken alphabetically for determinism."""
-    parent_of = {r['urn']: r.get('parent') for r in resources if r.get('urn')}
+    """Order removable URNs after all removable resources they reference.
 
-    def depth(urn: str) -> int:
-        d = 0
-        cur = parent_of.get(urn)
-        while cur in urns_to_remove:
-            d += 1
-            cur = parent_of.get(cur)
-        return d
+    Pulumi state can encode relationships through parent, dependency,
+    property-dependency, provider, deletedWith, and alias fields. A resource
+    must be removed before any removable resource it references. A cycle is
+    invalid for this operation and raises ValueError rather than hanging.
+    """
+    removable_refs: dict[str, set[str]] = {urn: set() for urn in urns_to_remove}
+    for resource in resources:
+        urn = resource.get('urn')
+        if urn not in urns_to_remove:
+            continue
+        refs: list[tuple[str, str]] = []
+        _add_single_field_refs(resource, urns_to_remove, refs)
+        _add_list_field_refs(resource, urns_to_remove, refs)
+        _add_property_dependency_refs(resource, urns_to_remove, refs)
+        _add_provider_map_refs(resource, urns_to_remove, refs)
+        for kind, target in refs:
+            if kind in {'provider'} or kind.startswith('providers['):
+                normalized_target = _extract_provider_urn(target)
+            else:
+                normalized_target = target
+            removable_refs[urn].add(normalized_target)
 
-    return sorted(urns_to_remove, key=lambda u: (-depth(u), u))
+    ordered: list[str] = []
+    remaining = set(urns_to_remove)
+    while remaining:
+        referenced = {
+            target for urn in remaining for target in removable_refs[urn] & remaining
+        }
+        ready = sorted(remaining - referenced)
+        if not ready:
+            cycle = ', '.join(sorted(remaining))
+            raise ValueError(f'cyclic removable resource references: {cycle}')
+        ordered.extend(ready)
+        remaining.difference_update(ready)
+    return ordered
 
 
 def pulumi_state_remove_one(stack: str, urn: str, pulumi_dir: str | None) -> None:
@@ -321,22 +345,31 @@ def _apply_removals(
     if not azure_urns:
         print('\nNothing to remove.')
         return 0
-    ordered = leaves_first_order(azure_urns, resources)
+    try:
+        ordered = leaves_first_order(azure_urns, resources)
+    except ValueError as err:
+        print(f'ERROR: cannot order removals: {err}', file=sys.stderr)
+        return 2
     print(f'\nRemoving {len(ordered)} URN(s) leaves-first...')
     succeeded: list[str] = []
-    failed: list[tuple[str, int]] = []
+    failed: list[tuple[str, str]] = []
     for urn in ordered:
         try:
             pulumi_state_remove_one(stack, urn, pulumi_dir)
             succeeded.append(urn)
         except subprocess.CalledProcessError as err:
-            failed.append((urn, err.returncode))
-            print(f'  FAILED (exit {err.returncode}): {urn}', file=sys.stderr)
+            reason = f'exit {err.returncode}'
+            failed.append((urn, reason))
+            print(f'  FAILED ({reason}): {urn}', file=sys.stderr)
+        except OSError as err:
+            reason = f'{type(err).__name__}: {err}'
+            failed.append((urn, reason))
+            print(f'  FAILED ({reason}): {urn}', file=sys.stderr)
     print(f'\nDone. {len(succeeded)} removed, {len(failed)} failed.')
     if failed:
         print('Failed URNs:', file=sys.stderr)
-        for urn, rc in failed:
-            print(f'  (exit {rc}) {urn}', file=sys.stderr)
+        for urn, reason in failed:
+            print(f'  ({reason}) {urn}', file=sys.stderr)
     if succeeded and has_survivor_block:
         print('Run the manual-command block above.')
     return 1 if failed else 0
