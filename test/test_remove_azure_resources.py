@@ -1,4 +1,5 @@
 import importlib
+import subprocess
 import sys
 from pathlib import Path
 
@@ -11,7 +12,16 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 def test_module_imports_without_third_party_deps():
     mod = importlib.import_module('remove_azure_resources')
     # Guard: the simplified script must not depend on google.cloud.storage.
-    assert 'google.cloud.storage' not in sys.modules
+    subprocess.run(  # noqa: S603
+        [
+            sys.executable,
+            '-c',
+            'import sys; import remove_azure_resources; '
+            "assert 'google.cloud.storage' not in sys.modules",
+        ],
+        cwd=ROOT / 'scripts',
+        check=True,
+    )
     # Public surface expected in later tasks.
     assert hasattr(mod, 'load_state')
     assert hasattr(mod, 'parse_args')
