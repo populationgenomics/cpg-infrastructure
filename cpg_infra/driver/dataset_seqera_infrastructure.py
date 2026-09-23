@@ -328,6 +328,14 @@ class DatasetSeqeraInfrastructure:
                 BucketMembership.MUTATE,
             )
 
+        for level, head_sa in self._head_sas.items():
+            self._infra.add_member_to_bucket(
+                f'seqera-{level}-head-work-bucket-viewer',
+                self._work_bucket_for_access_level(level),
+                head_sa,
+                BucketMembership.READ,
+            )
+
     def _work_dir_for_access_level(self, level: str) -> pulumi.Output[str]:
         """
         The work dir of a Seqera compute env for this access level.
