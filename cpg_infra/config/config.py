@@ -674,7 +674,10 @@ def infra_context_from_dataset_config(dc: CPGDatasetConfig) -> InfraContext:
         gcp_region=dc.gcp.region,
     )
 
-def infra_context_from_standalone_config(pc: CPGStandaloneProjectConfig) -> InfraContext:
+
+def infra_context_from_standalone_config(
+    pc: CPGStandaloneProjectConfig,
+) -> InfraContext:
     return InfraContext(
         name_prefix=pc.project_id,
         gcp_project_id=pc.project_id,

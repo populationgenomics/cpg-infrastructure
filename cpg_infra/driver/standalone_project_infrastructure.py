@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from cpg_infra.abstraction.gcp import GcpInfrastructure
 from cpg_infra.config import (
-    CPGDatasetConfig,
     CPGInfrastructureConfig,
     CPGStandaloneProjectConfig,
     infra_context_from_standalone_config,
@@ -33,9 +32,9 @@ class CPGStandaloneProjectInfrastructure:
         # `project_id` or `project` property, where the created resource is cached
         # for all subsequent accesses.
         self.infra.create_monthly_budget(
-            resource_key='budget', 
+            resource_key='budget',
             project=self.infra.project,
-            budget=self.project_config.monthly_budget
+            budget=self.project_config.monthly_budget,
         )
 
         owner_user = self.config.users.get(self.project_config.owner)
@@ -50,5 +49,5 @@ class CPGStandaloneProjectInfrastructure:
             resource_key='project-owner',
             project=self.infra.project_id,
             member=gcp_cloud.id,
-            role='roles/owner'
+            role='roles/owner',
         )

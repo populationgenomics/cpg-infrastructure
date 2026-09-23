@@ -28,7 +28,7 @@ from cpg_infra.abstraction.base import (
     SecretMembership,
 )
 from cpg_infra.abstraction.context import InfraContext
-from cpg_infra.config import CPGDatasetConfig, CPGInfrastructureConfig
+from cpg_infra.config import CPGInfrastructureConfig
 
 AZURE_BILLING_START_DATE = '2017-06-01T00:00:00Z'
 AZURE_BILLING_EXPIRY_DATE = '3141-25-09T00:00:00Z'

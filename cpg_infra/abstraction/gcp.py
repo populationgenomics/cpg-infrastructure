@@ -30,7 +30,7 @@ from cpg_infra.abstraction.google_group_membership import (
     GoogleGroupMembershipInputs,
 )
 from cpg_infra.abstraction.google_group_settings import GoogleGroupSettings
-from cpg_infra.config import CPGDatasetConfig, CPGInfrastructureConfig
+from cpg_infra.config import CPGInfrastructureConfig
 
 
 class BucketMembershipRole(NamedTuple):
@@ -439,9 +439,7 @@ class GcpInfrastructure(CloudInfraBase):
     ) -> Any:
         unique_bucket_name = name
         if not unique:
-            unique_bucket_name = (
-                f'{self.config.gcp.dataset_storage_prefix}{self.context.name_prefix or self.context.gcp_project_id}-{name}'
-            )
+            unique_bucket_name = f'{self.config.gcp.dataset_storage_prefix}{self.context.name_prefix or self.context.gcp_project_id}-{name}'
 
         def autoclass_args():
             # Only set the parameter if required, to avoid superflous changes to existing buckets.

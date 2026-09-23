@@ -39,7 +39,9 @@ from cpg_infra.driver.constants import (
 from cpg_infra.driver.dataset_infrastructure import CPGDatasetInfrastructure
 from cpg_infra.driver.dynamic_providers.seqera import SeqeraWorkspace
 from cpg_infra.driver.groups import GroupMember, GroupProvider
-from cpg_infra.driver.standalone_project_infrastructure import CPGStandaloneProjectInfrastructure
+from cpg_infra.driver.standalone_project_infrastructure import (
+    CPGStandaloneProjectInfrastructure,
+)
 from cpg_infra.github_wif.driver import PAM_BROKER_SA_NAME
 from cpg_infra.plugin import get_plugins
 
@@ -88,8 +90,7 @@ class CPGInfrastructure:
             CPGDatasetInfrastructure,
         ] = defaultdict()
         self.standalone_project_infrastructures: dict[
-            str,
-            CPGStandaloneProjectInfrastructure
+            str, CPGStandaloneProjectInfrastructure
         ] = defaultdict()
 
         self.seqera_workspaces: dict[
@@ -267,9 +268,10 @@ class CPGInfrastructure:
             # don't do this repeatedly
             return
         for name, project_config in self.standalone_project_configs.items():
-            self.standalone_project_infrastructures[name] = CPGStandaloneProjectInfrastructure(
-                config=self.config,
-                project_config=project_config
+            self.standalone_project_infrastructures[name] = (
+                CPGStandaloneProjectInfrastructure(
+                    config=self.config, project_config=project_config
+                )
             )
 
     def deploy_standalone_projects(self):

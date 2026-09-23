@@ -37,8 +37,8 @@ from cpg_infra.config import (
     CPGDatasetConfig,
     CPGInfrastructureConfig,
     HailAccount,
-    infra_context_from_dataset_config,
     SeqeraAccount,
+    infra_context_from_dataset_config,
 )
 from cpg_infra.driver.constants import (
     IGV_DESKTOP_ACCESS,
@@ -754,7 +754,10 @@ class CPGDatasetCloudInfrastructure:
                 _infra_to_call_function_on = (
                     self.infra
                     if isinstance(self.infra, Infra)
-                    else Infra(self.config, infra_context_from_dataset_config(self.dataset_config))
+                    else Infra(
+                        self.config,
+                        infra_context_from_dataset_config(self.dataset_config),
+                    )
                 )
                 break
         else:
