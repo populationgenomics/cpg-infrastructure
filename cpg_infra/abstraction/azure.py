@@ -27,7 +27,8 @@ from cpg_infra.abstraction.base import (
     MachineAccountRole,
     SecretMembership,
 )
-from cpg_infra.config import CPGDatasetConfig, CPGInfrastructureConfig
+from cpg_infra.abstraction.context import InfraContext
+from cpg_infra.config import CPGInfrastructureConfig
 
 AZURE_BILLING_START_DATE = '2017-06-01T00:00:00Z'
 AZURE_BILLING_EXPIRY_DATE = '3141-25-09T00:00:00Z'
@@ -37,9 +38,9 @@ class AzureInfra(CloudInfraBase):
     def __init__(
         self,
         config: CPGInfrastructureConfig,
-        dataset_config: CPGDatasetConfig,
+        context: InfraContext,
     ) -> None:
-        super().__init__(config, dataset_config)
+        super().__init__(config, context)
 
         assert config.azure, 'config.azure is required to deploy to Azure'
 

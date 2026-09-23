@@ -8,9 +8,12 @@ from cpg_infra.config.config import (
     CPGInfrastructureConfig,
     CPGInfrastructureGroup,
     CPGInfrastructureUser,
+    CPGStandaloneProjectConfig,
     GroupName,
     HailAccount,
     MemberKey,
     SeqeraAccount,
     TeamOwnership,
+    infra_context_from_dataset_config,
+    infra_context_from_standalone_config,
 )

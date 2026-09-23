@@ -17,6 +17,7 @@ from pydantic import (
 )
 from pydantic.alias_generators import to_camel
 
+from cpg_infra.abstraction.context import InfraContext
 from cpg_infra.config.base import ConfigModel
 
 MemberKey = str
@@ -652,3 +653,32 @@ class CPGDatasetConfig(ConfigModel):
             meta['billing_groups'] = sorted(self.billing_groups)
 
         return meta
+
+
+class CPGStandaloneProjectConfig(ConfigModel):
+    """
+    Configuration that describes the minimum information
+    required to construct a standalone GCP project
+    """
+
+    name: str
+    project_id: str
+    owner: MemberKey
+    monthly_budget: int
+
+
+def infra_context_from_dataset_config(dc: CPGDatasetConfig) -> InfraContext:
+    return InfraContext(
+        name_prefix=dc.dataset,
+        gcp_project_id=dc.gcp.project,
+        gcp_region=dc.gcp.region,
+    )
+
+
+def infra_context_from_standalone_config(
+    pc: CPGStandaloneProjectConfig,
+) -> InfraContext:
+    return InfraContext(
+        name_prefix=pc.project_id,
+        gcp_project_id=pc.project_id,
+    )

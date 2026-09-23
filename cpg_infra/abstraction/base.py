@@ -23,7 +23,8 @@ from typing import Any, Callable, Optional
 
 import pulumi
 
-from cpg_infra.config import CloudName, CPGDatasetConfig, CPGInfrastructureConfig
+from cpg_infra.abstraction.context import InfraContext
+from cpg_infra.config import CloudName, CPGInfrastructureConfig
 
 UNDELETE_PERIOD_IN_DAYS = 30
 TMP_BUCKET_PERIOD_IN_DAYS = 8  # tmp content gets deleted afterwards.
@@ -83,11 +84,11 @@ class CloudInfraBase(ABC):
     def __init__(
         self,
         config: CPGInfrastructureConfig,
-        dataset_config: CPGDatasetConfig,
+        context: InfraContext,
     ) -> None:
         super().__init__()
         self.config = config
-        self.dataset_config = dataset_config
+        self.context = context
 
     @cached_property
     def project(self):
@@ -112,12 +113,12 @@ class CloudInfraBase(ABC):
 
     @property
     def dataset(self):
-        return self.dataset_config.dataset
+        return self.context.name_prefix
 
     def get_pulumi_name(self, key: str):
-        assert self.dataset, 'Dataset config was not set'
-        key = key.removeprefix(self.dataset + '-')
-        return f'{self.dataset}-{self.name()}-' + key
+        assert self.context, 'Infra context was not set'
+        key = key.removeprefix(self.context.name_prefix + '-')
+        return f'{self.context.name_prefix}-{self.name()}-' + key
 
     @abstractmethod
     def finalise(self):
@@ -387,7 +388,7 @@ class DryRunInfra(CloudInfraBase):
         return 'dry-run'
 
     def get_dataset_project_id(self):
-        return self.dataset
+        return self.context.gcp_project_id
 
     @staticmethod
     def member_id(member) -> str | pulumi.Output[str]:

@@ -39,6 +39,9 @@ from cpg_infra.driver.constants import (
 from cpg_infra.driver.dataset_infrastructure import CPGDatasetInfrastructure
 from cpg_infra.driver.dynamic_providers.seqera import SeqeraWorkspace
 from cpg_infra.driver.groups import GroupMember, GroupProvider
+from cpg_infra.driver.standalone_project_infrastructure import (
+    CPGStandaloneProjectInfrastructure,
+)
 from cpg_infra.github_wif.driver import PAM_BROKER_SA_NAME
 from cpg_infra.plugin import get_plugins
 
@@ -46,6 +49,7 @@ if TYPE_CHECKING:
     from cpg_infra.config import (
         CPGDatasetConfig,
         CPGInfrastructureConfig,
+        CPGStandaloneProjectConfig,
         MemberKey,
         TeamOwnership,
     )
@@ -67,10 +71,14 @@ class CPGInfrastructure:
         self,
         config: CPGInfrastructureConfig,
         dataset_configs: list[CPGDatasetConfig],
+        standalone_project_configs: list[CPGStandaloneProjectConfig],
     ) -> None:
         self.config = config
         self.dataset_configs: dict[str, CPGDatasetConfig] = {
             d.dataset: d for d in dataset_configs
+        }
+        self.standalone_project_configs: dict[str, CPGStandaloneProjectConfig] = {
+            p.name: p for p in standalone_project_configs
         }
 
         self.group_provider = GroupProvider(
@@ -80,6 +88,9 @@ class CPGInfrastructure:
         self.dataset_infrastructures: dict[
             str,
             CPGDatasetInfrastructure,
+        ] = defaultdict()
+        self.standalone_project_infrastructures: dict[
+            str, CPGStandaloneProjectInfrastructure
         ] = defaultdict()
 
         self.seqera_workspaces: dict[
@@ -172,6 +183,7 @@ class CPGInfrastructure:
         # Go through each dataset and instantiate the CPGDatasetInfrastructure class
         # for that dataset.
         self.setup_datasets()
+        self.setup_standalone_projects()
 
         # create a bucket and attach accessor members to it. The bucket itself is
         # created by accessing the property `self.gcp_members_cache_bucket`
@@ -197,6 +209,7 @@ class CPGInfrastructure:
         # Deploy all the assets required for each dataset. Groups, permissions
         # storage buckets, metamist and hail users etc.
         self.deploy_datasets()
+        self.deploy_standalone_projects()
 
         # Deploy managed adhoc assets that are not associated with datasets.
         self.deploy_adhoc()
@@ -249,6 +262,21 @@ class CPGInfrastructure:
     def deploy_datasets(self):
         for cloud_dataset in self.dataset_infrastructures.values():
             cloud_dataset.main()
+
+    def setup_standalone_projects(self):
+        if self.standalone_project_infrastructures:
+            # don't do this repeatedly
+            return
+        for name, project_config in self.standalone_project_configs.items():
+            self.standalone_project_infrastructures[name] = (
+                CPGStandaloneProjectInfrastructure(
+                    config=self.config, project_config=project_config
+                )
+            )
+
+    def deploy_standalone_projects(self):
+        for standalone_project in self.standalone_project_infrastructures.values():
+            standalone_project.main()
 
     def deploy_adhoc(self):
         infra = self.common_gcp_infra
