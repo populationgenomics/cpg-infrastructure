@@ -38,8 +38,10 @@ from cpg_infra.config import (
     CPGInfrastructureConfig,
     HailAccount,
     infra_context_from_dataset_config,
+    SeqeraAccount,
 )
 from cpg_infra.driver.constants import (
+    IGV_DESKTOP_ACCESS,
     METAMIST_PERMISSIONS,
     NON_NAME_REGEX,
     SM_MAIN_CONTRIBUTE,
@@ -53,6 +55,9 @@ from cpg_infra.driver.constants import (
     access_levels,
     compute_hash,
     dict_to_toml,
+)
+from cpg_infra.driver.dataset_seqera_infrastructure import (
+    DatasetSeqeraInfrastructure,
 )
 
 
@@ -112,11 +117,46 @@ class CPGDatasetCloudInfrastructure:
         self.should_setup_analysis_runner = (
             CPGDatasetComponents.ANALYSIS_RUNNER in self.components
         )
+        self.should_setup_seqera = self._resolve_should_setup_seqera()
 
         # outputs
         self.storage_tomls: dict = {}
 
-    def create_group(self, name: str, cache_members: bool = False):
+    def _resolve_should_setup_seqera(self) -> bool:
+        component_enabled = CPGDatasetComponents.SEQERA_ACCOUNTS in self.components
+        if not component_enabled:
+            return False
+        if not isinstance(self.infra, GcpInfrastructure):
+            # Defence-in-depth: SEQERA_ACCOUNTS on non-GCP is silently ignored.
+            return False
+        if self.dataset_config.team_ownership is None:
+            raise ValueError(
+                f'{self.dataset_config.dataset}: SEQERA_ACCOUNTS component is '
+                'enabled but team_ownership is not set. Seqera integration '
+                'requires a team_ownership value to bind the WIF principal '
+                'to a Seqera workspace.',
+            )
+        if self.config.seqera is None:
+            raise ValueError(
+                f'{self.dataset_config.dataset}: SEQERA_ACCOUNTS component is '
+                'enabled but CPGInfrastructureConfig.seqera is not set.',
+            )
+        return True
+
+    @cached_property
+    def igv_proxy_config(self) -> CPGInfrastructureConfig.IgvProxy | None:
+        """The IGV desktop proxy config, or None if this dataset does not take part."""
+        if not isinstance(self.infra, GcpInfrastructure):
+            return None
+        if self.config.igv_proxy is None:
+            return None
+        if not self.dataset_config.members.get(
+            IGV_DESKTOP_ACCESS,  # type: ignore[call-overload]
+        ):
+            return None
+        return self.config.igv_proxy
+
+    def create_group(self, name: str, *, cache_members: bool = False):
         """
         Create a group with the dataset name as a prefix.
 
@@ -143,6 +183,8 @@ class CPGDatasetCloudInfrastructure:
             self.setup_metamist()
         if self.should_setup_hail:
             self.setup_hail()
+        if self.should_setup_seqera:
+            self.setup_seqera()
         if self.should_setup_cromwell:
             self.setup_cromwell()
         if self.should_setup_spark:
@@ -180,6 +222,8 @@ class CPGDatasetCloudInfrastructure:
 
         for access_level, account in self.hail_accounts_by_access_level.items():
             machine_accounts['hail'].append((access_level, account.cloud_id))
+        for access_level, account in self.seqera_accounts_by_access_level.items():
+            machine_accounts['seqera'].append((access_level, account.cloud_id))
         for access_level, account in self.deployment_accounts_by_access_level.items():
             machine_accounts['deployment'].append((access_level, account))
         for (
@@ -867,6 +911,16 @@ class CPGDatasetCloudInfrastructure:
             BucketMembership.MUTATE,
         )
 
+        # IGV desktop proxy. Bind the service account directly rather than
+        # main_read_group, which also covers main-tmp and main-analysis.
+        if igv_proxy := self.igv_proxy_config:
+            self.infra.add_member_to_bucket(
+                'igv-proxy-main-bucket-read',
+                self.main_bucket,
+                igv_proxy.server_machine_account,
+                BucketMembership.READ,
+            )
+
     def setup_storage_main_tmp_bucket(self):
         self.infra.add_member_to_bucket(
             'main-read-main-tmp-bucket-read',
@@ -1225,6 +1279,26 @@ class CPGDatasetCloudInfrastructure:
             autoclass=self.dataset_config.autoclass,
         )
 
+    @cached_property
+    def nf_main_work_bucket(self):
+        return self.infra.create_bucket(
+            'main-nfwork',
+            lifecycle_rules=[],  # lifecycle policy to be decided later
+            versioning=False,
+            autoclass=False,
+            soft_delete_protection=False,
+        )
+
+    @cached_property
+    def nf_test_work_bucket(self):
+        return self.infra.create_bucket(
+            'test-nfwork',
+            lifecycle_rules=[],  # lifecycle policy to be decided later
+            versioning=False,
+            autoclass=False,
+            soft_delete_protection=False,
+        )
+
     # endregion TEST BUCKETS
     # region RELEASE BUCKETS
 
@@ -1437,6 +1511,22 @@ class CPGDatasetCloudInfrastructure:
         )
 
     # endregion HAIL
+    # region SEQERA
+
+    @cached_property
+    def seqera(self) -> DatasetSeqeraInfrastructure:
+        return DatasetSeqeraInfrastructure(self)
+
+    def setup_seqera(self) -> None:
+        self.seqera.setup()
+
+    @cached_property
+    def seqera_accounts_by_access_level(self) -> dict[str, SeqeraAccount]:
+        if not self.should_setup_seqera:
+            return {}
+        return self.seqera.accounts_by_access_level
+
+    # endregion SEQERA
     # region CROMWELL
 
     def setup_cromwell(self):
@@ -1587,6 +1677,14 @@ class CPGDatasetCloudInfrastructure:
                 account,
             )
 
+            # Allow the Cromwell service accounts to write logs from the Google
+            # Batch jobs they run in the dataset project.
+            self.infra.add_project_role(
+                f'cromwell-service-account-{access_level}-log-writer',
+                member=account,
+                role='roles/logging.logWriter',
+            )
+
         # Give the Cromwell runner the batch job editor role
         self.infra.add_batch_jobs_editor_role(
             'cromwell-runner-batch-jobs-editor',
@@ -1701,7 +1799,7 @@ class CPGDatasetCloudInfrastructure:
         # this group gives list access to the dataset buckets but grants no ability
         # to read the actual contents of objects
         self.main_list_group.add_member(
-            self.infra.get_pulumi_name('metamist-service-account-in-main-list'),
+            self.infra.get_pulumi_name('metamist-new-service-account-in-main-list'),
             self.infra.config.metamist.gcp.machine_account,
         )
 

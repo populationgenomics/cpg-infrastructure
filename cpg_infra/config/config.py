@@ -6,10 +6,16 @@ specific dataset.
 """
 
 from enum import Enum
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 
 import pulumi
-from pydantic import Field
+from pydantic import (
+    AliasGenerator,
+    ConfigDict,
+    Field,
+    field_serializer,
+)
+from pydantic.alias_generators import to_camel
 
 from cpg_infra.abstraction.context import InfraContext
 from cpg_infra.config.base import ConfigModel
@@ -17,6 +23,7 @@ from cpg_infra.config.base import ConfigModel
 MemberKey = str
 GroupType = str
 CloudName = Literal['gcp', 'azure', 'dry-run']
+TeamOwnership = Literal['Rare Disease', 'Population Genomics', 'Shared']
 GroupName = Literal[
     'data-manager',
     'analysis',
@@ -27,6 +34,7 @@ GroupName = Literal[
     'release-access',
     'tmp-main-read-access',
     'external-repository-reader',
+    'igv-desktop-access',
 ]
 
 
@@ -34,10 +42,111 @@ class CPGInfrastructureUser(ConfigModel):
     class Cloud(ConfigModel):
         id: str  # noqa: RUF100, A003
         hail_batch_username: str | None = None
+        has_seqera_account: bool = False
 
     id: MemberKey  # noqa: RUF100, A003
     clouds: dict[CloudName, Cloud]
     can_access_internal_dataset_logs: bool = False
+
+
+class GoogleGroupSettings(ConfigModel):
+    """Google Group Settings that cpg_infra config may set.
+
+    These settings are in snake case for consistency with other cpg-infra config.
+    This model will then convert them to the required camel case before sending
+    to the google groups API. Boolean params are also converted to strings which is
+    required by the API.
+
+    https://developers.google.com/admin-sdk/groups-settings/v1/reference/groups
+    """
+
+    # snake_case in config -> camelCase when serialised for the API. serialization_alias
+    # (not validation_alias) so config keys stay snake_case; extra='forbid' (inherited)
+    # still rejects unknown keys.
+    model_config = ConfigDict(
+        alias_generator=AliasGenerator(serialization_alias=to_camel),
+    )
+
+    allow_external_members: bool | None = None
+    who_can_post_message: (
+        Literal[
+            'NONE_CAN_POST',
+            'ALL_MANAGERS_CAN_POST',
+            'ALL_OWNERS_CAN_POST',
+            'ALL_MEMBERS_CAN_POST',
+            'ALL_IN_DOMAIN_CAN_POST',
+            'ANYONE_CAN_POST',  # world-postable
+        ]
+        | None
+    ) = None
+    who_can_join: (
+        Literal[
+            'ANYONE_CAN_JOIN',
+            'ALL_IN_DOMAIN_CAN_JOIN',
+            'INVITED_CAN_JOIN',
+            'CAN_REQUEST_TO_JOIN',
+        ]
+        | None
+    ) = None
+    who_can_view_group: (
+        Literal[
+            'ANYONE_CAN_VIEW',
+            'ALL_IN_DOMAIN_CAN_VIEW',
+            'ALL_MEMBERS_CAN_VIEW',
+            'ALL_MANAGERS_CAN_VIEW',
+            'ALL_OWNERS_CAN_VIEW',
+        ]
+        | None
+    ) = None
+    who_can_view_membership: (
+        Literal[
+            'ALL_IN_DOMAIN_CAN_VIEW',
+            'ALL_MEMBERS_CAN_VIEW',
+            'ALL_MANAGERS_CAN_VIEW',
+            'ALL_OWNERS_CAN_VIEW',
+        ]
+        | None
+    ) = None
+    message_moderation_level: (
+        Literal[
+            'MODERATE_ALL_MESSAGES',
+            'MODERATE_NON_MEMBERS',
+            'MODERATE_NEW_MEMBERS',
+            'MODERATE_NONE',
+        ]
+        | None
+    ) = None
+    spam_moderation_level: (
+        Literal['ALLOW', 'MODERATE', 'SILENTLY_MODERATE', 'REJECT'] | None
+    ) = None
+    reply_to: (
+        Literal[
+            'REPLY_TO_CUSTOM',
+            'REPLY_TO_SENDER',
+            'REPLY_TO_LIST',
+            'REPLY_TO_OWNER',
+            'REPLY_TO_IGNORE',
+            'REPLY_TO_MANAGERS',
+        ]
+        | None
+    ) = None
+    archive_only: bool | None = None
+    members_can_post_as_the_group: bool | None = None
+
+    @field_serializer(
+        'allow_external_members',
+        'archive_only',
+        'members_can_post_as_the_group',
+    )
+    def _serialise_bool(self, value: bool | None) -> str | None:
+        """The Groups Settings API uses 'true'/'false' strings, not JSON booleans."""
+        if value is None:
+            return None
+        return 'true' if value else 'false'
+
+    def to_settings_dict(self) -> dict[str, str]:
+        """camelCase settings dict of only the keys set in config, ready for the API."""
+        return self.model_dump(by_alias=True, exclude_none=True)
 
 
 class CPGInfrastructureGroup(ConfigModel):
@@ -46,6 +155,10 @@ class CPGInfrastructureGroup(ConfigModel):
     name: str
     description: str
     members: list[MemberKey] = Field(default_factory=list)
+    # Extra Google Groups Settings that are merged with the default settings in the
+    # create_group method of the gcp abstraction (gcp.py). Config is validated here, but
+    # typed as a Mapping in the abstraction for compatibility with base and other abstractions
+    group_settings: GoogleGroupSettings | None = None
 
 
 class CPGInfrastructureConfig(ConfigModel):
@@ -65,11 +178,12 @@ class CPGInfrastructureConfig(ConfigModel):
         budget_notification_pubsub: str | None
         config_bucket_name: str
         dataset_storage_prefix: str
-        # This is mostly just to allow dev deploys to work, changing the setting to allow
-        # external members on a group requires a high level of access permissions which
-        # we don't want to give to all developers. Setting this to false will stop the
-        # infra code from trying to change that setting
-        allow_external_group_members: bool = True
+        # Whether this deploy may set Google Group settings (allowExternalMembers,
+        # whoCanPostMessage, ...). All of them require Workspace-admin privileges most
+        # developers lack, so dev deploys set this False to skip the group-settings
+        # resource entirely and avoid permission-denied failures. (A sibling of
+        # create_empty_groups, which gates a separate group-creation privilege.)
+        can_set_group_settings: bool = True
         # Creating groups without an initial member requires extra access permissions
         # so allow this to be turned off to make dev deploys possible
         create_empty_groups: bool = True
@@ -113,6 +227,16 @@ class CPGInfrastructureConfig(ConfigModel):
             server_machine_account: str
 
         gcp: GCP
+
+    class IgvProxy(ConfigModel):
+        """Global IGV desktop proxy configuration.
+
+        Setting this grants the proxy read on the '-main' buckets of datasets
+        listing members under 'igv-desktop-access'.
+        """
+
+        project: str
+        server_machine_account: str
 
     class WebService(ConfigModel):
         """
@@ -172,6 +296,37 @@ class CPGInfrastructureConfig(ConfigModel):
         gcp: GCP
         etl: ETLConfiguration | None = None
         slack_channel: str | None = None
+
+    class Seqera(ConfigModel):
+        """Global Seqera Platform configuration.
+
+        Set to enable Seqera integration for any dataset that opts in via
+        CPGDatasetComponents.SEQERA_ACCOUNTS.
+        """
+
+        class WorkspaceConfig(ConfigModel):
+            workspace_id: int
+            description: Optional[str] = Field(None, max_length=1000)
+            # Secret Manager secret name holding the Seqera launch token for this
+            # workspace. This is published in the analysis-runner Seqera config so the
+            # analysis-runner server knows which secret to use to launch a run.
+            launch_token_secret_name: str
+
+        class TeamWorkspaces(ConfigModel):
+            main: 'CPGInfrastructureConfig.Seqera.WorkspaceConfig'
+            test: 'CPGInfrastructureConfig.Seqera.WorkspaceConfig'
+
+        org_id: int
+        # Base URL of the Seqera Platform API
+        api_url: str
+        # Seqera Cloud OIDC issuer URI, see:
+        # https://docs.seqera.io/platform-cloud/credentials/overview#google-cloud
+        wif_issuer_uri: str
+        # Main and test workspace IDs per dataset team_ownership value.
+        teams: dict[
+            TeamOwnership,
+            'CPGInfrastructureConfig.Seqera.TeamWorkspaces',
+        ]
 
     class Billing(ConfigModel):
         class GCP(ConfigModel):
@@ -238,6 +393,8 @@ class CPGInfrastructureConfig(ConfigModel):
     analysis_runner: AnalysisRunner | None = None
     # configuration options for the data dropbox server
     data_dropbox: DataDropbox | None = None
+    # configuration options for the IGV desktop proxy
+    igv_proxy: IgvProxy | None = None
     # configuration options for the web service, a server that serves static files
     # from a bucket
     web_service: WebService | None = None
@@ -247,6 +404,8 @@ class CPGInfrastructureConfig(ConfigModel):
     cromwell: Cromwell | None = None
     # configuration options for our metamist service
     metamist: Metamist | None = None
+    # configuration options for Seqera platform
+    seqera: Seqera | None = None
     # configuration options for billing + billing aggregation
     billing: Billing | None = None
     # list of additional adhoc groups under infrastructure management
@@ -280,14 +439,27 @@ class CPGDatasetComponents(Enum):
     METAMIST = 'metamist'
     CONTAINER_REGISTRY = 'container-registry'
     ANALYSIS_RUNNER = 'analysis-runner'
+    SEQERA_ACCOUNTS = 'seqera-accounts'
 
     @staticmethod
     def default_component_for_infrastructure() -> (
         dict[str, list['CPGDatasetComponents']]
     ):
+        # Explicit lists so that opt-in components (e.g. SEQERA_ACCOUNTS)
+        # can be added to the enum without silently enabling them fleet-wide.
+        _default_gcp: list[CPGDatasetComponents] = [
+            CPGDatasetComponents.STORAGE,
+            CPGDatasetComponents.SPARK,
+            CPGDatasetComponents.CROMWELL,
+            CPGDatasetComponents.NOTEBOOKS,
+            CPGDatasetComponents.HAIL_ACCOUNTS,
+            CPGDatasetComponents.METAMIST,
+            CPGDatasetComponents.CONTAINER_REGISTRY,
+            CPGDatasetComponents.ANALYSIS_RUNNER,
+        ]
         return {
-            'dry-run': list(CPGDatasetComponents),
-            'gcp': list(CPGDatasetComponents),
+            'dry-run': list(_default_gcp),
+            'gcp': list(_default_gcp),
             'azure': [
                 CPGDatasetComponents.STORAGE,
                 CPGDatasetComponents.HAIL_ACCOUNTS,
@@ -309,6 +481,19 @@ class HailAccount(ConfigModel):
     model_config = ConfigModel.model_config | {'arbitrary_types_allowed': True}
 
     username: str
+    cloud_id: str | pulumi.Output[str]
+
+
+class SeqeraAccount(ConfigModel):
+    """A Seqera-facing GCP service account for one dataset+access-level.
+
+    cloud_id holds the SA email; may be a pulumi.Output at construction time
+    (same reason as HailAccount — pydantic isn't aware of pulumi types).
+    """
+
+    model_config = ConfigModel.model_config | {'arbitrary_types_allowed': True}
+
+    account_id: str
     cloud_id: str | pulumi.Output[str]
 
 
@@ -372,9 +557,7 @@ class CPGDatasetConfig(ConfigModel):
     description: str | None = None
 
     # Metamist dataset's team ownership
-    team_ownership: Literal['Rare Disease', 'Population Genomics', 'Shared'] | None = (
-        None
-    )
+    team_ownership: TeamOwnership | None = None
 
     # Metamist dataset's Billing group
     billing_groups: list[str] = Field(default_factory=list)

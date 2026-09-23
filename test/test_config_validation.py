@@ -142,3 +142,123 @@ class TestConfigValidation(TestCase):
             budgets={'dry-run': CPGDatasetConfig.Budget(monthly_budget=100)},
         )
         self.assertEqual(100, config.budgets['dry-run'].monthly_budget)
+
+    def test_seqera_account_model_parses(self):
+        """SeqeraAccount round-trips minimal valid input"""
+        from cpg_infra.config import SeqeraAccount
+
+        account = SeqeraAccount(
+            account_id='seqera-my-dataset-full',
+            cloud_id='seqera-my-dataset-full@project.iam.gserviceaccount.com',
+        )
+        self.assertEqual('seqera-my-dataset-full', account.account_id)
+        self.assertEqual(
+            'seqera-my-dataset-full@project.iam.gserviceaccount.com',
+            account.cloud_id,
+        )
+
+    def test_seqera_accounts_component_string_coercion(self):
+        """The 'seqera-accounts' string coerces to the enum member"""
+        config = CPGDatasetConfig.model_validate(
+            {
+                'dataset': 'DATASET',
+                'budgets': {},
+                'gcp': {'project': 'dataset-1234'},
+                'components': {'gcp': ['seqera-accounts']},
+            },
+        )
+        self.assertEqual(
+            [CPGDatasetComponents.SEQERA_ACCOUNTS],
+            config.components['gcp'],
+        )
+
+    def test_seqera_accounts_not_in_defaults(self):
+        """SEQERA_ACCOUNTS is opt-in only — not in any default component set"""
+        defaults = CPGDatasetComponents.default_component_for_infrastructure()
+        for cloud, components in defaults.items():
+            self.assertNotIn(
+                CPGDatasetComponents.SEQERA_ACCOUNTS,
+                components,
+                f'SEQERA_ACCOUNTS should not be in default components for {cloud}',
+            )
+
+    def test_seqera_infra_config_parses(self):
+        """CPGInfrastructureConfig.Seqera parses a minimal valid block"""
+        seqera = CPGInfrastructureConfig.Seqera.model_validate(
+            {
+                'org_id': 12345,
+                'api_url': 'https://api.cloud.seqera.io',
+                'wif_issuer_uri': 'https://cloud.seqera.io',
+                'teams': {
+                    'Rare Disease': {
+                        'main': {
+                            'workspace_id': 111,
+                            'launch_token_secret_name': 'seqera-launch-token-rd-main',
+                        },
+                        'test': {
+                            'workspace_id': 112,
+                            'launch_token_secret_name': 'seqera-launch-token-rd-test',
+                        },
+                    },
+                    'Population Genomics': {
+                        'main': {
+                            'workspace_id': 222,
+                            'launch_token_secret_name': 'seqera-launch-token-pg-main',
+                        },
+                        'test': {
+                            'workspace_id': 223,
+                            'launch_token_secret_name': 'seqera-launch-token-pg-test',
+                        },
+                    },
+                    'Shared': {
+                        'main': {
+                            'workspace_id': 333,
+                            'launch_token_secret_name': 'seqera-launch-token-shared-main',
+                        },
+                        'test': {
+                            'workspace_id': 334,
+                            'launch_token_secret_name': 'seqera-launch-token-shared-test',
+                        },
+                    },
+                },
+            },
+        )
+        self.assertEqual(12345, seqera.org_id)
+        self.assertEqual('https://api.cloud.seqera.io', seqera.api_url)
+        self.assertEqual(111, seqera.teams['Rare Disease'].main.workspace_id)
+        self.assertEqual(112, seqera.teams['Rare Disease'].test.workspace_id)
+        self.assertEqual(
+            'seqera-launch-token-rd-main',
+            seqera.teams['Rare Disease'].main.launch_token_secret_name,
+        )
+
+    def test_seqera_teams_reject_unknown_team(self):
+        """teams with a key outside the TeamOwnership Literal must raise"""
+        with self.assertRaises(ValidationError):
+            CPGInfrastructureConfig.Seqera.model_validate(
+                {
+                    'org_id': 1,
+                    'api_url': 'https://api.cloud.seqera.io',
+                    'wif_issuer_uri': 'https://cloud.seqera.io',
+                    'teams': {
+                        'Rare-Disease': {  # note the hyphen typo
+                            'main': {
+                                'workspace_id': 111,
+                                'launch_token_secret_name': 'lt-1',
+                            },
+                            'test': {
+                                'workspace_id': 112,
+                                'launch_token_secret_name': 'lt-2',
+                            },
+                        },
+                    },
+                },
+            )
+
+    def test_seqera_optional_on_infrastructure_config(self):
+        """CPGInfrastructureConfig.seqera defaults to None"""
+        # Just verify the attribute exists on the class with the right default;
+        # constructing a full CPGInfrastructureConfig here is heavy, so this
+        # inspects the model field definition.
+        field = CPGInfrastructureConfig.model_fields['seqera']
+        self.assertIsNone(field.default)

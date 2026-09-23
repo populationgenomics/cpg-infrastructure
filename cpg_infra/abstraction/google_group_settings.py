@@ -16,8 +16,9 @@ class GoogleGroupSettings(pulumi.dynamic.Resource):
     """A Pulumi dynamic resource for Google Groups settings."""
 
     group_email: pulumi.Output[str]
-    # See https://developers.google.com/admin-sdk/groups-settings/v1/reference/groups
-    # for the possible settings.
+    # Holds any Google Groups Settings API key, so typed as a plain dict. Config-driven
+    # settings are validated/typed by GoogleGroupSettings in cpg_infra.config. Full
+
     settings: pulumi.Output[dict]
 
     def __init__(

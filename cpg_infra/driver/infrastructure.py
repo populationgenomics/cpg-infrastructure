@@ -25,6 +25,7 @@ from cpg_infra.abstraction.gcp import GcpInfrastructure
 from cpg_infra.abstraction.hailbatch import HailBatchBillingProjectMembership
 from cpg_infra.abstraction.metamist import MetamistProjectMembers
 from cpg_infra.driver.constants import (
+    IGV_DESKTOP_ACCESS,
     SM_MAIN_CONTRIBUTE,
     SM_MAIN_READ,
     SM_MAIN_WRITE,
@@ -33,8 +34,10 @@ from cpg_infra.driver.constants import (
     SM_TEST_WRITE,
     compute_hash,
     dict_to_toml,
+    get_formatted_team_name,
 )
 from cpg_infra.driver.dataset_infrastructure import CPGDatasetInfrastructure
+from cpg_infra.driver.dynamic_providers.seqera import SeqeraWorkspace
 from cpg_infra.driver.groups import GroupMember, GroupProvider
 from cpg_infra.driver.standalone_project_infrastructure import CPGStandaloneProjectInfrastructure
 from cpg_infra.github_wif.driver import PAM_BROKER_SA_NAME
@@ -45,11 +48,18 @@ if TYPE_CHECKING:
         CPGDatasetConfig,
         CPGInfrastructureConfig,
         CPGStandaloneProjectConfig,
+        MemberKey,
+        TeamOwnership,
     )
     from cpg_infra.driver.dataset_cloud_infrastructure import (
         CPGDatasetCloudInfrastructure,
     )
     from cpg_infra.driver.groups import Group
+
+
+def get_formatted_ws_name(is_test: bool, team: str) -> str:
+    ws_team = team.replace(' ', '-')
+    return f'{ws_team}-Test' if is_test else ws_team
 
 
 class CPGInfrastructure:
@@ -82,6 +92,15 @@ class CPGInfrastructure:
             CPGStandaloneProjectInfrastructure
         ] = defaultdict()
 
+        self.seqera_workspaces: dict[
+            tuple[TeamOwnership, str],
+            SeqeraWorkspace,
+        ] = {}
+
+        self.seqera_workspace_participants: set[
+            tuple[TeamOwnership, str, MemberKey]
+        ] = set()
+
     @cached_property
     def common_dataset(self) -> CPGDatasetInfrastructure:
         # ensure it's setup
@@ -95,6 +114,30 @@ class CPGInfrastructure:
     @cached_property
     def common_azure_infra(self) -> AzureInfra:
         return self.common_dataset.clouds[AzureInfra.name()].infra  # type: ignore
+
+    @cached_property
+    def common_seqera_autoscaling_policy_user_role(self) -> gcp.projects.IAMCustomRole:
+        """Custom project role on cpg-common granting `dataproc.autoscalingPolicies.use`.
+
+        The predefined `roles/dataproc.autoscalingPolicyUser` role cannot be
+        bound at project scope (Google rejects it as "not supported for this
+        resource"); it is only assignable per-policy. We define an equivalent
+        custom role at the cpg-common project level once, so any Seqera Task
+        SA can be granted it project-wide and automatically cover every
+        current and future autoscaling policy in the project.
+        """
+        common_project_id = self.common_gcp_infra.project_id
+        return gcp.projects.IAMCustomRole(
+            'seqera-autoscaling-policy-user',
+            project=common_project_id,
+            role_id='seqeraAutoscalingPolicyUser',
+            title='Seqera Autoscaling Policy User',
+            description=(
+                'Allows using Dataproc autoscaling policies in this project. '
+                'Granted to Seqera Task SAs across datasets.'
+            ),
+            permissions=['dataproc.autoscalingPolicies.use'],
+        )
 
     @cached_property
     def internal_logs_access_group_gcp(self) -> Group:
@@ -157,6 +200,11 @@ class CPGInfrastructure:
         # Setup PAM broker infrastructure if PAM is configured
         self.setup_pam_broker()
 
+        # Workspaces should be created/imported before
+        # calling deploy_datasets() which setup Seqera/GCP infra per dataset
+        if self.config.seqera is not None:
+            self.setup_seqera_workspaces()
+
         # Deploy all the assets required for each dataset. Groups, permissions
         # storage buckets, metamist and hail users etc.
         self.deploy_datasets()
@@ -190,6 +238,10 @@ class CPGInfrastructure:
 
         # Generate data dropbox config from dataset upload configs
         self.generate_dropbox_config()
+        self.generate_igv_proxy_config()
+
+        # Publish the Seqera workspace/compute-env lookup for analysis-runner
+        self.generate_seqera_platform_config()
 
         # Store the deployed infrastructure config on gcp storage
         self.output_infrastructure_config()
@@ -233,6 +285,11 @@ class CPGInfrastructure:
                 name=group.name,
                 description=group.description,
                 cache_members=False,
+                group_settings=(
+                    group.group_settings.to_settings_dict()
+                    if group.group_settings
+                    else None
+                ),
             )
             for member_id in group.members:
                 member = self.config.users.get(member_id)
@@ -531,6 +588,136 @@ class CPGInfrastructure:
             membership=SecretMembership.ACCESSOR,
         )
 
+    def generate_igv_proxy_config(self):
+        """Write the IGV desktop proxy allow-list secret.
+
+        The proxy forwards objects to users who hold no IAM of their own, so it
+        needs an allow-list of who may read what.
+        """
+        if not self.config.igv_proxy:
+            return
+
+        igv_proxy = self.config.igv_proxy
+
+        # Bucket names are derived strings rather than read off the pulumi bucket
+        # resources, so the payload stays a static string with no Output in it.
+        main_buckets_by_user: dict[str, list[str]] = defaultdict(list)
+        prefix = self.config.gcp.dataset_storage_prefix
+
+        for dataset, dataset_config in self.dataset_configs.items():
+            member_keys = dataset_config.members.get(
+                IGV_DESKTOP_ACCESS,  # type: ignore[call-overload]
+            )
+            if not member_keys:
+                continue
+
+            main_bucket = f'{prefix}{dataset}-main'
+
+            for member_key in member_keys:
+                member = self.config.users.get(member_key)
+                if not member:
+                    raise ValueError(
+                        f'IGV proxy: member {member_key} of dataset {dataset} was '
+                        'not found in config',
+                    )
+                cloud_user = member.clouds.get(GcpInfrastructure.name())
+                if not cloud_user:
+                    raise ValueError(
+                        f'IGV proxy: member {member_key} of dataset {dataset} does '
+                        'not have a gcp id specified',
+                    )
+
+                main_buckets_by_user[cloud_user.id].append(main_bucket)
+
+        secret = self.common_gcp_infra.create_secret(
+            name='igv-proxy-config',
+            project=igv_proxy.project,
+            resource_key=self.common_gcp_infra.get_pulumi_name('igv-proxy-config'),
+        )
+
+        self.common_gcp_infra.add_secret_version(
+            'igv-proxy-config-latest',
+            secret=secret,
+            contents=self._igv_proxy_secret_contents(main_buckets_by_user),
+        )
+
+        self.common_gcp_infra.add_secret_member(
+            'igv-proxy-config-accessor',
+            secret=secret,
+            project=igv_proxy.project,
+            member=igv_proxy.server_machine_account,
+            membership=SecretMembership.ACCESSOR,
+        )
+
+    @staticmethod
+    def _igv_proxy_secret_contents(buckets_by_user: dict[str, list[str]]) -> str:
+        """Serialise the allow-list, sorted so the output is deterministic.
+
+        Without the sort, ordering would churn a new secret version on every deploy.
+        No set(): de-duplicating would mask a payload that wrongly repeats a bucket.
+        """
+        return json.dumps(
+            {
+                'users': {
+                    user: sorted(buckets_by_user[user])
+                    for user in sorted(buckets_by_user)
+                },
+            },
+        )
+
+    def generate_seqera_platform_config(self):
+        """Save the Seqera workspace + compute-env lookup for analysis-runner to a secret.
+
+        When users submit a job to analysis-runner they provide a dataset and an
+        access level. The analysis-runner server reads this secret to resolve that
+        pair to the Seqera workspace and compute environment to launch the run in.
+        """
+        if self.config.seqera is None or self.config.analysis_runner is None:
+            return
+
+        # dataset -> access_level -> entry
+        datasets_config: dict[str, dict[str, dict[str, Any]]] = {}
+
+        for dataset_infra in self.dataset_infrastructures.values():
+            cloud_infra = dataset_infra.clouds.get(GcpInfrastructure.name())
+            if cloud_infra is None or not cloud_infra.should_setup_seqera:
+                continue
+
+            dataset = dataset_infra.dataset
+            for level, entry in cloud_infra.seqera.analysis_runner_config.items():
+                datasets_config.setdefault(dataset, {})[level] = entry
+
+        if not datasets_config:
+            return
+
+        contents = pulumi.Output.json_dumps(
+            {
+                'org_id': self.config.seqera.org_id,
+                'api_url': self.config.seqera.api_url,
+                'datasets': datasets_config,
+            },
+        )
+
+        secret_name = 'seqera-platform-config'  # noqa: S105
+        secret = self.common_gcp_infra.create_secret(
+            name=secret_name,
+            project=self.config.analysis_runner.gcp.project,
+        )
+
+        self.common_gcp_infra.add_secret_version(
+            'seqera-platform-config-latest',
+            secret=secret,
+            contents=contents,
+        )
+
+        self.common_gcp_infra.add_secret_member(
+            'seqera-platform-config-accessor',
+            secret=secret,
+            project=self.config.analysis_runner.gcp.project,
+            member=self.config.analysis_runner.gcp.server_machine_account,
+            membership=SecretMembership.ACCESSOR,
+        )
+
     # dataset agnostic infrastructure
 
     def build_infrastructure_config_output(self) -> dict[str, pulumi.Output[str] | str]:
@@ -574,6 +761,31 @@ class CPGInfrastructure:
             contents=infra_config,
             output_name=os.path.join(suffix, 'infrastructure.toml'),
         )
+
+    def setup_seqera_workspaces(self):
+        """Import Seqera workspaces to pulumi state - created manually"""
+
+        seqera_cfg = self.config.seqera
+        assert seqera_cfg is not None
+
+        for team_ownership, ws_pair in seqera_cfg.teams.items():
+            formatted_team_name = get_formatted_team_name(team_ownership)
+            for workspace_type, ws_configs in (
+                ('main', ws_pair.main),
+                ('test', ws_pair.test),
+            ):
+                is_test = workspace_type == 'test'
+                self.seqera_workspaces[(team_ownership, workspace_type)] = (
+                    SeqeraWorkspace(
+                        f'seqera-ws-{formatted_team_name}-{workspace_type}',
+                        org_id=seqera_cfg.org_id,
+                        workspace_id=ws_configs.workspace_id,
+                        ws_name=get_formatted_ws_name(is_test, team_ownership),
+                        full_name=f'CPG {team_ownership}{" Test" if is_test else ""} Workspace',
+                        visibility='PRIVATE',
+                        description=ws_configs.description,
+                    )
+                )
 
     # region ACCESS_CACHE
 

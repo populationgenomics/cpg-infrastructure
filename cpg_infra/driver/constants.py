@@ -14,13 +14,14 @@ from toml_sort import TomlSort
 
 AccessLevel = str
 
-
 SM_TEST_READ = 'test-read'
 SM_TEST_WRITE = 'test-write'
 SM_TEST_CONTRIBUTE = 'test-contribute'
 SM_MAIN_READ = 'main-read'
 SM_MAIN_WRITE = 'main-write'
 SM_MAIN_CONTRIBUTE = 'main-contribute'
+IGV_DESKTOP_ACCESS = 'igv-desktop-access'
+
 METAMIST_PERMISSIONS = [
     SM_TEST_READ,
     SM_TEST_WRITE,
@@ -62,3 +63,10 @@ def compute_hash(dataset: str, member: str, cloud: str) -> str:
     msg = dataset + member + cloud
     computed_hash = xxhash.xxh32(msg.encode()).hexdigest()
     return initials + '-' + computed_hash
+
+
+def get_formatted_team_name(team: str) -> str:
+    """
+    Convert TeamOwnership to Seqera friendly format
+    """
+    return team.lower().replace(' ', '-')
