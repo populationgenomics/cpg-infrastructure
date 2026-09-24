@@ -88,6 +88,11 @@ class _GithubCredentialProvider(ResourceProvider):
         # Update Seqera token if there is a new version in GCP secret manager
         _, current_version = _access_latest_token(news['access_token_secret_name'])
         secret_rotated = current_version != olds.get('resolved_secret_version')
+        if secret_rotated:
+            pulumi.log.info(
+                f'GitHub token rotated: '
+                f'{olds.get("resolved_secret_version")} -> {current_version}',
+            )
 
         changed = bool(replaces) or field_changed or secret_rotated
         return DiffResult(changes=changed, replaces=replaces or None)
