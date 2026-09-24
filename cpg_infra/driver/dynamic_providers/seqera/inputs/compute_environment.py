@@ -1,30 +1,15 @@
-from dataclasses import dataclass, fields, is_dataclass
-from typing import Any, Literal, Optional
+from dataclasses import dataclass
+from typing import Literal, Optional
 
 import pulumi
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
+from cpg_infra.driver.dynamic_providers.seqera.inputs.credentials import (
+    GoogleWifCredentialArgs,
+)
+
 MAX_CE_NAME_LENGTH = 100
-MAX_CRED_NAME_LENGTH = 100
-
-
-def _to_input_dict(instance: Any) -> dict[str, Any]:
-    """Serialize a dataclass to a dict for Pulumi resource inputs.
-    Nested dataclasses (and lists of them) are recursively serialized.
-    Nones are dropped.
-    """
-    result: dict[str, Any] = {}
-    for f in fields(instance):
-        v = getattr(instance, f.name)
-        if v is None:
-            continue
-        if is_dataclass(v):
-            v = _to_input_dict(v)
-        elif isinstance(v, list) and v and is_dataclass(v[0]):
-            v = [_to_input_dict(item) for item in v]
-        result[f.name] = v
-    return result
 
 
 @dataclass
@@ -35,23 +20,6 @@ class ConfigEnvVariable:
     value: pulumi.Input[str]
     compute: Optional[pulumi.Input[bool]] = None
     head: Optional[pulumi.Input[bool]] = None
-
-    def to_input_dict(self) -> dict[str, Any]:
-        return _to_input_dict(self)
-
-
-@dataclass
-class GoogleWifCredentialConfig:
-    """WIF credential inputs for SeqeraComputeEnv.
-
-    The compute env owns the underlying Seqera credentials live resource"""
-
-    workload_identity_provider: pulumi.Input[str]
-    service_account_email: pulumi.Input[str]
-    token_audience: Optional[pulumi.Input[str]] = None
-
-    def to_input_dict(self) -> dict[str, Any]:
-        return _to_input_dict(self)
 
 
 @dataclass
@@ -99,9 +67,6 @@ class GoogleBatchConfig:
     ssh_daemon: Optional[pulumi.Input[bool]] = None
     ssh_image: Optional[pulumi.Input[str]] = None
     copy_image: Optional[pulumi.Input[str]] = None
-
-    def to_input_dict(self) -> dict[str, Any]:
-        return _to_input_dict(self)
 
 
 class ConfigEnvVariableArgs(BaseModel):
@@ -161,18 +126,6 @@ class GoogleBatchConfigArgs(BaseModel):
     ssh_daemon: Optional[bool] = None
     ssh_image: Optional[str] = None
     copy_image: Optional[str] = None
-
-
-class GoogleWifCredentialArgs(BaseModel):
-    """Validate props of the WIF credentials passed to ComputeEnvArgs."""
-
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
-
-    workload_identity_provider: str
-    service_account_email: str
-    token_audience: Optional[str] = None
-    id: Optional[str] = None
-    name: Optional[str] = Field(None, max_length=MAX_CRED_NAME_LENGTH)
 
 
 # Extend when new platforms are added. Also they will require defining new `config` Input classes

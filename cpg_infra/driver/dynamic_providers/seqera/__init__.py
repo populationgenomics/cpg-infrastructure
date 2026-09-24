@@ -7,6 +7,9 @@ from cpg_infra.driver.dynamic_providers.seqera.inputs.compute_environment import
 from cpg_infra.driver.dynamic_providers.seqera.resources.seqera_compute_environment import (
     SeqeraComputeEnv,
 )
+from cpg_infra.driver.dynamic_providers.seqera.resources.seqera_github_credential import (
+    SeqeraGithubCredential,
+)
 from cpg_infra.driver.dynamic_providers.seqera.resources.seqera_workspace import (
     SeqeraWorkspace,
 )
@@ -18,6 +21,7 @@ __all__ = [
     'GoogleBatchConfig',
     'ConfigEnvVariable',
     'SeqeraComputeEnv',
+    'SeqeraGithubCredential',
     'SeqeraWorkspace',
     'SeqeraWorkspaceParticipant',
 ]
