@@ -46,7 +46,7 @@ def _generate_credentials_name(ce_name: str) -> str:
     return combined
 
 
-def _build_credentials_body(creds: GoogleWifCredentialArgs, name: str) -> dict:
+def _build_google_credentials_body(creds: GoogleWifCredentialArgs, name: str) -> dict:
     keys: dict = {
         'keyType': 'google',
         **creds.model_dump(by_alias=True, exclude_none=True, exclude={'id', 'name'}),
@@ -148,7 +148,7 @@ class _ComputeEnvProvider(ResourceProvider):
         cred_name = _generate_credentials_name(inputs.name)
         cred_id = create_credentials(
             inputs.workspace_id,
-            _build_credentials_body(inputs.credentials, cred_name),
+            _build_google_credentials_body(inputs.credentials, cred_name),
         )
 
         inputs.credentials.id = cred_id
@@ -194,14 +194,12 @@ class _ComputeEnvProvider(ResourceProvider):
             _old_creds.get(f) != news['credentials'].get(f) for f in _CRED_UPDATE_FIELDS
         )
         if cred_changed:
-            assert (
-                inputs.credentials.id is not None
-                and inputs.credentials.name is not None
-            )
             update_credentials(
                 inputs.workspace_id,
                 inputs.credentials.id,
-                _build_credentials_body(inputs.credentials, inputs.credentials.name),
+                _build_google_credentials_body(
+                    inputs.credentials, inputs.credentials.name
+                ),
             )
 
         if olds.get('name') != news.get('name'):
