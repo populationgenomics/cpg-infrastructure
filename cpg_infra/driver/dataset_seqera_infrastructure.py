@@ -318,8 +318,7 @@ class DatasetSeqeraInfrastructure:
             )
 
     def _setup_dataproc_autoscaling_policies(self) -> None:
-        """Dataproc autoscaling policy definitions for Seqera-integrated datasets.
-        """
+        """Dataproc autoscaling policy definitions for Seqera-integrated datasets."""
 
         for spec in SEQERA_DATAPROC_ASP_SPECS:
             policy = self._infra.create_dataproc_autoscaling_policy(
