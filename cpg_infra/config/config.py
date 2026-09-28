@@ -425,6 +425,27 @@ class CPGInfrastructureConfig(ConfigModel):
     )
 
 
+class DataprocAutoscalingPolicySpec(ConfigModel):
+    """
+    https://docs.cloud.google.com/managed-spark/docs/reference/rest/v1/projects.locations.autoscalingPolicies#AutoscalingPolicy
+    """
+
+    id: str
+
+    cooldown_period: str
+    graceful_decommission_timeout: str
+    scale_up_factor: float = 1.0
+    scale_down_factor: float
+
+    primary_min_instances: int = 2
+    primary_max_instances: int = 2
+    primary_weight: int = 1
+
+    secondary_min_instances: int
+    secondary_max_instances: int
+    secondary_weight: int = 1
+
+
 class CPGDatasetComponents(Enum):
     """
     The specific components that make up the dataset infrastructure

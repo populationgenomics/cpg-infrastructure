@@ -29,6 +29,7 @@ from cpg_infra.abstraction.base import BucketMembership, MachineAccountRole
 from cpg_infra.abstraction.gcp import GcpInfrastructure
 from cpg_infra.config import (
     CPGInfrastructureConfig,
+    DataprocAutoscalingPolicySpec,
     MemberKey,
     SeqeraAccount,
     TeamOwnership,
@@ -78,6 +79,34 @@ _WORKSPACE_TYPE_FOR_LEVEL: dict[str, str] = {
     'standard': 'main',
     'test': 'test',
 }
+
+# Policy specification : https://cpg-populationanalysis.atlassian.net/wiki/spaces/ST/pages/1563688973/Dataproc+Autoscaling+Policies
+SEQERA_DATAPROC_ASP_SPECS = [
+    DataprocAutoscalingPolicySpec(
+        id='cpg-dataproc-light',
+        cooldown_period='180s',
+        graceful_decommission_timeout='300s',
+        scale_down_factor=0.5,
+        secondary_min_instances=0,
+        secondary_max_instances=4,
+    ),
+    DataprocAutoscalingPolicySpec(
+        id='cpg-dataproc-medium',
+        cooldown_period='120s',
+        graceful_decommission_timeout='300s',
+        scale_down_factor=0.3,
+        secondary_min_instances=1,
+        secondary_max_instances=10,
+    ),
+    DataprocAutoscalingPolicySpec(
+        id='cpg-dataproc-heavy',
+        cooldown_period='120s',
+        graceful_decommission_timeout='600s',
+        scale_down_factor=0.2,
+        secondary_min_instances=2,
+        secondary_max_instances=200,
+    ),
+]
 
 
 class DatasetSeqeraInfrastructure:
@@ -229,6 +258,7 @@ class DatasetSeqeraInfrastructure:
         self._grant_project_roles()
         self._bind_wif_principals()
         self._grant_work_bucket_access()
+        self._setup_dataproc_autoscaling_policies()
         self._setup_seqera_compute_environments()
         self._setup_workspace_participants()
 
@@ -286,6 +316,22 @@ class DatasetSeqeraInfrastructure:
                 role=autoscaling_role.name,
                 project=common_project_id,
             )
+
+    def _setup_dataproc_autoscaling_policies(self) -> None:
+        """Dataproc autoscaling policy definitions for Seqera-integrated datasets.
+        """
+
+        for spec in SEQERA_DATAPROC_ASP_SPECS:
+            policy = self._infra.create_dataproc_autoscaling_policy(
+                f'seqera-{spec.id}-autoscaling',
+                spec,
+            )
+            for level, sa in self._service_accounts.items():
+                self._infra.add_member_to_dataproc_autoscaling_policy(
+                    f'seqera-{level}-{spec.id}-autoscaling-user',
+                    policy=policy,
+                    member=sa,
+                )
 
     def _bind_wif_principals(self) -> None:
         assert self._config.seqera is not None
