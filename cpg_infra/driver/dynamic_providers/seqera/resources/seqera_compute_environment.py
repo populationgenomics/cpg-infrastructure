@@ -16,14 +16,23 @@ from pulumi.dynamic import (
 
 from cpg_infra.driver.dynamic_providers.seqera.inputs.compute_environment import (
     MAX_CE_NAME_LENGTH,
-    MAX_CRED_NAME_LENGTH,
     ComputeEnvArgs,
     GoogleBatchConfig,
+)
+from cpg_infra.driver.dynamic_providers.seqera.inputs.credentials import (
     GoogleWifCredentialArgs,
     GoogleWifCredentialConfig,
 )
 from cpg_infra.driver.dynamic_providers.seqera.util.api_util import (
     SeqeraApiClient,
+)
+from cpg_infra.driver.dynamic_providers.seqera.util.credentials_util import (
+    MAX_CRED_NAME_LENGTH,
+    create_credentials,
+    update_credentials,
+)
+from cpg_infra.driver.dynamic_providers.seqera.util.dataclass_util import (
+    to_input_dict,
 )
 
 _CRED_UUID_LEN = 8
@@ -37,9 +46,7 @@ def _generate_credentials_name(ce_name: str) -> str:
     return combined
 
 
-def _build_credentials_body(
-    creds: GoogleWifCredentialArgs, name: str, cred_id: Optional[str] = None
-) -> dict:
+def _build_google_credentials_body(creds: GoogleWifCredentialArgs, name: str) -> dict:
     keys: dict = {
         'keyType': 'google',
         **creds.model_dump(by_alias=True, exclude_none=True, exclude={'id', 'name'}),
@@ -51,37 +58,9 @@ def _build_credentials_body(
             'keys': keys,
         }
     }
-    if cred_id:
-        body['credentials']['id'] = cred_id
+    if creds.id is not None:
+        body['credentials']['id'] = creds.id
     return body
-
-
-def _create_credentials(
-    workspace_id: int, creds: GoogleWifCredentialArgs, name: str
-) -> str:
-    """https://docs.seqera.io/platform-api/create-credentials"""
-    result = SeqeraApiClient.call(
-        HTTPMethod.POST,
-        f'/credentials?workspaceId={workspace_id}',
-        _build_credentials_body(creds, name),
-    )
-    cred_id = result.get('credentialsId')
-    if not cred_id:
-        raise ValueError(
-            f'Compute env credentials create did not return credentialsId: {result}'
-        )
-    return str(cred_id)
-
-
-def _update_credentials(workspace_id: int, creds: GoogleWifCredentialArgs) -> None:
-    """https://docs.seqera.io/platform-api/update-credentials"""
-
-    assert creds.id is not None and creds.name is not None
-    SeqeraApiClient.call(
-        HTTPMethod.PUT,
-        f'/credentials/{creds.id}?workspaceId={workspace_id}',
-        _build_credentials_body(creds, creds.name, creds.id),
-    )
 
 
 def _create_compute_env(workspace_id: int, ce_body: dict) -> str:
@@ -167,8 +146,9 @@ class _ComputeEnvProvider(ResourceProvider):
         inputs = ComputeEnvArgs(**props)
 
         cred_name = _generate_credentials_name(inputs.name)
-        cred_id = _create_credentials(
-            inputs.workspace_id, inputs.credentials, cred_name
+        cred_id = create_credentials(
+            inputs.workspace_id,
+            _build_google_credentials_body(inputs.credentials, cred_name),
         )
 
         inputs.credentials.id = cred_id
@@ -214,7 +194,13 @@ class _ComputeEnvProvider(ResourceProvider):
             _old_creds.get(f) != news['credentials'].get(f) for f in _CRED_UPDATE_FIELDS
         )
         if cred_changed:
-            _update_credentials(inputs.workspace_id, inputs.credentials)
+            update_credentials(
+                inputs.workspace_id,
+                inputs.credentials.id,
+                _build_google_credentials_body(
+                    inputs.credentials, inputs.credentials.name
+                ),
+            )
 
         if olds.get('name') != news.get('name'):
             _update_compute_env_metadata(inputs.workspace_id, id_, inputs.name)
@@ -261,8 +247,8 @@ class SeqeraComputeEnv(Resource):
             {
                 'workspace_id': workspace_id,
                 'name': ce_name,
-                'credentials': credentials.to_input_dict(),
-                'config': config.to_input_dict(),
+                'credentials': to_input_dict(credentials),
+                'config': to_input_dict(config),
                 'description': description,
                 'platform': platform,
                 'label_ids': label_ids,
