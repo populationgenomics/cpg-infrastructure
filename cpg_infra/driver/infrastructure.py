@@ -37,7 +37,10 @@ from cpg_infra.driver.constants import (
     get_formatted_team_name,
 )
 from cpg_infra.driver.dataset_infrastructure import CPGDatasetInfrastructure
-from cpg_infra.driver.dynamic_providers.seqera import SeqeraWorkspace
+from cpg_infra.driver.dynamic_providers.seqera import (
+    SeqeraGithubCredential,
+    SeqeraWorkspace,
+)
 from cpg_infra.driver.groups import GroupMember, GroupProvider
 from cpg_infra.github_wif.driver import PAM_BROKER_SA_NAME
 from cpg_infra.plugin import get_plugins
@@ -749,16 +752,26 @@ class CPGInfrastructure:
                 ('test', ws_pair.test),
             ):
                 is_test = workspace_type == 'test'
-                self.seqera_workspaces[(team_ownership, workspace_type)] = (
-                    SeqeraWorkspace(
-                        f'seqera-ws-{formatted_team_name}-{workspace_type}',
-                        org_id=seqera_cfg.org_id,
-                        workspace_id=ws_configs.workspace_id,
-                        ws_name=get_formatted_ws_name(is_test, team_ownership),
-                        full_name=f'CPG {team_ownership}{" Test" if is_test else ""} Workspace',
-                        visibility='PRIVATE',
-                        description=ws_configs.description,
-                    )
+                workspace = SeqeraWorkspace(
+                    f'seqera-ws-{formatted_team_name}-{workspace_type}',
+                    org_id=seqera_cfg.org_id,
+                    workspace_id=ws_configs.workspace_id,
+                    ws_name=get_formatted_ws_name(is_test, team_ownership),
+                    full_name=f'CPG {team_ownership}{" Test" if is_test else ""} Workspace',
+                    visibility='PRIVATE',
+                    description=ws_configs.description,
+                )
+                self.seqera_workspaces[(team_ownership, workspace_type)] = workspace
+
+                # Credential per workspace to access private GitHub repositories
+                SeqeraGithubCredential(
+                    f'seqera-github-cred-{formatted_team_name}-{workspace_type}',
+                    workspace_id=ws_configs.workspace_id,
+                    cred_name='cpg-github-auth-token',
+                    username=seqera_cfg.github_auth_token_username,
+                    access_token_secret_name=seqera_cfg.github_auth_token_secret_name,
+                    base_url=seqera_cfg.github_auth_token_base_url,
+                    opts=pulumi.ResourceOptions(depends_on=[workspace]),
                 )
 
     # region ACCESS_CACHE

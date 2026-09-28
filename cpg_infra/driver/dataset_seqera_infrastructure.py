@@ -42,6 +42,8 @@ from cpg_infra.driver.dynamic_providers.seqera import (
 )
 from cpg_infra.driver.dynamic_providers.seqera.inputs.compute_environment import (
     ConfigEnvVariable,
+)
+from cpg_infra.driver.dynamic_providers.seqera.inputs.credentials import (
     GoogleWifCredentialConfig,
 )
 
