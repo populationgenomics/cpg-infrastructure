@@ -82,6 +82,7 @@ _WORKSPACE_TYPE_FOR_LEVEL: dict[str, str] = {
     'test': 'test',
 }
 
+# Dataproc autoscaling policy definitions for Seqera-integrated datasets
 # Policy specification : https://cpg-populationanalysis.atlassian.net/wiki/spaces/ST/pages/1563688973/Dataproc+Autoscaling+Policies
 SEQERA_DATAPROC_ASP_SPECS = [
     DataprocAutoscalingPolicySpec(
@@ -320,18 +321,20 @@ class DatasetSeqeraInfrastructure:
             )
 
     def _setup_dataproc_autoscaling_policies(self) -> None:
-        """Dataproc autoscaling policy definitions for Seqera-integrated datasets."""
+        asp_user_role = self._infra.dataproc_asp_user_role
 
         for spec in SEQERA_DATAPROC_ASP_SPECS:
             policy = self._infra.create_dataproc_autoscaling_policy(
                 f'seqera-{spec.id}-autoscaling',
                 spec,
             )
+            # Attach custom dataproc.autoscalingPolicies.use role per each policy
             for level, sa in self._service_accounts.items():
                 self._infra.add_member_to_dataproc_autoscaling_policy(
                     f'seqera-{level}-{spec.id}-autoscaling-user',
                     policy=policy,
                     member=sa,
+                    role=asp_user_role.name,
                 )
 
     def _bind_wif_principals(self) -> None:
