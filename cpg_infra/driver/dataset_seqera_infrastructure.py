@@ -84,7 +84,7 @@ _WORKSPACE_TYPE_FOR_LEVEL: dict[str, str] = {
 
 # Dataproc autoscaling policy definitions for Seqera-integrated datasets
 # Policy specification : https://cpg-populationanalysis.atlassian.net/wiki/spaces/ST/pages/1563688973/Dataproc+Autoscaling+Policies
-SEQERA_DATAPROC_ASP_SPECS = [
+SEQERA_DATAPROC_ASP_SPECS: tuple[DataprocAutoscalingPolicySpec, ...] = (
     DataprocAutoscalingPolicySpec(
         id='cpg-dataproc-light',
         cooldown_period='180s',
@@ -109,7 +109,7 @@ SEQERA_DATAPROC_ASP_SPECS = [
         secondary_min_instances=2,
         secondary_max_instances=200,
     ),
-]
+)
 
 
 class DatasetSeqeraInfrastructure:
