@@ -324,7 +324,6 @@ class DatasetSeqeraInfrastructure:
             )
 
     def _create_dataproc_autoscaling_policies(self) -> None:
-
         if self._dataproc_autoscaling_policies:
             return
 
