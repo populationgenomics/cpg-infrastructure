@@ -71,7 +71,7 @@ _TASK_JOB_ROLES: tuple[str, ...] = (
     'roles/batch.jobsEditor',  # Allows spawning nested jobs
     'roles/logging.logWriter',
     'roles/logging.viewer',  # Read Batch job logs from Nextflow tail-follow
-    'roles/dataproc.editor',  # Create/manage Dataproc clusters
+    'roles/dataproc.editor',  # Create/manage Dataproc clusters (Includes dataproc.autoscalingPolicies.use)
     'roles/dataproc.worker',  # Cluster SA (same SA) acts as Dataproc worker
 )
 
@@ -261,7 +261,7 @@ class DatasetSeqeraInfrastructure:
         self._grant_project_roles()
         self._bind_wif_principals()
         self._grant_work_bucket_access()
-        self._setup_dataproc_autoscaling_policies()
+        self._create_dataproc_autoscaling_policies()
         self._setup_seqera_compute_environments()
         self._setup_workspace_participants()
 
@@ -320,22 +320,12 @@ class DatasetSeqeraInfrastructure:
                 project=common_project_id,
             )
 
-    def _setup_dataproc_autoscaling_policies(self) -> None:
-        asp_user_role = self._infra.dataproc_asp_user_role
-
+    def _create_dataproc_autoscaling_policies(self) -> None:
         for spec in SEQERA_DATAPROC_ASP_SPECS:
-            policy = self._infra.create_dataproc_autoscaling_policy(
+            self._infra.create_dataproc_autoscaling_policy(
                 f'seqera-{spec.id}-autoscaling',
                 spec,
             )
-            # Attach custom dataproc.autoscalingPolicies.use role per each policy
-            for level, sa in self._service_accounts.items():
-                self._infra.add_member_to_dataproc_autoscaling_policy(
-                    f'seqera-{level}-{spec.id}-autoscaling-user',
-                    policy=policy,
-                    member=sa,
-                    role=asp_user_role.name,
-                )
 
     def _bind_wif_principals(self) -> None:
         assert self._config.seqera is not None

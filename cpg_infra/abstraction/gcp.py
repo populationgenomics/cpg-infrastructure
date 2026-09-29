@@ -281,18 +281,6 @@ class GcpInfrastructure(CloudInfraBase):
             ),
         )
 
-    @cached_property
-    def dataproc_asp_user_role(self) -> gcp.projects.IAMCustomRole:
-        """Custom project role granting `dataproc.autoscalingPolicies.use`."""
-        return gcp.projects.IAMCustomRole(
-            self.get_pulumi_name('dataproc-autoscaling-policy-user-role'),
-            project=self.project_id,
-            role_id='dataprocAutoscalingPolicyUser',
-            title='Dataproc Autoscaling Policy User',
-            description='Allows using Dataproc autoscaling policies in this project.',
-            permissions=['dataproc.autoscalingPolicies.use'],
-        )
-
     # endregion SERVICES
 
     def create_project(self, resource_key, name):
