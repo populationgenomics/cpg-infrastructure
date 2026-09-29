@@ -127,6 +127,9 @@ class DatasetSeqeraInfrastructure:
         # Populated by create_compute_environments() during setup(); keyed by
         # access level.
         self._compute_envs: dict[str, SeqeraComputeEnv] = {}
+        self._dataproc_autoscaling_policies: dict[
+            str, gcp.dataproc.AutoscalingPolicy
+        ] = {}
 
     @cached_property
     def _access_levels(self) -> list[str]:
@@ -321,10 +324,16 @@ class DatasetSeqeraInfrastructure:
             )
 
     def _create_dataproc_autoscaling_policies(self) -> None:
+
+        if self._dataproc_autoscaling_policies:
+            return
+
         for spec in SEQERA_DATAPROC_ASP_SPECS:
-            self._infra.create_dataproc_autoscaling_policy(
-                f'seqera-{spec.id}-autoscaling',
-                spec,
+            self._dataproc_autoscaling_policies[spec.id] = (
+                self._infra.create_dataproc_autoscaling_policy(
+                    f'seqera-{spec.id}-autoscaling',
+                    spec,
+                )
             )
 
     def _bind_wif_principals(self) -> None:
