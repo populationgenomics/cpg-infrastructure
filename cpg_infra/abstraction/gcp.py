@@ -994,22 +994,6 @@ class GcpInfrastructure(CloudInfraBase):
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_dataproc]),
         )
 
-    def add_member_to_dataproc_autoscaling_policy(
-        self,
-        resource_key: str,
-        policy: gcp.dataproc.AutoscalingPolicy,
-        member,
-        role: pulumi.Input[str],
-    ) -> gcp.dataproc.AutoscalingPolicyIamMember:
-        return gcp.dataproc.AutoscalingPolicyIamMember(
-            self.get_pulumi_name(resource_key),
-            project=self.project_id,
-            location=self.region,
-            policy_id=policy.policy_id,
-            role=role,
-            member=get_member_key(member),
-        )
-
     def add_cloudrun_invoker(
         self,
         resource_key: str,
