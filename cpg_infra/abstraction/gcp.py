@@ -29,7 +29,11 @@ from cpg_infra.abstraction.google_group_membership import (
     GoogleGroupMembershipInputs,
 )
 from cpg_infra.abstraction.google_group_settings import GoogleGroupSettings
-from cpg_infra.config import CPGDatasetConfig, CPGInfrastructureConfig
+from cpg_infra.config import (
+    CPGDatasetConfig,
+    CPGInfrastructureConfig,
+    DataprocAutoscalingPolicySpec,
+)
 
 
 class BucketMembershipRole(NamedTuple):
@@ -955,6 +959,38 @@ class GcpInfrastructure(CloudInfraBase):
             role=role,
             member=get_member_key(account),
             project=self.project_id,
+            opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_dataproc]),
+        )
+
+    def create_dataproc_autoscaling_policy(
+        self,
+        resource_key: str,
+        spec: DataprocAutoscalingPolicySpec,
+    ) -> gcp.dataproc.AutoscalingPolicy:
+        """Create a Dataproc autoscaling policy in this dataset's project."""
+        return gcp.dataproc.AutoscalingPolicy(
+            self.get_pulumi_name(resource_key),
+            policy_id=spec.id,
+            project=self.project_id,
+            location=self.region,
+            basic_algorithm=gcp.dataproc.AutoscalingPolicyBasicAlgorithmArgs(
+                cooldown_period=spec.cooldown_period,
+                yarn_config=gcp.dataproc.AutoscalingPolicyBasicAlgorithmYarnConfigArgs(
+                    graceful_decommission_timeout=spec.graceful_decommission_timeout,
+                    scale_up_factor=spec.scale_up_factor,
+                    scale_down_factor=spec.scale_down_factor,
+                ),
+            ),
+            worker_config=gcp.dataproc.AutoscalingPolicyWorkerConfigArgs(
+                min_instances=spec.primary_min_instances,
+                max_instances=spec.primary_max_instances,
+                weight=spec.primary_weight,
+            ),
+            secondary_worker_config=gcp.dataproc.AutoscalingPolicySecondaryWorkerConfigArgs(
+                min_instances=spec.secondary_min_instances,
+                max_instances=spec.secondary_max_instances,
+                weight=spec.secondary_weight,
+            ),
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_dataproc]),
         )
 

@@ -29,6 +29,7 @@ from cpg_infra.abstraction.base import BucketMembership, MachineAccountRole
 from cpg_infra.abstraction.gcp import GcpInfrastructure
 from cpg_infra.config import (
     CPGInfrastructureConfig,
+    DataprocAutoscalingPolicySpec,
     MemberKey,
     SeqeraAccount,
     TeamOwnership,
@@ -70,7 +71,7 @@ _TASK_JOB_ROLES: tuple[str, ...] = (
     'roles/batch.jobsEditor',  # Allows spawning nested jobs
     'roles/logging.logWriter',
     'roles/logging.viewer',  # Read Batch job logs from Nextflow tail-follow
-    'roles/dataproc.editor',  # Create/manage Dataproc clusters
+    'roles/dataproc.editor',  # Create/manage Dataproc clusters (Includes dataproc.autoscalingPolicies.use)
     'roles/dataproc.worker',  # Cluster SA (same SA) acts as Dataproc worker
 )
 
@@ -80,6 +81,35 @@ _WORKSPACE_TYPE_FOR_LEVEL: dict[str, str] = {
     'standard': 'main',
     'test': 'test',
 }
+
+# Dataproc autoscaling policy definitions for Seqera-integrated datasets
+# Policy specification : https://cpg-populationanalysis.atlassian.net/wiki/spaces/ST/pages/1563688973/Dataproc+Autoscaling+Policies
+SEQERA_DATAPROC_ASP_SPECS: tuple[DataprocAutoscalingPolicySpec, ...] = (
+    DataprocAutoscalingPolicySpec(
+        id='cpg-dataproc-light',
+        cooldown_period='180s',
+        graceful_decommission_timeout='300s',
+        scale_down_factor=0.5,
+        secondary_min_instances=0,
+        secondary_max_instances=4,
+    ),
+    DataprocAutoscalingPolicySpec(
+        id='cpg-dataproc-medium',
+        cooldown_period='120s',
+        graceful_decommission_timeout='300s',
+        scale_down_factor=0.3,
+        secondary_min_instances=1,
+        secondary_max_instances=10,
+    ),
+    DataprocAutoscalingPolicySpec(
+        id='cpg-dataproc-heavy',
+        cooldown_period='120s',
+        graceful_decommission_timeout='600s',
+        scale_down_factor=0.2,
+        secondary_min_instances=2,
+        secondary_max_instances=200,
+    ),
+)
 
 
 class DatasetSeqeraInfrastructure:
@@ -97,6 +127,9 @@ class DatasetSeqeraInfrastructure:
         # Populated by create_compute_environments() during setup(); keyed by
         # access level.
         self._compute_envs: dict[str, SeqeraComputeEnv] = {}
+        self._dataproc_autoscaling_policies: dict[
+            str, gcp.dataproc.AutoscalingPolicy
+        ] = {}
 
     @cached_property
     def _access_levels(self) -> list[str]:
@@ -231,6 +264,7 @@ class DatasetSeqeraInfrastructure:
         self._grant_project_roles()
         self._bind_wif_principals()
         self._grant_work_bucket_access()
+        self._create_dataproc_autoscaling_policies()
         self._setup_seqera_compute_environments()
         self._setup_workspace_participants()
 
@@ -287,6 +321,18 @@ class DatasetSeqeraInfrastructure:
                 member=sa,
                 role=autoscaling_role.name,
                 project=common_project_id,
+            )
+
+    def _create_dataproc_autoscaling_policies(self) -> None:
+        if self._dataproc_autoscaling_policies:
+            return
+
+        for spec in SEQERA_DATAPROC_ASP_SPECS:
+            self._dataproc_autoscaling_policies[spec.id] = (
+                self._infra.create_dataproc_autoscaling_policy(
+                    f'seqera-{spec.id}-autoscaling',
+                    spec,
+                )
             )
 
     def _bind_wif_principals(self) -> None:
