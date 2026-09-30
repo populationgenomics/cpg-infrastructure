@@ -84,7 +84,7 @@ _WORKSPACE_TYPE_FOR_LEVEL: dict[str, str] = {
 
 # Dataproc autoscaling policy definitions for Seqera-integrated datasets
 # Policy specification : https://cpg-populationanalysis.atlassian.net/wiki/spaces/ST/pages/1563688973/Dataproc+Autoscaling+Policies
-SEQERA_DATAPROC_ASP_SPECS = [
+SEQERA_DATAPROC_ASP_SPECS: tuple[DataprocAutoscalingPolicySpec, ...] = (
     DataprocAutoscalingPolicySpec(
         id='cpg-dataproc-light',
         cooldown_period='180s',
@@ -109,7 +109,7 @@ SEQERA_DATAPROC_ASP_SPECS = [
         secondary_min_instances=2,
         secondary_max_instances=200,
     ),
-]
+)
 
 
 class DatasetSeqeraInfrastructure:
@@ -127,6 +127,9 @@ class DatasetSeqeraInfrastructure:
         # Populated by create_compute_environments() during setup(); keyed by
         # access level.
         self._compute_envs: dict[str, SeqeraComputeEnv] = {}
+        self._dataproc_autoscaling_policies: dict[
+            str, gcp.dataproc.AutoscalingPolicy
+        ] = {}
 
     @cached_property
     def _access_levels(self) -> list[str]:
@@ -304,10 +307,15 @@ class DatasetSeqeraInfrastructure:
             )
 
     def _create_dataproc_autoscaling_policies(self) -> None:
+        if self._dataproc_autoscaling_policies:
+            return
+
         for spec in SEQERA_DATAPROC_ASP_SPECS:
-            self._infra.create_dataproc_autoscaling_policy(
-                f'seqera-{spec.id}-autoscaling',
-                spec,
+            self._dataproc_autoscaling_policies[spec.id] = (
+                self._infra.create_dataproc_autoscaling_policy(
+                    f'seqera-{spec.id}-autoscaling',
+                    spec,
+                )
             )
 
     def _bind_wif_principals(self) -> None:
