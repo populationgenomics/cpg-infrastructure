@@ -8,12 +8,14 @@ GCP Workload Identity Federation for OIDC authentication and Artifact Registry a
 It also includes PAM broker service account setup for Privileged Access Manager.
 """
 
+import os
 import re
 from typing import Any, Literal
 
 import pulumi
 import pulumi_gcp as gcp
 import pulumi_github as github
+import requests
 from pydantic import Field, field_validator
 
 from cpg_infra.config.base import ConfigModel
@@ -234,60 +236,61 @@ def create_github_service_account(
     )
 
 
-def wif_subject_principals(
-    project_number: str,
-    pool_name: str,
-    github_repo: str,
-    environment: str,
-) -> dict[str, pulumi.Output[str]]:
+def get_sub_claim_prefix(github_repo: str) -> str:
     """
-    Build the WIF principals a repo environment's OIDC token may present.
+    Get the repo part of the OIDC `sub` claim GitHub issues for a repository.
 
-    GitHub issues two `sub` claim formats: repos created (or renamed/transferred)
-    after 15 July 2026 always use the immutable format, which includes the owner
-    and repo IDs, while older repos keep the name-only format unless opted in.
-    We can't tell which one a repo uses from the API, so trust both.
+    Repos created, renamed or transferred after 15 July 2026, and repos that
+    have opted in, use the immutable format, which includes the owner and repo
+    IDs (`repo:{ORG}@{ORG_ID}/{REPO}@{REPO_ID}`). Older repos use the name-only
+    format (`repo:{ORG}/{REPO}`). GitHub returns the one in use, with the
+    repo's current name, from the OIDC customization endpoint.
     https://docs.github.com/en/actions/reference/security/oidc#immutable-subject-claims
 
+    pulumi-github doesn't expose `sub_claim_prefix` yet, so call the REST API
+    with the same GITHUB_TOKEN the GitHub provider uses.
+
     Args:
-        project_number: GCP project number hosting the WIF pool
-        pool_name: WIF pool name
         github_repo: Full GitHub repo path (org/repo)
-        environment: Environment name
 
     Returns:
-        Principals keyed by subject format ('legacy', 'immutable')
+        The sub claim prefix, e.g. 'repo:populationgenomics/my-repo'
     """
-    org_name, repo_name = github_repo.split('/', 1)
-    pool_prefix = (
-        f'principal://iam.googleapis.com/projects/{project_number}/'
-        f'locations/global/workloadIdentityPools/{pool_name}/subject/'
-    )
+    token = os.environ.get('GITHUB_TOKEN')
+    if not token:
+        raise ValueError('GITHUB_TOKEN must be set to look up OIDC subject claims')
 
-    # Format: repo:{ORG}/{REPO}:environment:{ENV}
-    legacy = pulumi.Output.from_input(
-        f'{pool_prefix}repo:{github_repo}:environment:{environment}'
+    response = requests.get(
+        f'https://api.github.com/repos/{github_repo}/actions/oidc/customization/sub',
+        headers={
+            'Accept': 'application/vnd.github+json',
+            'Authorization': f'Bearer {token}',
+            'X-GitHub-Api-Version': '2022-11-28',
+        },
+        timeout=30,
     )
+    response.raise_for_status()
+    customization = response.json()
 
-    # Format: repo:{ORG}@{ORG_ID}/{REPO}@{REPO_ID}:environment:{ENV}
-    repo = github.get_repository_output(full_name=github_repo)
-    immutable = pulumi.Output.concat(
-        f'{pool_prefix}repo:{org_name}@{GITHUB_ORG_ID}/{repo_name}@',
-        repo.repo_id.apply(str),
-        f':environment:{environment}',
-    )
+    # A custom template changes what follows the prefix, so the
+    # ':environment:{ENV}' subject we bind would never match
+    if not customization['use_default']:
+        raise ValueError(
+            f'{github_repo} uses a custom OIDC subject claim template, '
+            'which github_wif does not support'
+        )
 
-    return {'legacy': legacy, 'immutable': immutable}
+    return customization['sub_claim_prefix']
 
 
 def grant_wif_impersonation(
     resource_key: str,
     service_account_id: pulumi.Input[str],
     project_number: str,
-    github_repo: str,
+    sub_claim_prefix: str,
     environment: str,
     pool_name: str = WIF_POOL_NAME,
-) -> list[gcp.serviceaccount.IAMMember]:
+) -> gcp.serviceaccount.IAMMember:
     """
     Grant WIF permission to impersonate the service account.
 
@@ -295,35 +298,27 @@ def grant_wif_impersonation(
         resource_key: Unique resource key for Pulumi
         service_account_id: Name of the service account to grant access to
         project_number: GCP project number
-        github_repo: Full GitHub repo path
+        sub_claim_prefix: Repo part of the OIDC sub claim, from get_sub_claim_prefix
         environment: Environment name
         pool_name: WIF pool name
 
     Returns:
-        IAM member bindings, one per subject format
+        IAM member binding
     """
-    principals = wif_subject_principals(
-        project_number, pool_name, github_repo, environment
+    # Format: principal://iam.googleapis.com/projects/{PROJECT_NUMBER}/locations/global/
+    #         workloadIdentityPools/{POOL}/subject/{SUB_CLAIM_PREFIX}:environment:{ENV}
+    principal = (
+        f'principal://iam.googleapis.com/projects/{project_number}/'
+        f'locations/global/workloadIdentityPools/{pool_name}/'
+        f'subject/{sub_claim_prefix}:environment:{environment}'
     )
 
-    bindings = []
-    for subject_format, principal in principals.items():
-        # Keep the original resource name for the legacy binding so existing
-        # stacks don't replace it
-        key = (
-            resource_key
-            if subject_format == 'legacy'
-            else f'{resource_key}-{subject_format}'
-        )
-        bindings.append(
-            gcp.serviceaccount.IAMMember(
-                key,
-                service_account_id=service_account_id,
-                role='roles/iam.workloadIdentityUser',
-                member=principal,
-            )
-        )
-    return bindings
+    return gcp.serviceaccount.IAMMember(
+        resource_key,
+        service_account_id=service_account_id,
+        role='roles/iam.workloadIdentityUser',
+        member=principal,
+    )
 
 
 def grant_artifact_registry_access(
@@ -473,6 +468,7 @@ def setup_github_wif_infrastructure(
         for repo_config in project_config.repositories:
             repo_name = repo_config.name
             github_repo = repo_config.github_repo
+            sub_claim_prefix = get_sub_claim_prefix(github_repo)
 
             for env_config in repo_config.environments:
                 env_name = env_config.name
@@ -492,7 +488,7 @@ def setup_github_wif_infrastructure(
                     f'{project_id}-{repo_name}-{env_name}-wif-binding',
                     sa.name,
                     project_number,
-                    github_repo,
+                    sub_claim_prefix,
                     env_name,
                 )
 
@@ -579,7 +575,7 @@ def setup_pam_broker_github_wif(
         f'{project_id}-pam-broker-wif-binding',
         f'projects/{project_id}/serviceAccounts/{broker_sa_email}',
         project_number,
-        wif_repository,
+        get_sub_claim_prefix(wif_repository),
         wif_environment,
         pool_name=wif_pool_name,
     )

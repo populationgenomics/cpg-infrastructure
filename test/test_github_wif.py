@@ -4,63 +4,107 @@ from __future__ import annotations
 
 from typing import Any
 from unittest import TestCase
+from unittest.mock import MagicMock, patch
 
 import pulumi
 
-REPO_ID = 1362376390
+from cpg_infra.github_wif.driver import get_sub_claim_prefix, grant_wif_impersonation
+
+POOL = 'principal://iam.googleapis.com/projects/123/locations/global/workloadIdentityPools/github-pool/subject/'
+IMMUTABLE_PREFIX = 'repo:populationgenomics@69879407/popgen-ancestry@1362376390'
 
 
 class _Mocks(pulumi.runtime.Mocks):
-    def __init__(self) -> None:
-        self.resources: dict[str, dict[str, Any]] = {}
-
     def new_resource(
         self, args: pulumi.runtime.MockResourceArgs
     ) -> tuple[str | None, dict[str, Any]]:
-        self.resources[args.name] = dict(args.inputs)
         return f'{args.name}-id', dict(args.inputs)
 
-    def call(self, args: pulumi.runtime.MockCallArgs) -> dict[str, Any]:
-        if args.token == 'github:index/getRepository:getRepository':  # noqa: S105
-            return {'repoId': REPO_ID, 'fullName': args.args['fullName']}
+    def call(self, args: pulumi.runtime.MockCallArgs) -> dict[str, Any]:  # noqa: ARG002
         return {}
 
 
-_mocks = _Mocks()
-pulumi.runtime.set_mocks(_mocks, preview=False)
+def _customization_response(body: dict[str, Any]) -> MagicMock:
+    response = MagicMock()
+    response.json.return_value = body
+    return response
 
-from cpg_infra.github_wif.driver import grant_wif_impersonation  # noqa: E402
 
-POOL = 'principal://iam.googleapis.com/projects/123/locations/global/workloadIdentityPools/github-pool/subject/'
+@patch.dict('os.environ', {'GITHUB_TOKEN': 'test-token'})
+class TestGetSubClaimPrefix(TestCase):
+    @patch('cpg_infra.github_wif.driver.requests.get')
+    def test_returns_prefix_from_github(self, get: MagicMock):
+        get.return_value = _customization_response(
+            {
+                'use_default': True,
+                'use_immutable_subject': True,
+                'sub_claim_prefix': IMMUTABLE_PREFIX,
+            }
+        )
+
+        self.assertEqual(
+            get_sub_claim_prefix('populationgenomics/popgen-ancestry'),
+            IMMUTABLE_PREFIX,
+        )
+        self.assertEqual(
+            get.call_args.args[0],
+            'https://api.github.com/repos/populationgenomics/popgen-ancestry/actions/oidc/customization/sub',
+        )
+
+    @patch('cpg_infra.github_wif.driver.requests.get')
+    def test_rejects_custom_template(self, get: MagicMock):
+        get.return_value = _customization_response(
+            {
+                'use_default': False,
+                'include_claim_keys': ['repo', 'context'],
+                'sub_claim_prefix': 'repo:populationgenomics/my-repo',
+            }
+        )
+
+        with self.assertRaisesRegex(ValueError, 'custom OIDC subject claim template'):
+            get_sub_claim_prefix('populationgenomics/my-repo')
+
+    @patch.dict('os.environ', {}, clear=True)
+    def test_requires_github_token(self):
+        with self.assertRaisesRegex(ValueError, 'GITHUB_TOKEN'):
+            get_sub_claim_prefix('populationgenomics/my-repo')
 
 
 class TestGrantWifImpersonation(TestCase):
+    def setUp(self):
+        pulumi.runtime.set_mocks(_Mocks(), preview=False)
+
     @pulumi.runtime.test
-    def test_binds_legacy_and_immutable_subjects(self):
-        bindings = grant_wif_impersonation(
+    def test_binds_immutable_subject(self):
+        binding = grant_wif_impersonation(
             'cpg-proj-popgen-ancestry-development-wif-binding',
             'projects/cpg-proj/serviceAccounts/sa@cpg-proj.iam.gserviceaccount.com',
             '123',
-            'populationgenomics/popgen-ancestry',
+            IMMUTABLE_PREFIX,
             'development',
         )
 
-        def check(members: list[str]) -> None:
+        def check(member: str) -> None:
             self.assertEqual(
-                members,
-                [
-                    f'{POOL}repo:populationgenomics/popgen-ancestry:environment:development',
-                    f'{POOL}repo:populationgenomics@69879407/popgen-ancestry@{REPO_ID}'
-                    ':environment:development',
-                ],
-            )
-            # Legacy binding keeps its original resource name
-            self.assertIn(
-                'cpg-proj-popgen-ancestry-development-wif-binding', _mocks.resources
-            )
-            self.assertIn(
-                'cpg-proj-popgen-ancestry-development-wif-binding-immutable',
-                _mocks.resources,
+                member, f'{POOL}{IMMUTABLE_PREFIX}:environment:development'
             )
 
-        return pulumi.Output.all(*[b.member for b in bindings]).apply(check)
+        return binding.member.apply(check)
+
+    @pulumi.runtime.test
+    def test_binds_name_only_subject(self):
+        binding = grant_wif_impersonation(
+            'cpg-proj-my-repo-production-wif-binding',
+            'projects/cpg-proj/serviceAccounts/sa@cpg-proj.iam.gserviceaccount.com',
+            '123',
+            'repo:populationgenomics/my-repo',
+            'production',
+        )
+
+        def check(member: str) -> None:
+            self.assertEqual(
+                member,
+                f'{POOL}repo:populationgenomics/my-repo:environment:production',
+            )
+
+        return binding.member.apply(check)
