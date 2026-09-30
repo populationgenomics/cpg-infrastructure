@@ -234,41 +234,96 @@ def create_github_service_account(
     )
 
 
+def wif_subject_principals(
+    project_number: str,
+    pool_name: str,
+    github_repo: str,
+    environment: str,
+) -> dict[str, pulumi.Output[str]]:
+    """
+    Build the WIF principals a repo environment's OIDC token may present.
+
+    GitHub issues two `sub` claim formats: repos created (or renamed/transferred)
+    after 15 July 2026 always use the immutable format, which includes the owner
+    and repo IDs, while older repos keep the name-only format unless opted in.
+    We can't tell which one a repo uses from the API, so trust both.
+    https://docs.github.com/en/actions/reference/security/oidc#immutable-subject-claims
+
+    Args:
+        project_number: GCP project number hosting the WIF pool
+        pool_name: WIF pool name
+        github_repo: Full GitHub repo path (org/repo)
+        environment: Environment name
+
+    Returns:
+        Principals keyed by subject format ('legacy', 'immutable')
+    """
+    org_name, repo_name = github_repo.split('/', 1)
+    pool_prefix = (
+        f'principal://iam.googleapis.com/projects/{project_number}/'
+        f'locations/global/workloadIdentityPools/{pool_name}/subject/'
+    )
+
+    # Format: repo:{ORG}/{REPO}:environment:{ENV}
+    legacy = pulumi.Output.from_input(
+        f'{pool_prefix}repo:{github_repo}:environment:{environment}'
+    )
+
+    # Format: repo:{ORG}@{ORG_ID}/{REPO}@{REPO_ID}:environment:{ENV}
+    repo = github.get_repository_output(full_name=github_repo)
+    immutable = pulumi.Output.concat(
+        f'{pool_prefix}repo:{org_name}@{GITHUB_ORG_ID}/{repo_name}@',
+        repo.repo_id.apply(str),
+        f':environment:{environment}',
+    )
+
+    return {'legacy': legacy, 'immutable': immutable}
+
+
 def grant_wif_impersonation(
     resource_key: str,
-    service_account: gcp.serviceaccount.Account,
+    service_account_id: pulumi.Input[str],
     project_number: str,
     github_repo: str,
     environment: str,
-) -> gcp.serviceaccount.IAMMember:
+    pool_name: str = WIF_POOL_NAME,
+) -> list[gcp.serviceaccount.IAMMember]:
     """
     Grant WIF permission to impersonate the service account.
 
     Args:
         resource_key: Unique resource key for Pulumi
-        service_account: Service account to grant access to
+        service_account_id: Name of the service account to grant access to
         project_number: GCP project number
         github_repo: Full GitHub repo path
         environment: Environment name
+        pool_name: WIF pool name
 
     Returns:
-        IAM member binding
+        IAM member bindings, one per subject format
     """
-    # Create the principal identifier for WIF
-    # Format: principal://iam.googleapis.com/projects/{PROJECT_NUMBER}/locations/global/
-    #         workloadIdentityPools/{POOL}/subject/repo:{ORG}/{REPO}:environment:{ENV}
-    principal = pulumi.Output.concat(
-        f'principal://iam.googleapis.com/projects/{project_number}/',
-        f'locations/global/workloadIdentityPools/{WIF_POOL_NAME}/',
-        f'subject/repo:{github_repo}:environment:{environment}',
+    principals = wif_subject_principals(
+        project_number, pool_name, github_repo, environment
     )
 
-    return gcp.serviceaccount.IAMMember(
-        resource_key,
-        service_account_id=service_account.name,
-        role='roles/iam.workloadIdentityUser',
-        member=principal,
-    )
+    bindings = []
+    for subject_format, principal in principals.items():
+        # Keep the original resource name for the legacy binding so existing
+        # stacks don't replace it
+        key = (
+            resource_key
+            if subject_format == 'legacy'
+            else f'{resource_key}-{subject_format}'
+        )
+        bindings.append(
+            gcp.serviceaccount.IAMMember(
+                key,
+                service_account_id=service_account_id,
+                role='roles/iam.workloadIdentityUser',
+                member=principal,
+            )
+        )
+    return bindings
 
 
 def grant_artifact_registry_access(
@@ -435,7 +490,7 @@ def setup_github_wif_infrastructure(
                 # Grant WIF impersonation permission
                 grant_wif_impersonation(
                     f'{project_id}-{repo_name}-{env_name}-wif-binding',
-                    sa,
+                    sa.name,
                     project_number,
                     github_repo,
                     env_name,
@@ -520,18 +575,13 @@ def setup_pam_broker_github_wif(
     )
 
     # Grant WIF impersonation to broker SA (using email directly)
-    # Create the principal identifier for WIF
-    principal = (
-        f'principal://iam.googleapis.com/projects/{project_number}/'
-        f'locations/global/workloadIdentityPools/{wif_pool_name}/'
-        f'subject/repo:{wif_repository}:environment:{wif_environment}'
-    )
-
-    gcp.serviceaccount.IAMMember(
+    grant_wif_impersonation(
         f'{project_id}-pam-broker-wif-binding',
-        service_account_id=f'projects/{project_id}/serviceAccounts/{broker_sa_email}',
-        role='roles/iam.workloadIdentityUser',
-        member=principal,
+        f'projects/{project_id}/serviceAccounts/{broker_sa_email}',
+        project_number,
+        wif_repository,
+        wif_environment,
+        pool_name=wif_pool_name,
     )
 
     # Build WIF provider path for GitHub secrets

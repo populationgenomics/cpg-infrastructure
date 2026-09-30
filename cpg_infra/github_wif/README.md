@@ -136,7 +136,10 @@ Each service account receives:
 
 1. **WIF Impersonation** (`roles/iam.workloadIdentityUser`):
    - Scoped to specific GitHub repo and environment
-   - Principal: `principalSet://iam.googleapis.com/projects/{PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-pool/attribute.repository/populationgenomics/{repo}:environment:{env}`
+   - Granted to both OIDC subject formats GitHub issues, since a repo's format can't be queried:
+     - Name-only (repos created before 15 July 2026): `principal://iam.googleapis.com/projects/{PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-pool/subject/repo:populationgenomics/{repo}:environment:{env}`
+     - [Immutable](https://docs.github.com/en/actions/reference/security/oidc#immutable-subject-claims) (repos created, renamed or transferred after 15 July 2026, or opted in): `principal://iam.googleapis.com/projects/{PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-pool/subject/repo:populationgenomics@{ORG_ID}/{repo}@{REPO_ID}:environment:{env}`
+   - The repo ID is looked up from the GitHub API at deploy time
 
 2. **Artifact Registry Writer** (`roles/artifactregistry.writer`):
    - On the specified `push_registry`
@@ -191,6 +194,7 @@ Ensure:
 - Workflow has `permissions: id-token: write`
 - Environment name in workflow matches YAML exactly
 - The GitHub Environment exists (it should be automatically created by Pulumi)
+- The repo hasn't been renamed or transferred since the last `pulumi up`. The `github_repo` name is part of both subject formats, so update the YAML and redeploy after a rename
 
 ### GitHub API 403 Errors
 
