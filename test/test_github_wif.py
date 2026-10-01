@@ -1,4 +1,4 @@
-"""Tests for GitHub WIF impersonation bindings (issue #409)."""
+"""Tests for the GitHub WIF driver."""
 
 from __future__ import annotations
 
