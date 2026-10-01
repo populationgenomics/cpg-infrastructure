@@ -185,7 +185,7 @@ This abstraction is still trying to address a number of difficult problems:
   interface (`CloudInfraBase`) so datasets don't reach into provider SDKs
   directly? Historically we ran GCP + Azure through the same abstraction;
   Azure has since been retired but the seam is preserved so a future
-  backend (e.g. Seqera / Nextflow) can be added without rewriting driver
+  backend can be added without rewriting driver
   code.
 - Can we modularise our deployment for each dataset a bit more?
 
