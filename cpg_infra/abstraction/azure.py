@@ -46,9 +46,9 @@ class AzureInfra(CloudInfraBase):
 
         self.dataset_storage_prefix = config.azure.dataset_storage_prefix
         self.region = config.azure.region
-        self._resource_group_name = f'{self.dataset_storage_prefix}{self.dataset}'
+        self._resource_group_name = f'{self.dataset_storage_prefix}{self.name_prefix}'
         self._storage_account_name = self.fix_azure_alphanum_names(
-            f'{self.dataset_storage_prefix}{self.dataset}',
+            f'{self.dataset_storage_prefix}{self.name_prefix}',
         )
         self.storage_account_lifecycle_rules: list[Any] = []
         self.storage_account_undelete_rule = None
@@ -612,7 +612,7 @@ class AzureInfra(CloudInfraBase):
             admin_user_enabled=True,
             location=self.region,
             registry_name=self.fix_azure_alphanum_names(
-                self.config.azure.dataset_storage_prefix + self.dataset + name,
+                self.config.azure.dataset_storage_prefix + self.name_prefix + name,
             ),
             resource_group_name=self.resource_group.name,
             sku=az.containerregistry.SkuArgs(

@@ -27,7 +27,7 @@ class CPGStandaloneProjectInfrastructure:
             context=infra_context_from_standalone_config(project_config),
         )
 
-    def main(self):
+    def deploy(self):
         # GcpInfrastructure implicitly creates a GCP project on the first access of its
         # `project_id` or `project` property, where the created resource is cached
         # for all subsequent accesses.

@@ -112,8 +112,8 @@ class CloudInfraBase(ABC):
         """Regex for matching storage urls"""
 
     @property
-    def dataset(self):
-        return self.context.name_prefix
+    def name_prefix(self):
+        return self.context.name_prefix or self.context.gcp_project_id
 
     def get_pulumi_name(self, key: str):
         assert self.context, 'Infra context was not set'

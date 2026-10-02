@@ -255,7 +255,7 @@ class CPGInfrastructure:
 
     def deploy_standalone_projects(self):
         for standalone_project in self.standalone_project_infrastructures.values():
-            standalone_project.main()
+            standalone_project.deploy()
 
     def deploy_adhoc(self):
         infra = self.common_gcp_infra
