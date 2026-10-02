@@ -37,7 +37,10 @@ from cpg_infra.driver.constants import (
     get_formatted_team_name,
 )
 from cpg_infra.driver.dataset_infrastructure import CPGDatasetInfrastructure
-from cpg_infra.driver.dynamic_providers.seqera import SeqeraWorkspace
+from cpg_infra.driver.dynamic_providers.seqera import (
+    SeqeraGithubCredential,
+    SeqeraWorkspace,
+)
 from cpg_infra.driver.groups import GroupMember, GroupProvider
 from cpg_infra.driver.standalone_project_infrastructure import (
     CPGStandaloneProjectInfrastructure,
@@ -115,30 +118,6 @@ class CPGInfrastructure:
     @cached_property
     def common_azure_infra(self) -> AzureInfra:
         return self.common_dataset.clouds[AzureInfra.name()].infra  # type: ignore
-
-    @cached_property
-    def common_seqera_autoscaling_policy_user_role(self) -> gcp.projects.IAMCustomRole:
-        """Custom project role on cpg-common granting `dataproc.autoscalingPolicies.use`.
-
-        The predefined `roles/dataproc.autoscalingPolicyUser` role cannot be
-        bound at project scope (Google rejects it as "not supported for this
-        resource"); it is only assignable per-policy. We define an equivalent
-        custom role at the cpg-common project level once, so any Seqera Task
-        SA can be granted it project-wide and automatically cover every
-        current and future autoscaling policy in the project.
-        """
-        common_project_id = self.common_gcp_infra.project_id
-        return gcp.projects.IAMCustomRole(
-            'seqera-autoscaling-policy-user',
-            project=common_project_id,
-            role_id='seqeraAutoscalingPolicyUser',
-            title='Seqera Autoscaling Policy User',
-            description=(
-                'Allows using Dataproc autoscaling policies in this project. '
-                'Granted to Seqera Task SAs across datasets.'
-            ),
-            permissions=['dataproc.autoscalingPolicies.use'],
-        )
 
     @cached_property
     def internal_logs_access_group_gcp(self) -> Group:
@@ -777,16 +756,26 @@ class CPGInfrastructure:
                 ('test', ws_pair.test),
             ):
                 is_test = workspace_type == 'test'
-                self.seqera_workspaces[(team_ownership, workspace_type)] = (
-                    SeqeraWorkspace(
-                        f'seqera-ws-{formatted_team_name}-{workspace_type}',
-                        org_id=seqera_cfg.org_id,
-                        workspace_id=ws_configs.workspace_id,
-                        ws_name=get_formatted_ws_name(is_test, team_ownership),
-                        full_name=f'CPG {team_ownership}{" Test" if is_test else ""} Workspace',
-                        visibility='PRIVATE',
-                        description=ws_configs.description,
-                    )
+                workspace = SeqeraWorkspace(
+                    f'seqera-ws-{formatted_team_name}-{workspace_type}',
+                    org_id=seqera_cfg.org_id,
+                    workspace_id=ws_configs.workspace_id,
+                    ws_name=get_formatted_ws_name(is_test, team_ownership),
+                    full_name=f'CPG {team_ownership}{" Test" if is_test else ""} Workspace',
+                    visibility='PRIVATE',
+                    description=ws_configs.description,
+                )
+                self.seqera_workspaces[(team_ownership, workspace_type)] = workspace
+
+                # Credential per workspace to access private GitHub repositories
+                SeqeraGithubCredential(
+                    f'seqera-github-cred-{formatted_team_name}-{workspace_type}',
+                    workspace_id=ws_configs.workspace_id,
+                    cred_name='cpg-github-auth-token',
+                    username=seqera_cfg.github_auth_token_username,
+                    access_token_secret_name=seqera_cfg.github_auth_token_secret_name,
+                    base_url=seqera_cfg.github_auth_token_base_url,
+                    opts=pulumi.ResourceOptions(depends_on=[workspace]),
                 )
 
     # region ACCESS_CACHE

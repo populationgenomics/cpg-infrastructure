@@ -136,7 +136,9 @@ Each service account receives:
 
 1. **WIF Impersonation** (`roles/iam.workloadIdentityUser`):
    - Scoped to specific GitHub repo and environment
-   - Principal: `principalSet://iam.googleapis.com/projects/{PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-pool/attribute.repository/populationgenomics/{repo}:environment:{env}`
+   - Principal: `principal://iam.googleapis.com/projects/{PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-pool/subject/{SUB_CLAIM_PREFIX}:environment:{env}`
+   - `{SUB_CLAIM_PREFIX}` comes from GitHub's [OIDC customization endpoint](https://docs.github.com/en/rest/actions/oidc) at deploy time. Repos created, renamed or transferred after 15 July 2026, or opted in, use the [immutable format](https://docs.github.com/en/actions/reference/security/oidc#immutable-subject-claims) `repo:populationgenomics@{ORG_ID}/{repo}@{REPO_ID}`. Older repos use `repo:populationgenomics/{repo}`
+   - Repos with a custom OIDC subject claim template aren't supported, and the stack fails on them
 
 2. **Artifact Registry Writer** (`roles/artifactregistry.writer`):
    - On the specified `push_registry`
@@ -191,6 +193,7 @@ Ensure:
 - Workflow has `permissions: id-token: write`
 - Environment name in workflow matches YAML exactly
 - The GitHub Environment exists (it should be automatically created by Pulumi)
+- The stack has been redeployed since the repo was renamed, transferred or opted in to immutable subject claims. Each of these changes the repo's OIDC subject, and the GitHub WIF workflow doesn't run on its own when that happens
 
 ### GitHub API 403 Errors
 

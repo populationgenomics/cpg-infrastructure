@@ -9,6 +9,7 @@ from cpg_infra.config.config import (
     CPGInfrastructureGroup,
     CPGInfrastructureUser,
     CPGStandaloneProjectConfig,
+    DataprocAutoscalingPolicySpec,
     GroupName,
     HailAccount,
     MemberKey,
