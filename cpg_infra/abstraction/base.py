@@ -6,10 +6,11 @@ Generic Infrastructure abstraction. Retained to keep the dry-run backend
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from datetime import date
 from enum import Enum
 from functools import cached_property
-from typing import Any, Callable, Optional
+from typing import Any
 
 import pulumi
 
@@ -180,7 +181,7 @@ class CloudInfraBase(ABC):
         requester_pays: bool = False,
         versioning: bool = True,
         autoclass: bool = False,
-        project: Optional[str] = None,
+        project: str | None = None,
         soft_delete_protection: bool = True,
     ) -> Any:
         """
@@ -250,7 +251,7 @@ class CloudInfraBase(ABC):
         self,
         resource_key: str,
         member,
-        project: Optional[str] = None,
+        project: str | None = None,
     ):
         pass
 
@@ -261,9 +262,9 @@ class CloudInfraBase(ABC):
     def create_machine_account(
         self,
         name: str,
-        project: Optional[str] = None,
+        project: str | None = None,
         *,
-        resource_key: Optional[str] = None,
+        resource_key: str | None = None,
     ) -> Any:
         """
         Generate a non-person account with some name
@@ -277,7 +278,7 @@ class CloudInfraBase(ABC):
         machine_account,
         member,
         role: MachineAccountRole,
-        project: Optional[str] = None,
+        project: str | None = None,
     ) -> Any:
         pass
 
@@ -319,8 +320,8 @@ class CloudInfraBase(ABC):
     def create_secret(
         self,
         name: str,
-        project: Optional[str] = None,
-        resource_key: Optional[str] = None,
+        project: str | None = None,
+        resource_key: str | None = None,
     ) -> Any:
         pass
 
@@ -331,7 +332,7 @@ class CloudInfraBase(ABC):
         secret,
         member,
         membership: SecretMembership,
-        project: Optional[str] = None,
+        project: str | None = None,
     ) -> Any:
         pass
 
@@ -440,7 +441,7 @@ class DryRunInfra(CloudInfraBase):
         requester_pays: bool = False,
         versioning: bool = True,
         autoclass: bool = False,
-        project: Optional[str] = None,
+        project: str | None = None,
         soft_delete_protection: bool = True,
     ) -> Any:
         print(f'Create bucket: {name} w/ rules: {", ".join(lifecycle_rules)}')
@@ -452,9 +453,9 @@ class DryRunInfra(CloudInfraBase):
     def create_machine_account(
         self,
         name: str,
-        project: Optional[str] = None,
+        project: str | None = None,
         *,
-        resource_key: Optional[str] = None,
+        resource_key: str | None = None,
     ) -> Any:
         print(f'Creating SA: {name}')
         return name + '@generated.service-account'
@@ -465,7 +466,7 @@ class DryRunInfra(CloudInfraBase):
         machine_account,
         member,
         role: MachineAccountRole,
-        project: Optional[str] = None,
+        project: str | None = None,
     ) -> Any:
         print(f'Allow {member} to access {machine_account}')
 
@@ -496,8 +497,8 @@ class DryRunInfra(CloudInfraBase):
     def create_secret(
         self,
         name: str,
-        project: Optional[str] = None,
-        resource_key: Optional[str] = None,
+        project: str | None = None,
+        resource_key: str | None = None,
     ) -> Any:
         print(f'Creating secret: {name}')
         return f'SECRET:{name}'
@@ -508,7 +509,7 @@ class DryRunInfra(CloudInfraBase):
         secret,
         member,
         membership,
-        project: Optional[str] = None,
+        project: str | None = None,
     ) -> Any:
         print(f'{resource_key} :: Allow {member} to read secret {secret}')
 
@@ -517,7 +518,7 @@ class DryRunInfra(CloudInfraBase):
         resource_key: str,
         secret: Any,
         contents: Any,
-        processor: Optional[Callable[[Any], Any]] = None,
+        processor: Callable[[Any], Any] | None = None,
     ):
         _processor = processor or (lambda el: el)
         return f'{resource_key} :: {secret}.add_version({_processor(contents)!r})'
@@ -536,7 +537,7 @@ class DryRunInfra(CloudInfraBase):
         self,
         resource_key: str,
         member,
-        project: Optional[str] = None,
+        project: str | None = None,
     ):
         return f'{resource_key} :: {member} can list buckets'
 

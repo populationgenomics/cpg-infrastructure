@@ -6,8 +6,9 @@ and store it in the bq table.
 import json
 import logging
 import os
+from collections.abc import Sequence
 from functools import cache
-from typing import Any, Sequence
+from typing import Any
 
 import functions_framework
 import google.cloud.bigquery as bq
