@@ -37,7 +37,8 @@ if TYPE_CHECKING:
 
 
 NAME_TO_INFRA_CLASS: dict[str, type[CloudInfraBase]] = {
-    c.name(): c for c in CloudInfraBase.__subclasses__()  # type: ignore
+    c.name(): c  # type: ignore[type-abstract]
+    for c in CloudInfraBase.__subclasses__()
 }
 
 

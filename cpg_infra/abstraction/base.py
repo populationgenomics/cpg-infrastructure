@@ -381,10 +381,10 @@ class DryRunInfra(CloudInfraBase):
         return self.context.gcp_project_id
 
     def get_project(self):
-        return self.create_project(resource_key='project', name=self.dataset)
+        return self.create_project(resource_key='project', name=self.name_prefix)
 
     def get_project_id(self):
-        return self.dataset
+        return self.name_prefix
 
     @staticmethod
     def member_id(member) -> str | pulumi.Output[str]:
