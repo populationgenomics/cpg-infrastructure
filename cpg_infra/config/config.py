@@ -5,7 +5,6 @@ describe the CPG infrastructure, including what's required from a
 specific dataset.
 """
 
-import os
 from enum import Enum
 from typing import Any, Literal, Optional
 
@@ -18,6 +17,7 @@ from pydantic import (
 )
 from pydantic.alias_generators import to_camel
 
+from cpg_infra.abstraction.context import InfraContext
 from cpg_infra.config.base import ConfigModel
 
 MemberKey = str
@@ -34,6 +34,7 @@ GroupName = Literal[
     'release-access',
     'tmp-main-read-access',
     'external-repository-reader',
+    'igv-desktop-access',
 ]
 
 
@@ -215,6 +216,16 @@ class CPGInfrastructureConfig(ConfigModel):
 
         gcp: GCP
 
+    class IgvProxy(ConfigModel):
+        """Global IGV desktop proxy configuration.
+
+        Setting this grants the proxy read on the '-main' buckets of datasets
+        listing members under 'igv-desktop-access'.
+        """
+
+        project: str
+        server_machine_account: str
+
     class WebService(ConfigModel):
         """
         This is a CPG-specific configuration that allows a
@@ -284,12 +295,18 @@ class CPGInfrastructureConfig(ConfigModel):
         class WorkspaceConfig(ConfigModel):
             workspace_id: int
             description: Optional[str] = Field(None, max_length=1000)
+            # Secret Manager secret name holding the Seqera launch token for this
+            # workspace. This is published in the analysis-runner Seqera config so the
+            # analysis-runner server knows which secret to use to launch a run.
+            launch_token_secret_name: str
 
         class TeamWorkspaces(ConfigModel):
             main: 'CPGInfrastructureConfig.Seqera.WorkspaceConfig'
             test: 'CPGInfrastructureConfig.Seqera.WorkspaceConfig'
 
         org_id: int
+        # Base URL of the Seqera Platform API
+        api_url: str
         # Seqera Cloud OIDC issuer URI, see:
         # https://docs.seqera.io/platform-cloud/credentials/overview#google-cloud
         wif_issuer_uri: str
@@ -298,12 +315,10 @@ class CPGInfrastructureConfig(ConfigModel):
             TeamOwnership,
             'CPGInfrastructureConfig.Seqera.TeamWorkspaces',
         ]
-
-        def export_env(self) -> None:
-            """Set as environment variables so that these parameters are available for pulumi subprocesses"""
-
-            os.environ['SEQERA_SERVER_URL'] = self.api_url
-            os.environ['SEQERA_TOKEN_SECRET_NAME'] = self.token_secret_name
+        # For private GitHub repo access
+        github_auth_token_secret_name: str
+        github_auth_token_username: str
+        github_auth_token_base_url: str
 
     class Billing(ConfigModel):
         class GCP(ConfigModel):
@@ -368,6 +383,8 @@ class CPGInfrastructureConfig(ConfigModel):
     analysis_runner: AnalysisRunner | None = None
     # configuration options for the data dropbox server
     data_dropbox: DataDropbox | None = None
+    # configuration options for the IGV desktop proxy
+    igv_proxy: IgvProxy | None = None
     # configuration options for the web service, a server that serves static files
     # from a bucket
     web_service: WebService | None = None
@@ -397,6 +414,27 @@ class CPGInfrastructureConfig(ConfigModel):
     budget_notification_thresholds: list[float] = Field(
         default_factory=lambda: [0.5, 0.9, 1.0],
     )
+
+
+class DataprocAutoscalingPolicySpec(ConfigModel):
+    """
+    https://docs.cloud.google.com/managed-spark/docs/reference/rest/v1/projects.locations.autoscalingPolicies#AutoscalingPolicy
+    """
+
+    id: str
+
+    cooldown_period: str
+    graceful_decommission_timeout: str
+    scale_up_factor: float = 1.0
+    scale_down_factor: float
+
+    primary_min_instances: int = 2
+    primary_max_instances: int = 2
+    primary_weight: int = 1
+
+    secondary_min_instances: int
+    secondary_max_instances: int
+    secondary_weight: int = 1
 
 
 class CPGDatasetComponents(Enum):
@@ -614,3 +652,32 @@ class CPGDatasetConfig(ConfigModel):
             meta['billing_groups'] = sorted(self.billing_groups)
 
         return meta
+
+
+class CPGStandaloneProjectConfig(ConfigModel):
+    """
+    Configuration that describes the minimum information
+    required to construct a standalone GCP project
+    """
+
+    name: str
+    project_id: str
+    owner: MemberKey
+    monthly_budget: int
+
+
+def infra_context_from_dataset_config(dc: CPGDatasetConfig) -> InfraContext:
+    return InfraContext(
+        name_prefix=dc.dataset,
+        gcp_project_id=dc.gcp.project,
+        gcp_region=dc.gcp.region,
+    )
+
+
+def infra_context_from_standalone_config(
+    pc: CPGStandaloneProjectConfig,
+) -> InfraContext:
+    return InfraContext(
+        name_prefix=pc.project_id,
+        gcp_project_id=pc.project_id,
+    )

@@ -14,13 +14,14 @@ from toml_sort import TomlSort
 
 AccessLevel = str
 
-
 SM_TEST_READ = 'test-read'
 SM_TEST_WRITE = 'test-write'
 SM_TEST_CONTRIBUTE = 'test-contribute'
 SM_MAIN_READ = 'main-read'
 SM_MAIN_WRITE = 'main-write'
 SM_MAIN_CONTRIBUTE = 'main-contribute'
+IGV_DESKTOP_ACCESS = 'igv-desktop-access'
+
 METAMIST_PERMISSIONS = [
     SM_TEST_READ,
     SM_TEST_WRITE,

@@ -29,6 +29,7 @@ from cpg_infra.abstraction.base import BucketMembership, MachineAccountRole
 from cpg_infra.abstraction.gcp import GcpInfrastructure
 from cpg_infra.config import (
     CPGInfrastructureConfig,
+    DataprocAutoscalingPolicySpec,
     MemberKey,
     SeqeraAccount,
     TeamOwnership,
@@ -42,6 +43,8 @@ from cpg_infra.driver.dynamic_providers.seqera import (
 )
 from cpg_infra.driver.dynamic_providers.seqera.inputs.compute_environment import (
     ConfigEnvVariable,
+)
+from cpg_infra.driver.dynamic_providers.seqera.inputs.credentials import (
     GoogleWifCredentialConfig,
 )
 
@@ -67,6 +70,9 @@ _TASK_JOB_ROLES: tuple[str, ...] = (
     'roles/batch.agentReporter',
     'roles/batch.jobsEditor',  # Allows spawning nested jobs
     'roles/logging.logWriter',
+    'roles/logging.viewer',  # Read Batch job logs from Nextflow tail-follow
+    'roles/dataproc.editor',  # Create/manage Dataproc clusters (Includes dataproc.autoscalingPolicies.use)
+    'roles/dataproc.worker',  # Cluster SA (same SA) acts as Dataproc worker
 )
 
 # Maps each access level to the workspace type that holds it.
@@ -75,6 +81,35 @@ _WORKSPACE_TYPE_FOR_LEVEL: dict[str, str] = {
     'standard': 'main',
     'test': 'test',
 }
+
+# Dataproc autoscaling policy definitions for Seqera-integrated datasets
+# Policy specification : https://cpg-populationanalysis.atlassian.net/wiki/spaces/ST/pages/1563688973/Dataproc+Autoscaling+Policies
+SEQERA_DATAPROC_ASP_SPECS: tuple[DataprocAutoscalingPolicySpec, ...] = (
+    DataprocAutoscalingPolicySpec(
+        id='cpg-dataproc-light',
+        cooldown_period='180s',
+        graceful_decommission_timeout='300s',
+        scale_down_factor=0.5,
+        secondary_min_instances=0,
+        secondary_max_instances=4,
+    ),
+    DataprocAutoscalingPolicySpec(
+        id='cpg-dataproc-medium',
+        cooldown_period='120s',
+        graceful_decommission_timeout='300s',
+        scale_down_factor=0.3,
+        secondary_min_instances=1,
+        secondary_max_instances=10,
+    ),
+    DataprocAutoscalingPolicySpec(
+        id='cpg-dataproc-heavy',
+        cooldown_period='120s',
+        graceful_decommission_timeout='600s',
+        scale_down_factor=0.2,
+        secondary_min_instances=2,
+        secondary_max_instances=200,
+    ),
+)
 
 
 class DatasetSeqeraInfrastructure:
@@ -89,6 +124,12 @@ class DatasetSeqeraInfrastructure:
         self._config = parent.config
         self._dataset_config = parent.dataset_config
         self._infra: GcpInfrastructure = parent.infra
+        # Populated by create_compute_environments() during setup(); keyed by
+        # access level.
+        self._compute_envs: dict[str, SeqeraComputeEnv] = {}
+        self._dataproc_autoscaling_policies: dict[
+            str, gcp.dataproc.AutoscalingPolicy
+        ] = {}
 
     @cached_property
     def _access_levels(self) -> list[str]:
@@ -223,6 +264,7 @@ class DatasetSeqeraInfrastructure:
         self._grant_project_roles()
         self._bind_wif_principals()
         self._grant_work_bucket_access()
+        self._create_dataproc_autoscaling_policies()
         self._setup_seqera_compute_environments()
         self._setup_workspace_participants()
 
@@ -262,6 +304,18 @@ class DatasetSeqeraInfrastructure:
                 machine_account=sa,
                 member=sa,
                 role=MachineAccountRole.ACCESS,
+            )
+
+    def _create_dataproc_autoscaling_policies(self) -> None:
+        if self._dataproc_autoscaling_policies:
+            return
+
+        for spec in SEQERA_DATAPROC_ASP_SPECS:
+            self._dataproc_autoscaling_policies[spec.id] = (
+                self._infra.create_dataproc_autoscaling_policy(
+                    f'seqera-{spec.id}-autoscaling',
+                    spec,
+                )
             )
 
     def _bind_wif_principals(self) -> None:
@@ -305,6 +359,14 @@ class DatasetSeqeraInfrastructure:
                 BucketMembership.MUTATE,
             )
 
+        for level, head_sa in self._head_sas.items():
+            self._infra.add_member_to_bucket(
+                f'seqera-{level}-head-work-bucket-viewer',
+                self._work_bucket_for_access_level(level),
+                head_sa,
+                BucketMembership.READ,
+            )
+
     def _work_dir_for_access_level(self, level: str) -> pulumi.Output[str]:
         """
         The work dir of a Seqera compute env for this access level.
@@ -322,8 +384,14 @@ class DatasetSeqeraInfrastructure:
         return pulumi.Output.concat(base, '/', level)
 
     def _setup_seqera_compute_environments(self) -> None:
-        """Create Seqera GCP Batch compute env per access level in the relevant workspace."""
+        """Create a Seqera GCP Batch compute env per access level in the relevant
+        workspace, storing them keyed by access level in ``self._compute_envs``.
 
+        """
+        if self._compute_envs:
+            return
+
+        assert self._config.seqera is not None
         project_id = self._infra.project_id
 
         for level in self._access_levels:
@@ -335,7 +403,7 @@ class DatasetSeqeraInfrastructure:
             head_sa = self._head_sas.get(level)
             assert head_sa is not None
 
-            SeqeraComputeEnv(
+            self._compute_envs[level] = SeqeraComputeEnv(
                 self._infra.get_pulumi_name(f'seqera-ce-{dataset}-{level}'),
                 workspace_id=workspace_resource.workspace_id,
                 ce_name=f'{dataset}-{level}',
@@ -367,6 +435,27 @@ class DatasetSeqeraInfrastructure:
                 ),
                 opts=pulumi.ResourceOptions(depends_on=[workspace_resource]),
             )
+
+    @property
+    def analysis_runner_config(self) -> dict[str, dict[str, Any]]:
+        """Per access level workspace + compute env details for analysis-runner lookup.
+
+        Returns config for each access level so the analysis-runner server can resolve
+        from dataset and access level to all the info it needs to start a run in Seqera.
+
+        compute_env_id is an unresolved pulumi output at this point so this needs to be
+        run through pulumi.Output.json_dumps before use
+        """
+        return {
+            level: {
+                'workspace_id': self._workspace_ids[_WORKSPACE_TYPE_FOR_LEVEL[level]],
+                'compute_env_id': ce.compute_env_id,
+                'launch_token_secret_name': self._workspace_for_access_level(
+                    level,
+                ).launch_token_secret_name,
+            }
+            for level, ce in self._compute_envs.items()
+        }
 
     def _setup_workspace_participants(self) -> None:
         """Add this dataset's analysis members to the team's main and test
