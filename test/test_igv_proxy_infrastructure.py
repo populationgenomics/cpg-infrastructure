@@ -37,11 +37,7 @@ def _make_igv_proxy_config() -> CPGInfrastructureConfig.IgvProxy:
 
 def _make_user(key: str, *, gcp_id: str | None) -> CPGInfrastructureUser:
     # no gcp_id => a user known to the system, but with no gcp identity
-    clouds = (
-        {'gcp': {'id': gcp_id}}
-        if gcp_id
-        else {'azure': {'id': f'{key}@azure.example.com'}}
-    )
+    clouds: dict[str, dict[str, str]] = {'gcp': {'id': gcp_id}} if gcp_id else {}
     return CPGInfrastructureUser.model_validate({'id': key, 'clouds': clouds})
 
 
