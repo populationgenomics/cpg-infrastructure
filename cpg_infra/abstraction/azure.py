@@ -27,7 +27,8 @@ from cpg_infra.abstraction.base import (
     MachineAccountRole,
     SecretMembership,
 )
-from cpg_infra.config import CPGDatasetConfig, CPGInfrastructureConfig
+from cpg_infra.abstraction.context import InfraContext
+from cpg_infra.config import CPGInfrastructureConfig
 
 AZURE_BILLING_START_DATE = '2017-06-01T00:00:00Z'
 AZURE_BILLING_EXPIRY_DATE = '3141-25-09T00:00:00Z'
@@ -37,17 +38,17 @@ class AzureInfra(CloudInfraBase):
     def __init__(
         self,
         config: CPGInfrastructureConfig,
-        dataset_config: CPGDatasetConfig,
+        context: InfraContext,
     ) -> None:
-        super().__init__(config, dataset_config)
+        super().__init__(config, context)
 
         assert config.azure, 'config.azure is required to deploy to Azure'
 
         self.dataset_storage_prefix = config.azure.dataset_storage_prefix
         self.region = config.azure.region
-        self._resource_group_name = f'{self.dataset_storage_prefix}{self.dataset}'
+        self._resource_group_name = f'{self.dataset_storage_prefix}{self.name_prefix}'
         self._storage_account_name = self.fix_azure_alphanum_names(
-            f'{self.dataset_storage_prefix}{self.dataset}',
+            f'{self.dataset_storage_prefix}{self.name_prefix}',
         )
         self.storage_account_lifecycle_rules: list[Any] = []
         self.storage_account_undelete_rule = None
@@ -611,7 +612,7 @@ class AzureInfra(CloudInfraBase):
             admin_user_enabled=True,
             location=self.region,
             registry_name=self.fix_azure_alphanum_names(
-                self.config.azure.dataset_storage_prefix + self.dataset + name,
+                self.config.azure.dataset_storage_prefix + self.name_prefix + name,
             ),
             resource_group_name=self.resource_group.name,
             sku=az.containerregistry.SkuArgs(
