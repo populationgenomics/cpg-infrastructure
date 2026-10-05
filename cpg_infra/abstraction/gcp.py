@@ -6,7 +6,7 @@ GCP implementation for abstract infrastructure
 import base64
 from datetime import date
 from functools import cached_property
-from typing import Any, NamedTuple, Optional
+from typing import Any, NamedTuple
 
 import pulumi
 import pulumi_gcp as gcp
@@ -437,7 +437,7 @@ class GcpInfrastructure(CloudInfraBase):
         requester_pays=False,
         versioning: bool = True,
         autoclass: bool = False,
-        project: Optional[str] = None,
+        project: str | None = None,
         soft_delete_protection: bool = True,
     ) -> Any:
         unique_bucket_name = name
@@ -475,7 +475,7 @@ class GcpInfrastructure(CloudInfraBase):
         )
 
     def get_group_key(self, group) -> str | pulumi.Output[str]:
-        if isinstance(group, (gcp.serviceaccount.Account, gcp.storage.Bucket)):
+        if isinstance(group, gcp.serviceaccount.Account | gcp.storage.Bucket):
             raise ValueError(f'Incorrect type for group key: {type(group)}')
 
         if isinstance(group, gcp.cloudidentity.Group):
@@ -677,7 +677,7 @@ class GcpInfrastructure(CloudInfraBase):
         self,
         resource_key: str,
         member,
-        project: Optional[str] = None,
+        project: str | None = None,
     ):
         role_list = self.bucket_membership_to_role_list(
             BucketMembership.LIST,
@@ -698,9 +698,9 @@ class GcpInfrastructure(CloudInfraBase):
     def create_machine_account(
         self,
         name: str,
-        project: Optional[str] = None,
+        project: str | None = None,
         *,
-        resource_key: Optional[str] = None,
+        resource_key: str | None = None,
     ) -> Any:
         if project and isinstance(project, gcp.organizations.Project):
             project = project.project_id
@@ -821,8 +821,8 @@ class GcpInfrastructure(CloudInfraBase):
     def create_secret(
         self,
         name: str,
-        project: Optional[str] = None,
-        resource_key: Optional[str] = None,
+        project: str | None = None,
+        resource_key: str | None = None,
     ) -> Any:
         return gcp.secretmanager.Secret(
             resource_key or self.get_pulumi_name(name),
@@ -846,7 +846,7 @@ class GcpInfrastructure(CloudInfraBase):
         secret,
         member,
         membership: SecretMembership,
-        project: Optional[str] = None,
+        project: str | None = None,
     ) -> Any:
         if membership == SecretMembership.ADMIN:
             role = 'roles/secretmanager.secretVersionManager'
@@ -1015,7 +1015,7 @@ class GcpInfrastructure(CloudInfraBase):
         *,
         member: Any,
         role: str,
-        project: Optional[str] = None,
+        project: str | None = None,
     ):
         gcp.projects.IAMMember(
             self.get_pulumi_name(resource_key),
