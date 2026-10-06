@@ -37,11 +37,7 @@ def _make_igv_proxy_config() -> CPGInfrastructureConfig.IgvProxy:
 
 def _make_user(key: str, *, gcp_id: str | None) -> CPGInfrastructureUser:
     # no gcp_id => a user known to the system, but with no gcp identity
-    clouds = (
-        {'gcp': {'id': gcp_id}}
-        if gcp_id
-        else {'azure': {'id': f'{key}@azure.example.com'}}
-    )
+    clouds: dict[str, dict[str, str]] = {'gcp': {'id': gcp_id}} if gcp_id else {}
     return CPGInfrastructureUser.model_validate({'id': key, 'clouds': clouds})
 
 
@@ -310,16 +306,14 @@ class TestIgvProxyBucketBindings(TestCase):
         *,
         igv_proxy: CPGInfrastructureConfig.IgvProxy | None,
         igv_members: list[str] | None,
-        infra_is_gcp: bool = True,
     ) -> CPGDatasetCloudInfrastructure:
-        from cpg_infra.abstraction.azure import AzureInfra
         from cpg_infra.abstraction.gcp import GcpInfrastructure
         from cpg_infra.driver.dataset_cloud_infrastructure import (
             CPGDatasetCloudInfrastructure,
         )
 
-        infra = MagicMock(spec=GcpInfrastructure if infra_is_gcp else AzureInfra)
-        infra.name.return_value = 'gcp' if infra_is_gcp else 'azure'
+        infra = MagicMock(spec=GcpInfrastructure)
+        infra.name.return_value = 'gcp'
 
         config = MagicMock(spec=CPGInfrastructureConfig)
         config.igv_proxy = igv_proxy
@@ -367,18 +361,13 @@ class TestIgvProxyBucketBindings(TestCase):
         self.assertEqual({}, self._bindings(driver))
 
     def test_no_bindings_when_dataset_does_not_participate(self):
-        """Participation needs GCP, an igv_proxy block, and listed members"""
+        """Participation needs an igv_proxy block and listed members"""
         cases = {
             'no members listed': {
                 'igv_proxy': _make_igv_proxy_config(),
                 'igv_members': None,
             },
             'igv_proxy absent': {'igv_proxy': None, 'igv_members': ['alice']},
-            'non-gcp infrastructure': {
-                'igv_proxy': _make_igv_proxy_config(),
-                'igv_members': ['alice'],
-                'infra_is_gcp': False,
-            },
         }
         setups = (
             'setup_storage_main_bucket_permissions',

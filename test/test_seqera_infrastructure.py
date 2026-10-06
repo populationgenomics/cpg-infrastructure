@@ -50,7 +50,7 @@ class TestShouldSetupSeqeraGate(TestCase):
         )
 
         infra = MagicMock(spec=GcpInfrastructure if infra_is_gcp else object)
-        infra.name.return_value = 'gcp' if infra_is_gcp else 'azure'
+        infra.name.return_value = 'gcp' if infra_is_gcp else 'dry-run'
 
         infra_config = MagicMock(spec=CPGInfrastructureConfig)
         infra_config.seqera = MagicMock() if seqera_configured else None

@@ -17,7 +17,6 @@ from typing import TYPE_CHECKING
 # (e.g. Seqera / Nextflow / whatever comes next) and forget to import it here,
 # ``NAME_TO_INFRA_CLASS`` will silently omit it and this class will fail to
 # instantiate the deploy location.
-from cpg_infra.abstraction.azure import AzureInfra
 from cpg_infra.abstraction.base import CloudInfraBase, DryRunInfra
 from cpg_infra.abstraction.context import InfraContext
 from cpg_infra.abstraction.gcp import GcpInfrastructure
@@ -38,7 +37,7 @@ if TYPE_CHECKING:
 
 
 NAME_TO_INFRA_CLASS: dict[str, type[CloudInfraBase]] = {
-    c.name(): c  # type: ignore
+    c.name(): c  # type: ignore[type-abstract]
     for c in CloudInfraBase.__subclasses__()
 }
 
