@@ -206,6 +206,7 @@ class CPGInfrastructureConfig(ConfigModel):
             server_machine_account: str
             logger_machine_account: str
             container_registry_name: str
+            dev_server_machine_account: str | None = None
 
         gcp: GCP
 
@@ -608,6 +609,9 @@ class CPGDatasetConfig(ConfigModel):
     # `test` access level is excluded to disallow starting of standard/full workflows
     # from a test workflow.
     allow_nested_analysis_runner_jobs: bool = False
+
+    # Allow the dev analysis-runner server to submit test jobs for this dataset.
+    enable_analysis_runner_dev: bool = False
 
     # give FULL access to these datasets, as this dataset depends_on them
     depends_on: list[str] = Field(default_factory=list)
