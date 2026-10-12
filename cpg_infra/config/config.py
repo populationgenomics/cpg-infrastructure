@@ -235,6 +235,7 @@ class CPGInfrastructureConfig(ConfigModel):
 
         class GCP(ConfigModel):
             server_machine_account: str
+            dev_server_machine_account: str | None = None
 
         gcp: GCP
         # The template is a string that can be formatted with: namespace, dataset
@@ -610,7 +611,8 @@ class CPGDatasetConfig(ConfigModel):
     # from a test workflow.
     allow_nested_analysis_runner_jobs: bool = False
 
-    # Allow the dev analysis-runner server to submit test jobs for this dataset.
+    # Allow the dev analysis-runner server to submit test jobs for this dataset, and
+    # the dev web server to serve its test-web bucket.
     enable_analysis_runner_dev: bool = False
 
     # give FULL access to these datasets, as this dataset depends_on them

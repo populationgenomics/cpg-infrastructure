@@ -1227,6 +1227,15 @@ class CPGDatasetCloudInfrastructure:
                 membership=BucketMembership.READ,
             )
 
+            dev_account = self.config.web_service.gcp.dev_server_machine_account
+            if dev_account and self.dataset_config.enable_analysis_runner_dev:
+                self.infra.add_member_to_bucket(
+                    'web-server-dev-test-web-bucket-viewer',
+                    bucket=self.test_web_bucket,
+                    member=dev_account,
+                    membership=BucketMembership.READ,
+                )
+
     @cached_property
     def test_bucket(self):
         return self.infra.create_bucket(
