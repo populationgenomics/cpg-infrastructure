@@ -46,19 +46,21 @@ def _make_dataset_config(
     *,
     igv_members: list[str] | None = None,
     setup_test: bool = True,
+    components: dict[str, list[str]] | None = None,
 ) -> CPGDatasetConfig:
     members: dict[str, list[str]] = {}
     if igv_members is not None:
         members[IGV_DESKTOP_ACCESS] = igv_members
-    return CPGDatasetConfig.model_validate(
-        {
-            'dataset': dataset,
-            'budgets': {},
-            'gcp': {'project': f'{dataset}-1234'},
-            'setup_test': setup_test,
-            'members': members,
-        },
-    )
+    payload: dict[str, Any] = {
+        'dataset': dataset,
+        'budgets': {},
+        'gcp': {'project': f'{dataset}-1234'},
+        'setup_test': setup_test,
+        'members': members,
+    }
+    if components is not None:
+        payload['components'] = components
+    return CPGDatasetConfig.model_validate(payload)
 
 
 def _make_root(
@@ -324,7 +326,13 @@ class TestIgvProxyBucketBindings(TestCase):
             root=MagicMock(),
             group_provider=MagicMock(),
             infra=infra,
-            dataset_config=_make_dataset_config('dataset-a', igv_members=igv_members),
+            dataset_config=_make_dataset_config(
+                'dataset-a',
+                igv_members=igv_members,
+                # Opt out of SEQERA_ACCOUNTS here; it is on by default but
+                # drags in a config.seqera lookup unrelated to IGV bindings.
+                components={'gcp': []},
+            ),
         )
 
     @staticmethod

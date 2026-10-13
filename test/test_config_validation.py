@@ -172,14 +172,14 @@ class TestConfigValidation(TestCase):
             config.components['gcp'],
         )
 
-    def test_seqera_accounts_not_in_defaults(self):
-        """SEQERA_ACCOUNTS is opt-in only — not in any default component set"""
+    def test_seqera_accounts_in_defaults(self):
+        """SEQERA_ACCOUNTS is on by default for every infrastructure"""
         defaults = CPGDatasetComponents.default_component_for_infrastructure()
         for cloud, components in defaults.items():
-            self.assertNotIn(
+            self.assertIn(
                 CPGDatasetComponents.SEQERA_ACCOUNTS,
                 components,
-                f'SEQERA_ACCOUNTS should not be in default components for {cloud}',
+                f'SEQERA_ACCOUNTS should be in default components for {cloud}',
             )
 
     def test_seqera_infra_config_parses(self):
