@@ -5,7 +5,7 @@ Contains pulumi.dynamic.ResourceProvider implementations for Google Groups Membe
 import textwrap
 import time
 from functools import cache
-from typing import TYPE_CHECKING, Optional, TypedDict
+from typing import TYPE_CHECKING, TypedDict
 from urllib.parse import urlencode
 
 import google.auth
@@ -79,7 +79,7 @@ class GoogleGroupMembership(pulumi.dynamic.Resource):
         self,
         name: str,
         props: GoogleGroupMembershipInputs,
-        opts: Optional[ResourceOptions] = None,
+        opts: ResourceOptions | None = None,
     ) -> None:
         super().__init__(
             GoogleGroupMembershipProvider(),

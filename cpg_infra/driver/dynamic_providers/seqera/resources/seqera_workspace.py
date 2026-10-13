@@ -1,7 +1,7 @@
 """Dynamic provider for Seqera workspaces."""
 
 from http import HTTPMethod
-from typing import Any, Optional
+from typing import Any
 
 import pulumi
 from pulumi.dynamic import (
@@ -135,8 +135,8 @@ class SeqeraWorkspace(Resource):
         ws_name: pulumi.Input[str],
         full_name: pulumi.Input[str],
         visibility: pulumi.Input[str],
-        description: Optional[pulumi.Input[str]] = None,
-        opts: Optional[pulumi.ResourceOptions] = None,
+        description: pulumi.Input[str] | None = None,
+        opts: pulumi.ResourceOptions | None = None,
     ) -> None:
         super().__init__(
             _WorkspaceProvider(),

@@ -13,20 +13,20 @@ import os
 import re
 import sys
 from base64 import b64decode
-from datetime import date, datetime, timedelta, timezone
-from io import BytesIO
-from pathlib import Path
-from typing import (
-    Any,
+from collections.abc import (
     AsyncGenerator,
     Awaitable,
     Callable,
     Generator,
     Iterator,
-    Literal,
-    Optional,
     Sequence,
-    Type,
+)
+from datetime import UTC, date, datetime, timedelta
+from io import BytesIO
+from pathlib import Path
+from typing import (
+    Any,
+    Literal,
     TypeVar,
 )
 
@@ -180,7 +180,7 @@ def get_bigquery_client():
 
 async def async_retry_transient_get_request(
     url: str,
-    errors: Type[Exception] | tuple[Type[Exception], ...],
+    errors: type[Exception] | tuple[type[Exception], ...],
     *args: list[Any],
     attempts: int = 5,
     session: aiohttp.ClientSession | None = None,
@@ -235,7 +235,7 @@ async def async_retry_transient_get_request(
 
 async def async_retry_transient_post_request(
     url: str,
-    errors: Type[Exception] | tuple[Type[Exception], ...],
+    errors: type[Exception] | tuple[type[Exception], ...],
     *args: list[Any],
     attempts: int = 1,
     session: aiohttp.ClientSession | None = None,
@@ -386,7 +386,7 @@ def parse_hail_time(time_str: str) -> datetime:
 
     try:
         fmt = '%Y-%m-%dT%H:%M:%S'
-        return datetime.strptime(time_str, fmt).replace(tzinfo=timezone.utc)
+        return datetime.strptime(time_str, fmt).replace(tzinfo=UTC)
     except ValueError as e:
         exceptions.append(e)
 
@@ -406,7 +406,7 @@ def get_date_time_from_value(key: str, value: Any) -> datetime:
         return value.to_pydatetime()
     if isinstance(value, str) and value.isdigit():
         value = int(value)
-    if isinstance(value, (int, float)):
+    if isinstance(value, int | float):
         return datetime.fromtimestamp(int(value / 1000))
 
     raise ValueError(
@@ -492,7 +492,7 @@ async def get_completed_batches_hail_api(
                 aiohttp.ClientError,
                 headers={'Authorization': 'Bearer ' + token},
             )
-        except asyncio.TimeoutError as ex:
+        except TimeoutError as ex:
             e = ex
 
     raise e
@@ -621,7 +621,7 @@ async def get_batch_by_id(
             headers={'Authorization': 'Bearer ' + token},
             attempts=attempts,
         )
-    except asyncio.TimeoutError as ex:
+    except TimeoutError as ex:
         e = ex
 
     raise e
@@ -655,7 +655,7 @@ async def process_entries_from_hail_in_chunks(
         [BatchType, list[JobType]],
         Generator[dict[str, Any], None, None],
     ],
-    billing_project: Optional[str] = None,
+    billing_project: str | None = None,
     batch_group_chunk_size: int = BATCH_GROUP_CHUNK_SIZE,
     log_prefix: str = '',
     mode: str = 'prod',
@@ -1371,8 +1371,8 @@ def process_default_start_and_end(
     Take input start / end values, and apply
     defaults
     """
-    _end = end.astimezone(timezone.utc) if end else datetime.now(tz=timezone.utc)
-    _start = start.astimezone(timezone.utc) if start else _end - interval
+    _end = end.astimezone(UTC) if end else datetime.now(tz=UTC)
+    _start = start.astimezone(UTC) if start else _end - interval
 
     assert isinstance(_start, datetime) and isinstance(_end, datetime)
     return _start, _end
@@ -1402,7 +1402,7 @@ def get_hail_entry(
     batch_resource: str,
     start_time: datetime,
     end_time: datetime,
-    labels: Optional[dict[str, str]] = None,
+    labels: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """
     Get well-formed entry dictionary from keys
