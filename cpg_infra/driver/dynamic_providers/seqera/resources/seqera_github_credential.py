@@ -2,7 +2,7 @@
 
 from functools import cache
 from http import HTTPStatus
-from typing import Any, Optional
+from typing import Any
 
 import pulumi
 from google.cloud import secretmanager
@@ -142,7 +142,7 @@ class SeqeraGithubCredential(Resource):
         username: pulumi.Input[str],
         access_token_secret_name: pulumi.Input[str],
         base_url: pulumi.Input[str],
-        opts: Optional[pulumi.ResourceOptions] = None,
+        opts: pulumi.ResourceOptions | None = None,
     ) -> None:
         super().__init__(
             _GithubCredentialProvider(),

@@ -30,8 +30,7 @@ import hashlib
 import json
 import logging
 import time
-from datetime import datetime, timezone
-from typing import Dict, Optional
+from datetime import UTC, datetime
 
 import functions_framework
 import google.cloud.bigquery as bq
@@ -196,7 +195,7 @@ def billing_row_to_key(row) -> str:
     return identifier.hexdigest()
 
 
-def get_dataset_to_topic_map() -> Dict[str, str]:
+def get_dataset_to_topic_map() -> dict[str, str]:
     """Get the server-config from the secret manager"""
     server_config = json.loads(
         read_secret(
@@ -214,8 +213,8 @@ def get_dataset_to_topic_map() -> Dict[str, str]:
 
 
 async def main(
-    start: Optional[datetime] = None,
-    end: Optional[datetime] = None,
+    start: datetime | None = None,
+    end: datetime | None = None,
 ) -> dict:
     """Main body function"""
     s, e = utils.process_default_start_and_end(start, end)
@@ -248,10 +247,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.start and args.end:
-        start_date = datetime.strptime(args.start, '%Y-%m-%d').replace(
-            tzinfo=timezone.utc
-        )
-        end_date = datetime.strptime(args.end, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+        start_date = datetime.strptime(args.start, '%Y-%m-%d').replace(tzinfo=UTC)
+        end_date = datetime.strptime(args.end, '%Y-%m-%d').replace(tzinfo=UTC)
 
         # iterate over the period if start_date/end_date is not none
         for period in utils.get_date_intervals_for(start_date, end_date):

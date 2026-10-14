@@ -1,4 +1,4 @@
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -11,7 +11,7 @@ class WorkspaceArgs(BaseModel):
     name: str = Field(min_length=2, max_length=40)
     full_name: str = Field(min_length=1, max_length=100)
     visibility: Literal['PRIVATE', 'SHARED'] = 'PRIVATE'
-    description: Optional[str] = Field(None, max_length=1000)
+    description: str | None = Field(None, max_length=1000)
 
 
 WorkspaceParticipantRole = Literal[
@@ -25,10 +25,10 @@ class WorkspaceParticipantArgs(BaseModel):
     org_id: int
     workspace_id: int
     role: WorkspaceParticipantRole
-    email: Optional[str] = None
-    member_id: Optional[int] = None
-    team_id: Optional[int] = None
-    participant_id: Optional[int] = None
+    email: str | None = None
+    member_id: int | None = None
+    team_id: int | None = None
+    participant_id: int | None = None
 
     @model_validator(mode='after')
     def _exactly_one_subject(self) -> 'WorkspaceParticipantArgs':

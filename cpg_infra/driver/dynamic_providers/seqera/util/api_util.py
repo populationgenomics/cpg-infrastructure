@@ -1,6 +1,6 @@
 import os
 from functools import cached_property
-from typing import ClassVar, Optional
+from typing import ClassVar
 
 import requests
 from google.cloud import secretmanager
@@ -57,7 +57,7 @@ class SeqeraApiClient:
         cls: type['SeqeraApiClient'],
         method: str,
         path: str,
-        data: Optional[dict] = None,
+        data: dict | None = None,
     ) -> dict:
         """Call Seqera Platform API."""
         client = cls._get()

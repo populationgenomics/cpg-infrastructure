@@ -5,10 +5,9 @@ Group data structures: GroupMember, Group, and GroupProvider.
 
 from __future__ import annotations
 
+import graphlib
 from collections import defaultdict
 from typing import TYPE_CHECKING
-
-import graphlib
 
 from cpg_infra.config import CPGInfrastructureUser
 

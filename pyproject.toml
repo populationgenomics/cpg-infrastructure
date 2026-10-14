@@ -1,3 +1,70 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cpg-infra"
+version = "0.1.0"
+description = "CPG Infrastructure"
+readme = "README.md"
+requires-python = "==3.11.*"
+license = "MIT"
+keywords = ["cpg", "infrastructure"]
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Natural Language :: English",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: POSIX",
+    "Operating System :: Unix",
+    "Programming Language :: Python",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+dependencies = [
+    # fix boto3/core version to prevent pip downloading all the versions caused by cloudpathlib
+    "boto3>=1.28.56",
+    "botocore>=1.31.56",
+    "cpg-utils>=4.15.1",
+    "google-api-python-client==2.*",
+    "google-auth==2.*",
+    "pydantic>=2",
+    "pulumi-gcp~=7.6",
+    "pulumi-github>=6.0.0",
+    "pulumi==3.96.2",
+    "pytest==9.1.0",
+    "toml-sort",
+    "toml==0.10.2",
+    "xxhash==3.2.0",
+    "metamist",
+    "metamist-infrastructure @ git+https://github.com/populationgenomics/metamist.git@main#subdirectory=metamist_infrastructure",
+    # not directly required, pinned by pip-audit to avoid a vulnerability
+    "setuptools>=65.5.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/populationgenomics/cpg-infrastructure"
+
+[project.entry-points."cpginfra.plugins"]
+billing_aggregator = "cpg_infra.billing_aggregator.driver:BillingAggregator"
+
+[dependency-groups]
+dev = [
+    "pre-commit",
+    "coverage",
+    "pip-audit",
+    "google-api-python-client-stubs==1.15.0",
+    "google-cloud-storage==2.14.0",
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["cpg_infra*"]
+
+[tool.setuptools.package-data]
+# read off disk by utils.archive_folder() to build the Cloud Function AssetArchives
+"cpg_infra" = ["**/*.txt", "**/*.json"]
 
 [tool.ruff]
 line-length = 88

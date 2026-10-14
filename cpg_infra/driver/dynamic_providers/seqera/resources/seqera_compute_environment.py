@@ -1,9 +1,9 @@
 """Dynamic provider for Seqera compute environments."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from http import HTTPMethod
-from typing import Any, Optional
+from typing import Any
 
 import pulumi
 from pulumi.dynamic import (
@@ -87,7 +87,7 @@ def _soft_delete_compute_env(workspace_id: int, ce_id: str, current_name: str) -
     """Soft-delete a compute environment: rename with a ``-deprecated-<utc>`
     Disable compute env: https://docs.seqera.io/platform-api/disable-compute-env
     """
-    stamp = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
+    stamp = datetime.now(UTC).strftime('%Y%m%d-%H%M%S')
     deprecated_name = f'{current_name}-deprecated-{stamp}'
 
     assert len(deprecated_name) <= MAX_CE_NAME_LENGTH
@@ -103,7 +103,7 @@ def _soft_delete_compute_env(workspace_id: int, ce_id: str, current_name: str) -
     )
 
 
-def _build_ce_body(inputs: ComputeEnvArgs, name_override: Optional[str] = None) -> dict:
+def _build_ce_body(inputs: ComputeEnvArgs, name_override: str | None = None) -> dict:
     compute_env: dict = {
         'name': name_override or inputs.name,
         'description': inputs.description or '',
@@ -230,9 +230,9 @@ class SeqeraComputeEnv(Resource):
         platform: pulumi.Input[str],
         config: GoogleBatchConfig,  # Extend when supporting new platforms
         credentials: GoogleWifCredentialConfig,
-        description: Optional[pulumi.Input[str]] = None,
-        label_ids: Optional[pulumi.Input[list[int]]] = None,
-        opts: Optional[pulumi.ResourceOptions] = None,
+        description: pulumi.Input[str] | None = None,
+        label_ids: pulumi.Input[list[int]] | None = None,
+        opts: pulumi.ResourceOptions | None = None,
     ) -> None:
         # Seqera compute envs must have unique names.
         # In-case of a replace event (but same compute env name), there will be name collision

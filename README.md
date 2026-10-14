@@ -149,8 +149,8 @@ brew install pulumi
 pulumi login gs://cpg-pulumi-state/
 
 # inside the cpg-infrastructure directory
-virtualenv cpg-infra
-pip install -e .
+# requires uv (https://docs.astral.sh/uv/), creates and populates .venv
+uv sync
 
 # our pulumi stack is fairly large, so we'll run in a non-interactive view
 PULUMI_EXPERIMENTAL=true PULUMI_SKIP_CHECKPOINTS=true pulumi preview \

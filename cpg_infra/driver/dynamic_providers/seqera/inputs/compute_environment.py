@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Literal, Optional
+from typing import Literal
 
 import pulumi
 from pydantic import BaseModel, ConfigDict, Field
@@ -18,8 +18,8 @@ class ConfigEnvVariable:
 
     name: pulumi.Input[str]
     value: pulumi.Input[str]
-    compute: Optional[pulumi.Input[bool]] = None
-    head: Optional[pulumi.Input[bool]] = None
+    compute: pulumi.Input[bool] | None = None
+    head: pulumi.Input[bool] | None = None
 
 
 @dataclass
@@ -29,44 +29,44 @@ class GoogleBatchConfig:
     location: pulumi.Input[str]
     work_dir: pulumi.Input[str]
 
-    pre_run_script: Optional[pulumi.Input[str]] = None
-    post_run_script: Optional[pulumi.Input[str]] = None
+    pre_run_script: pulumi.Input[str] | None = None
+    post_run_script: pulumi.Input[str] | None = None
 
-    service_account: Optional[pulumi.Input[str]] = None
-    project_id: Optional[pulumi.Input[str]] = None
+    service_account: pulumi.Input[str] | None = None
+    project_id: pulumi.Input[str] | None = None
 
-    network: Optional[pulumi.Input[str]] = None
-    subnetwork: Optional[pulumi.Input[str]] = None
-    network_tags: Optional[list[pulumi.Input[str]]] = None
-    use_private_address: Optional[pulumi.Input[bool]] = None
+    network: pulumi.Input[str] | None = None
+    subnetwork: pulumi.Input[str] | None = None
+    network_tags: list[pulumi.Input[str]] | None = None
+    use_private_address: pulumi.Input[bool] | None = None
 
-    machine_type: Optional[pulumi.Input[str]] = None
-    compute_jobs_machine_type: Optional[list[pulumi.Input[str]]] = None
-    cpu_platform: Optional[pulumi.Input[str]] = None
-    boot_disk_image: Optional[pulumi.Input[str]] = None
-    boot_disk_size_gb: Optional[pulumi.Input[int]] = None
-    debug_mode: Optional[pulumi.Input[int]] = None
+    machine_type: pulumi.Input[str] | None = None
+    compute_jobs_machine_type: list[pulumi.Input[str]] | None = None
+    cpu_platform: pulumi.Input[str] | None = None
+    boot_disk_image: pulumi.Input[str] | None = None
+    boot_disk_size_gb: pulumi.Input[int] | None = None
+    debug_mode: pulumi.Input[int] | None = None
 
-    head_job_cpus: Optional[pulumi.Input[int]] = None
-    head_job_memory_mb: Optional[pulumi.Input[int]] = None
-    head_job_instance_template: Optional[pulumi.Input[str]] = None
-    compute_jobs_instance_template: Optional[pulumi.Input[str]] = None
+    head_job_cpus: pulumi.Input[int] | None = None
+    head_job_memory_mb: pulumi.Input[int] | None = None
+    head_job_instance_template: pulumi.Input[str] | None = None
+    compute_jobs_instance_template: pulumi.Input[str] | None = None
 
-    spot: Optional[pulumi.Input[bool]] = None
-    wave_enabled: Optional[pulumi.Input[bool]] = None
-    fusion2_enabled: Optional[pulumi.Input[bool]] = None
-    fusion_snapshots: Optional[pulumi.Input[bool]] = None
+    spot: pulumi.Input[bool] | None = None
+    wave_enabled: pulumi.Input[bool] | None = None
+    fusion2_enabled: pulumi.Input[bool] | None = None
+    fusion_snapshots: pulumi.Input[bool] | None = None
 
-    nextflow_config: Optional[pulumi.Input[str]] = None
-    environment: Optional[list[ConfigEnvVariable]] = None
+    nextflow_config: pulumi.Input[str] | None = None
+    environment: list[ConfigEnvVariable] | None = None
 
-    labels: Optional[dict[str, pulumi.Input[str]]] = None
+    labels: dict[str, pulumi.Input[str]] | None = None
 
-    nfs_mount: Optional[pulumi.Input[str]] = None
-    nfs_target: Optional[pulumi.Input[str]] = None
-    ssh_daemon: Optional[pulumi.Input[bool]] = None
-    ssh_image: Optional[pulumi.Input[str]] = None
-    copy_image: Optional[pulumi.Input[str]] = None
+    nfs_mount: pulumi.Input[str] | None = None
+    nfs_target: pulumi.Input[str] | None = None
+    ssh_daemon: pulumi.Input[bool] | None = None
+    ssh_image: pulumi.Input[str] | None = None
+    copy_image: pulumi.Input[str] | None = None
 
 
 class ConfigEnvVariableArgs(BaseModel):
@@ -76,8 +76,8 @@ class ConfigEnvVariableArgs(BaseModel):
 
     name: str
     value: str
-    compute: Optional[bool] = None
-    head: Optional[bool] = None
+    compute: bool | None = None
+    head: bool | None = None
 
 
 class GoogleBatchConfigArgs(BaseModel):
@@ -88,44 +88,44 @@ class GoogleBatchConfigArgs(BaseModel):
     location: str
     work_dir: str
 
-    pre_run_script: Optional[str] = None
-    post_run_script: Optional[str] = None
+    pre_run_script: str | None = None
+    post_run_script: str | None = None
 
-    service_account: Optional[str] = None
-    project_id: Optional[str] = None
+    service_account: str | None = None
+    project_id: str | None = None
 
-    network: Optional[str] = None
-    subnetwork: Optional[str] = None
-    network_tags: Optional[list[str]] = None
-    use_private_address: Optional[bool] = None
+    network: str | None = None
+    subnetwork: str | None = None
+    network_tags: list[str] | None = None
+    use_private_address: bool | None = None
 
-    machine_type: Optional[str] = None
-    compute_jobs_machine_type: Optional[list[str]] = None
-    cpu_platform: Optional[str] = None
-    boot_disk_image: Optional[str] = None
-    boot_disk_size_gb: Optional[int] = None
-    debug_mode: Optional[int] = None
+    machine_type: str | None = None
+    compute_jobs_machine_type: list[str] | None = None
+    cpu_platform: str | None = None
+    boot_disk_image: str | None = None
+    boot_disk_size_gb: int | None = None
+    debug_mode: int | None = None
 
-    head_job_cpus: Optional[int] = None
-    head_job_memory_mb: Optional[int] = None
-    head_job_instance_template: Optional[str] = None
-    compute_jobs_instance_template: Optional[str] = None
+    head_job_cpus: int | None = None
+    head_job_memory_mb: int | None = None
+    head_job_instance_template: str | None = None
+    compute_jobs_instance_template: str | None = None
 
-    spot: Optional[bool] = None
-    wave_enabled: Optional[bool] = None
-    fusion2_enabled: Optional[bool] = None
-    fusion_snapshots: Optional[bool] = None
+    spot: bool | None = None
+    wave_enabled: bool | None = None
+    fusion2_enabled: bool | None = None
+    fusion_snapshots: bool | None = None
 
-    nextflow_config: Optional[str] = None
-    environment: Optional[list[ConfigEnvVariableArgs]] = None
+    nextflow_config: str | None = None
+    environment: list[ConfigEnvVariableArgs] | None = None
 
-    labels: Optional[dict[str, str]] = None
+    labels: dict[str, str] | None = None
 
-    nfs_mount: Optional[str] = None
-    nfs_target: Optional[str] = None
-    ssh_daemon: Optional[bool] = None
-    ssh_image: Optional[str] = None
-    copy_image: Optional[str] = None
+    nfs_mount: str | None = None
+    nfs_target: str | None = None
+    ssh_daemon: bool | None = None
+    ssh_image: str | None = None
+    copy_image: str | None = None
 
 
 # Extend when new platforms are added. Also they will require defining new `config` Input classes
@@ -139,7 +139,7 @@ class ComputeEnvArgs(BaseModel):
     name: str = Field(min_length=1, max_length=MAX_CE_NAME_LENGTH)
     credentials: GoogleWifCredentialArgs
     config: GoogleBatchConfigArgs
-    description: Optional[str] = Field(None, max_length=2000)
+    description: str | None = Field(None, max_length=2000)
     platform: ComputeEnvPlatform
-    label_ids: Optional[list[int]] = None
-    compute_env_id: Optional[str] = None
+    label_ids: list[int] | None = None
+    compute_env_id: str | None = None
