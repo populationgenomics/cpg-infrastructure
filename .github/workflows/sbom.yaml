@@ -24,9 +24,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b  #v8.1.0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  #v10.3.0
         with:
           enable-cache: false
+          version: 0.12.9 #uv version
 
       - name: Install dependencies into .venv
         run: |
@@ -49,9 +50,18 @@ jobs:
           if version=$(uv version 2>/dev/null | awk '{print $2}') && [ -n "$version" ]; then
             echo "Version from pyproject.toml: $version"
           else
-            version="0.0.0+${GITHUB_SHA::7}"
+            version="0.0.0"
             echo "No version in pyproject.toml, using $version"
           fi
+          # A tag is a release and keeps the bare version. A branch push gets
+          # the commit appended, so each upload is its own version in
+          # Dependency-Track rather than overwriting the previous one - without
+          # it, a repo whose pyproject version never changes keeps one entry
+          # forever and loses all history.
+          if [ "$GITHUB_REF_TYPE" != "tag" ]; then
+            version="${version}+${GITHUB_SHA::7}"
+          fi
+          echo "Project version: $version"
           echo "value=$version" >> "$GITHUB_OUTPUT"
 
       - name: Generate SBOM
@@ -80,6 +90,10 @@ jobs:
           # Mark main-branch and tag uploads as the "latest" project version in DT
           IS_LATEST: ${{ github.ref_name == github.event.repository.default_branch || github.ref_type == 'tag' }}
         run: |
+          # Both auth headers are needed: the Bearer id_token gets past the IAP
+          # load balancer in front of dtrack.popgen.rocks, and X-Api-Key
+          # authenticates to Dependency-Track itself behind it.
+          #
           # Attach to the version-less parent project (one per repo) if it
           # exists in Dependency-Track. The portfolio's Slack alert is limited
           # to these parents with "include active children", so attaching here
