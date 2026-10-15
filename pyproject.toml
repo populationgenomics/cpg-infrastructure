@@ -8,7 +8,9 @@ version = "0.1.0"
 description = "CPG Infrastructure"
 readme = "README.md"
 requires-python = "==3.11.*"
-license = "MIT"
+# the TOML-table form is deprecated by setuptools, but cyclonedx-py --pyproject
+# (sbom.yaml) cannot parse a PEP 639 license expression
+license = { text = "MIT" }
 keywords = ["cpg", "infrastructure"]
 classifiers = [
     "Intended Audience :: Science/Research",
@@ -30,7 +32,7 @@ dependencies = [
     "pydantic>=2",
     "pulumi-gcp~=7.6",
     "pulumi-github>=6.0.0",
-    "pulumi==3.96.2",
+    "pulumi==3.260.0",
     "pytest==9.1.0",
     "toml-sort",
     "toml==0.10.2",
