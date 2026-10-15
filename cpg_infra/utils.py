@@ -41,7 +41,14 @@ def archive_folder(
 
             with open(filename, encoding='utf-8') as file:
                 # do it this way to stop any issues with changing paths
-                assets[filename] = pulumi.StringAsset(file.read())
+                contents = file.read()
+
+            # An empty StringAsset is stored in state without its text, which
+            # pulumi SDKs newer than 3.96 fail to deserialize (pulumi#13878)
+            if not contents:
+                continue
+
+            assets[filename] = pulumi.StringAsset(contents)
 
     if extra_assets:
         assets.update(extra_assets)
