@@ -217,6 +217,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
             event_trigger=gcp.cloudfunctionsv2.FunctionEventTriggerArgs(
                 event_type='google.cloud.pubsub.topic.v1.messagePublished',
                 pubsub_topic=pubsub_topic_name,
+                retry_policy='RETRY_POLICY_DO_NOT_RETRY',
                 service_account_email=service_account,
             ),
         )
