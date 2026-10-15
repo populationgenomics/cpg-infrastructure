@@ -32,7 +32,7 @@ dependencies = [
     "pydantic>=2",
     "pulumi-gcp~=7.6",
     "pulumi-github>=6.0.0",
-    "pulumi==3.260.0",
+    "pulumi==3.96.2",
     "pytest==9.1.0",
     "toml-sort",
     "toml==0.10.2",

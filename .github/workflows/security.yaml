@@ -22,4 +22,10 @@ jobs:
       - uses: pypa/gh-action-pip-audit@1220774d901786e6f652ae159f7b6bc8fea6d266 #v1.1.0
         with:
           virtual-environment: .venv
+          # PYSEC-2026-1805: protobuf ParseDict DoS on untrusted JSON, which
+          # we never parse. pulumi 3.96.2 caps protobuf at ~=4.21; newer pulumi
+          # SDKs fail to deserialize assets in our stack state, so remove this
+          # once that's fixed and pulumi is bumped again.
+          ignore-vulns: |
+            PYSEC-2026-1805
           summary: true
