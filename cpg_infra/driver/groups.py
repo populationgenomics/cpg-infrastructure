@@ -166,5 +166,9 @@ class GroupProvider:
             else:
                 resolved_members.append(member)
 
-        self._cached_resolved_members[group.name] = list(set(resolved_members))
+        # GroupMember hashes by identity, so a set would order members by
+        # memory address and change the output (e.g. the metamist ETL
+        # accessor secret) on every run; dict.fromkeys keeps config order
+        resolved_members = list(dict.fromkeys(resolved_members))
+        self._cached_resolved_members[group.name] = resolved_members
         return resolved_members
