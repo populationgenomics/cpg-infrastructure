@@ -404,10 +404,55 @@ class BillingAggregator(CpgInfrastructurePlugin):
                     ),
                 ),
                 schedule=f'{start_minute} */{self.config.billing.aggregator.interval_hours} * * *',
+                # With max_instance_count=1, Cloud Run often rejects the cold-start
+                # request with a 429 ("no available instance") before the instance is
+                # up. Retry so the run isn't skipped; inserts dedupe on existing ids.
+                retry_config=gcp.cloudscheduler.JobRetryConfigArgs(
+                    retry_count=3,
+                    min_backoff_duration='30s',
+                ),
                 project=self.config.billing.gcp.project_id,
                 region=self.config.gcp.region,
                 time_zone='Australia/Sydney',
                 opts=pulumi.ResourceOptions(depends_on=[fxn, self.scheduler_service]),
+            )
+
+            # The error alert ignores 429s, so alert when runs stop succeeding instead:
+            # no 2xx response for two consecutive scheduled runs (even after retries)
+            missed_runs_hours = min(
+                2 * self.config.billing.aggregator.interval_hours, 23
+            )
+            _ = gcp.monitoring.AlertPolicy(
+                f'billing-aggregator-{function}-missed-runs-alert',
+                display_name=f'Aggregator {function.capitalize()} Billing Function Missed Runs',
+                combiner='OR',
+                notification_channels=[self.slack_channel.id],
+                conditions=[
+                    gcp.monitoring.AlertPolicyConditionArgs(
+                        display_name=f'No successful run in {missed_runs_hours}h',
+                        condition_absent=gcp.monitoring.AlertPolicyConditionConditionAbsentArgs(
+                            filter=fxn.name.apply(
+                                lambda fxn_name: (
+                                    'metric.type="run.googleapis.com/request_count" '
+                                    'AND resource.type="cloud_run_revision" '
+                                    f'AND resource.label.service_name="{fxn_name}" '
+                                    'AND metric.label.response_code_class="2xx"'
+                                ),
+                            ),
+                            duration=f'{missed_runs_hours * 3600}s',
+                            aggregations=[
+                                # sum across revisions so a redeploy doesn't look like an absence
+                                gcp.monitoring.AlertPolicyConditionConditionAbsentAggregationArgs(
+                                    alignment_period='300s',
+                                    per_series_aligner='ALIGN_SUM',
+                                    cross_series_reducer='REDUCE_SUM',
+                                    group_by_fields=['resource.label.service_name'],
+                                ),
+                            ],
+                        ),
+                    ),
+                ],
+                opts=pulumi.ResourceOptions(depends_on=[fxn]),
             )
 
     # monthly billing aggregator
@@ -486,8 +531,10 @@ class BillingAggregator(CpgInfrastructurePlugin):
                     AND resource.labels.service_name="{fxn_name}"
                 ))
                 AND severity>=WARNING
+                AND NOT httpRequest.status=429
             """,
         )
+        # 429s above are cold-start rejections, retried by the Cloud Scheduler job
 
         # Create the Cloud Function's event alert
         alert_condition = gcp.monitoring.AlertPolicyConditionArgs(
