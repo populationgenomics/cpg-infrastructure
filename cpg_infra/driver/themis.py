@@ -28,6 +28,18 @@ ROSTER_FORMAT = 1
 ROSTER_OBJECT_NAME = 'roster.json'
 
 
+def environment_projects(
+    projects: Mapping[str, CPGInfrastructureConfig.Themis.Project],
+    environment: str,
+) -> dict[str, CPGInfrastructureConfig.Themis.Project]:
+    """The Projects whose `environments` include `environment`."""
+    return {
+        project_id: project
+        for project_id, project in projects.items()
+        if environment in project.environments
+    }
+
+
 def themis_datasets(
     projects: Mapping[str, CPGInfrastructureConfig.Themis.Project],
     dataset_configs: Mapping[str, CPGDatasetConfig],
@@ -75,10 +87,11 @@ def build_roster(
     users: Mapping[MemberKey, CPGInfrastructureUser],
     dataset_configs: Mapping[str, CPGDatasetConfig],
 ) -> dict[str, Any]:
-    """Resolve the roster: member keys become lowercase emails.
+    """Resolve one environment's roster: member keys become lowercase emails.
 
-    `admitted` is the union of the operators and every Project's members, so
-    each Project member is also admitted.
+    `admitted` is the union of the environment's operators and every Project's
+    members, so each Project member is also admitted. With no Projects, the
+    roster admits the operators alone, which Themis accepts.
 
     Raises:
         ValueError: on an unknown member key, a member without a gcp email, or

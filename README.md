@@ -94,13 +94,13 @@ To do this:
 
 ### Themis roster
 
-[Themis](https://github.com/populationgenomics/themis) learns who it admits, and which Projects they belong to, from one JSON object called the roster. Themis owns the roster format. The `CPGInfrastructureConfig.themis` section holds the operators (admitted without belonging to any Project) and Themis's service accounts, and `CPGInfrastructureConfig.themis_projects` holds the Projects, each with a name, datasets and members. The two are set together or not at all. When they are set, `CPGInfrastructure.setup_themis`:
+[Themis](https://github.com/populationgenomics/themis) learns who it admits, and which Projects they belong to, from one JSON object called the roster. Themis owns the roster format. Each Themis environment (for example `dev` and `prod`) has its own roster. `CPGInfrastructureConfig.themis` maps each environment to its operators (admitted without belonging to any Project) and its service accounts, and `CPGInfrastructureConfig.themis_projects` holds the Projects, each with a name, datasets, members and the environments it is enabled in. For each environment, `CPGInfrastructure.setup_themis`:
 
-- resolves the roster (user keys become lowercase emails; `admitted` is the operators plus every Project's members) and writes it as `roster.json` to a versioned bucket in the common dataset's project,
-- gives Themis's auth service account read on that bucket, and
-- adds Themis's data service account to the `external-repository-reader` and `sample-metadata-main-read` groups of each dataset some Project lists. Those are the narrowest existing groups that read the main bucket and the main metamist project.
+- resolves the roster from that environment's operators and Projects (user keys become lowercase emails; `admitted` is the operators plus every Project's members) and writes it as `roster.json` to the versioned bucket `<dataset_storage_prefix>themis-<environment>-roster` in the common dataset's project,
+- gives the environment's auth service account read on that bucket, and
+- adds the environment's data service account to the `external-repository-reader` and `sample-metadata-main-read` groups of each dataset those Projects list. Those are the narrowest existing groups that read the main bucket and the main metamist project.
 
-A Project id must be a slug, because Themis stores Analyses under it. An unknown user key or dataset, or a dataset without the storage and metamist components, fails the deploy before any resource is created.
+Project ids and environment names must be slugs, because Themis stores Analyses under a Project's id and the environment names a bucket. A Project enabled in an environment that has no settings, an unknown user key or dataset, or a dataset without the storage and metamist components fails the deploy before any resource is created. An environment with no Projects gets a roster that admits its operators alone.
 
 ## Infrastructure
 

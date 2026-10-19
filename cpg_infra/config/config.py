@@ -43,8 +43,11 @@ GroupName = Literal[
 
 # get_member_key binds anything else as a `user:` principal
 SERVICE_ACCOUNT_PATTERN = r'^[^@\s]+@[^@\s]+\.iam\.gserviceaccount\.com$'
+_SLUG = StringConstraints(pattern=r'^[a-z0-9][a-z0-9-]*$')
 # Themis stores Analyses under a Project's id, so it must be a stable slug
-ThemisProjectId = Annotated[str, StringConstraints(pattern=r'^[a-z0-9][a-z0-9-]*$')]
+ThemisProjectId = Annotated[str, _SLUG]
+# a Themis deployment, e.g. dev or prod; part of its roster bucket's name
+ThemisEnvironment = Annotated[str, _SLUG]
 
 
 def _no_duplicates(value: list[str]) -> list[str]:
@@ -336,12 +339,13 @@ class CPGInfrastructureConfig(ConfigModel):
         github_auth_token_base_url: str
 
     class Themis(ConfigModel):
-        """Themis production access: the roster it reads, and its data grants.
+        """One Themis environment's access: the roster it reads, and its data grants.
 
-        Themis reads one JSON object, the roster, listing who it admits and which
-        Projects they belong to. Themis owns the roster format; the driver
-        resolves it from this section and `themis_projects`, and writes it to a
-        bucket in the common dataset's project.
+        Each Themis environment reads one JSON object, its roster, listing who
+        it admits and which Projects they belong to. Themis owns the roster
+        format; the driver resolves it from these settings and the Projects
+        enabled in the environment, and writes it to a bucket in the common
+        dataset's project.
         """
 
         class Project(ConfigModel):
@@ -351,14 +355,14 @@ class CPGInfrastructureConfig(ConfigModel):
             datasets: list[str] = Field(min_length=1)
             # users (keys into `users`) who belong to the Project
             members: list[MemberKey]
+            # the Themis environments whose roster lists the Project
+            environments: list[ThemisEnvironment] = Field(min_length=1)
 
-            @field_validator('datasets', 'members')
+            @field_validator('datasets', 'members', 'environments')
             @classmethod
             def _no_duplicate_entries(cls, value: list[str]) -> list[str]:
                 return _no_duplicates(value)
 
-        # appended to gcp.dataset_storage_prefix to name the roster bucket
-        roster_bucket_suffix: str = Field(min_length=1)
         # service account that reads the roster
         auth_service_account: str = Field(pattern=SERVICE_ACCOUNT_PATTERN)
         # service account that reads the datasets of every Project
@@ -450,8 +454,8 @@ class CPGInfrastructureConfig(ConfigModel):
     # configuration options for billing + billing aggregation
     billing: Billing | None = None
     # configuration options for Themis: its roster and its data access
-    themis: Themis | None = None
-    # the Projects Themis serves, keyed by Project id; set exactly when `themis` is
+    themis: dict[ThemisEnvironment, Themis] = Field(default_factory=dict)
+    # the Projects Themis serves, keyed by Project id
     themis_projects: dict[ThemisProjectId, Themis.Project] = Field(
         default_factory=dict,
     )
@@ -473,14 +477,20 @@ class CPGInfrastructureConfig(ConfigModel):
     )
 
     @model_validator(mode='after')
-    def _themis_needs_projects(self) -> 'CPGInfrastructureConfig':
-        if self.themis_projects and self.themis is None:
+    def _themis_projects_have_environments(self) -> 'CPGInfrastructureConfig':
+        for project_id, project in self.themis_projects.items():
+            if unknown := sorted(set(project.environments) - set(self.themis)):
+                raise ValueError(
+                    f'Themis Project {project_id!r} names environments {unknown}, '
+                    'which have no themis section',
+                )
+        # one service account as two environments' data reader would join each
+        # dataset group twice
+        data_service_accounts = [t.data_service_account for t in self.themis.values()]
+        if len(set(data_service_accounts)) != len(data_service_accounts):
             raise ValueError(
-                f'There are Themis Projects {sorted(self.themis_projects)}, but '
-                'no themis section',
+                'Themis environments must not share a data service account'
             )
-        if self.themis is not None and not self.themis_projects:
-            raise ValueError('There is a themis section, but no Themis Project')
         return self
 
 

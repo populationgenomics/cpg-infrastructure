@@ -1937,8 +1937,8 @@ class CPGDatasetCloudInfrastructure:
                 'enable_metamist_project',
             )
 
-    def add_themis_data_reader(self, member: str):
-        """Give Themis's data service account read of this dataset's main data.
+    def add_themis_data_reader(self, member: str, *, environment: str):
+        """Give a Themis environment's data service account read of main data.
 
         Adds it to the two narrowest existing groups that cover this:
         external-repository-reader reads the main bucket and nothing else, and
@@ -1948,11 +1948,15 @@ class CPGDatasetCloudInfrastructure:
         self.check_themis_data_readable()
 
         self.external_repository_reader_group.add_member(
-            self.infra.get_pulumi_name('themis-data-in-external-repository-reader'),
+            self.infra.get_pulumi_name(
+                f'themis-{environment}-data-in-external-repository-reader',
+            ),
             member=member,
         )
         self.metamist_groups[SM_MAIN_READ].add_member(
-            self.infra.get_pulumi_name('themis-data-in-sample-metadata-main-read'),
+            self.infra.get_pulumi_name(
+                f'themis-{environment}-data-in-sample-metadata-main-read',
+            ),
             member=member,
         )
 

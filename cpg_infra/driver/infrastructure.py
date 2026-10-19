@@ -10,7 +10,7 @@ import json
 import os.path
 from collections import defaultdict
 from functools import cached_property
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import pulumi
 import pulumi_gcp as gcp
@@ -47,6 +47,7 @@ from cpg_infra.driver.standalone_project_infrastructure import (
 from cpg_infra.driver.themis import (
     ROSTER_OBJECT_NAME,
     build_roster,
+    environment_projects,
     serialise_roster,
     themis_datasets,
 )
@@ -67,6 +68,13 @@ if TYPE_CHECKING:
         CPGDatasetCloudInfrastructure,
     )
     from cpg_infra.driver.groups import Group
+
+
+class ResolvedThemisEnvironment(NamedTuple):
+    settings: CPGInfrastructureConfig.Themis
+    roster: dict[str, Any]
+    # the GCP infrastructure of each dataset the environment's Projects list
+    dataset_infras: list[CPGDatasetCloudInfrastructure]
 
 
 def get_formatted_ws_name(is_test: bool, team: str) -> str:
@@ -854,83 +862,85 @@ class CPGInfrastructure:
 
     # region THEMIS
 
-    @cached_property
-    def themis_roster_bucket(self):
-        themis = self.config.themis
-        assert themis
-        return self.common_gcp_infra.create_bucket(
-            f'{self.config.gcp.dataset_storage_prefix}{themis.roster_bucket_suffix}',
-            unique=True,
-            versioning=True,
-            autoclass=False,  # Read about once a minute.
-            lifecycle_rules=[],
-            enforce_public_access_prevention=True,
-        )
-
     def setup_themis(self):
-        """Write the Themis roster, and grant Themis's service accounts access.
+        """Per Themis environment, write its roster and grant its service accounts.
 
-        The auth service account reads the roster bucket. The data service
-        account reads every dataset some Project lists, and no other.
+        Each environment gets its own roster bucket. Its auth service account
+        reads that bucket, and its data service account reads every dataset of
+        the Projects enabled in that environment, and no other.
         """
-        themis = self.config.themis
-        if themis is None:
-            return
+        for environment, resolved in self._resolve_themis().items():
+            bucket = self.common_gcp_infra.create_bucket(
+                self.themis_roster_bucket_name(environment),
+                unique=True,
+                versioning=True,
+                autoclass=False,  # Read about once a minute.
+                lifecycle_rules=[],
+                enforce_public_access_prevention=True,
+            )
+            self.common_gcp_infra.add_blob_to_bucket(
+                f'themis-{environment}-roster-blob',
+                bucket=bucket,
+                contents=serialise_roster(resolved.roster),
+                output_name=ROSTER_OBJECT_NAME,
+            )
+            self.common_gcp_infra.add_member_to_bucket(
+                f'themis-{environment}-auth-roster-reader',
+                bucket=bucket,
+                member=resolved.settings.auth_service_account,
+                membership=BucketMembership.READ,
+            )
 
-        roster, cloud_infras = self._resolve_themis(themis)
+            for cloud_infra in resolved.dataset_infras:
+                cloud_infra.add_themis_data_reader(
+                    resolved.settings.data_service_account,
+                    environment=environment,
+                )
 
-        self.common_gcp_infra.add_blob_to_bucket(
-            'themis-roster-blob',
-            bucket=self.themis_roster_bucket,
-            contents=serialise_roster(roster),
-            output_name=ROSTER_OBJECT_NAME,
-        )
-        self.common_gcp_infra.add_member_to_bucket(
-            'themis-auth-roster-reader',
-            bucket=self.themis_roster_bucket,
-            member=themis.auth_service_account,
-            membership=BucketMembership.READ,
-        )
-
-        for cloud_infra in cloud_infras:
-            cloud_infra.add_themis_data_reader(themis.data_service_account)
+    def themis_roster_bucket_name(self, environment: str) -> str:
+        assert self.config.gcp
+        return f'{self.config.gcp.dataset_storage_prefix}themis-{environment}-roster'
 
     def validate_themis(self):
         """Raise on Themis config that setup_themis cannot honour."""
-        if self.config.themis is not None:
-            self._resolve_themis(self.config.themis)
+        self._resolve_themis()
 
-    def _resolve_themis(
-        self,
-        themis: CPGInfrastructureConfig.Themis,
-    ) -> tuple[dict[str, Any], list[CPGDatasetCloudInfrastructure]]:
-        """The roster, and the dataset infrastructures Themis reads.
+    def _resolve_themis(self) -> dict[str, ResolvedThemisEnvironment]:
+        """Each Themis environment's roster and the datasets it reads.
 
         Registers no resources, and raises on anything setup_themis would
         otherwise fail on part way.
         """
-        projects = self.config.themis_projects
-        roster = build_roster(
-            themis,
-            projects,
-            self.config.users,
-            self.dataset_configs,
-        )
-
-        cloud_infras = []
-        for dataset in themis_datasets(projects, self.dataset_configs):
-            cloud_infra = self.dataset_infrastructures[dataset].clouds.get(
-                GcpInfrastructure.name(),
+        resolved = {}
+        for environment, settings in sorted(self.config.themis.items()):
+            projects = environment_projects(self.config.themis_projects, environment)
+            roster = build_roster(
+                settings,
+                projects,
+                self.config.users,
+                self.dataset_configs,
             )
-            if cloud_infra is None:
-                raise ValueError(
-                    f'Themis reads dataset {dataset!r}, which has no '
-                    f'{GcpInfrastructure.name()!r} deploy location',
-                )
-            cloud_infra.check_themis_data_readable()
-            cloud_infras.append(cloud_infra)
 
-        return roster, cloud_infras
+            dataset_infras = []
+            for dataset in themis_datasets(projects, self.dataset_configs):
+                cloud_infra = self.dataset_infrastructures[dataset].clouds.get(
+                    GcpInfrastructure.name(),
+                )
+                if cloud_infra is None:
+                    raise ValueError(
+                        f'Themis reads dataset {dataset!r}, which has no '
+                        f'{GcpInfrastructure.name()!r} deploy location',
+                    )
+                cloud_infra.check_themis_data_readable()
+                dataset_infras.append(cloud_infra)
+
+            resolved[environment] = ResolvedThemisEnvironment(
+                settings=settings,
+                roster=roster,
+                dataset_infras=dataset_infras,
+            )
+
+        return resolved
 
     # endregion THEMIS
 
