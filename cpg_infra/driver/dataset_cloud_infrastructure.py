@@ -1932,7 +1932,7 @@ class CPGDatasetCloudInfrastructure:
         ):
             raise ValueError(
                 f'{self.dataset_config.dataset}: Themis reads the main bucket and '
-                'the main metamist project, so a dataset a Themis project lists '
+                'the main metamist project, so a dataset a Themis Project lists '
                 'needs the storage and metamist components and '
                 'enable_metamist_project',
             )

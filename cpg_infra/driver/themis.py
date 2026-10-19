@@ -29,29 +29,22 @@ ROSTER_OBJECT_NAME = 'roster.json'
 
 
 def themis_datasets(
-    themis: CPGInfrastructureConfig.Themis,
+    projects: Mapping[str, CPGInfrastructureConfig.Themis.Project],
     dataset_configs: Mapping[str, CPGDatasetConfig],
 ) -> list[str]:
     """The sorted union of every Project's datasets.
 
     Raises:
-        ValueError: if a Project lists a dataset that is not configured, or one
-            that does not set `themis_enabled`.
+        ValueError: if a Project lists a dataset that is not configured.
     """
-    for project_id, project in themis.projects.items():
+    for project_id, project in projects.items():
         for dataset in project.datasets:
-            dataset_config = dataset_configs.get(dataset)
-            if dataset_config is None:
+            if dataset not in dataset_configs:
                 raise ValueError(
                     f'Themis project {project_id!r} lists dataset {dataset!r}, '
                     'which is not configured',
                 )
-            if not dataset_config.themis_enabled:
-                raise ValueError(
-                    f'Themis project {project_id!r} lists dataset {dataset!r}, '
-                    'which does not set themis_enabled',
-                )
-    return sorted({d for p in themis.projects.values() for d in p.datasets})
+    return sorted({d for p in projects.values() for d in p.datasets})
 
 
 def _member_email(
@@ -78,6 +71,7 @@ def _member_email(
 
 def build_roster(
     themis: CPGInfrastructureConfig.Themis,
+    projects: Mapping[str, CPGInfrastructureConfig.Themis.Project],
     users: Mapping[MemberKey, CPGInfrastructureUser],
     dataset_configs: Mapping[str, CPGDatasetConfig],
 ) -> dict[str, Any]:
@@ -88,11 +82,11 @@ def build_roster(
 
     Raises:
         ValueError: on an unknown member key, a member without a gcp email, or
-            a dataset rejected by `themis_datasets`.
+            a dataset that is not configured.
     """
-    themis_datasets(themis, dataset_configs)
+    themis_datasets(projects, dataset_configs)
 
-    projects = {
+    roster_projects = {
         project_id: {
             'name': project.name,
             'datasets': sorted(project.datasets),
@@ -103,15 +97,15 @@ def build_roster(
                 },
             ),
         }
-        for project_id, project in themis.projects.items()
+        for project_id, project in projects.items()
     }
     operators = {_member_email(m, users, context='operators') for m in themis.operators}
-    admitted = operators.union(*(p['members'] for p in projects.values()))
+    admitted = operators.union(*(p['members'] for p in roster_projects.values()))
 
     return {
         'format': ROSTER_FORMAT,
         'admitted': sorted(admitted),
-        'projects': projects,
+        'projects': roster_projects,
     }
 
 

@@ -6,15 +6,17 @@ specific dataset.
 """
 
 from enum import Enum
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import pulumi
 from pydantic import (
     AliasGenerator,
     ConfigDict,
     Field,
+    StringConstraints,
     field_serializer,
     field_validator,
+    model_validator,
 )
 from pydantic.alias_generators import to_camel
 
@@ -41,6 +43,8 @@ GroupName = Literal[
 
 # get_member_key binds anything else as a `user:` principal
 SERVICE_ACCOUNT_PATTERN = r'^[^@\s]+@[^@\s]+\.iam\.gserviceaccount\.com$'
+# Themis stores Analyses under a Project's id, so it must be a stable slug
+ThemisProjectId = Annotated[str, StringConstraints(pattern=r'^[a-z0-9][a-z0-9-]*$')]
 
 
 def _no_duplicates(value: list[str]) -> list[str]:
@@ -336,14 +340,14 @@ class CPGInfrastructureConfig(ConfigModel):
 
         Themis reads one JSON object, the roster, listing who it admits and which
         Projects they belong to. Themis owns the roster format; the driver
-        resolves it from this config and writes it to a bucket in the common
-        dataset's project.
+        resolves it from this section and `themis_projects`, and writes it to a
+        bucket in the common dataset's project.
         """
 
         class Project(ConfigModel):
             # display name shown in Themis
             name: str = Field(min_length=1)
-            # CPG datasets the Project reads; each must set `themis_enabled`
+            # CPG datasets the Project reads
             datasets: list[str] = Field(min_length=1)
             # users (keys into `users`) who belong to the Project
             members: list[MemberKey]
@@ -361,8 +365,6 @@ class CPGInfrastructureConfig(ConfigModel):
         data_service_account: str = Field(pattern=SERVICE_ACCOUNT_PATTERN)
         # users (keys into `users`) admitted without belonging to any Project
         operators: list[MemberKey]
-        # keyed by Project id; Themis stores Analyses under it, so keep it stable
-        projects: dict[str, Project]
 
         @field_validator('operators')
         @classmethod
@@ -449,6 +451,10 @@ class CPGInfrastructureConfig(ConfigModel):
     billing: Billing | None = None
     # configuration options for Themis: its roster and its data access
     themis: Themis | None = None
+    # the Projects Themis serves, keyed by Project id; set exactly when `themis` is
+    themis_projects: dict[ThemisProjectId, Themis.Project] = Field(
+        default_factory=dict,
+    )
     # list of additional adhoc groups under infrastructure management
     adhoc_groups: list[CPGInfrastructureGroup] | None = None
 
@@ -465,6 +471,17 @@ class CPGInfrastructureConfig(ConfigModel):
     budget_notification_thresholds: list[float] = Field(
         default_factory=lambda: [0.5, 0.9, 1.0],
     )
+
+    @model_validator(mode='after')
+    def _themis_needs_projects(self) -> 'CPGInfrastructureConfig':
+        if self.themis_projects and self.themis is None:
+            raise ValueError(
+                f'There are Themis Projects {sorted(self.themis_projects)}, but '
+                'no themis section',
+            )
+        if self.themis is not None and not self.themis_projects:
+            raise ValueError('There is a themis section, but no Themis Project')
+        return self
 
 
 class DataprocAutoscalingPolicySpec(ConfigModel):
@@ -647,10 +664,6 @@ class CPGDatasetConfig(ConfigModel):
     # `test` access level is excluded to disallow starting of standard/full workflows
     # from a test workflow.
     allow_nested_analysis_runner_jobs: bool = False
-
-    # Allow Themis Projects to list this dataset. Themis's data service account
-    # then reads the main bucket and main metamist project of each listed dataset.
-    themis_enabled: bool = False
 
     # give FULL access to these datasets, as this dataset depends_on them
     depends_on: list[str] = Field(default_factory=list)

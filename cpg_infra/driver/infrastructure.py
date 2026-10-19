@@ -871,7 +871,7 @@ class CPGInfrastructure:
         """Write the Themis roster, and grant Themis's service accounts access.
 
         The auth service account reads the roster bucket. The data service
-        account reads every dataset some Themis project lists, and no other.
+        account reads every dataset some Project lists, and no other.
         """
         themis = self.config.themis
         if themis is None:
@@ -909,10 +909,16 @@ class CPGInfrastructure:
         Registers no resources, and raises on anything setup_themis would
         otherwise fail on part way.
         """
-        roster = build_roster(themis, self.config.users, self.dataset_configs)
+        projects = self.config.themis_projects
+        roster = build_roster(
+            themis,
+            projects,
+            self.config.users,
+            self.dataset_configs,
+        )
 
         cloud_infras = []
-        for dataset in themis_datasets(themis, self.dataset_configs):
+        for dataset in themis_datasets(projects, self.dataset_configs):
             cloud_infra = self.dataset_infrastructures[dataset].clouds.get(
                 GcpInfrastructure.name(),
             )
