@@ -870,14 +870,7 @@ class CPGInfrastructure:
         the Projects enabled in that environment, and no other.
         """
         for environment, resolved in self._resolve_themis().items():
-            bucket = self.common_gcp_infra.create_bucket(
-                self.themis_acls_bucket_name(environment),
-                unique=True,
-                versioning=True,
-                autoclass=False,  # Read about once a minute.
-                lifecycle_rules=[],
-                enforce_public_access_prevention=True,
-            )
+            bucket = self._create_themis_acls_bucket(environment)
             self.common_gcp_infra.add_blob_to_bucket(
                 f'themis-{environment}-acls-blob',
                 bucket=bucket,
@@ -896,6 +889,27 @@ class CPGInfrastructure:
                     resolved.settings.data_service_account,
                     environment=environment,
                 )
+
+    def _create_themis_acls_bucket(self, environment: str) -> gcp.storage.Bucket:
+        """A private, versioned bucket in the common project for one ACL file.
+
+        Built directly, like the other one-off resources in this class, because
+        create_bucket leaves public access prevention to organisation policy.
+        The other settings match what create_bucket gives the members cache.
+        """
+        infra = self.common_gcp_infra
+        name = self.themis_acls_bucket_name(environment)
+        return gcp.storage.Bucket(
+            infra.get_pulumi_name(name + '-bucket'),
+            name=name,
+            location=infra.region,
+            uniform_bucket_level_access=True,
+            public_access_prevention='enforced',
+            versioning=gcp.storage.BucketVersioningArgs(enabled=True),
+            labels={'bucket': name},
+            lifecycle_rules=[infra.bucket_rule_abort_incomplete_multipart_upload()],
+            project=infra.project_id,
+        )
 
     def themis_acls_bucket_name(self, environment: str) -> str:
         assert self.config.gcp

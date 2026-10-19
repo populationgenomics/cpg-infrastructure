@@ -6,6 +6,7 @@ import json
 from typing import Any, cast
 from unittest.mock import MagicMock
 
+import pulumi_gcp as gcp
 import pytest
 from pydantic import ValidationError
 
@@ -365,7 +366,7 @@ def _make_root(
     root.dataset_configs = DATASETS
 
     common_gcp_infra = MagicMock(spec=GcpInfrastructure)
-    common_gcp_infra.create_bucket.side_effect = lambda name, **_: f'bucket:{name}'
+    common_gcp_infra.region = 'australia-southeast1'
     # common_gcp_infra is a cached_property; seed the cache with the mock
     root.__dict__['common_gcp_infra'] = common_gcp_infra
 
@@ -375,6 +376,19 @@ def _make_root(
         for d, cloud_infra in cloud_infras.items()
     }
     return root, common_gcp_infra, cloud_infras
+
+
+@pytest.fixture
+def created_buckets(monkeypatch: pytest.MonkeyPatch) -> dict[str, dict[str, Any]]:
+    """Bucket name -> its arguments, for the buckets created without registering."""
+    created: dict[str, dict[str, Any]] = {}
+
+    def bucket(_resource_name: str, **kwargs: Any) -> str:
+        created[kwargs['name']] = kwargs
+        return f'bucket:{kwargs["name"]}'
+
+    monkeypatch.setattr(gcp.storage, 'Bucket', bucket)
+    return created
 
 
 def _written(common_gcp_infra: MagicMock) -> dict[str, dict[str, Any]]:
@@ -401,20 +415,18 @@ def _data_readers(cloud_infras: dict[str, MagicMock]) -> dict[str, set[str]]:
     }
 
 
-def test_setup_themis_writes_each_environments_acls_and_grants_access():
+def test_setup_themis_writes_each_environments_acls_and_grants_access(
+    created_buckets: dict[str, dict[str, Any]],
+):
     config = _config()
     root, common_gcp_infra, cloud_infras = _make_root(config)
     root.setup_themis()
 
-    buckets = {
-        call.args[0]: call.kwargs
-        for call in common_gcp_infra.create_bucket.call_args_list
-    }
-    assert set(buckets) == {'cpg-themis-dev-acls', 'cpg-themis-prod-acls'}
-    for kwargs in buckets.values():
-        assert kwargs['unique']
-        assert kwargs['versioning']
-        assert kwargs['enforce_public_access_prevention']
+    assert set(created_buckets) == {'cpg-themis-dev-acls', 'cpg-themis-prod-acls'}
+    for kwargs in created_buckets.values():
+        assert kwargs['public_access_prevention'] == 'enforced'
+        assert kwargs['uniform_bucket_level_access']
+        assert kwargs['versioning'].enabled
 
     assert _written(common_gcp_infra) == {
         'cpg-themis-dev-acls': _acls(config, 'dev'),
@@ -435,6 +447,7 @@ def test_setup_themis_writes_each_environments_acls_and_grants_access():
     assert _data_readers(cloud_infras) == {'ds-a': both, 'ds-b': both, 'ds-c': set()}
 
 
+@pytest.mark.usefixtures('created_buckets')
 def test_environments_are_separate():
     """A Project enabled in one environment reaches neither the other's ACL file
     nor the other's data service account."""
@@ -464,11 +477,14 @@ def test_environments_are_separate():
     }
 
 
-def test_setup_themis_is_a_no_op_without_themis_config():
+def test_setup_themis_is_a_no_op_without_themis_config(
+    created_buckets: dict[str, dict[str, Any]],
+):
     root, common_gcp_infra, cloud_infras = _make_root(_config(themis={}, projects={}))
     root.validate_themis()
     root.setup_themis()
 
+    assert not created_buckets
     assert not common_gcp_infra.method_calls
     for cloud_infra in cloud_infras.values():
         assert not cloud_infra.method_calls
@@ -481,7 +497,9 @@ def test_dataset_without_a_gcp_deploy_location_raises():
         root.validate_themis()
 
 
-def test_unreadable_dataset_fails_before_any_resource_is_registered():
+def test_unreadable_dataset_fails_before_any_resource_is_registered(
+    created_buckets: dict[str, dict[str, Any]],
+):
     """A partial deploy would publish ACLs whose data grants never landed."""
     root, common_gcp_infra, cloud_infras = _make_root(_config())
     cast(
@@ -491,6 +509,7 @@ def test_unreadable_dataset_fails_before_any_resource_is_registered():
     for step in (root.validate_themis, root.setup_themis):
         with pytest.raises(ValueError, match='ds-b: Themis reads'):
             step()
+    assert not created_buckets
     assert not common_gcp_infra.method_calls
     for cloud_infra in cloud_infras.values():
         cast('MagicMock', cloud_infra.add_themis_data_reader).assert_not_called()

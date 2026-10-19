@@ -439,7 +439,6 @@ class GcpInfrastructure(CloudInfraBase):
         autoclass: bool = False,
         project: str | None = None,
         soft_delete_protection: bool = True,
-        enforce_public_access_prevention: bool = False,
     ) -> Any:
         unique_bucket_name = name
         if not unique:
@@ -472,11 +471,6 @@ class GcpInfrastructure(CloudInfraBase):
                 self.bucket_rule_abort_incomplete_multipart_upload(),
             ],
             requester_pays=requester_pays,
-            # None keeps the provider default ('inherited'), so existing buckets
-            # see no diff
-            public_access_prevention=(
-                'enforced' if enforce_public_access_prevention else None
-            ),
             project=project or self.project_id,
         )
 
