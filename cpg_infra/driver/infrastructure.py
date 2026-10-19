@@ -44,6 +44,12 @@ from cpg_infra.driver.groups import GroupMember, GroupProvider
 from cpg_infra.driver.standalone_project_infrastructure import (
     CPGStandaloneProjectInfrastructure,
 )
+from cpg_infra.driver.themis import (
+    ROSTER_OBJECT_NAME,
+    build_roster,
+    serialise_roster,
+    themis_datasets,
+)
 from cpg_infra.github_wif.driver import PAM_BROKER_SA_NAME
 from cpg_infra.plugin import get_plugins
 
@@ -174,6 +180,10 @@ class CPGInfrastructure:
         self.setup_datasets()
         self.setup_standalone_projects()
 
+        # Fail on bad Themis config before any resource is registered, as pulumi
+        # starts applying resources while the program still runs
+        self.validate_themis()
+
         # create a bucket and attach accessor members to it. The bucket itself is
         # created by accessing the property `self.gcp_members_cache_bucket`
         # This will also have the side effect of creating a cloud resource manager and
@@ -202,6 +212,10 @@ class CPGInfrastructure:
 
         # Deploy managed adhoc assets that are not associated with datasets.
         self.deploy_adhoc()
+
+        # Write the Themis roster and grant Themis's service accounts access.
+        # Adds group members, so must run before finalize_groups.
+        self.setup_themis()
 
         plugins = get_plugins()
         initialised_plugins = []
@@ -837,6 +851,82 @@ class CPGInfrastructure:
             )
 
     # endregion ACCESS_CACHE
+
+    # region THEMIS
+
+    @cached_property
+    def themis_roster_bucket(self):
+        themis = self.config.themis
+        assert themis
+        return self.common_gcp_infra.create_bucket(
+            f'{self.config.gcp.dataset_storage_prefix}{themis.roster_bucket_suffix}',
+            unique=True,
+            versioning=True,
+            autoclass=False,  # Read about once a minute.
+            lifecycle_rules=[],
+            enforce_public_access_prevention=True,
+        )
+
+    def setup_themis(self):
+        """Write the Themis roster, and grant Themis's service accounts access.
+
+        The auth service account reads the roster bucket. The data service
+        account reads every dataset some Themis project lists, and no other.
+        """
+        themis = self.config.themis
+        if themis is None:
+            return
+
+        roster, cloud_infras = self._resolve_themis(themis)
+
+        self.common_gcp_infra.add_blob_to_bucket(
+            'themis-roster-blob',
+            bucket=self.themis_roster_bucket,
+            contents=serialise_roster(roster),
+            output_name=ROSTER_OBJECT_NAME,
+        )
+        self.common_gcp_infra.add_member_to_bucket(
+            'themis-auth-roster-reader',
+            bucket=self.themis_roster_bucket,
+            member=themis.auth_service_account,
+            membership=BucketMembership.READ,
+        )
+
+        for cloud_infra in cloud_infras:
+            cloud_infra.add_themis_data_reader(themis.data_service_account)
+
+    def validate_themis(self):
+        """Raise on Themis config that setup_themis cannot honour."""
+        if self.config.themis is not None:
+            self._resolve_themis(self.config.themis)
+
+    def _resolve_themis(
+        self,
+        themis: CPGInfrastructureConfig.Themis,
+    ) -> tuple[dict[str, Any], list[CPGDatasetCloudInfrastructure]]:
+        """The roster, and the dataset infrastructures Themis reads.
+
+        Registers no resources, and raises on anything setup_themis would
+        otherwise fail on part way.
+        """
+        roster = build_roster(themis, self.config.users, self.dataset_configs)
+
+        cloud_infras = []
+        for dataset in themis_datasets(themis, self.dataset_configs):
+            cloud_infra = self.dataset_infrastructures[dataset].clouds.get(
+                GcpInfrastructure.name(),
+            )
+            if cloud_infra is None:
+                raise ValueError(
+                    f'Themis reads dataset {dataset!r}, which has no '
+                    f'{GcpInfrastructure.name()!r} deploy location',
+                )
+            cloud_infra.check_themis_data_readable()
+            cloud_infras.append(cloud_infra)
+
+        return roster, cloud_infras
+
+    # endregion THEMIS
 
     @cached_property
     def config_viewer_group(self):

@@ -1921,6 +1921,42 @@ class CPGDatasetCloudInfrastructure:
                 )
 
     # endregion SAMPLE METADATA
+    # region THEMIS
+
+    def check_themis_data_readable(self):
+        """Raise unless add_themis_data_reader can grant read on this dataset."""
+        if not (
+            self.should_setup_storage
+            and self.should_setup_metamist
+            and self.dataset_config.enable_metamist_project
+        ):
+            raise ValueError(
+                f'{self.dataset_config.dataset}: Themis reads the main bucket and '
+                'the main metamist project, so a dataset a Themis project lists '
+                'needs the storage and metamist components and '
+                'enable_metamist_project',
+            )
+
+    def add_themis_data_reader(self, member: str):
+        """Give Themis's data service account read of this dataset's main data.
+
+        Adds it to the two narrowest existing groups that cover this:
+        external-repository-reader reads the main bucket and nothing else, and
+        sample-metadata-main-read reads the main metamist project and nothing
+        else (it is also among the metamist Cloud Run invokers).
+        """
+        self.check_themis_data_readable()
+
+        self.external_repository_reader_group.add_member(
+            self.infra.get_pulumi_name('themis-data-in-external-repository-reader'),
+            member=member,
+        )
+        self.metamist_groups[SM_MAIN_READ].add_member(
+            self.infra.get_pulumi_name('themis-data-in-sample-metadata-main-read'),
+            member=member,
+        )
+
+    # endregion THEMIS
     # region CONTAINER REGISTRY
 
     def setup_container_registry(self):

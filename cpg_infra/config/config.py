@@ -14,6 +14,7 @@ from pydantic import (
     ConfigDict,
     Field,
     field_serializer,
+    field_validator,
 )
 from pydantic.alias_generators import to_camel
 
@@ -36,6 +37,16 @@ GroupName = Literal[
     'external-repository-reader',
     'igv-desktop-access',
 ]
+
+
+# get_member_key binds anything else as a `user:` principal
+SERVICE_ACCOUNT_PATTERN = r'^[^@\s]+@[^@\s]+\.iam\.gserviceaccount\.com$'
+
+
+def _no_duplicates(value: list[str]) -> list[str]:
+    if len(set(value)) != len(value):
+        raise ValueError(f'duplicate entries in {value}')
+    return value
 
 
 class CPGInfrastructureUser(ConfigModel):
@@ -320,6 +331,44 @@ class CPGInfrastructureConfig(ConfigModel):
         github_auth_token_username: str
         github_auth_token_base_url: str
 
+    class Themis(ConfigModel):
+        """Themis production access: the roster it reads, and its data grants.
+
+        Themis reads one JSON object, the roster, listing who it admits and which
+        Projects they belong to. Themis owns the roster format; the driver
+        resolves it from this config and writes it to a bucket in the common
+        dataset's project.
+        """
+
+        class Project(ConfigModel):
+            # display name shown in Themis
+            name: str = Field(min_length=1)
+            # CPG datasets the Project reads; each must set `themis_enabled`
+            datasets: list[str] = Field(min_length=1)
+            # users (keys into `users`) who belong to the Project
+            members: list[MemberKey]
+
+            @field_validator('datasets', 'members')
+            @classmethod
+            def _no_duplicate_entries(cls, value: list[str]) -> list[str]:
+                return _no_duplicates(value)
+
+        # appended to gcp.dataset_storage_prefix to name the roster bucket
+        roster_bucket_suffix: str = Field(min_length=1)
+        # service account that reads the roster
+        auth_service_account: str = Field(pattern=SERVICE_ACCOUNT_PATTERN)
+        # service account that reads the datasets of every Project
+        data_service_account: str = Field(pattern=SERVICE_ACCOUNT_PATTERN)
+        # users (keys into `users`) admitted without belonging to any Project
+        operators: list[MemberKey]
+        # keyed by Project id; Themis stores Analyses under it, so keep it stable
+        projects: dict[str, Project]
+
+        @field_validator('operators')
+        @classmethod
+        def _no_duplicate_operators(cls, value: list[str]) -> list[str]:
+            return _no_duplicates(value)
+
     class Billing(ConfigModel):
         class GCP(ConfigModel):
             """Details of the BILLING account"""
@@ -398,6 +447,8 @@ class CPGInfrastructureConfig(ConfigModel):
     seqera: Seqera | None = None
     # configuration options for billing + billing aggregation
     billing: Billing | None = None
+    # configuration options for Themis: its roster and its data access
+    themis: Themis | None = None
     # list of additional adhoc groups under infrastructure management
     adhoc_groups: list[CPGInfrastructureGroup] | None = None
 
@@ -596,6 +647,10 @@ class CPGDatasetConfig(ConfigModel):
     # `test` access level is excluded to disallow starting of standard/full workflows
     # from a test workflow.
     allow_nested_analysis_runner_jobs: bool = False
+
+    # Allow Themis Projects to list this dataset. Themis's data service account
+    # then reads the main bucket and main metamist project of each listed dataset.
+    themis_enabled: bool = False
 
     # give FULL access to these datasets, as this dataset depends_on them
     depends_on: list[str] = Field(default_factory=list)

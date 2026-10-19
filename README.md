@@ -92,6 +92,16 @@ To do this:
 - a user config must have `can_access_internal_dataset_logs = True`, and
 - the dataset config must have `is_internal_dataset = True`.
 
+### Themis roster
+
+[Themis](https://github.com/populationgenomics/themis) learns who it admits, and which Projects they belong to, from one JSON object called the roster. Themis owns the roster format. When `CPGInfrastructureConfig.themis` is set, `CPGInfrastructure.setup_themis`:
+
+- resolves the roster from the config (user keys become lowercase emails; `admitted` is the operators plus every Project's members) and writes it as `roster.json` to a versioned bucket in the common dataset's project,
+- gives Themis's auth service account read on that bucket, and
+- adds Themis's data service account to the `external-repository-reader` and `sample-metadata-main-read` groups of each dataset some Project lists. Those are the narrowest existing groups that read the main bucket and the main metamist project.
+
+A Project may only list datasets whose config sets `themis_enabled`; anything else fails the deploy, as does an unknown user key.
+
 ## Infrastructure
 
 ### Dataset infrastructure
