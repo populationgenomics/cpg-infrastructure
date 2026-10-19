@@ -74,12 +74,13 @@ def _member_email(
     cloud_user = user.clouds.get(GcpInfrastructure.name())
     if cloud_user is None:
         raise ValueError(
-            f'Themis {context}: member {member_key!r} does not have a gcp id specified',
+            f'Themis {context}: member {member_key!r} has no Google account '
+            '(`gcp.id`) in the users config',
         )
     if '@' not in cloud_user.id:
         raise ValueError(
-            f'Themis {context}: member {member_key!r} has gcp id {cloud_user.id!r}, '
-            'which is not an email address',
+            f'Themis {context}: member {member_key!r} has `gcp.id` {cloud_user.id!r}, '
+            'which is not the email of a Google account',
         )
     return cloud_user.id.lower()
 
@@ -97,7 +98,7 @@ def build_acls(
     ACL file admits the operators alone, which Themis accepts.
 
     Raises:
-        ValueError: on an unknown member key, a member without a gcp email, or
+        ValueError: on an unknown member key, a member without a Google account, or
             a dataset that is not configured.
     """
     themis_datasets(projects, dataset_configs)

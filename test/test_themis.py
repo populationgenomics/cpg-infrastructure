@@ -314,14 +314,14 @@ def test_serialised_acls_are_deterministic():
             _config(
                 themis={'prod': _settings('prod', operators=['no-gcp'])}, projects={}
             ),
-            "'no-gcp' does not have",
+            "'no-gcp' has no Google account",
         ),
         (
             _config(
                 themis={'prod': _settings('prod', operators=['not-an-email'])},
                 projects={},
             ),
-            'not an email',
+            'not the email of a Google account',
         ),
     ],
 )
