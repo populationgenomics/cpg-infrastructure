@@ -45,10 +45,10 @@ from cpg_infra.driver.standalone_project_infrastructure import (
     CPGStandaloneProjectInfrastructure,
 )
 from cpg_infra.driver.themis import (
-    ROSTER_OBJECT_NAME,
-    build_roster,
+    ACLS_OBJECT_NAME,
+    build_acls,
     environment_projects,
-    serialise_roster,
+    serialise_acls,
     themis_datasets,
 )
 from cpg_infra.github_wif.driver import PAM_BROKER_SA_NAME
@@ -72,7 +72,7 @@ if TYPE_CHECKING:
 
 class ResolvedThemisEnvironment(NamedTuple):
     settings: CPGInfrastructureConfig.Themis
-    roster: dict[str, Any]
+    acls: dict[str, Any]
     # the GCP infrastructure of each dataset the environment's Projects list
     dataset_infras: list[CPGDatasetCloudInfrastructure]
 
@@ -221,7 +221,7 @@ class CPGInfrastructure:
         # Deploy managed adhoc assets that are not associated with datasets.
         self.deploy_adhoc()
 
-        # Write the Themis roster and grant Themis's service accounts access.
+        # Write the Themis ACL files and grant Themis's service accounts access.
         # Adds group members, so must run before finalize_groups.
         self.setup_themis()
 
@@ -863,15 +863,15 @@ class CPGInfrastructure:
     # region THEMIS
 
     def setup_themis(self):
-        """Per Themis environment, write its roster and grant its service accounts.
+        """Per Themis environment, write its ACL file and grant its service accounts.
 
-        Each environment gets its own roster bucket. Its auth service account
+        Each environment gets its own ACL file bucket. Its auth service account
         reads that bucket, and its data service account reads every dataset of
         the Projects enabled in that environment, and no other.
         """
         for environment, resolved in self._resolve_themis().items():
             bucket = self.common_gcp_infra.create_bucket(
-                self.themis_roster_bucket_name(environment),
+                self.themis_acls_bucket_name(environment),
                 unique=True,
                 versioning=True,
                 autoclass=False,  # Read about once a minute.
@@ -879,13 +879,13 @@ class CPGInfrastructure:
                 enforce_public_access_prevention=True,
             )
             self.common_gcp_infra.add_blob_to_bucket(
-                f'themis-{environment}-roster-blob',
+                f'themis-{environment}-acls-blob',
                 bucket=bucket,
-                contents=serialise_roster(resolved.roster),
-                output_name=ROSTER_OBJECT_NAME,
+                contents=serialise_acls(resolved.acls),
+                output_name=ACLS_OBJECT_NAME,
             )
             self.common_gcp_infra.add_member_to_bucket(
-                f'themis-{environment}-auth-roster-reader',
+                f'themis-{environment}-auth-acls-reader',
                 bucket=bucket,
                 member=resolved.settings.auth_service_account,
                 membership=BucketMembership.READ,
@@ -897,16 +897,16 @@ class CPGInfrastructure:
                     environment=environment,
                 )
 
-    def themis_roster_bucket_name(self, environment: str) -> str:
+    def themis_acls_bucket_name(self, environment: str) -> str:
         assert self.config.gcp
-        return f'{self.config.gcp.dataset_storage_prefix}themis-{environment}-roster'
+        return f'{self.config.gcp.dataset_storage_prefix}themis-{environment}-acls'
 
     def validate_themis(self):
         """Raise on Themis config that setup_themis cannot honour."""
         self._resolve_themis()
 
     def _resolve_themis(self) -> dict[str, ResolvedThemisEnvironment]:
-        """Each Themis environment's roster and the datasets it reads.
+        """Each Themis environment's ACLs and the datasets it reads.
 
         Registers no resources, and raises on anything setup_themis would
         otherwise fail on part way.
@@ -914,7 +914,7 @@ class CPGInfrastructure:
         resolved = {}
         for environment, settings in sorted(self.config.themis.items()):
             projects = environment_projects(self.config.themis_projects, environment)
-            roster = build_roster(
+            acls = build_acls(
                 settings,
                 projects,
                 self.config.users,
@@ -936,7 +936,7 @@ class CPGInfrastructure:
 
             resolved[environment] = ResolvedThemisEnvironment(
                 settings=settings,
-                roster=roster,
+                acls=acls,
                 dataset_infras=dataset_infras,
             )
 

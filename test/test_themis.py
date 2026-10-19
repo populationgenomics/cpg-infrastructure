@@ -1,4 +1,4 @@
-"""Tests for the Themis rosters and the access the driver grants Themis."""
+"""Tests for the Themis ACL files and the access the driver grants Themis."""
 
 from __future__ import annotations
 
@@ -23,9 +23,9 @@ from cpg_infra.driver.dataset_cloud_infrastructure import (
 from cpg_infra.driver.groups import GroupMember, GroupProvider
 from cpg_infra.driver.infrastructure import CPGInfrastructure
 from cpg_infra.driver.themis import (
-    build_roster,
+    build_acls,
     environment_projects,
-    serialise_roster,
+    serialise_acls,
     themis_datasets,
 )
 
@@ -97,12 +97,12 @@ def _config(
     )
 
 
-def _roster(
+def _acls(
     config: CPGInfrastructureConfig,
     environment: str = 'prod',
     datasets: Any = None,
 ) -> dict[str, Any]:
-    return build_roster(
+    return build_acls(
         config.themis[environment],
         environment_projects(config.themis_projects, environment),
         config.users,
@@ -196,7 +196,7 @@ def test_invalid_project_is_rejected(project: dict[str, Any], message: str):
             'string_pattern',
         ),
         ({'operators': ['carol', 'carol']}, 'duplicate'),
-        ({'roster_bucket_suffix': 'themis-roster'}, 'extra_forbidden'),
+        ({'bucket_suffix': 'themis-acls'}, 'extra_forbidden'),
     ],
 )
 def test_invalid_environment_settings_are_rejected(
@@ -221,11 +221,11 @@ def test_environments_may_not_share_a_data_service_account():
 
 
 # endregion
-# region roster
+# region ACLs
 
 
-def test_roster_resolves_keys_to_lowercase_emails():
-    assert _roster(_config()) == {
+def test_acls_resolve_keys_to_lowercase_emails():
+    assert _acls(_config()) == {
         'format': 1,
         'admitted': [
             'alice.smith@example.org',
@@ -254,29 +254,29 @@ def test_admitted_is_the_union_of_operators_and_every_projects_members():
             'p3': _project(['ds-c'], [], ['prod']),
         },
     )
-    roster = _roster(config)
+    acls = _acls(config)
 
-    assert set(roster['projects']) == {'p1', 'p2', 'p3'}
-    members = {m for p in roster['projects'].values() for m in p['members']}
-    assert set(roster['admitted']) == members | {
+    assert set(acls['projects']) == {'p1', 'p2', 'p3'}
+    members = {m for p in acls['projects'].values() for m in p['members']}
+    assert set(acls['admitted']) == members | {
         'carol@example.com',
         'alice.smith@example.org',
     }
-    assert roster['admitted'] == sorted(set(roster['admitted']))
-    assert roster['projects']['p3']['members'] == []
+    assert acls['admitted'] == sorted(set(acls['admitted']))
+    assert acls['projects']['p3']['members'] == []
 
 
 def test_environment_without_projects_admits_its_operators_alone():
-    """Themis accepts a roster with no Projects."""
+    """Themis accepts an ACL file with no Projects."""
     config = _config(projects={'p1': _project(['ds-a'], ['bob'], ['prod'])})
-    assert _roster(config, 'dev') == {
+    assert _acls(config, 'dev') == {
         'format': 1,
         'admitted': ['carol@example.com'],
         'projects': {},
     }
 
 
-def test_serialised_roster_is_deterministic():
+def test_serialised_acls_are_deterministic():
     """Config order does not reach the output, so an unchanged config writes no diff."""
     forward = _config(
         themis={'prod': _settings('prod', operators=['carol', 'bob'])},
@@ -293,10 +293,10 @@ def test_serialised_roster_is_deterministic():
         },
     )
 
-    serialised = serialise_roster(_roster(forward))
-    assert serialised == serialise_roster(_roster(reverse))
+    serialised = serialise_acls(_acls(forward))
+    assert serialised == serialise_acls(_acls(reverse))
     assert serialised.endswith('}\n')
-    assert json.loads(serialised) == _roster(forward)
+    assert json.loads(serialised) == _acls(forward)
 
 
 @pytest.mark.parametrize(
@@ -327,14 +327,14 @@ def test_serialised_roster_is_deterministic():
 )
 def test_unresolvable_member_raises(config: CPGInfrastructureConfig, message: str):
     with pytest.raises(ValueError, match=message):
-        _roster(config)
+        _acls(config)
 
 
 def test_unconfigured_dataset_raises():
     datasets = {'ds-a': DATASETS['ds-a']}
     message = "dataset 'ds-b', which is not configured"
     with pytest.raises(ValueError, match=message):
-        _roster(_config(), datasets=datasets)
+        _acls(_config(), datasets=datasets)
     with pytest.raises(ValueError, match=message):
         themis_datasets(_config().themis_projects, datasets)
 
@@ -378,10 +378,10 @@ def _make_root(
 
 
 def _written(common_gcp_infra: MagicMock) -> dict[str, dict[str, Any]]:
-    """Bucket name -> the roster written to it."""
+    """Bucket name -> the ACL file written to it."""
     written = {}
     for call in common_gcp_infra.add_blob_to_bucket.call_args_list:
-        assert call.kwargs['output_name'] == 'roster.json'
+        assert call.kwargs['output_name'] == 'acls.json'
         bucket = call.kwargs['bucket'].removeprefix('bucket:')
         written[bucket] = json.loads(call.kwargs['contents'])
     return written
@@ -401,7 +401,7 @@ def _data_readers(cloud_infras: dict[str, MagicMock]) -> dict[str, set[str]]:
     }
 
 
-def test_setup_themis_writes_each_environments_roster_and_grants_access():
+def test_setup_themis_writes_each_environments_acls_and_grants_access():
     config = _config()
     root, common_gcp_infra, cloud_infras = _make_root(config)
     root.setup_themis()
@@ -410,15 +410,15 @@ def test_setup_themis_writes_each_environments_roster_and_grants_access():
         call.args[0]: call.kwargs
         for call in common_gcp_infra.create_bucket.call_args_list
     }
-    assert set(buckets) == {'cpg-themis-dev-roster', 'cpg-themis-prod-roster'}
+    assert set(buckets) == {'cpg-themis-dev-acls', 'cpg-themis-prod-acls'}
     for kwargs in buckets.values():
         assert kwargs['unique']
         assert kwargs['versioning']
         assert kwargs['enforce_public_access_prevention']
 
     assert _written(common_gcp_infra) == {
-        'cpg-themis-dev-roster': _roster(config, 'dev'),
-        'cpg-themis-prod-roster': _roster(config, 'prod'),
+        'cpg-themis-dev-acls': _acls(config, 'dev'),
+        'cpg-themis-prod-acls': _acls(config, 'prod'),
     }
 
     grants = {
@@ -426,8 +426,8 @@ def test_setup_themis_writes_each_environments_roster_and_grants_access():
         for call in common_gcp_infra.add_member_to_bucket.call_args_list
     }
     assert grants == {
-        ('bucket:cpg-themis-dev-roster', _sa('auth-dev'), BucketMembership.READ),
-        ('bucket:cpg-themis-prod-roster', _sa('auth-prod'), BucketMembership.READ),
+        ('bucket:cpg-themis-dev-acls', _sa('auth-dev'), BucketMembership.READ),
+        ('bucket:cpg-themis-prod-acls', _sa('auth-prod'), BucketMembership.READ),
     }
 
     # ds-c is configured, but no Themis Project lists it
@@ -436,7 +436,7 @@ def test_setup_themis_writes_each_environments_roster_and_grants_access():
 
 
 def test_environments_are_separate():
-    """A Project enabled in one environment reaches neither the other's roster
+    """A Project enabled in one environment reaches neither the other's ACL file
     nor the other's data service account."""
     config = _config(
         projects={
@@ -449,7 +449,7 @@ def test_environments_are_separate():
     root.setup_themis()
 
     written = _written(common_gcp_infra)
-    dev, prod = written['cpg-themis-dev-roster'], written['cpg-themis-prod-roster']
+    dev, prod = written['cpg-themis-dev-acls'], written['cpg-themis-prod-acls']
     assert set(dev['projects']) == {'shared', 'dev-only'}
     assert set(prod['projects']) == {'shared', 'prod-only'}
     assert 'dave@example.com' in dev['admitted']
@@ -482,7 +482,7 @@ def test_dataset_without_a_gcp_deploy_location_raises():
 
 
 def test_unreadable_dataset_fails_before_any_resource_is_registered():
-    """A partial deploy would publish a roster whose data grants never landed."""
+    """A partial deploy would publish ACLs whose data grants never landed."""
     root, common_gcp_infra, cloud_infras = _make_root(_config())
     cast(
         'MagicMock', cloud_infras['ds-b'].check_themis_data_readable

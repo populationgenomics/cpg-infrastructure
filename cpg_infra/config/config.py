@@ -46,7 +46,7 @@ SERVICE_ACCOUNT_PATTERN = r'^[^@\s]+@[^@\s]+\.iam\.gserviceaccount\.com$'
 _SLUG = StringConstraints(pattern=r'^[a-z0-9][a-z0-9-]*$')
 # Themis stores Analyses under a Project's id, so it must be a stable slug
 ThemisProjectId = Annotated[str, _SLUG]
-# a Themis deployment, e.g. dev or prod; part of its roster bucket's name
+# a Themis deployment, e.g. dev or prod; part of its ACL file bucket's name
 ThemisEnvironment = Annotated[str, _SLUG]
 
 
@@ -339,13 +339,13 @@ class CPGInfrastructureConfig(ConfigModel):
         github_auth_token_base_url: str
 
     class Themis(ConfigModel):
-        """One Themis environment's access: the roster it reads, and its data grants.
+        """One Themis environment's access: the ACL file it reads, and its data grants.
 
-        Each Themis environment reads one JSON object, its roster, listing who
-        it admits and which Projects they belong to. Themis owns the roster
-        format; the driver resolves it from these settings and the Projects
-        enabled in the environment, and writes it to a bucket in the common
-        dataset's project.
+        Each Themis environment reads one JSON object, its ACL file, holding
+        Themis's access control lists: who it admits, and for each Project its
+        datasets and members. Themis owns the format; the driver resolves the
+        file from these settings and the Projects enabled in the environment,
+        and writes it to a bucket in the common dataset's project.
         """
 
         class Project(ConfigModel):
@@ -355,7 +355,7 @@ class CPGInfrastructureConfig(ConfigModel):
             datasets: list[str] = Field(min_length=1)
             # users (keys into `users`) who belong to the Project
             members: list[MemberKey]
-            # the Themis environments whose roster lists the Project
+            # the Themis environments whose ACL file lists the Project
             environments: list[ThemisEnvironment] = Field(min_length=1)
 
             @field_validator('datasets', 'members', 'environments')
@@ -363,7 +363,7 @@ class CPGInfrastructureConfig(ConfigModel):
             def _no_duplicate_entries(cls, value: list[str]) -> list[str]:
                 return _no_duplicates(value)
 
-        # service account that reads the roster
+        # service account that reads the ACL file
         auth_service_account: str = Field(pattern=SERVICE_ACCOUNT_PATTERN)
         # service account that reads the datasets of every Project
         data_service_account: str = Field(pattern=SERVICE_ACCOUNT_PATTERN)
@@ -453,7 +453,7 @@ class CPGInfrastructureConfig(ConfigModel):
     seqera: Seqera | None = None
     # configuration options for billing + billing aggregation
     billing: Billing | None = None
-    # configuration options for Themis: its roster and its data access
+    # configuration options for Themis: its ACL files and its data access
     themis: dict[ThemisEnvironment, Themis] = Field(default_factory=dict)
     # the Projects Themis serves, keyed by Project id
     themis_projects: dict[ThemisProjectId, Themis.Project] = Field(

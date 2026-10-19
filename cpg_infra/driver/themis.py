@@ -1,10 +1,13 @@
 """
-Resolve the Themis roster from config.
+Resolve the Themis ACL file from config.
 
-Themis reads one JSON object, the roster, and nothing else from this
-infrastructure. Themis owns its format: it rejects a roster whose `format` it
-does not know, whose emails are not lowercase, or that lists a Project member
-missing from `admitted`. `CPGInfrastructure.setup_themis` writes the result.
+Themis reads one JSON object, the ACL file, and nothing else from this
+infrastructure. It holds Themis's access control lists: one ACL for the
+deployment (`admitted`, the people Themis admits) and, for each Project, its
+datasets and an ACL of its members. Themis owns the format: it rejects a file
+whose `format` it does not know, whose emails are not lowercase, or that lists
+a Project member missing from `admitted`. `CPGInfrastructure.setup_themis`
+writes the result.
 """
 
 from __future__ import annotations
@@ -24,8 +27,8 @@ if TYPE_CHECKING:
         MemberKey,
     )
 
-ROSTER_FORMAT = 1
-ROSTER_OBJECT_NAME = 'roster.json'
+ACLS_FORMAT = 1
+ACLS_OBJECT_NAME = 'acls.json'
 
 
 def environment_projects(
@@ -81,17 +84,17 @@ def _member_email(
     return cloud_user.id.lower()
 
 
-def build_roster(
+def build_acls(
     themis: CPGInfrastructureConfig.Themis,
     projects: Mapping[str, CPGInfrastructureConfig.Themis.Project],
     users: Mapping[MemberKey, CPGInfrastructureUser],
     dataset_configs: Mapping[str, CPGDatasetConfig],
 ) -> dict[str, Any]:
-    """Resolve one environment's roster: member keys become lowercase emails.
+    """Resolve one environment's ACLs: member keys become lowercase emails.
 
     `admitted` is the union of the environment's operators and every Project's
     members, so each Project member is also admitted. With no Projects, the
-    roster admits the operators alone, which Themis accepts.
+    ACL file admits the operators alone, which Themis accepts.
 
     Raises:
         ValueError: on an unknown member key, a member without a gcp email, or
@@ -99,7 +102,7 @@ def build_roster(
     """
     themis_datasets(projects, dataset_configs)
 
-    roster_projects = {
+    acl_projects = {
         project_id: {
             'name': project.name,
             'datasets': sorted(project.datasets),
@@ -113,15 +116,15 @@ def build_roster(
         for project_id, project in projects.items()
     }
     operators = {_member_email(m, users, context='operators') for m in themis.operators}
-    admitted = operators.union(*(p['members'] for p in roster_projects.values()))
+    admitted = operators.union(*(p['members'] for p in acl_projects.values()))
 
     return {
-        'format': ROSTER_FORMAT,
+        'format': ACLS_FORMAT,
         'admitted': sorted(admitted),
-        'projects': roster_projects,
+        'projects': acl_projects,
     }
 
 
-def serialise_roster(roster: dict[str, Any]) -> str:
+def serialise_acls(acls: dict[str, Any]) -> str:
     """Serialise deterministically, so an unchanged config writes no new object."""
-    return json.dumps(roster, indent=2, sort_keys=True) + '\n'
+    return json.dumps(acls, indent=2, sort_keys=True) + '\n'
