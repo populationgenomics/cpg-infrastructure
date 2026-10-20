@@ -72,8 +72,12 @@ _TASK_JOB_ROLES: tuple[str, ...] = (
     'roles/logging.logWriter',
     'roles/logging.viewer',  # Read Batch job logs from Nextflow tail-follow
     'roles/dataproc.editor',  # Create/manage Dataproc clusters (Includes dataproc.autoscalingPolicies.use)
-    'roles/dataproc.worker',  # Cluster SA (same SA) acts as Dataproc worker
 )
+
+# This role grants similar permissions to the dataproc.worker role, but avoids the broad
+# storage access that dataproc.worker grants.
+# https://docs.cloud.google.com/iam/docs/roles-permissions/dataproc#dataproc.worker
+_DATAPROC_WORKER_ROLE = 'roles/DataprocWorkerWithoutStorageAccess'
 
 # Maps each access level to the workspace type that holds it.
 _WORKSPACE_TYPE_FOR_LEVEL: dict[str, str] = {
@@ -287,6 +291,12 @@ class DatasetSeqeraInfrastructure:
                     member=sa,
                     role=role,
                 )
+
+            self._infra.add_project_role(
+                f'seqera-{level}-dataproc-worker-no-storage',
+                member=sa,
+                role=f'{self._infra.organization.id}/{_DATAPROC_WORKER_ROLE}',
+            )
         # Grant HEAD SA roles/iam.serviceAccountUser on TASK SAs per access level
         for level, head_sa in self._head_sas.items():
             task_sa = self._service_accounts[level]
