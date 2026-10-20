@@ -3,8 +3,8 @@ Resolve the Themis ACL file from config.
 
 Themis reads one JSON object, the ACL file, and nothing else from this
 infrastructure. It holds Themis's access control lists: `projects` maps each
-Project's id to its members' emails. A Themis Project is one dataset, and its
-id is the dataset's name. Themis owns the format: it rejects a file whose
+Project's id to the emails of its `managers` and its `curators`. A Themis
+Project is one dataset, and its id is the dataset's name. Themis owns the format: it rejects a file whose
 `format` it does not know, that has keys it does not know, or whose emails are
 not lowercase. `CPGInfrastructure.setup_themis` writes the result.
 """
@@ -15,7 +15,7 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from cpg_infra.abstraction.gcp import GcpInfrastructure
-from cpg_infra.driver.constants import THEMIS_ACCESS
+from cpg_infra.driver.constants import THEMIS_CURATOR, THEMIS_MANAGER
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
@@ -23,20 +23,25 @@ if TYPE_CHECKING:
     from cpg_infra.config import (
         CPGDatasetConfig,
         CPGInfrastructureUser,
+        GroupName,
         MemberKey,
     )
 
 ACLS_FORMAT = 1
 ACLS_OBJECT_NAME = 'acls.json'
+# each role in an ACL file Project, and the members.yaml list that fills it
+ROLE_LISTS: dict[str, GroupName] = {
+    'managers': THEMIS_MANAGER,
+    'curators': THEMIS_CURATOR,
+}
 
 
 def _member_email(
     member_key: MemberKey,
     users: Mapping[MemberKey, CPGInfrastructureUser],
     *,
-    dataset: str,
+    context: str,
 ) -> str:
-    context = f'Themis: {dataset} {THEMIS_ACCESS}'
     user = users.get(member_key)
     if user is None:
         raise ValueError(f'{context}: member {member_key!r} not found in config')
@@ -55,7 +60,7 @@ def _member_email(
     if email.lower().endswith('.gserviceaccount.com'):
         raise ValueError(
             f'{context}: member {member_key!r} is the service account {email!r}; '
-            f'{THEMIS_ACCESS} lists people',
+            'Themis roles are for people',
         )
     # ASCII only, so this is the ASCII lowercase Themis compares against
     return email.lower()
@@ -68,10 +73,11 @@ def build_acls(
 ) -> dict[str, Any]:
     """Resolve one environment's ACL file.
 
-    Each allowed dataset with a non-empty `themis-access` list becomes a
-    Project: the dataset's name, mapped to those users' sorted lowercase
-    emails. With no such dataset, the ACL file has no Projects, which
-    Themis accepts.
+    Each allowed dataset with a non-empty `themis-manager` or `themis-curator`
+    list becomes a Project: the dataset's name, mapped to the sorted lowercase
+    emails of its `managers` and its `curators`. Both keys are always present;
+    one of them may be empty. With no such dataset, the ACL file has no
+    Projects, which Themis accepts.
 
     Raises:
         ValueError: on an allowed dataset that is not configured, an unknown
@@ -85,10 +91,17 @@ def build_acls(
             raise ValueError(
                 f'Themis allows dataset {dataset!r}, which is not configured',
             )
-        if member_keys := dataset_config.members.get(THEMIS_ACCESS):
-            projects[dataset] = sorted(
-                {_member_email(m, users, dataset=dataset) for m in member_keys},
+        roles = {
+            role: sorted(
+                {
+                    _member_email(m, users, context=f'Themis: {dataset} {list_name}')
+                    for m in dataset_config.members.get(list_name, [])
+                },
             )
+            for role, list_name in ROLE_LISTS.items()
+        }
+        if any(roles.values()):
+            projects[dataset] = roles
 
     return {'format': ACLS_FORMAT, 'projects': projects}
 

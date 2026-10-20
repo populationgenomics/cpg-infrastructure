@@ -38,8 +38,9 @@ GroupName = Literal[
     'tmp-main-read-access',
     'external-repository-reader',
     'igv-desktop-access',
-    # who reaches the dataset through Themis; creates no group
-    'themis-access',
+    # the dataset's Themis Project roles; neither creates a group
+    'themis-manager',
+    'themis-curator',
 ]
 
 
@@ -344,19 +345,19 @@ class CPGInfrastructureConfig(ConfigModel):
         """One Themis environment: its service accounts and the datasets it may serve.
 
         Each Themis environment reads one JSON object, its ACL file, holding
-        Themis's access control lists: its Projects with their members. Themis
-        owns the format. A Themis Project is one dataset: each
-        allowed dataset whose `themis-access` member list is non-empty becomes a
-        Project with those members. The driver resolves the file from these
-        settings and the datasets' member lists, and writes it to a bucket in the
-        common dataset's project.
+        Themis's access control lists: its Projects with the people in each
+        role. Themis owns the format. A Themis Project is one dataset: each
+        allowed dataset whose `themis-manager` or `themis-curator` member list
+        is non-empty becomes a Project with those managers and curators. The
+        driver resolves the file from these settings and the datasets' member
+        lists, and writes it to a bucket in the common dataset's project.
         """
 
         # service account that reads the ACL file
         auth_service_account: str = Field(pattern=SERVICE_ACCOUNT_PATTERN)
         # service account that reads the datasets in the ACL file
         data_service_account: str = Field(pattern=SERVICE_ACCOUNT_PATTERN)
-        # the datasets whose `themis-access` lists the ACL file is built from
+        # the datasets whose Themis role lists the ACL file is built from
         allowed_datasets: list[str] = Field(min_length=1)
 
         @field_validator('allowed_datasets')

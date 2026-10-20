@@ -63,13 +63,21 @@ def _dataset(name: str, **extra: Any) -> CPGDatasetConfig:
 DATASETS = {
     'ds-a': _dataset(
         'ds-a',
-        members={'themis-access': ['bob', 'alice'], 'web-access': ['dave']},
+        members={
+            'themis-manager': ['bob', 'alice'],
+            'themis-curator': ['alice'],
+            'web-access': ['dave'],
+        },
     ),
-    'ds-b': _dataset('ds-b', members={'themis-access': ['carol', 'bob']}),
-    # no themis-access list, so never a Project
+    # curators only
+    'ds-b': _dataset('ds-b', members={'themis-curator': ['carol', 'bob']}),
+    # no Themis role list, so never a Project
     'ds-c': _dataset('ds-c', members={'web-access': ['dave']}),
-    # an empty themis-access list, so never a Project
-    'ds-d': _dataset('ds-d', members={'themis-access': []}),
+    # empty Themis role lists, so never a Project
+    'ds-d': _dataset(
+        'ds-d',
+        members={'themis-manager': [], 'themis-curator': []},
+    ),
 }
 ALL_DATASETS = sorted(DATASETS)
 
@@ -175,24 +183,49 @@ def test_environments_may_not_share_a_data_service_account():
         )
 
 
-def test_datasets_may_list_themis_access_members():
-    assert DATASETS['ds-a'].members['themis-access'] == ['bob', 'alice']
+def test_datasets_may_list_themis_role_members():
+    assert DATASETS['ds-a'].members['themis-manager'] == ['bob', 'alice']
+    assert DATASETS['ds-a'].members['themis-curator'] == ['alice']
 
 
 # endregion
 # region ACLs
 
 
-def test_acls_have_one_project_per_dataset_with_lowercase_emails():
-    assert _acls(['ds-a']) == {
+def test_acls_have_one_project_per_dataset_with_both_roles_as_lowercase_emails():
+    assert _acls(['ds-a', 'ds-b']) == {
         'format': 1,
         'projects': {
-            'ds-a': ['alice.smith@example.org', 'bob@example.com'],
+            'ds-a': {
+                'managers': ['alice.smith@example.org', 'bob@example.com'],
+                'curators': ['alice.smith@example.org'],
+            },
+            'ds-b': {
+                'managers': [],
+                'curators': ['bob@example.com', 'carol@example.com'],
+            },
         },
     }
 
 
-def test_only_allowed_datasets_with_themis_access_members_are_projects():
+@pytest.mark.parametrize(
+    ('members', 'is_project'),
+    [
+        ({'themis-manager': ['bob']}, True),
+        ({'themis-curator': ['bob']}, True),
+        ({'themis-manager': [], 'themis-curator': []}, False),
+        ({'web-access': ['bob']}, False),
+    ],
+)
+def test_a_dataset_is_a_project_when_either_role_list_is_non_empty(
+    members: dict[str, list[str]],
+    is_project: bool,
+):
+    acls = _acls(['ds-x'], {'ds-x': _dataset('ds-x', members=members)})
+    assert ('ds-x' in acls['projects']) is is_project
+
+
+def test_only_allowed_datasets_are_projects():
     assert set(_acls(ALL_DATASETS)['projects']) == {'ds-a', 'ds-b'}
     assert set(_acls(['ds-b', 'ds-c'])['projects']) == {'ds-b'}
 
@@ -205,8 +238,11 @@ def test_acls_without_projects_have_an_empty_projects_map():
 def test_serialised_acls_are_deterministic():
     """Config order does not reach the output, so an unchanged config writes no diff."""
     reordered = {
-        'ds-a': _dataset('ds-a', members={'themis-access': ['alice', 'bob']}),
-        'ds-b': _dataset('ds-b', members={'themis-access': ['bob', 'carol']}),
+        'ds-a': _dataset(
+            'ds-a',
+            members={'themis-curator': ['alice'], 'themis-manager': ['alice', 'bob']},
+        ),
+        'ds-b': _dataset('ds-b', members={'themis-curator': ['bob', 'carol']}),
     }
     serialised = serialise_acls(_acls(['ds-a', 'ds-b']))
     assert serialised == serialise_acls(_acls(['ds-b', 'ds-a'], reordered))
@@ -217,7 +253,7 @@ def test_serialised_acls_are_deterministic():
 @pytest.mark.parametrize(
     ('member', 'message'),
     [
-        ('eve', "ds-x themis-access: member 'eve' not found"),
+        ('eve', "member 'eve' not found"),
         ('no-gcp', "'no-gcp' has no Google account"),
         ('not-an-email', 'not the email of a Google account'),
         ('non-ascii', 'not the email of a Google account'),
@@ -225,9 +261,10 @@ def test_serialised_acls_are_deterministic():
         ('compute', "'compute' is the service account"),
     ],
 )
-def test_unresolvable_member_raises(member: str, message: str):
-    datasets = {'ds-x': _dataset('ds-x', members={'themis-access': [member]})}
-    with pytest.raises(ValueError, match=message):
+@pytest.mark.parametrize('list_name', ['themis-manager', 'themis-curator'])
+def test_unresolvable_member_raises(list_name: str, member: str, message: str):
+    datasets = {'ds-x': _dataset('ds-x', members={list_name: [member]})}
+    with pytest.raises(ValueError, match=f'ds-x {list_name}: .*{message}'):
         _acls(['ds-x'], datasets)
 
 
@@ -374,10 +411,16 @@ def test_environments_are_separate():
     written = _written(common_gcp_infra)
     dev, prod = written['cpg-themis-dev-acls'], written['cpg-themis-prod-acls']
     assert dev['projects'] == {
-        'ds-a': ['alice.smith@example.org', 'bob@example.com'],
+        'ds-a': {
+            'managers': ['alice.smith@example.org', 'bob@example.com'],
+            'curators': ['alice.smith@example.org'],
+        },
     }
     assert prod['projects'] == {
-        'ds-b': ['bob@example.com', 'carol@example.com'],
+        'ds-b': {
+            'managers': [],
+            'curators': ['bob@example.com', 'carol@example.com'],
+        },
     }
 
     assert _data_readers(cloud_infras) == {
@@ -546,13 +589,17 @@ def test_data_reader_needs_storage_and_metamist(extra: dict[str, Any]):
         driver.add_themis_data_reader(_sa('data-prod'), environment='prod')
 
 
-def test_themis_access_members_join_no_group():
-    """themis-access reaches a dataset only through Themis, never a Google group."""
+def test_themis_role_members_join_no_group():
+    """Themis roles reach a dataset only through Themis, never a Google group."""
     driver = _dataset_cloud_infra(
         _dataset(
             'ds-a',
             components={'gcp': ['storage', 'metamist']},
-            members={'themis-access': ['alice'], 'web-access': ['bob']},
+            members={
+                'themis-manager': ['alice'],
+                'themis-curator': ['carol'],
+                'web-access': ['bob'],
+            },
         ),
     )
     cast('MagicMock', driver.config).users = USERS
@@ -561,10 +608,11 @@ def test_themis_access_members_join_no_group():
     groups = driver.group_provider.groups['gcp']
     joined = {
         email: {name for name, g in groups.items() if email in _direct_members(g)}
-        for email in ('Alice.Smith@Example.org', 'bob@example.com')
+        for email in ('Alice.Smith@Example.org', 'carol@example.com', 'bob@example.com')
     }
     assert joined == {
         'Alice.Smith@Example.org': set(),
+        'carol@example.com': set(),
         'bob@example.com': {'ds-a-web-access'},
     }
 
