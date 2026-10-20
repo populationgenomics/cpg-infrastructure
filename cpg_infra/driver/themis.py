@@ -2,11 +2,11 @@
 Resolve the Themis ACL file from config.
 
 Themis reads one JSON object, the ACL file, and nothing else from this
-infrastructure. It holds Themis's access control lists: for each Project, an
-ACL of its members. A Themis Project is one dataset, keyed by the dataset's
-name. Themis owns the format: it rejects a file whose `format` it
-does not know, that has keys it does not know, or whose emails are not
-lowercase. `CPGInfrastructure.setup_themis` writes the result.
+infrastructure. It holds Themis's access control lists: `projects` maps each
+Project's id to its members' emails. A Themis Project is one dataset, and its
+id is the dataset's name. Themis owns the format: it rejects a file whose
+`format` it does not know, that has keys it does not know, or whose emails are
+not lowercase. `CPGInfrastructure.setup_themis` writes the result.
 """
 
 from __future__ import annotations
@@ -69,8 +69,8 @@ def build_acls(
     """Resolve one environment's ACL file.
 
     Each allowed dataset with a non-empty `themis-access` list becomes a
-    Project keyed by the dataset, whose members are those users'
-    lowercase emails. With no such dataset, the ACL file has no Projects, which
+    Project: the dataset's name, mapped to those users' sorted lowercase
+    emails. With no such dataset, the ACL file has no Projects, which
     Themis accepts.
 
     Raises:
@@ -86,11 +86,9 @@ def build_acls(
                 f'Themis allows dataset {dataset!r}, which is not configured',
             )
         if member_keys := dataset_config.members.get(THEMIS_ACCESS):
-            projects[dataset] = {
-                'members': sorted(
-                    {_member_email(m, users, dataset=dataset) for m in member_keys},
-                ),
-            }
+            projects[dataset] = sorted(
+                {_member_email(m, users, dataset=dataset) for m in member_keys},
+            )
 
     return {'format': ACLS_FORMAT, 'projects': projects}
 

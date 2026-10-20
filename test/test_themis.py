@@ -187,9 +187,7 @@ def test_acls_have_one_project_per_dataset_with_lowercase_emails():
     assert _acls(['ds-a']) == {
         'format': 1,
         'projects': {
-            'ds-a': {
-                'members': ['alice.smith@example.org', 'bob@example.com'],
-            },
+            'ds-a': ['alice.smith@example.org', 'bob@example.com'],
         },
     }
 
@@ -375,16 +373,12 @@ def test_environments_are_separate():
 
     written = _written(common_gcp_infra)
     dev, prod = written['cpg-themis-dev-acls'], written['cpg-themis-prod-acls']
-    assert set(dev['projects']) == {'ds-a'}
-    assert set(prod['projects']) == {'ds-b'}
-    assert dev['projects']['ds-a']['members'] == [
-        'alice.smith@example.org',
-        'bob@example.com',
-    ]
-    assert prod['projects']['ds-b']['members'] == [
-        'bob@example.com',
-        'carol@example.com',
-    ]
+    assert dev['projects'] == {
+        'ds-a': ['alice.smith@example.org', 'bob@example.com'],
+    }
+    assert prod['projects'] == {
+        'ds-b': ['bob@example.com', 'carol@example.com'],
+    }
 
     assert _data_readers(cloud_infras) == {
         'ds-a': {_sa('data-dev')},
