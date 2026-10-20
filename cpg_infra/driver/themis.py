@@ -2,13 +2,11 @@
 Resolve the Themis ACL file from config.
 
 Themis reads one JSON object, the ACL file, and nothing else from this
-infrastructure. It holds Themis's access control lists: one ACL for the
-deployment (`admitted`, the people Themis admits) and, for each Project, its
-name and an ACL of its members. A Themis Project is one dataset, keyed by the
-dataset's name. Themis owns the format: it rejects a file whose `format` it
-does not know, that has keys it does not know, whose emails are not lowercase,
-or that lists a Project member missing from `admitted`.
-`CPGInfrastructure.setup_themis` writes the result.
+infrastructure. It holds Themis's access control lists: for each Project, an
+ACL of its members. A Themis Project is one dataset, keyed by the dataset's
+name. Themis owns the format: it rejects a file whose `format` it
+does not know, that has keys it does not know, or whose emails are not
+lowercase. `CPGInfrastructure.setup_themis` writes the result.
 """
 
 from __future__ import annotations
@@ -54,6 +52,11 @@ def _member_email(
             f'{context}: member {member_key!r} has `gcp.id` {email!r}, '
             'which is not the email of a Google account',
         )
+    if email.lower().endswith('.gserviceaccount.com'):
+        raise ValueError(
+            f'{context}: member {member_key!r} is the service account {email!r}; '
+            f'{THEMIS_ACCESS} lists people',
+        )
     # ASCII only, so this is the ASCII lowercase Themis compares against
     return email.lower()
 
@@ -66,13 +69,14 @@ def build_acls(
     """Resolve one environment's ACL file.
 
     Each allowed dataset with a non-empty `themis-access` list becomes a
-    Project keyed and named by the dataset, whose members are those users'
-    lowercase emails. `admitted` is the union of every Project's members. With
-    no such dataset, the ACL file admits no one, which Themis accepts.
+    Project keyed by the dataset, whose members are those users'
+    lowercase emails. With no such dataset, the ACL file has no Projects, which
+    Themis accepts.
 
     Raises:
         ValueError: on an allowed dataset that is not configured, an unknown
-            member key, or a member without the email of a Google account.
+            member key, a member without the email of a Google account, or a
+            service account.
     """
     projects = {}
     for dataset in allowed_datasets:
@@ -83,18 +87,12 @@ def build_acls(
             )
         if member_keys := dataset_config.members.get(THEMIS_ACCESS):
             projects[dataset] = {
-                'name': dataset,
                 'members': sorted(
                     {_member_email(m, users, dataset=dataset) for m in member_keys},
                 ),
             }
 
-    admitted = set().union(*(p['members'] for p in projects.values()))
-    return {
-        'format': ACLS_FORMAT,
-        'admitted': sorted(admitted),
-        'projects': projects,
-    }
+    return {'format': ACLS_FORMAT, 'projects': projects}
 
 
 def serialise_acls(acls: dict[str, Any]) -> str:

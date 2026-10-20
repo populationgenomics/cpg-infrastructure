@@ -344,8 +344,8 @@ class CPGInfrastructureConfig(ConfigModel):
         """One Themis environment: its service accounts and the datasets it may serve.
 
         Each Themis environment reads one JSON object, its ACL file, holding
-        Themis's access control lists: who it admits, and its Projects with their
-        members. Themis owns the format. A Themis Project is one dataset: each
+        Themis's access control lists: its Projects with their members. Themis
+        owns the format. A Themis Project is one dataset: each
         allowed dataset whose `themis-access` member list is non-empty becomes a
         Project with those members. The driver resolves the file from these
         settings and the datasets' member lists, and writes it to a bucket in the

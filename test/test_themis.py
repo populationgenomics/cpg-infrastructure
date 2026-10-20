@@ -43,6 +43,8 @@ USERS = {
         'no-gcp': None,
         'not-an-email': 'some-id-without-an-at-sign',
         'non-ascii': 'zoë@example.com',
+        'robot': 'Robot@some-project.iam.gserviceaccount.com',
+        'compute': '1234-compute@developer.gserviceaccount.com',
     }.items()
 }
 
@@ -184,10 +186,8 @@ def test_datasets_may_list_themis_access_members():
 def test_acls_have_one_project_per_dataset_with_lowercase_emails():
     assert _acls(['ds-a']) == {
         'format': 1,
-        'admitted': ['alice.smith@example.org', 'bob@example.com'],
         'projects': {
             'ds-a': {
-                'name': 'ds-a',
                 'members': ['alice.smith@example.org', 'bob@example.com'],
             },
         },
@@ -199,20 +199,9 @@ def test_only_allowed_datasets_with_themis_access_members_are_projects():
     assert set(_acls(['ds-b', 'ds-c'])['projects']) == {'ds-b'}
 
 
-def test_admitted_is_the_union_of_every_projects_members():
-    acls = _acls(ALL_DATASETS)
-    members = {m for p in acls['projects'].values() for m in p['members']}
-    assert acls['admitted'] == sorted(members)
-    assert members == {
-        'alice.smith@example.org',
-        'bob@example.com',
-        'carol@example.com',
-    }
-
-
-def test_acls_without_projects_admit_no_one():
+def test_acls_without_projects_have_an_empty_projects_map():
     """Themis accepts an ACL file with no Projects."""
-    assert _acls(['ds-c', 'ds-d']) == {'format': 1, 'admitted': [], 'projects': {}}
+    assert _acls(['ds-c', 'ds-d']) == {'format': 1, 'projects': {}}
 
 
 def test_serialised_acls_are_deterministic():
@@ -234,6 +223,8 @@ def test_serialised_acls_are_deterministic():
         ('no-gcp', "'no-gcp' has no Google account"),
         ('not-an-email', 'not the email of a Google account'),
         ('non-ascii', 'not the email of a Google account'),
+        ('robot', "'robot' is the service account"),
+        ('compute', "'compute' is the service account"),
     ],
 )
 def test_unresolvable_member_raises(member: str, message: str):
@@ -386,10 +377,14 @@ def test_environments_are_separate():
     dev, prod = written['cpg-themis-dev-acls'], written['cpg-themis-prod-acls']
     assert set(dev['projects']) == {'ds-a'}
     assert set(prod['projects']) == {'ds-b'}
-    assert 'alice.smith@example.org' in dev['admitted']
-    assert 'alice.smith@example.org' not in prod['admitted']
-    assert 'carol@example.com' in prod['admitted']
-    assert 'carol@example.com' not in dev['admitted']
+    assert dev['projects']['ds-a']['members'] == [
+        'alice.smith@example.org',
+        'bob@example.com',
+    ]
+    assert prod['projects']['ds-b']['members'] == [
+        'bob@example.com',
+        'carol@example.com',
+    ]
 
     assert _data_readers(cloud_infras) == {
         'ds-a': {_sa('data-dev')},
@@ -410,6 +405,29 @@ def test_setup_themis_is_a_no_op_without_themis_config(
     assert not common_gcp_infra.method_calls
     for cloud_infra in cloud_infras.values():
         assert not cloud_infra.method_calls
+
+
+def test_bucket_name_over_the_gcs_limit_fails_validation(
+    created_buckets: dict[str, dict[str, Any]],
+):
+    # 'cpg-themis-' + environment + '-acls' is 63 characters at the limit
+    at_limit, over_limit = 'e' * 47, 'e' * 48
+    root, _, _ = _make_root(_config(themis={at_limit: _settings('x')}))
+    root.validate_themis()
+
+    root, common_gcp_infra, _ = _make_root(_config(themis={over_limit: _settings('x')}))
+    with pytest.raises(ValueError, match='longer than 63 characters'):
+        root.validate_themis()
+    with pytest.raises(ValueError, match='longer than 63 characters'):
+        root.setup_themis()
+    assert not created_buckets
+    assert not common_gcp_infra.method_calls
+
+
+def test_themis_without_gcp_config_fails_validation():
+    root, _, _ = _make_root(_config().model_copy(update={'gcp': None}))
+    with pytest.raises(ValueError, match='needs the gcp config'):
+        root.validate_themis()
 
 
 def test_dataset_without_a_gcp_deploy_location_raises():

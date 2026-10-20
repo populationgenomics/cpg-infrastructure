@@ -94,16 +94,16 @@ To do this:
 
 ### Themis ACL files
 
-[Themis](https://github.com/populationgenomics/themis) learns who it admits, and which Projects they belong to, from one JSON object called the ACL file. It holds Themis's access control lists: one ACL for the deployment (`admitted`, the people Themis admits) and, for each Project, its name and an ACL of its members. Themis owns the format. A Themis Project is one dataset, and its id is the dataset's name.
+[Themis](https://github.com/populationgenomics/themis) learns which Projects each person belongs to from one JSON object called the ACL file. It holds Themis's access control lists: for each Project, an ACL of its members. Themis owns the format. A Themis Project is one dataset, and its id is the dataset's name.
 
 Each Themis environment (for example `dev` and `prod`) has its own ACL file. `CPGInfrastructureConfig.themis` maps each environment to its two service accounts and its `allowed_datasets`, the datasets the environment may serve. A dataset's `themis-access` member list says who reaches it through Themis; it creates no group. For each environment, `CPGInfrastructure.setup_themis`:
 
-- resolves the ACL file: every allowed dataset with a non-empty `themis-access` list becomes a Project, keyed and named by the dataset, whose members are those users' lowercase emails, and `admitted` is the union of all Projects' members,
+- resolves the ACL file: every allowed dataset with a non-empty `themis-access` list becomes a Project, keyed by the dataset, whose members are those users' lowercase emails,
 - writes it as `acls.json` to the versioned bucket `<dataset_storage_prefix>themis-<environment>-acls` in the common dataset's project,
 - gives the environment's auth service account read on that bucket, and
 - adds the environment's data service account to the `external-repository-reader` and `sample-metadata-main-read` groups of each dataset in that ACL file and no other. Those are the narrowest existing groups that read the main bucket and the main metamist project.
 
-Environment names must be slugs, because they name a bucket. An allowed dataset that is not configured, an unknown user key or one without a Google account, or a dataset in the ACL file that lacks the storage and metamist components fails the deploy before any resource is created. An environment where no allowed dataset has `themis-access` members gets an ACL file that admits no one.
+Environment names must be slugs short enough that the bucket name stays within GCS's 63 characters, because they name a bucket. `themis-access` lists people: a service account on it fails the deploy, as do an allowed dataset that is not configured, an unknown user key or one without a Google account, and a dataset in the ACL file that lacks the storage and metamist components. All of these fail before any resource is created. An environment where no allowed dataset has `themis-access` members gets an ACL file with no Projects.
 
 ## Infrastructure
 

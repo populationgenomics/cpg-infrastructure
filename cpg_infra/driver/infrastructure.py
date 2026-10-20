@@ -68,8 +68,12 @@ if TYPE_CHECKING:
     from cpg_infra.driver.groups import Group
 
 
+MAX_BUCKET_NAME_LENGTH = 63
+
+
 class ResolvedThemisEnvironment(NamedTuple):
     settings: CPGInfrastructureConfig.Themis
+    bucket_name: str
     acls: dict[str, Any]
     # the GCP infrastructure of each dataset in the ACL file
     dataset_infras: list[CPGDatasetCloudInfrastructure]
@@ -868,7 +872,7 @@ class CPGInfrastructure:
         that ACL file, and no other.
         """
         for environment, resolved in self._resolve_themis().items():
-            bucket = self._create_themis_acls_bucket(environment)
+            bucket = self._create_themis_acls_bucket(resolved.bucket_name)
             self.common_gcp_infra.add_blob_to_bucket(
                 f'themis-{environment}-acls-blob',
                 bucket=bucket,
@@ -888,7 +892,7 @@ class CPGInfrastructure:
                     environment=environment,
                 )
 
-    def _create_themis_acls_bucket(self, environment: str) -> gcp.storage.Bucket:
+    def _create_themis_acls_bucket(self, name: str) -> gcp.storage.Bucket:
         """A private, versioned bucket in the common project for one ACL file.
 
         Built directly, like the other one-off resources in this class, because
@@ -896,7 +900,6 @@ class CPGInfrastructure:
         The other settings match what create_bucket gives the members cache.
         """
         infra = self.common_gcp_infra
-        name = self.themis_acls_bucket_name(environment)
         return gcp.storage.Bucket(
             infra.get_pulumi_name(name + '-bucket'),
             name=name,
@@ -909,10 +912,6 @@ class CPGInfrastructure:
             project=infra.project_id,
         )
 
-    def themis_acls_bucket_name(self, environment: str) -> str:
-        assert self.config.gcp
-        return f'{self.config.gcp.dataset_storage_prefix}themis-{environment}-acls'
-
     def validate_themis(self):
         """Raise on Themis config that setup_themis cannot honour."""
         self._resolve_themis()
@@ -923,8 +922,25 @@ class CPGInfrastructure:
         Registers no resources, and raises on anything setup_themis would
         otherwise fail on part way.
         """
+        if not self.config.themis:
+            return {}
+        gcp_config = self.config.gcp
+        if gcp_config is None:
+            raise ValueError('Themis ACL files live in GCS, which needs the gcp config')
+
         resolved = {}
         for environment, settings in sorted(self.config.themis.items()):
+            bucket_name = (
+                f'{gcp_config.dataset_storage_prefix}themis-{environment}-acls'
+            )
+            # the name is also the bucket's label value, which has the same limit
+            if len(bucket_name) > MAX_BUCKET_NAME_LENGTH:
+                raise ValueError(
+                    f'Themis environment {environment!r} makes the ACL file bucket '
+                    f'name {bucket_name!r} longer than {MAX_BUCKET_NAME_LENGTH} '
+                    'characters',
+                )
+
             acls = build_acls(
                 settings.allowed_datasets,
                 self.dataset_configs,
@@ -947,6 +963,7 @@ class CPGInfrastructure:
 
             resolved[environment] = ResolvedThemisEnvironment(
                 settings=settings,
+                bucket_name=bucket_name,
                 acls=acls,
                 dataset_infras=dataset_infras,
             )
