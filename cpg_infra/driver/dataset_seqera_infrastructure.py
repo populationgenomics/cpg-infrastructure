@@ -377,6 +377,20 @@ class DatasetSeqeraInfrastructure:
                 BucketMembership.READ,
             )
 
+        # Allow members of the analysis group to read the nf work bucket so that they
+        # can view logs and intermediate outputs.
+        work_buckets = [('main', self._parent.nf_main_work_bucket)]
+        if self._dataset_config.setup_test:
+            work_buckets.append(('test', self._parent.nf_test_work_bucket))
+
+        for name, bucket in work_buckets:
+            self._infra.add_member_to_bucket(
+                f'analysis-group-{name}-nfwork-bucket-viewer',
+                bucket,
+                self._parent.analysis_group,
+                BucketMembership.READ,
+            )
+
     def _work_dir_for_access_level(self, level: str) -> pulumi.Output[str]:
         """
         The work dir of a Seqera compute env for this access level.
