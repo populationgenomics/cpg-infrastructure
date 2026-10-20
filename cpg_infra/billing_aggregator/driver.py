@@ -10,30 +10,44 @@ Requires:
     - CPGConfiguration.billing.aggregator configugration
 
 Creates the following:
-    - Enable Cloud Function Service
-    - Create a bucket for the function source code
-    - Create bucket object for the function source code and put it in the bucket
-    - Create a pubsub topic and cloud scheduler for the functions
+    - Enable Cloud Function / Cloud Run Services
+    - Build the aggregator image with Cloud Build (needs gcloud where pulumi runs)
+    - Create a Cloud Run job and cloud scheduler for each aggregator
+    - Create a bucket for the remaining cloud functions' source code
     - Create a slack notification channel for all functions
-    - Create a cloud function for each function
 
 TODO:
 
     - action monthly billing function
 """
 
+import hashlib
 import os
 from base64 import b64encode
 from functools import cached_property
 
 import pulumi
+import pulumi_command as command
 import pulumi_gcp as gcp
 
 from cpg_infra.plugin import CpgInfrastructurePlugin
-from cpg_infra.utils import archive_folder
+from cpg_infra.utils import DEFAULT_ALLOWED_EXTENSIONS, archive_folder
 from cpg_utils.cloud import read_secret
 
 PATH_TO_AGGREGATE_SOURCE_CODE = os.path.join(os.path.dirname(__file__), 'aggregate')
+
+
+def hash_folder(path: str) -> str:
+    """Short hash of the files the aggregator Dockerfile copies into the image"""
+    digest = hashlib.sha256()
+    for filename in sorted(os.listdir(path)):
+        if filename == 'Dockerfile' or filename.endswith(
+            tuple(DEFAULT_ALLOWED_EXTENSIONS),
+        ):
+            digest.update(filename.encode())
+            with open(os.path.join(path, filename), 'rb') as file:
+                digest.update(file.read())
+    return digest.hexdigest()[:12]
 
 
 def get_file_content(filename: str) -> str:
@@ -312,12 +326,8 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 f'two runs within the interval period',
             )
 
-        # Create the source archive
-        source_archive = self.create_source_archive(
-            'billing-aggregator-functions-source-code',
-            self.source_bucket.name,
-            PATH_TO_AGGREGATE_SOURCE_CODE,
-        )
+        project = self.config.billing.gcp.project_id
+        region = self.config.gcp.region
 
         for function in self.config.billing.aggregator.functions:
             # Balance CPU by this table:
@@ -348,7 +358,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 start_minute = 1
 
             if function in ['hail', 'seqr', 'seqr24', 'gcp']:
-                # max possible timeout is 1H for HTTP functions
+                # keep under the hourly interval so runs can't overlap
                 timeout = 3600
 
             if function == 'hail':
@@ -365,95 +375,225 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 memory = '16Gi'
                 start_minute = 3 if function == 'seqr' else 4
 
-            # Create the function, the trigger and subscription.
-            fxn = self.create_cloud_function(
-                resource_name=f'billing-aggregator-{function}-billing-function',
-                name=f'Aggregator {function.capitalize()}',
-                source_file=f'{function}.py',
-                service_account=self.config.billing.coordinator_machine_account,
-                source_bucket=self.source_bucket.name,
-                source_archive_object=source_archive,
-                notification_channel=self.slack_channel,
+            job = self.create_aggregator_job(
+                function=function,
                 memory=memory,
                 cpu=cpu,
-                project=self.config.billing.gcp.project_id,
+                timeout=timeout,
                 env={
-                    # 'SETUP_GCP_LOGGING': 'true',
                     'GCP_AGGREGATE_DEST_TABLE': self.config.billing.aggregator.destination_bq_table,
                     'GCP_BILLING_SOURCE_TABLE': self.config.billing.gcp.source_bq_table,
-                    'DEFAULT_INTERVAL_HOURS': default_interval_hours,
+                    'DEFAULT_INTERVAL_HOURS': str(default_interval_hours),
                     'BILLING_PROJECT_ID': self.config.billing.gcp.project_id,
                     'ICA_RAW_TABLE': self.config.billing.aggregator.ica_raw_table,
                     'ICA_API_SECRET_NAME': self.config.billing.aggregator.ica_api_secret_name,
                 },
-                timeout=timeout,
             )
-
-            # create cron job to run each function as a separate job
+            # The scheduler only starts the execution, so it gets a quick response
+            # instead of waiting on the whole aggregation
             _ = gcp.cloudscheduler.Job(
                 f'billing-aggregator-scheduler-job-{function}',
                 http_target=gcp.cloudscheduler.JobHttpTargetArgs(
-                    uri=fxn.url,
+                    uri=job.name.apply(
+                        lambda job_name: (
+                            f'https://run.googleapis.com/v2/projects/{project}'
+                            f'/locations/{region}/jobs/{job_name}:run'
+                        ),
+                    ),
                     http_method='POST',
-                    headers={
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                    },
-                    oidc_token=gcp.cloudscheduler.JobHttpTargetOidcTokenArgs(
-                        audience=fxn.url,
+                    body=b64encode(b'{}').decode(),
+                    headers={'Content-Type': 'application/json'},
+                    oauth_token=gcp.cloudscheduler.JobHttpTargetOauthTokenArgs(
                         service_account_email=self.config.billing.coordinator_machine_account,
                     ),
                 ),
                 schedule=f'{start_minute} */{self.config.billing.aggregator.interval_hours} * * *',
-                # With max_instance_count=1, Cloud Run often rejects the cold-start
-                # request with a 429 ("no available instance") before the instance is
-                # up. Retry so the run isn't skipped; inserts dedupe on existing ids.
                 retry_config=gcp.cloudscheduler.JobRetryConfigArgs(
                     retry_count=3,
                     min_backoff_duration='30s',
                 ),
-                project=self.config.billing.gcp.project_id,
-                region=self.config.gcp.region,
+                project=project,
+                region=region,
                 time_zone='Australia/Sydney',
-                opts=pulumi.ResourceOptions(depends_on=[fxn, self.scheduler_service]),
+                opts=pulumi.ResourceOptions(depends_on=[job, self.scheduler_service]),
             )
 
-            # The error alert ignores 429s, so alert when runs stop succeeding instead:
-            # no 2xx response for two consecutive scheduled runs (even after retries)
+            # no successful execution for two consecutive scheduled runs
             missed_runs_hours = min(
                 2 * self.config.billing.aggregator.interval_hours, 23
             )
             _ = gcp.monitoring.AlertPolicy(
                 f'billing-aggregator-{function}-missed-runs-alert',
-                display_name=f'Aggregator {function.capitalize()} Billing Function Missed Runs',
+                display_name=f'Aggregator {function.capitalize()} Billing Job Missed Runs',
                 combiner='OR',
                 notification_channels=[self.slack_channel.id],
                 conditions=[
                     gcp.monitoring.AlertPolicyConditionArgs(
                         display_name=f'No successful run in {missed_runs_hours}h',
                         condition_absent=gcp.monitoring.AlertPolicyConditionConditionAbsentArgs(
-                            filter=fxn.name.apply(
-                                lambda fxn_name: (
-                                    'metric.type="run.googleapis.com/request_count" '
-                                    'AND resource.type="cloud_run_revision" '
-                                    f'AND resource.label.service_name="{fxn_name}" '
-                                    'AND metric.label.response_code_class="2xx"'
+                            filter=job.name.apply(
+                                lambda job_name: (
+                                    'metric.type="run.googleapis.com/job/completed_execution_count" '
+                                    'AND resource.type="cloud_run_job" '
+                                    f'AND resource.label.job_name="{job_name}" '
+                                    'AND metric.label.result="succeeded"'
                                 ),
                             ),
                             duration=f'{missed_runs_hours * 3600}s',
                             aggregations=[
-                                # sum across revisions so a redeploy doesn't look like an absence
                                 gcp.monitoring.AlertPolicyConditionConditionAbsentAggregationArgs(
                                     alignment_period='300s',
                                     per_series_aligner='ALIGN_SUM',
                                     cross_series_reducer='REDUCE_SUM',
-                                    group_by_fields=['resource.label.service_name'],
+                                    group_by_fields=['resource.label.job_name'],
                                 ),
                             ],
                         ),
                     ),
                 ],
-                opts=pulumi.ResourceOptions(depends_on=[fxn]),
+                opts=pulumi.ResourceOptions(depends_on=[job]),
             )
+
+    @cached_property
+    def run_service(self):
+        return gcp.projects.Service(
+            'billing-aggregator-run-service',
+            service='run.googleapis.com',
+            project=self.config.billing.gcp.project_id,
+            disable_on_destroy=False,
+        )
+
+    @cached_property
+    def artifact_registry_service(self):
+        return gcp.projects.Service(
+            'billing-aggregator-artifactregistry-service',
+            service='artifactregistry.googleapis.com',
+            project=self.config.billing.gcp.project_id,
+            disable_on_destroy=False,
+        )
+
+    @cached_property
+    def aggregator_image(self) -> pulumi.Output[str]:
+        """
+        Build the aggregator image with Cloud Build, tagged with a hash of the
+        source so it's only rebuilt (and the jobs updated) when the code changes
+        """
+        project = self.config.billing.gcp.project_id
+        region = self.config.gcp.region
+
+        repository = gcp.artifactregistry.Repository(
+            'billing-aggregator-image-repository',
+            repository_id='billing-aggregator',
+            format='DOCKER',
+            location=region,
+            project=project,
+            opts=pulumi.ResourceOptions(depends_on=[self.artifact_registry_service]),
+        )
+        tag = hash_folder(PATH_TO_AGGREGATE_SOURCE_CODE)
+        image = repository.repository_id.apply(
+            lambda repository_id: (
+                f'{region}-docker.pkg.dev/{project}/{repository_id}/aggregator:{tag}'
+            ),
+        )
+        # only runs on `pulumi up` (not preview), and again when the tag changes
+        build = command.local.Command(
+            'billing-aggregator-image-build',
+            create=image.apply(
+                lambda image_name: (
+                    f'gcloud builds submit {PATH_TO_AGGREGATE_SOURCE_CODE} '
+                    f'--tag={image_name} --project={project} --region={region}'
+                ),
+            ),
+            opts=pulumi.ResourceOptions(depends_on=[repository, self.build_service]),
+        )
+        return pulumi.Output.all(image, build.id).apply(lambda args: args[0])
+
+    def create_aggregator_job(
+        self,
+        function: str,
+        memory: str,
+        cpu: int,
+        timeout: int,
+        env: dict[str, str],
+    ) -> gcp.cloudrunv2.Job:
+        """
+        Create the Cloud Run job for one aggregator, plus its error alert
+        """
+        project = self.config.billing.gcp.project_id
+        region = self.config.gcp.region
+        service_account = self.config.billing.coordinator_machine_account
+
+        job = gcp.cloudrunv2.Job(
+            f'billing-aggregator-{function}-job',
+            location=region,
+            project=project,
+            template=gcp.cloudrunv2.JobTemplateArgs(
+                template=gcp.cloudrunv2.JobTemplateTemplateArgs(
+                    containers=[
+                        gcp.cloudrunv2.JobTemplateTemplateContainerArgs(
+                            image=self.aggregator_image,
+                            args=[f'{function}.py'],
+                            envs=[
+                                gcp.cloudrunv2.JobTemplateTemplateContainerEnvArgs(
+                                    name=name,
+                                    value=value,
+                                )
+                                for name, value in env.items()
+                            ],
+                            resources=gcp.cloudrunv2.JobTemplateTemplateContainerResourcesArgs(
+                                limits={'cpu': str(cpu), 'memory': memory},
+                            ),
+                        ),
+                    ],
+                    timeout=f'{timeout}s',
+                    # a retried task could still be running when the next hourly
+                    # execution starts, and concurrent runs can insert duplicates
+                    max_retries=0,
+                    service_account=service_account,
+                ),
+            ),
+            opts=pulumi.ResourceOptions(depends_on=[self.run_service]),
+        )
+
+        _ = gcp.cloudrunv2.JobIamMember(
+            f'billing-aggregator-{function}-job-invoker',
+            name=job.name,
+            location=region,
+            project=project,
+            role='roles/run.invoker',
+            member=f'serviceAccount:{service_account}',
+        )
+
+        _ = gcp.monitoring.AlertPolicy(
+            f'billing-aggregator-{function}-alert',
+            display_name=f'Aggregator {function.capitalize()} Billing Job Error Alert',
+            combiner='OR',
+            notification_channels=[self.slack_channel.id],
+            conditions=[
+                gcp.monitoring.AlertPolicyConditionArgs(
+                    display_name='Job warning/error',
+                    condition_matched_log=gcp.monitoring.AlertPolicyConditionConditionMatchedLogArgs(
+                        filter=job.name.apply(
+                            lambda job_name: (
+                                'resource.type="cloud_run_job" '
+                                f'AND resource.labels.job_name="{job_name}" '
+                                'AND severity>=WARNING'
+                            ),
+                        ),
+                    ),
+                ),
+            ],
+            alert_strategy=gcp.monitoring.AlertPolicyAlertStrategyArgs(
+                notification_rate_limit=(
+                    gcp.monitoring.AlertPolicyAlertStrategyNotificationRateLimitArgs(
+                        period='300s',
+                    )
+                ),
+            ),
+            opts=pulumi.ResourceOptions(depends_on=[job]),
+        )
+
+        return job
 
     # monthly billing aggregator
 

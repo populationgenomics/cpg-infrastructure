@@ -30,6 +30,8 @@ dependencies = [
     "google-api-python-client==2.*",
     "google-auth==2.*",
     "pydantic>=2",
+    # 1.0.2+ needs pulumi>=3.142, pulumi is pinned to 3.96.2 below
+    "pulumi-command==1.0.1",
     "pulumi-gcp~=7.6",
     "pulumi-github>=6.0.0",
     "pulumi==3.268.0",
@@ -65,8 +67,9 @@ include-package-data = true
 include = ["cpg_infra*"]
 
 [tool.setuptools.package-data]
-# read off disk by utils.archive_folder() to build the Cloud Function AssetArchives
-"cpg_infra" = ["**/*.txt", "**/*.json"]
+# read off disk by utils.archive_folder() to build the Cloud Function AssetArchives,
+# and by Cloud Build for the billing aggregator image
+"cpg_infra" = ["**/*.txt", "**/*.json", "**/Dockerfile"]
 
 [tool.ruff]
 line-length = 88
