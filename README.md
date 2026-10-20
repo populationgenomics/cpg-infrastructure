@@ -94,13 +94,16 @@ To do this:
 
 ### Themis ACL files
 
-[Themis](https://github.com/populationgenomics/themis) learns who it admits, and which Projects they belong to, from one JSON object called the ACL file. It holds Themis's access control lists: one ACL for the deployment (`admitted`, the people Themis admits) and, for each Project, its datasets and an ACL of its members. Themis owns the format. Each Themis environment (for example `dev` and `prod`) has its own ACL file. `CPGInfrastructureConfig.themis` maps each environment to its operators (admitted without belonging to any Project) and its service accounts, and `CPGInfrastructureConfig.themis_projects` holds the Projects, each with a name, datasets, members and the environments it is enabled in. For each environment, `CPGInfrastructure.setup_themis`:
+[Themis](https://github.com/populationgenomics/themis) learns who it admits, and which Projects they belong to, from one JSON object called the ACL file. It holds Themis's access control lists: one ACL for the deployment (`admitted`, the people Themis admits) and, for each Project, its name and an ACL of its members. Themis owns the format. A Themis Project is one dataset, and its id is the dataset's name.
 
-- resolves the ACL file from that environment's operators and Projects (user keys become lowercase emails; `admitted` is the operators plus every Project's members) and writes it as `acls.json` to the versioned bucket `<dataset_storage_prefix>themis-<environment>-acls` in the common dataset's project,
+Each Themis environment (for example `dev` and `prod`) has its own ACL file. `CPGInfrastructureConfig.themis` maps each environment to its two service accounts and its `allowed_datasets`, the datasets the environment may serve. A dataset's `themis-access` member list says who reaches it through Themis; it creates no group. For each environment, `CPGInfrastructure.setup_themis`:
+
+- resolves the ACL file: every allowed dataset with a non-empty `themis-access` list becomes a Project, keyed and named by the dataset, whose members are those users' lowercase emails, and `admitted` is the union of all Projects' members,
+- writes it as `acls.json` to the versioned bucket `<dataset_storage_prefix>themis-<environment>-acls` in the common dataset's project,
 - gives the environment's auth service account read on that bucket, and
-- adds the environment's data service account to the `external-repository-reader` and `sample-metadata-main-read` groups of each dataset those Projects list. Those are the narrowest existing groups that read the main bucket and the main metamist project.
+- adds the environment's data service account to the `external-repository-reader` and `sample-metadata-main-read` groups of each dataset in that ACL file and no other. Those are the narrowest existing groups that read the main bucket and the main metamist project.
 
-Project ids and environment names must be slugs, because Themis stores Analyses under a Project's id and the environment names a bucket. A Project enabled in an environment that has no settings, an unknown user key or dataset, or a dataset without the storage and metamist components fails the deploy before any resource is created. An environment with no Projects gets an ACL file that admits its operators alone.
+Environment names must be slugs, because they name a bucket. An allowed dataset that is not configured, an unknown user key or one without a Google account, or a dataset in the ACL file that lacks the storage and metamist components fails the deploy before any resource is created. An environment where no allowed dataset has `themis-access` members gets an ACL file that admits no one.
 
 ## Infrastructure
 
@@ -134,6 +137,8 @@ Members have different roles within a dataset, those roles include:
 - external-repository-reader
   - Read access to data in main. This is distinct from the `data-manager` role as it only grants read access to main and no additional access to any other buckets or services.
   - Developed to support Terra Data Repository service account access to self-hosted production data in CPG buckets. Do not assign this role to a human user.
+- themis-access
+  - Reach the dataset through Themis, if a Themis environment allows the dataset (see [Themis ACL files](#themis-acl-files)). Creates no group, so it grants no access outside Themis.
 
 ## Setup
 

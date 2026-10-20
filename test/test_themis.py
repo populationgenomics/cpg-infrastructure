@@ -23,12 +23,7 @@ from cpg_infra.driver.dataset_cloud_infrastructure import (
 )
 from cpg_infra.driver.groups import GroupMember, GroupProvider
 from cpg_infra.driver.infrastructure import CPGInfrastructure
-from cpg_infra.driver.themis import (
-    build_acls,
-    environment_projects,
-    serialise_acls,
-    themis_datasets,
-)
+from cpg_infra.driver.themis import build_acls, serialise_acls
 
 
 # Deliberately fictitious; the real accounts live in cpg-infrastructure-private.
@@ -47,33 +42,47 @@ USERS = {
         'dave': 'dave@example.com',
         'no-gcp': None,
         'not-an-email': 'some-id-without-an-at-sign',
+        'non-ascii': 'zoë@example.com',
     }.items()
 }
 
-DEFAULT_PROJECTS = {
-    'p1': {
-        'name': 'Project one',
-        'datasets': ['ds-b', 'ds-a'],
-        'members': ['bob', 'alice'],
-        'environments': ['dev', 'prod'],
-    },
+
+def _dataset(name: str, **extra: Any) -> CPGDatasetConfig:
+    return CPGDatasetConfig.model_validate(
+        {
+            'dataset': name,
+            'budgets': {},
+            'gcp': {'project': f'{name}-1234'},
+            **extra,
+        },
+    )
+
+
+DATASETS = {
+    'ds-a': _dataset(
+        'ds-a',
+        members={'themis-access': ['bob', 'alice'], 'web-access': ['dave']},
+    ),
+    'ds-b': _dataset('ds-b', members={'themis-access': ['carol', 'bob']}),
+    # no themis-access list, so never a Project
+    'ds-c': _dataset('ds-c', members={'web-access': ['dave']}),
+    # an empty themis-access list, so never a Project
+    'ds-d': _dataset('ds-d', members={'themis-access': []}),
 }
+ALL_DATASETS = sorted(DATASETS)
 
 
 def _settings(environment: str, **overrides: Any) -> dict[str, Any]:
     return {
         'auth_service_account': _sa(f'auth-{environment}'),
         'data_service_account': _sa(f'data-{environment}'),
-        'operators': ['carol'],
+        'allowed_datasets': ALL_DATASETS,
         **overrides,
     }
 
 
-def _config(
-    themis: dict[str, Any] | None = None,
-    projects: dict[str, dict[str, Any]] | None = None,
-) -> CPGInfrastructureConfig:
-    """An infrastructure config with the given Themis environments and Projects."""
+def _config(themis: dict[str, Any] | None = None) -> CPGInfrastructureConfig:
+    """An infrastructure config with the given Themis environments."""
     return CPGInfrastructureConfig.model_validate(
         {
             'domain': 'example.org',
@@ -93,99 +102,32 @@ def _config(
             'themis': (
                 {e: _settings(e) for e in ('dev', 'prod')} if themis is None else themis
             ),
-            'themis_projects': DEFAULT_PROJECTS if projects is None else projects,
         },
     )
 
 
 def _acls(
-    config: CPGInfrastructureConfig,
-    environment: str = 'prod',
-    datasets: Any = None,
+    allowed_datasets: list[str],
+    datasets: dict[str, CPGDatasetConfig] | None = None,
 ) -> dict[str, Any]:
     return build_acls(
-        config.themis[environment],
-        environment_projects(config.themis_projects, environment),
-        config.users,
+        allowed_datasets,
         DATASETS if datasets is None else datasets,
+        USERS,
     )
-
-
-def _dataset(name: str, **extra: Any) -> CPGDatasetConfig:
-    return CPGDatasetConfig.model_validate(
-        {
-            'dataset': name,
-            'budgets': {},
-            'gcp': {'project': f'{name}-1234'},
-            **extra,
-        },
-    )
-
-
-DATASETS = {d: _dataset(d) for d in ('ds-a', 'ds-b', 'ds-c')}
-
-
-def _project(
-    datasets: list[str],
-    members: list[str],
-    environments: list[str],
-) -> dict[str, Any]:
-    return {
-        'name': 'P',
-        'datasets': datasets,
-        'members': members,
-        'environments': environments,
-    }
 
 
 # region config
 
 
 def test_without_themis_nothing_is_configured():
-    config = _config(themis={}, projects={})
-    assert config.themis == {}
-    assert config.themis_projects == {}
-
-
-def test_project_in_an_environment_without_settings_is_rejected():
-    with pytest.raises(ValidationError, match=r"names environments \['prod'\]"):
-        _config(themis={'dev': _settings('dev')})
-
-
-@pytest.mark.parametrize(
-    'project_id',
-    ['neuro/ataxia', 'Upper-case', '-leading-hyphen', 'has space', ''],
-)
-def test_project_id_must_be_a_slug(project_id: str):
-    with pytest.raises(ValidationError, match='string_pattern_mismatch'):
-        _config(projects={project_id: DEFAULT_PROJECTS['p1']})
+    assert _config(themis={}).themis == {}
 
 
 @pytest.mark.parametrize('environment', ['Prod', 'dev/x', '-dev', ''])
 def test_environment_must_be_a_slug(environment: str):
     with pytest.raises(ValidationError, match='string_pattern_mismatch'):
-        _config(themis={environment: _settings('x')}, projects={})
-
-
-@pytest.mark.parametrize(
-    ('project', 'message'),
-    [
-        ({**DEFAULT_PROJECTS['p1'], 'datasets': []}, 'too_short'),
-        ({**DEFAULT_PROJECTS['p1'], 'environments': []}, 'too_short'),
-        ({**DEFAULT_PROJECTS['p1'], 'name': ''}, 'too_short'),
-        ({**DEFAULT_PROJECTS['p1'], 'datasets': ['ds-a', 'ds-a']}, 'duplicate'),
-        ({**DEFAULT_PROJECTS['p1'], 'members': ['bob', 'bob']}, 'duplicate'),
-        ({**DEFAULT_PROJECTS['p1'], 'environments': ['dev', 'dev']}, 'duplicate'),
-        ({**DEFAULT_PROJECTS['p1'], 'unknown': 1}, 'extra_forbidden'),
-        (
-            {k: v for k, v in DEFAULT_PROJECTS['p1'].items() if k != 'members'},
-            'missing',
-        ),
-    ],
-)
-def test_invalid_project_is_rejected(project: dict[str, Any], message: str):
-    with pytest.raises(ValidationError, match=message):
-        _config(projects={'p1': project})
+        _config(themis={environment: _settings('x')})
 
 
 @pytest.mark.parametrize(
@@ -196,8 +138,11 @@ def test_invalid_project_is_rejected(project: dict[str, Any], message: str):
             {'data_service_account': 'data@project.iam.gserviceaccount.com.evil'},
             'string_pattern',
         ),
-        ({'operators': ['carol', 'carol']}, 'duplicate'),
-        ({'bucket_suffix': 'themis-acls'}, 'extra_forbidden'),
+        ({'allowed_datasets': []}, 'too_short'),
+        ({'allowed_datasets': ['ds-a', 'ds-a']}, 'duplicate'),
+        # the site resolves its allowlist into allowed_datasets
+        ({'project_allowlist': ['p1']}, 'extra_forbidden'),
+        ({'operators': ['carol']}, 'extra_forbidden'),
     ],
 )
 def test_invalid_environment_settings_are_rejected(
@@ -208,6 +153,13 @@ def test_invalid_environment_settings_are_rejected(
         _config(
             themis={'dev': _settings('dev'), 'prod': _settings('prod', **overrides)}
         )
+
+
+def test_allowed_datasets_are_required():
+    settings = _settings('prod')
+    del settings['allowed_datasets']
+    with pytest.raises(ValidationError, match='missing'):
+        _config(themis={'prod': settings})
 
 
 def test_environments_may_not_share_a_data_service_account():
@@ -221,133 +173,78 @@ def test_environments_may_not_share_a_data_service_account():
         )
 
 
+def test_datasets_may_list_themis_access_members():
+    assert DATASETS['ds-a'].members['themis-access'] == ['bob', 'alice']
+
+
 # endregion
 # region ACLs
 
 
-def test_acls_resolve_keys_to_lowercase_emails():
-    assert _acls(_config()) == {
+def test_acls_have_one_project_per_dataset_with_lowercase_emails():
+    assert _acls(['ds-a']) == {
         'format': 1,
-        'admitted': [
-            'alice.smith@example.org',
-            'bob@example.com',
-            'carol@example.com',
-        ],
+        'admitted': ['alice.smith@example.org', 'bob@example.com'],
         'projects': {
-            'p1': {
-                'name': 'Project one',
-                'datasets': ['ds-a', 'ds-b'],
+            'ds-a': {
+                'name': 'ds-a',
                 'members': ['alice.smith@example.org', 'bob@example.com'],
             },
         },
     }
 
 
-def test_admitted_is_the_union_of_operators_and_every_projects_members():
-    config = _config(
-        themis={
-            'dev': _settings('dev'),
-            'prod': _settings('prod', operators=['carol', 'alice']),
-        },
-        projects={
-            'p1': _project(['ds-a'], ['alice'], ['prod']),
-            'p2': _project(['ds-b'], ['bob'], ['prod']),
-            'p3': _project(['ds-c'], [], ['prod']),
-        },
-    )
-    acls = _acls(config)
+def test_only_allowed_datasets_with_themis_access_members_are_projects():
+    assert set(_acls(ALL_DATASETS)['projects']) == {'ds-a', 'ds-b'}
+    assert set(_acls(['ds-b', 'ds-c'])['projects']) == {'ds-b'}
 
-    assert set(acls['projects']) == {'p1', 'p2', 'p3'}
+
+def test_admitted_is_the_union_of_every_projects_members():
+    acls = _acls(ALL_DATASETS)
     members = {m for p in acls['projects'].values() for m in p['members']}
-    assert set(acls['admitted']) == members | {
-        'carol@example.com',
+    assert acls['admitted'] == sorted(members)
+    assert members == {
         'alice.smith@example.org',
+        'bob@example.com',
+        'carol@example.com',
     }
-    assert acls['admitted'] == sorted(set(acls['admitted']))
-    assert acls['projects']['p3']['members'] == []
 
 
-def test_environment_without_projects_admits_its_operators_alone():
+def test_acls_without_projects_admit_no_one():
     """Themis accepts an ACL file with no Projects."""
-    config = _config(projects={'p1': _project(['ds-a'], ['bob'], ['prod'])})
-    assert _acls(config, 'dev') == {
-        'format': 1,
-        'admitted': ['carol@example.com'],
-        'projects': {},
-    }
+    assert _acls(['ds-c', 'ds-d']) == {'format': 1, 'admitted': [], 'projects': {}}
 
 
 def test_serialised_acls_are_deterministic():
     """Config order does not reach the output, so an unchanged config writes no diff."""
-    forward = _config(
-        themis={'prod': _settings('prod', operators=['carol', 'bob'])},
-        projects={
-            'p1': _project(['ds-a', 'ds-b'], ['alice'], ['prod']),
-            'p2': _project(['ds-c'], ['bob', 'carol'], ['prod']),
-        },
-    )
-    reverse = _config(
-        themis={'prod': _settings('prod', operators=['bob', 'carol'])},
-        projects={
-            'p2': _project(['ds-c'], ['carol', 'bob'], ['prod']),
-            'p1': _project(['ds-b', 'ds-a'], ['alice'], ['prod']),
-        },
-    )
-
-    serialised = serialise_acls(_acls(forward))
-    assert serialised == serialise_acls(_acls(reverse))
+    reordered = {
+        'ds-a': _dataset('ds-a', members={'themis-access': ['alice', 'bob']}),
+        'ds-b': _dataset('ds-b', members={'themis-access': ['bob', 'carol']}),
+    }
+    serialised = serialise_acls(_acls(['ds-a', 'ds-b']))
+    assert serialised == serialise_acls(_acls(['ds-b', 'ds-a'], reordered))
     assert serialised.endswith('}\n')
-    assert json.loads(serialised) == _acls(forward)
+    assert json.loads(serialised) == _acls(['ds-a', 'ds-b'])
 
 
 @pytest.mark.parametrize(
-    ('config', 'message'),
+    ('member', 'message'),
     [
-        (
-            _config(projects={'p1': _project(['ds-a'], ['eve'], ['prod'])}),
-            "project 'p1': member 'eve' not found",
-        ),
-        (
-            _config(themis={'prod': _settings('prod', operators=['eve'])}, projects={}),
-            "operators: member 'eve'",
-        ),
-        (
-            _config(
-                themis={'prod': _settings('prod', operators=['no-gcp'])}, projects={}
-            ),
-            "'no-gcp' has no Google account",
-        ),
-        (
-            _config(
-                themis={'prod': _settings('prod', operators=['not-an-email'])},
-                projects={},
-            ),
-            'not the email of a Google account',
-        ),
+        ('eve', "ds-x themis-access: member 'eve' not found"),
+        ('no-gcp', "'no-gcp' has no Google account"),
+        ('not-an-email', 'not the email of a Google account'),
+        ('non-ascii', 'not the email of a Google account'),
     ],
 )
-def test_unresolvable_member_raises(config: CPGInfrastructureConfig, message: str):
+def test_unresolvable_member_raises(member: str, message: str):
+    datasets = {'ds-x': _dataset('ds-x', members={'themis-access': [member]})}
     with pytest.raises(ValueError, match=message):
-        _acls(config)
+        _acls(['ds-x'], datasets)
 
 
-def test_unconfigured_dataset_raises():
-    datasets = {'ds-a': DATASETS['ds-a']}
-    message = "dataset 'ds-b', which is not configured"
-    with pytest.raises(ValueError, match=message):
-        _acls(_config(), datasets=datasets)
-    with pytest.raises(ValueError, match=message):
-        themis_datasets(_config().themis_projects, datasets)
-
-
-def test_themis_datasets_is_the_sorted_union_of_project_datasets():
-    config = _config(
-        projects={
-            'p1': _project(['ds-b', 'ds-a'], [], ['prod']),
-            'p2': _project(['ds-a'], [], ['prod']),
-        },
-    )
-    assert themis_datasets(config.themis_projects, DATASETS) == ['ds-a', 'ds-b']
+def test_unconfigured_allowed_dataset_raises():
+    with pytest.raises(ValueError, match="dataset 'ds-z', which is not configured"):
+        _acls(['ds-a', 'ds-z'])
 
 
 # endregion
@@ -418,8 +315,7 @@ def _data_readers(cloud_infras: dict[str, MagicMock]) -> dict[str, set[str]]:
 def test_setup_themis_writes_each_environments_acls_and_grants_access(
     created_buckets: dict[str, dict[str, Any]],
 ):
-    config = _config()
-    root, common_gcp_infra, cloud_infras = _make_root(config)
+    root, common_gcp_infra, cloud_infras = _make_root(_config())
     root.setup_themis()
 
     assert set(created_buckets) == {'cpg-themis-dev-acls', 'cpg-themis-prod-acls'}
@@ -429,8 +325,8 @@ def test_setup_themis_writes_each_environments_acls_and_grants_access(
         assert kwargs['versioning'].enabled
 
     assert _written(common_gcp_infra) == {
-        'cpg-themis-dev-acls': _acls(config, 'dev'),
-        'cpg-themis-prod-acls': _acls(config, 'prod'),
+        'cpg-themis-dev-acls': _acls(ALL_DATASETS),
+        'cpg-themis-prod-acls': _acls(ALL_DATASETS),
     }
 
     grants = {
@@ -442,20 +338,45 @@ def test_setup_themis_writes_each_environments_acls_and_grants_access(
         ('bucket:cpg-themis-prod-acls', _sa('auth-prod'), BucketMembership.READ),
     }
 
-    # ds-c is configured, but no Themis Project lists it
+    # ds-c and ds-d are allowed, but no Project is built from them
     both = {_sa('data-dev'), _sa('data-prod')}
-    assert _data_readers(cloud_infras) == {'ds-a': both, 'ds-b': both, 'ds-c': set()}
+    assert _data_readers(cloud_infras) == {
+        'ds-a': both,
+        'ds-b': both,
+        'ds-c': set(),
+        'ds-d': set(),
+    }
+
+
+@pytest.mark.usefixtures('created_buckets')
+def test_data_service_account_reads_exactly_the_acl_files_datasets():
+    config = _config(
+        themis={
+            'dev': _settings('dev', allowed_datasets=['ds-a', 'ds-c']),
+            'prod': _settings('prod', allowed_datasets=['ds-b', 'ds-d']),
+        },
+    )
+    root, common_gcp_infra, cloud_infras = _make_root(config)
+    root.setup_themis()
+
+    readers = _data_readers(cloud_infras)
+    for bucket, acls in _written(common_gcp_infra).items():
+        environment = bucket.removeprefix('cpg-themis-').removesuffix('-acls')
+        assert {
+            dataset
+            for dataset, sas in readers.items()
+            if _sa(f'data-{environment}') in sas
+        } == set(acls['projects'])
 
 
 @pytest.mark.usefixtures('created_buckets')
 def test_environments_are_separate():
-    """A Project enabled in one environment reaches neither the other's ACL file
+    """A dataset allowed in one environment reaches neither the other's ACL file
     nor the other's data service account."""
     config = _config(
-        projects={
-            'shared': _project(['ds-a'], ['alice'], ['dev', 'prod']),
-            'dev-only': _project(['ds-c'], ['dave'], ['dev']),
-            'prod-only': _project(['ds-b'], ['bob'], ['prod']),
+        themis={
+            'dev': _settings('dev', allowed_datasets=['ds-a']),
+            'prod': _settings('prod', allowed_datasets=['ds-b']),
         },
     )
     root, common_gcp_infra, cloud_infras = _make_root(config)
@@ -463,24 +384,25 @@ def test_environments_are_separate():
 
     written = _written(common_gcp_infra)
     dev, prod = written['cpg-themis-dev-acls'], written['cpg-themis-prod-acls']
-    assert set(dev['projects']) == {'shared', 'dev-only'}
-    assert set(prod['projects']) == {'shared', 'prod-only'}
-    assert 'dave@example.com' in dev['admitted']
-    assert 'dave@example.com' not in prod['admitted']
-    assert 'bob@example.com' in prod['admitted']
-    assert 'bob@example.com' not in dev['admitted']
+    assert set(dev['projects']) == {'ds-a'}
+    assert set(prod['projects']) == {'ds-b'}
+    assert 'alice.smith@example.org' in dev['admitted']
+    assert 'alice.smith@example.org' not in prod['admitted']
+    assert 'carol@example.com' in prod['admitted']
+    assert 'carol@example.com' not in dev['admitted']
 
     assert _data_readers(cloud_infras) == {
-        'ds-a': {_sa('data-dev'), _sa('data-prod')},
+        'ds-a': {_sa('data-dev')},
         'ds-b': {_sa('data-prod')},
-        'ds-c': {_sa('data-dev')},
+        'ds-c': set(),
+        'ds-d': set(),
     }
 
 
 def test_setup_themis_is_a_no_op_without_themis_config(
     created_buckets: dict[str, dict[str, Any]],
 ):
-    root, common_gcp_infra, cloud_infras = _make_root(_config(themis={}, projects={}))
+    root, common_gcp_infra, cloud_infras = _make_root(_config(themis={}))
     root.validate_themis()
     root.setup_themis()
 
@@ -513,6 +435,16 @@ def test_unreadable_dataset_fails_before_any_resource_is_registered(
     assert not common_gcp_infra.method_calls
     for cloud_infra in cloud_infras.values():
         cast('MagicMock', cloud_infra.add_themis_data_reader).assert_not_called()
+
+
+def test_allowed_dataset_outside_the_acl_file_needs_no_themis_prerequisites():
+    """Only the datasets Themis reads must be readable by it."""
+    root, _, cloud_infras = _make_root(_config())
+    root.dataset_infrastructures['ds-c'].clouds = {}
+    cast(
+        'MagicMock', cloud_infras['ds-d'].check_themis_data_readable
+    ).side_effect = ValueError('ds-d: Themis reads')
+    root.validate_themis()
 
 
 def _dataset_cloud_infra(
@@ -600,6 +532,29 @@ def test_data_reader_needs_storage_and_metamist(extra: dict[str, Any]):
     driver = _dataset_cloud_infra(_dataset('ds-a', **extra))
     with pytest.raises(ValueError, match='ds-a: Themis reads'):
         driver.add_themis_data_reader(_sa('data-prod'), environment='prod')
+
+
+def test_themis_access_members_join_no_group():
+    """themis-access reaches a dataset only through Themis, never a Google group."""
+    driver = _dataset_cloud_infra(
+        _dataset(
+            'ds-a',
+            components={'gcp': ['storage', 'metamist']},
+            members={'themis-access': ['alice'], 'web-access': ['bob']},
+        ),
+    )
+    cast('MagicMock', driver.config).users = USERS
+    driver.setup_externally_specified_members()
+
+    groups = driver.group_provider.groups['gcp']
+    joined = {
+        email: {name for name, g in groups.items() if email in _direct_members(g)}
+        for email in ('Alice.Smith@Example.org', 'bob@example.com')
+    }
+    assert joined == {
+        'Alice.Smith@Example.org': set(),
+        'bob@example.com': {'ds-a-web-access'},
+    }
 
 
 # endregion

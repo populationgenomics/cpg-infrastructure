@@ -47,9 +47,7 @@ from cpg_infra.driver.standalone_project_infrastructure import (
 from cpg_infra.driver.themis import (
     ACLS_OBJECT_NAME,
     build_acls,
-    environment_projects,
     serialise_acls,
-    themis_datasets,
 )
 from cpg_infra.github_wif.driver import PAM_BROKER_SA_NAME
 from cpg_infra.plugin import get_plugins
@@ -73,7 +71,7 @@ if TYPE_CHECKING:
 class ResolvedThemisEnvironment(NamedTuple):
     settings: CPGInfrastructureConfig.Themis
     acls: dict[str, Any]
-    # the GCP infrastructure of each dataset the environment's Projects list
+    # the GCP infrastructure of each dataset in the ACL file
     dataset_infras: list[CPGDatasetCloudInfrastructure]
 
 
@@ -866,8 +864,8 @@ class CPGInfrastructure:
         """Per Themis environment, write its ACL file and grant its service accounts.
 
         Each environment gets its own ACL file bucket. Its auth service account
-        reads that bucket, and its data service account reads every dataset of
-        the Projects enabled in that environment, and no other.
+        reads that bucket, and its data service account reads every dataset in
+        that ACL file, and no other.
         """
         for environment, resolved in self._resolve_themis().items():
             bucket = self._create_themis_acls_bucket(environment)
@@ -927,16 +925,15 @@ class CPGInfrastructure:
         """
         resolved = {}
         for environment, settings in sorted(self.config.themis.items()):
-            projects = environment_projects(self.config.themis_projects, environment)
             acls = build_acls(
-                settings,
-                projects,
-                self.config.users,
+                settings.allowed_datasets,
                 self.dataset_configs,
+                self.config.users,
             )
 
             dataset_infras = []
-            for dataset in themis_datasets(projects, self.dataset_configs):
+            # a Project is one dataset, so these are exactly the file's datasets
+            for dataset in sorted(acls['projects']):
                 cloud_infra = self.dataset_infrastructures[dataset].clouds.get(
                     GcpInfrastructure.name(),
                 )

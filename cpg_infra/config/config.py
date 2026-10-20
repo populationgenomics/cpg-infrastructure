@@ -38,16 +38,18 @@ GroupName = Literal[
     'tmp-main-read-access',
     'external-repository-reader',
     'igv-desktop-access',
+    # who reaches the dataset through Themis; creates no group
+    'themis-access',
 ]
 
 
 # get_member_key binds anything else as a `user:` principal
 SERVICE_ACCOUNT_PATTERN = r'^[^@\s]+@[^@\s]+\.iam\.gserviceaccount\.com$'
-_SLUG = StringConstraints(pattern=r'^[a-z0-9][a-z0-9-]*$')
-# Themis stores Analyses under a Project's id, so it must be a stable slug
-ThemisProjectId = Annotated[str, _SLUG]
 # a Themis deployment, e.g. dev or prod; part of its ACL file bucket's name
-ThemisEnvironment = Annotated[str, _SLUG]
+ThemisEnvironment = Annotated[
+    str,
+    StringConstraints(pattern=r'^[a-z0-9][a-z0-9-]*$'),
+]
 
 
 def _no_duplicates(value: list[str]) -> list[str]:
@@ -339,40 +341,27 @@ class CPGInfrastructureConfig(ConfigModel):
         github_auth_token_base_url: str
 
     class Themis(ConfigModel):
-        """One Themis environment's access: the ACL file it reads, and its data grants.
+        """One Themis environment: its service accounts and the datasets it may serve.
 
         Each Themis environment reads one JSON object, its ACL file, holding
-        Themis's access control lists: who it admits, and for each Project its
-        datasets and members. Themis owns the format; the driver resolves the
-        file from these settings and the Projects enabled in the environment,
-        and writes it to a bucket in the common dataset's project.
+        Themis's access control lists: who it admits, and its Projects with their
+        members. Themis owns the format. A Themis Project is one dataset: each
+        allowed dataset whose `themis-access` member list is non-empty becomes a
+        Project with those members. The driver resolves the file from these
+        settings and the datasets' member lists, and writes it to a bucket in the
+        common dataset's project.
         """
-
-        class Project(ConfigModel):
-            # display name shown in Themis
-            name: str = Field(min_length=1)
-            # CPG datasets the Project reads
-            datasets: list[str] = Field(min_length=1)
-            # users (keys into `users`) who belong to the Project
-            members: list[MemberKey]
-            # the Themis environments whose ACL file lists the Project
-            environments: list[ThemisEnvironment] = Field(min_length=1)
-
-            @field_validator('datasets', 'members', 'environments')
-            @classmethod
-            def _no_duplicate_entries(cls, value: list[str]) -> list[str]:
-                return _no_duplicates(value)
 
         # service account that reads the ACL file
         auth_service_account: str = Field(pattern=SERVICE_ACCOUNT_PATTERN)
-        # service account that reads the datasets of every Project
+        # service account that reads the datasets in the ACL file
         data_service_account: str = Field(pattern=SERVICE_ACCOUNT_PATTERN)
-        # users (keys into `users`) admitted without belonging to any Project
-        operators: list[MemberKey]
+        # the datasets whose `themis-access` lists the ACL file is built from
+        allowed_datasets: list[str] = Field(min_length=1)
 
-        @field_validator('operators')
+        @field_validator('allowed_datasets')
         @classmethod
-        def _no_duplicate_operators(cls, value: list[str]) -> list[str]:
+        def _no_duplicate_datasets(cls, value: list[str]) -> list[str]:
             return _no_duplicates(value)
 
     class Billing(ConfigModel):
@@ -455,10 +444,6 @@ class CPGInfrastructureConfig(ConfigModel):
     billing: Billing | None = None
     # configuration options for Themis: its ACL files and its data access
     themis: dict[ThemisEnvironment, Themis] = Field(default_factory=dict)
-    # the Projects Themis serves, keyed by Project id
-    themis_projects: dict[ThemisProjectId, Themis.Project] = Field(
-        default_factory=dict,
-    )
     # list of additional adhoc groups under infrastructure management
     adhoc_groups: list[CPGInfrastructureGroup] | None = None
 
@@ -477,13 +462,7 @@ class CPGInfrastructureConfig(ConfigModel):
     )
 
     @model_validator(mode='after')
-    def _themis_projects_have_environments(self) -> 'CPGInfrastructureConfig':
-        for project_id, project in self.themis_projects.items():
-            if unknown := sorted(set(project.environments) - set(self.themis)):
-                raise ValueError(
-                    f'Themis Project {project_id!r} names environments {unknown}, '
-                    'which have no themis section',
-                )
+    def _themis_data_service_accounts_differ(self) -> 'CPGInfrastructureConfig':
         # one service account as two environments' data reader would join each
         # dataset group twice
         data_service_accounts = [t.data_service_account for t in self.themis.values()]
