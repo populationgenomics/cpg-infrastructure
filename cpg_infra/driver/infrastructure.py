@@ -709,6 +709,14 @@ class CPGInfrastructure:
             membership=SecretMembership.ACCESSOR,
         )
 
+        self.common_gcp_infra.add_secret_member(
+            'seqera-platform-config-seqera-config-resolver-accessor',
+            secret=secret,
+            project=self.config.analysis_runner.gcp.project,
+            member=self.config.analysis_runner.gcp.config_resolver_machine_account,
+            membership=SecretMembership.ACCESSOR,
+        )
+
     # dataset agnostic infrastructure
 
     def build_infrastructure_config_output(self) -> dict[str, pulumi.Output[str] | str]:
