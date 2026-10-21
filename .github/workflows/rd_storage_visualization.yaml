@@ -22,10 +22,10 @@ jobs:
 
     steps:
       # Checkout this repository (cpg-infrastructure).
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
 
       # Checkout the private repository (cpg-infrastructure-private).
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
         with:
           repository: populationgenomics/cpg-infrastructure-private
           path: cpg-infrastructure-private
@@ -33,7 +33,7 @@ jobs:
 
       - name: "Authenticate to Google Cloud"
         id: "google-cloud-auth"
-        uses: "google-github-actions/auth@v1"
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 #v3.0.0
         with:
           credentials_json: "${{ secrets.GCP_STORAGE_VISUALIZATION_CREDENTIALS }}"
           project_id: cpg-common
@@ -47,11 +47,13 @@ jobs:
       - name: "push Docker image"
         run: docker push australia-southeast1-docker.pkg.dev/cpg-common/images/storage-visualization:latest
 
-      - uses: actions/setup-python@v4
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 #v10.3.0
         with:
-          python-version: "3.11"
+          activate-environment: true
+          enable-cache: false
+          version: 0.12.9 #uv version
 
-      - run: pip install analysis-runner
+      - run: uv pip install analysis-runner
 
       - name: "Submit batch"
         # Automatically confirm to run with "full" access level.

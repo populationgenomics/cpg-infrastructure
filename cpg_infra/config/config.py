@@ -6,7 +6,7 @@ specific dataset.
 """
 
 from enum import Enum
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 import pulumi
 from pydantic import (
@@ -296,7 +296,7 @@ class CPGInfrastructureConfig(ConfigModel):
 
         class WorkspaceConfig(ConfigModel):
             workspace_id: int
-            description: Optional[str] = Field(None, max_length=1000)
+            description: str | None = Field(None, max_length=1000)
             # Secret Manager secret name holding the Seqera launch token for this
             # workspace. This is published in the analysis-runner Seqera config so the
             # analysis-runner server knows which secret to use to launch a run.

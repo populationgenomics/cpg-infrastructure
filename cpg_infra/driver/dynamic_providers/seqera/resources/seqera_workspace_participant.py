@@ -1,5 +1,5 @@
 from http import HTTPMethod, HTTPStatus
-from typing import Any, Optional
+from typing import Any
 
 import pulumi
 from pulumi.dynamic import (
@@ -151,10 +151,10 @@ class SeqeraWorkspaceParticipant(Resource):
         org_id: pulumi.Input[int],
         workspace_id: pulumi.Input[int],
         role: pulumi.Input[str],
-        email: Optional[pulumi.Input[str]] = None,
-        member_id: Optional[pulumi.Input[int]] = None,
-        team_id: Optional[pulumi.Input[int]] = None,
-        opts: Optional[pulumi.ResourceOptions] = None,
+        email: pulumi.Input[str] | None = None,
+        member_id: pulumi.Input[int] | None = None,
+        team_id: pulumi.Input[int] | None = None,
+        opts: pulumi.ResourceOptions | None = None,
     ) -> None:
         super().__init__(
             _WorkspaceParticipantProvider(),

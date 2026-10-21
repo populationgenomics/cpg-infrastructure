@@ -5,10 +5,9 @@ Group data structures: GroupMember, Group, and GroupProvider.
 
 from __future__ import annotations
 
+import graphlib
 from collections import defaultdict
 from typing import TYPE_CHECKING
-
-import graphlib
 
 from cpg_infra.config import CPGInfrastructureUser
 
@@ -167,5 +166,9 @@ class GroupProvider:
             else:
                 resolved_members.append(member)
 
-        self._cached_resolved_members[group.name] = list(set(resolved_members))
+        # GroupMember hashes by identity, so a set would order members by
+        # memory address and change the output (e.g. the metamist ETL
+        # accessor secret) on every run; dict.fromkeys keeps config order
+        resolved_members = list(dict.fromkeys(resolved_members))
+        self._cached_resolved_members[group.name] = resolved_members
         return resolved_members

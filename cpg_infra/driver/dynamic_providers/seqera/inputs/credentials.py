@@ -1,7 +1,6 @@
 """Input models for Seqera credential resources."""
 
 from dataclasses import dataclass
-from typing import Optional
 
 import pulumi
 from pydantic import BaseModel, ConfigDict, Field
@@ -21,7 +20,7 @@ class GoogleWifCredentialConfig:
 
     workload_identity_provider: pulumi.Input[str]
     service_account_email: pulumi.Input[str]
-    token_audience: Optional[pulumi.Input[str]] = None
+    token_audience: pulumi.Input[str] | None = None
 
 
 class GoogleWifCredentialArgs(BaseModel):
@@ -31,9 +30,9 @@ class GoogleWifCredentialArgs(BaseModel):
 
     workload_identity_provider: str
     service_account_email: str
-    token_audience: Optional[str] = None
-    id: Optional[str] = None
-    name: Optional[str] = Field(None, max_length=MAX_CRED_NAME_LENGTH)
+    token_audience: str | None = None
+    id: str | None = None
+    name: str | None = Field(None, max_length=MAX_CRED_NAME_LENGTH)
 
 
 class GithubCredentialArgs(BaseModel):
@@ -45,8 +44,8 @@ class GithubCredentialArgs(BaseModel):
     name: str = Field(min_length=1, max_length=MAX_CRED_NAME_LENGTH)
     username: str
     base_url: str
-    credentials_id: Optional[str] = None
+    credentials_id: str | None = None
 
     # Additional properties to support token rotation
     access_token_secret_name: str
-    resolved_secret_version: Optional[str] = None
+    resolved_secret_version: str | None = None

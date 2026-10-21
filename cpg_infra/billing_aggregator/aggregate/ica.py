@@ -24,7 +24,6 @@ from io import StringIO
 from typing import (
     Any,
     Literal,
-    Optional,
 )
 
 import aiohttp
@@ -270,7 +269,7 @@ async def get_jwt_token(
         )
         return resp.get('token')
 
-    except asyncio.TimeoutError as ex:
+    except TimeoutError as ex:
         e = ex
 
     raise e
@@ -319,7 +318,7 @@ async def get_csv_data(
         # export df to JSON string and reload as JSON
         return json.loads(df.to_json(orient='records', date_format='iso'))
 
-    except asyncio.TimeoutError as ex:
+    except TimeoutError as ex:
         e = ex
 
     raise e
@@ -331,8 +330,8 @@ async def get_csv_data(
 
 
 async def main(
-    start: Optional[datetime] = None,
-    end: Optional[datetime] = None,
+    start: datetime | None = None,
+    end: datetime | None = None,
 ) -> dict:
     """Main body function"""
     s, e = utils.process_default_start_and_end(start, end, timedelta(days=7))
