@@ -209,7 +209,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
             service_account_email=service_account,
         )
 
-        function = gcp.cloudfunctionsv2.Function(
+        _ = gcp.cloudfunctionsv2.Function(
             'gcp-cost-control',
             location=location,
             service_config=service_config,
@@ -221,8 +221,6 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 service_account_email=service_account,
             ),
         )
-
-        pulumi.export('gcp_cost_control_cloud_function', function)
 
     def setup_gcp_cost_reporting(self):
         """
@@ -272,7 +270,7 @@ class BillingAggregator(CpgInfrastructurePlugin):
         )
 
         # Create Cloud Scheduler job
-        cron_job = gcp.cloudscheduler.Job(
+        _ = gcp.cloudscheduler.Job(
             'gcp-cost-reporting-job',
             project=project_id,
             region=region,
@@ -292,9 +290,6 @@ class BillingAggregator(CpgInfrastructurePlugin):
             ),
             opts=pulumi.ResourceOptions(depends_on=[self.scheduler_service]),
         )
-
-        pulumi.export('gcp_cost_reporting_cloud_function', function)
-        pulumi.export('gcp_cost_reporting_cloud_scheduler_job', cron_job)
 
     def setup_aggregator_functions(self):
         """Setup hourly aggregator functions"""
