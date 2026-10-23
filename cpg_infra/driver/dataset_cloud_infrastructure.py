@@ -1916,6 +1916,19 @@ class CPGDatasetCloudInfrastructure:
                     permissions=METAMIST_PERMISSIONS,
                 ),
             )
+            # allow the analysis-runner config resolver to read and update the analysis-runner entries
+            sm_access_levels.append(
+                SampleMetadataAccessorMembership(
+                    name='analysis-runner-seqera-config-resolver',
+                    member=self.config.analysis_runner.gcp.config_resolver_machine_account,
+                    permissions=(
+                        SM_TEST_READ,
+                        SM_TEST_WRITE,
+                        SM_MAIN_READ,
+                        SM_MAIN_WRITE,
+                    ),
+                ),
+            )
 
         # extra custom SAs
         extra_sm_read_sas = self.dataset_config.sm_read_only_sas

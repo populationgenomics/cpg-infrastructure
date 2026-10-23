@@ -206,6 +206,7 @@ class CPGInfrastructureConfig(ConfigModel):
             server_machine_account: str
             logger_machine_account: str
             container_registry_name: str
+            config_resolver_machine_account: str
             dev_server_machine_account: str | None = None
 
         gcp: GCP
