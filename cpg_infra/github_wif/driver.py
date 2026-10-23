@@ -3,7 +3,8 @@
 GitHub Workload Identity Federation (WIF) setup for Pulumi
 
 This module provides functionality to set up GitHub repositories with
-GCP Workload Identity Federation for OIDC authentication and Artifact Registry access.
+GCP Workload Identity Federation for OIDC authentication, Artifact Registry access
+and project-level role grants.
 
 It also includes PAM broker service account setup for Privileged Access Manager.
 """
@@ -37,8 +38,9 @@ class GitHubWIFEnvironment(ConfigModel):
     """Configuration for a single GitHub environment (e.g., development, production)."""
 
     name: str
-    push_registry: str
+    push_registry: str | None = None
     read_registries: list[str] = Field(default_factory=list)
+    project_roles: list[str] = Field(default_factory=list)
 
 
 class GitHubWIFRepository(ConfigModel):
@@ -361,6 +363,34 @@ def grant_artifact_registry_access(
     )
 
 
+def grant_project_role(
+    resource_key: str,
+    service_account: gcp.serviceaccount.Account,
+    project_id: str,
+    role: str,
+) -> gcp.projects.IAMMember:
+    """
+    Grant a project-level role to a service account.
+
+    Args:
+        resource_key: Unique resource key for Pulumi
+        service_account: Service account to grant the role to
+        project_id: GCP project ID
+        role: Role to grant (e.g. 'roles/run.developer')
+
+    Returns:
+        IAM member binding
+    """
+    member = pulumi.Output.concat('serviceAccount:', service_account.email)
+
+    return gcp.projects.IAMMember(
+        resource_key,
+        project=project_id,
+        role=role,
+        member=member,
+    )
+
+
 def manage_github_secrets(
     github_repo: str,
     environment: str,
@@ -438,7 +468,7 @@ def manage_github_secrets(
 
 
 def setup_github_wif_infrastructure(
-    config: GitHubWIFConfig | dict[str, Any],
+    pipeline_config: GitHubWIFConfig | dict[str, Any],
 ) -> dict[str, Any]:
     """
     Main function to set up GitHub WIF infrastructure from parsed config.
@@ -450,8 +480,9 @@ def setup_github_wif_infrastructure(
         Empty dictionary (for backwards compatibility)
     """
     # Allow passing dict for backwards compatibility, but convert to typed config
+    print(GitHubWIFConfig.model_validate(pipeline_config) if isinstance(pipeline_config, dict) else pipeline_config)
     wif_config = (
-        GitHubWIFConfig.model_validate(config) if isinstance(config, dict) else config
+        GitHubWIFConfig.model_validate(pipeline_config) if isinstance(pipeline_config, dict) else pipeline_config
     )
 
     for project_id, project_config in wif_config.projects.items():
@@ -474,6 +505,7 @@ def setup_github_wif_infrastructure(
                 env_name = env_config.name
                 push_registry = env_config.push_registry
                 read_registries = env_config.read_registries
+                project_roles = env_config.project_roles
 
                 # Create service account
                 sa = create_github_service_account(
@@ -493,14 +525,15 @@ def setup_github_wif_infrastructure(
                 )
 
                 # Grant write access to push registry
-                grant_artifact_registry_access(
-                    f'{project_id}-{repo_name}-{env_name}-{push_registry}-write',
-                    sa,
-                    project_id,
-                    location,
-                    push_registry,
-                    'write',
-                )
+                if push_registry:
+                    grant_artifact_registry_access(
+                        f'{project_id}-{repo_name}-{env_name}-{push_registry}-write',
+                        sa,
+                        project_id,
+                        location,
+                        push_registry,
+                        'write',
+                    )
 
                 # Grant read access to any read registries
                 for idx, read_registry in enumerate(read_registries):
@@ -511,6 +544,15 @@ def setup_github_wif_infrastructure(
                         location,
                         read_registry,
                         'read',
+                    )
+
+                # Grant project-level roles
+                for role in env_config.project_roles:
+                    grant_project_role(
+                        f'{project_id}-{repo_name}-{env_name}-{role.removeprefix("roles/")}',
+                        sa,
+                        project_id,
+                        role,
                     )
 
                 # Manage GitHub Secrets
