@@ -66,8 +66,9 @@ include-package-data = true
 include = ["cpg_infra*"]
 
 [tool.setuptools.package-data]
-# read off disk by utils.archive_folder() to build the Cloud Function AssetArchives,
-# and by Cloud Build for the billing aggregator image
+# read off disk by utils.archive_folder() to zip the remaining Cloud Functions
+# (gcp-cost-control, gcp-cost-reporting), and by Cloud Build for the billing
+# aggregator image
 "cpg_infra" = ["**/*.txt", "**/*.json", "**/Dockerfile"]
 
 [tool.ruff]
