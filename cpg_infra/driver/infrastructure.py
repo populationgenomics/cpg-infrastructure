@@ -710,7 +710,7 @@ class CPGInfrastructure:
         )
 
         self.common_gcp_infra.add_secret_member(
-            'seqera-platform-config-seqera-config-resolver-accessor',
+            'seqera-platform-config-resolver-accessor',
             secret=secret,
             project=self.config.analysis_runner.gcp.project,
             member=self.config.analysis_runner.gcp.config_resolver_machine_account,
