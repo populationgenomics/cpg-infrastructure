@@ -10,7 +10,7 @@ import json
 import os.path
 from collections import defaultdict
 from functools import cached_property
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import pulumi
 import pulumi_gcp as gcp
@@ -44,6 +44,11 @@ from cpg_infra.driver.groups import GroupMember, GroupProvider
 from cpg_infra.driver.standalone_project_infrastructure import (
     CPGStandaloneProjectInfrastructure,
 )
+from cpg_infra.driver.themis import (
+    ACLS_OBJECT_NAME,
+    build_acls,
+    serialise_acls,
+)
 from cpg_infra.github_wif.driver import PAM_BROKER_SA_NAME
 from cpg_infra.plugin import get_plugins
 
@@ -61,6 +66,17 @@ if TYPE_CHECKING:
         CPGDatasetCloudInfrastructure,
     )
     from cpg_infra.driver.groups import Group
+
+
+MAX_BUCKET_NAME_LENGTH = 63
+
+
+class ResolvedThemisEnvironment(NamedTuple):
+    settings: CPGInfrastructureConfig.Themis
+    bucket_name: str
+    acls: dict[str, Any]
+    # the GCP infrastructure of each dataset in the ACL file
+    dataset_infras: list[CPGDatasetCloudInfrastructure]
 
 
 def get_formatted_ws_name(is_test: bool, team: str) -> str:
@@ -174,6 +190,10 @@ class CPGInfrastructure:
         self.setup_datasets()
         self.setup_standalone_projects()
 
+        # Fail on bad Themis config before any resource is registered, as pulumi
+        # starts applying resources while the program still runs
+        self.validate_themis()
+
         # create a bucket and attach accessor members to it. The bucket itself is
         # created by accessing the property `self.gcp_members_cache_bucket`
         # This will also have the side effect of creating a cloud resource manager and
@@ -202,6 +222,10 @@ class CPGInfrastructure:
 
         # Deploy managed adhoc assets that are not associated with datasets.
         self.deploy_adhoc()
+
+        # Write the Themis ACL files and grant Themis's service accounts access.
+        # Adds group members, so must run before finalize_groups.
+        self.setup_themis()
 
         plugins = get_plugins()
         initialised_plugins = []
@@ -837,6 +861,116 @@ class CPGInfrastructure:
             )
 
     # endregion ACCESS_CACHE
+
+    # region THEMIS
+
+    def setup_themis(self):
+        """Per Themis environment, write its ACL file and grant its service accounts.
+
+        Each environment gets its own ACL file bucket. Its auth service account
+        reads that bucket, and its data service account reads every dataset in
+        that ACL file, and no other.
+        """
+        for environment, resolved in self._resolve_themis().items():
+            bucket = self._create_themis_acls_bucket(resolved.bucket_name)
+            self.common_gcp_infra.add_blob_to_bucket(
+                f'themis-{environment}-acls-blob',
+                bucket=bucket,
+                contents=serialise_acls(resolved.acls),
+                output_name=ACLS_OBJECT_NAME,
+            )
+            self.common_gcp_infra.add_member_to_bucket(
+                f'themis-{environment}-auth-acls-reader',
+                bucket=bucket,
+                member=resolved.settings.auth_service_account,
+                membership=BucketMembership.READ,
+            )
+
+            for cloud_infra in resolved.dataset_infras:
+                cloud_infra.add_themis_data_reader(
+                    resolved.settings.data_service_account,
+                    environment=environment,
+                )
+
+    def _create_themis_acls_bucket(self, name: str) -> gcp.storage.Bucket:
+        """A private, versioned bucket in the common project for one ACL file.
+
+        Built directly, like the other one-off resources in this class, because
+        create_bucket leaves public access prevention to organisation policy.
+        The other settings match what create_bucket gives the members cache.
+        """
+        infra = self.common_gcp_infra
+        return gcp.storage.Bucket(
+            infra.get_pulumi_name(name + '-bucket'),
+            name=name,
+            location=infra.region,
+            uniform_bucket_level_access=True,
+            public_access_prevention='enforced',
+            versioning=gcp.storage.BucketVersioningArgs(enabled=True),
+            labels={'bucket': name},
+            lifecycle_rules=[infra.bucket_rule_abort_incomplete_multipart_upload()],
+            project=infra.project_id,
+        )
+
+    def validate_themis(self):
+        """Raise on Themis config that setup_themis cannot honour."""
+        self._resolve_themis()
+
+    def _resolve_themis(self) -> dict[str, ResolvedThemisEnvironment]:
+        """Each Themis environment's ACLs and the datasets it reads.
+
+        Registers no resources, and raises on anything setup_themis would
+        otherwise fail on part way.
+        """
+        if not self.config.themis:
+            return {}
+        gcp_config = self.config.gcp
+        if gcp_config is None:
+            raise ValueError('Themis ACL files live in GCS, which needs the gcp config')
+
+        resolved = {}
+        for environment, settings in sorted(self.config.themis.items()):
+            bucket_name = (
+                f'{gcp_config.dataset_storage_prefix}themis-{environment}-acls'
+            )
+            # the name is also the bucket's label value, which has the same limit
+            if len(bucket_name) > MAX_BUCKET_NAME_LENGTH:
+                raise ValueError(
+                    f'Themis environment {environment!r} makes the ACL file bucket '
+                    f'name {bucket_name!r} longer than {MAX_BUCKET_NAME_LENGTH} '
+                    'characters',
+                )
+
+            acls = build_acls(
+                settings.allowed_datasets,
+                self.dataset_configs,
+                self.config.users,
+            )
+
+            dataset_infras = []
+            # a Project is one dataset, so these are exactly the file's datasets
+            for dataset in sorted(acls['projects']):
+                cloud_infra = self.dataset_infrastructures[dataset].clouds.get(
+                    GcpInfrastructure.name(),
+                )
+                if cloud_infra is None:
+                    raise ValueError(
+                        f'Themis reads dataset {dataset!r}, which has no '
+                        f'{GcpInfrastructure.name()!r} deploy location',
+                    )
+                cloud_infra.check_themis_data_readable()
+                dataset_infras.append(cloud_infra)
+
+            resolved[environment] = ResolvedThemisEnvironment(
+                settings=settings,
+                bucket_name=bucket_name,
+                acls=acls,
+                dataset_infras=dataset_infras,
+            )
+
+        return resolved
+
+    # endregion THEMIS
 
     @cached_property
     def config_viewer_group(self):

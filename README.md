@@ -92,6 +92,19 @@ To do this:
 - a user config must have `can_access_internal_dataset_logs = True`, and
 - the dataset config must have `is_internal_dataset = True`.
 
+### Themis ACL files
+
+[Themis](https://github.com/populationgenomics/themis) learns which Projects each person belongs to from one JSON object called the ACL file. It holds Themis's access control lists: `projects` maps each Project's id to the emails of the people in its two roles, as in `{"format": 1, "projects": {"<dataset>": {"managers": ["<email>", ...], "curators": ["<email>", ...]}}}`. Themis owns the format. A Themis Project is one dataset, and its id is the dataset's name. A person may hold both roles.
+
+Each Themis environment (for example `dev` and `prod`) has its own ACL file. `CPGInfrastructureConfig.themis` maps each environment to its two service accounts and its `allowed_datasets`, the datasets the environment may serve. A dataset's `themis-manager` and `themis-curator` member lists say who holds each role on its Project; neither creates a group. For each environment, `CPGInfrastructure.setup_themis`:
+
+- resolves the ACL file: every allowed dataset where either list is non-empty becomes a Project, mapping the dataset's name to `managers` and `curators`, each the sorted lowercase emails of the users on the matching list (both keys are always present, and one may be empty),
+- writes it as `acls.json` to the versioned bucket `<dataset_storage_prefix>themis-<environment>-acls` in the common dataset's project,
+- gives the environment's auth service account read on that bucket, and
+- adds the environment's data service account to the `external-repository-reader` and `sample-metadata-main-read` groups of each dataset in that ACL file and no other. Those are the narrowest existing groups that read the main bucket and the main metamist project.
+
+Environment names must be slugs short enough that the bucket name stays within GCS's 63 characters, because they name a bucket. Themis roles are for people: a service account on either list fails the deploy, as do an allowed dataset that is not configured, an unknown user key or one without a Google account, and a dataset in the ACL file that lacks the storage and metamist components. All of these fail before any resource is created. An environment where no allowed dataset has Themis role members gets an ACL file with no Projects.
+
 ## Infrastructure
 
 ### Dataset infrastructure
@@ -124,6 +137,8 @@ Members have different roles within a dataset, those roles include:
 - external-repository-reader
   - Read access to data in main. This is distinct from the `data-manager` role as it only grants read access to main and no additional access to any other buckets or services.
   - Developed to support Terra Data Repository service account access to self-hosted production data in CPG buckets. Do not assign this role to a human user.
+- themis-manager, themis-curator
+  - The manager and curator roles on the dataset's Themis Project, in each Themis environment that allows the dataset (see [Themis ACL files](#themis-acl-files)). Neither creates a group, so they grant no access outside Themis.
 
 ## Setup
 

@@ -6,14 +6,17 @@ specific dataset.
 """
 
 from enum import Enum
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import pulumi
 from pydantic import (
     AliasGenerator,
     ConfigDict,
     Field,
+    StringConstraints,
     field_serializer,
+    field_validator,
+    model_validator,
 )
 from pydantic.alias_generators import to_camel
 
@@ -35,7 +38,25 @@ GroupName = Literal[
     'tmp-main-read-access',
     'external-repository-reader',
     'igv-desktop-access',
+    # the dataset's Themis Project roles; neither creates a group
+    'themis-manager',
+    'themis-curator',
 ]
+
+
+# get_member_key binds anything else as a `user:` principal
+SERVICE_ACCOUNT_PATTERN = r'^[^@\s]+@[^@\s]+\.iam\.gserviceaccount\.com$'
+# a Themis deployment, e.g. dev or prod; part of its ACL file bucket's name
+ThemisEnvironment = Annotated[
+    str,
+    StringConstraints(pattern=r'^[a-z0-9][a-z0-9-]*$'),
+]
+
+
+def _no_duplicates(value: list[str]) -> list[str]:
+    if len(set(value)) != len(value):
+        raise ValueError(f'duplicate entries in {value}')
+    return value
 
 
 class CPGInfrastructureUser(ConfigModel):
@@ -320,6 +341,30 @@ class CPGInfrastructureConfig(ConfigModel):
         github_auth_token_username: str
         github_auth_token_base_url: str
 
+    class Themis(ConfigModel):
+        """One Themis environment: its service accounts and the datasets it may serve.
+
+        Each Themis environment reads one JSON object, its ACL file, holding
+        Themis's access control lists: its Projects with the people in each
+        role. Themis owns the format. A Themis Project is one dataset: each
+        allowed dataset whose `themis-manager` or `themis-curator` member list
+        is non-empty becomes a Project with those managers and curators. The
+        driver resolves the file from these settings and the datasets' member
+        lists, and writes it to a bucket in the common dataset's project.
+        """
+
+        # service account that reads the ACL file
+        auth_service_account: str = Field(pattern=SERVICE_ACCOUNT_PATTERN)
+        # service account that reads the datasets in the ACL file
+        data_service_account: str = Field(pattern=SERVICE_ACCOUNT_PATTERN)
+        # the datasets whose Themis role lists the ACL file is built from
+        allowed_datasets: list[str] = Field(min_length=1)
+
+        @field_validator('allowed_datasets')
+        @classmethod
+        def _no_duplicate_datasets(cls, value: list[str]) -> list[str]:
+            return _no_duplicates(value)
+
     class Billing(ConfigModel):
         class GCP(ConfigModel):
             """Details of the BILLING account"""
@@ -398,6 +443,8 @@ class CPGInfrastructureConfig(ConfigModel):
     seqera: Seqera | None = None
     # configuration options for billing + billing aggregation
     billing: Billing | None = None
+    # configuration options for Themis: its ACL files and its data access
+    themis: dict[ThemisEnvironment, Themis] = Field(default_factory=dict)
     # list of additional adhoc groups under infrastructure management
     adhoc_groups: list[CPGInfrastructureGroup] | None = None
 
@@ -414,6 +461,17 @@ class CPGInfrastructureConfig(ConfigModel):
     budget_notification_thresholds: list[float] = Field(
         default_factory=lambda: [0.5, 0.9, 1.0],
     )
+
+    @model_validator(mode='after')
+    def _themis_data_service_accounts_differ(self) -> 'CPGInfrastructureConfig':
+        # one service account as two environments' data reader would join each
+        # dataset group twice
+        data_service_accounts = [t.data_service_account for t in self.themis.values()]
+        if len(set(data_service_accounts)) != len(data_service_accounts):
+            raise ValueError(
+                'Themis environments must not share a data service account'
+            )
+        return self
 
 
 class DataprocAutoscalingPolicySpec(ConfigModel):
