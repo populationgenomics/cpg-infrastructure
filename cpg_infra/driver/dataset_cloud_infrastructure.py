@@ -1947,7 +1947,7 @@ class CPGDatasetCloudInfrastructure:
         environment: str,
         namespace: ThemisNamespace,
     ):
-        """Give a Themis environment's data service account read of one namespace.
+        """Give a Themis environment's sandbox service account read of one namespace.
 
         main: the two narrowest existing groups that cover this.
         external-repository-reader reads the main bucket and nothing else, and
@@ -1965,13 +1965,13 @@ class CPGDatasetCloudInfrastructure:
         if namespace == 'main':
             self.external_repository_reader_group.add_member(
                 self.infra.get_pulumi_name(
-                    f'themis-{environment}-data-in-external-repository-reader',
+                    f'themis-{environment}-sandbox-in-external-repository-reader',
                 ),
                 member=member,
             )
         else:
             self.infra.add_member_to_bucket(
-                f'themis-{environment}-data-test-bucket-read',
+                f'themis-{environment}-sandbox-test-bucket-read',
                 bucket=self.test_bucket,
                 member=member,
                 membership=BucketMembership.READ,
@@ -1980,7 +1980,7 @@ class CPGDatasetCloudInfrastructure:
         metamist_read = SM_MAIN_READ if namespace == 'main' else SM_TEST_READ
         self.metamist_groups[metamist_read].add_member(
             self.infra.get_pulumi_name(
-                f'themis-{environment}-data-in-sample-metadata-{metamist_read}',
+                f'themis-{environment}-sandbox-in-sample-metadata-{metamist_read}',
             ),
             member=member,
         )

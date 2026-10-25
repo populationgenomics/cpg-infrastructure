@@ -86,7 +86,7 @@ ALL_DATASETS = sorted(DATASETS)
 def _settings(environment: str, **overrides: Any) -> dict[str, Any]:
     return {
         'auth_service_account': _sa(f'auth-{environment}'),
-        'data_service_account': _sa(f'data-{environment}'),
+        'sandbox_service_account': _sa(f'sandbox-{environment}'),
         'namespace': 'test' if environment == 'dev' else 'main',
         'allowed_datasets': ALL_DATASETS,
         **overrides,
@@ -147,7 +147,7 @@ def test_environment_must_be_a_slug(environment: str):
     [
         ({'auth_service_account': 'someone@example.com'}, 'string_pattern'),
         (
-            {'data_service_account': 'data@project.iam.gserviceaccount.com.evil'},
+            {'sandbox_service_account': 'sandbox@project.iam.gserviceaccount.com.evil'},
             'string_pattern',
         ),
         ({'allowed_datasets': []}, 'too_short'),
@@ -177,9 +177,9 @@ def test_settings_without_a_default_are_required(field: str):
         _config(themis={'prod': settings})
 
 
-def test_environments_may_not_share_a_data_service_account():
-    shared = {'data_service_account': _sa('data')}
-    with pytest.raises(ValidationError, match='share a data service account'):
+def test_environments_may_not_share_a_sandbox_service_account():
+    shared = {'sandbox_service_account': _sa('sandbox')}
+    with pytest.raises(ValidationError, match='share a sandbox service account'):
         _config(
             themis={
                 'dev': _settings('dev', **shared),
@@ -370,27 +370,27 @@ def test_setup_themis_writes_each_environments_acls_and_grants_access(
     }
 
     # ds-c and ds-d are allowed, but no Project is built from them
-    both = {_sa('data-dev'), _sa('data-prod')}
+    both = {_sa('sandbox-dev'), _sa('sandbox-prod')}
     assert _data_readers(cloud_infras) == {
         'ds-a': both,
         'ds-b': both,
         'ds-c': set(),
         'ds-d': set(),
     }
-    # each environment's data service account reads its own namespace
+    # each environment's sandbox service account reads its own namespace
     namespaces = {
         (call.args[0], call.kwargs['environment'], call.kwargs['namespace'])
         for cloud_infra in cloud_infras.values()
         for call in cast('MagicMock', cloud_infra.add_themis_data_reader).call_args_list
     }
     assert namespaces == {
-        (_sa('data-dev'), 'dev', 'test'),
-        (_sa('data-prod'), 'prod', 'main'),
+        (_sa('sandbox-dev'), 'dev', 'test'),
+        (_sa('sandbox-prod'), 'prod', 'main'),
     }
 
 
 @pytest.mark.usefixtures('created_buckets')
-def test_data_service_account_reads_exactly_the_acl_files_datasets():
+def test_sandbox_service_account_reads_exactly_the_acl_files_datasets():
     config = _config(
         themis={
             'dev': _settings('dev', allowed_datasets=['ds-a', 'ds-c']),
@@ -406,14 +406,14 @@ def test_data_service_account_reads_exactly_the_acl_files_datasets():
         assert {
             dataset
             for dataset, sas in readers.items()
-            if _sa(f'data-{environment}') in sas
+            if _sa(f'sandbox-{environment}') in sas
         } == set(acls['projects'])
 
 
 @pytest.mark.usefixtures('created_buckets')
 def test_environments_are_separate():
     """A dataset allowed in one environment reaches neither the other's ACL file
-    nor the other's data service account."""
+    nor the other's sandbox service account."""
     config = _config(
         themis={
             'dev': _settings('dev', allowed_datasets=['ds-a']),
@@ -439,8 +439,8 @@ def test_environments_are_separate():
     }
 
     assert _data_readers(cloud_infras) == {
-        'ds-a': {_sa('data-dev')},
-        'ds-b': {_sa('data-prod')},
+        'ds-a': {_sa('sandbox-dev')},
+        'ds-b': {_sa('sandbox-prod')},
         'ds-c': set(),
         'ds-d': set(),
     }
@@ -555,13 +555,15 @@ def test_data_reader_joins_only_its_namespaces_read_groups(
     driver = _dataset_cloud_infra(
         _dataset('ds-a', components={'gcp': ['storage', 'metamist']}),
     )
-    driver.add_themis_data_reader(_sa('data-x'), environment='x', namespace=namespace)
+    driver.add_themis_data_reader(
+        _sa('sandbox-x'), environment='x', namespace=namespace
+    )
 
     provider_groups = driver.group_provider.groups['gcp']
     joined = {
         name
         for name, g in provider_groups.items()
-        if _sa('data-x') in _direct_members(g)
+        if _sa('sandbox-x') in _direct_members(g)
     }
     assert joined == groups
 
@@ -614,9 +616,9 @@ def test_data_reader_reads_its_namespaces_bucket_and_may_invoke_metamist(
     provider = driver.group_provider
     invokers = provider.create_group(driver.infra, 'invokers', cache_members=False)
     cast('MagicMock', driver.root).gcp_metamist_invoker_group = invokers
-    data_sa = _sa('data-x')
+    sandbox_sa = _sa('sandbox-x')
 
-    driver.add_themis_data_reader(data_sa, environment='x', namespace=namespace)
+    driver.add_themis_data_reader(sandbox_sa, environment='x', namespace=namespace)
     driver.setup_storage_main_bucket_permissions()
     driver.setup_storage_test_buckets_permissions()
     driver.setup_metamist_cloudrun_permissions()
@@ -628,7 +630,7 @@ def test_data_reader_reads_its_namespaces_bucket_and_may_invoke_metamist(
         'test-tmp': driver.test_tmp_bucket,
     }
     read = {
-        name for name, b in buckets.items() if data_sa in _bucket_readers(driver, b)
+        name for name, b in buckets.items() if sandbox_sa in _bucket_readers(driver, b)
     }
     assert read == {bucket_name}
     # update_metamist_members sends this group's members as the project's readers
@@ -636,10 +638,10 @@ def test_data_reader_reads_its_namespaces_bucket_and_may_invoke_metamist(
         kind: {m.cloud_id for m in provider.resolve_group_members(group)}
         for kind, group in driver.metamist_groups.items()
     }
-    assert {kind for kind, members in resolved.items() if data_sa in members} == {
+    assert {kind for kind, members in resolved.items() if sandbox_sa in members} == {
         metamist_read,
     }
-    assert data_sa in {m.cloud_id for m in provider.resolve_group_members(invokers)}
+    assert sandbox_sa in {m.cloud_id for m in provider.resolve_group_members(invokers)}
 
 
 @pytest.mark.parametrize(
@@ -672,7 +674,7 @@ def test_data_reader_needs_its_namespaces_storage_and_metamist(
         ValueError, match=f'ds-a: Themis reads its {namespace} .*{missing}'
     ):
         driver.add_themis_data_reader(
-            _sa('data-x'), environment='x', namespace=namespace
+            _sa('sandbox-x'), environment='x', namespace=namespace
         )
 
 

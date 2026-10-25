@@ -868,7 +868,7 @@ class CPGInfrastructure:
         """Per Themis environment, write its ACL file and grant its service accounts.
 
         Each environment gets its own ACL file bucket. Its auth service account
-        reads that bucket, and its data service account reads the environment's
+        reads that bucket, and its sandbox service account reads the environment's
         namespace of every dataset in that ACL file, and no other.
         """
         for environment, resolved in self._resolve_themis().items():
@@ -888,7 +888,7 @@ class CPGInfrastructure:
 
             for cloud_infra in resolved.dataset_infras:
                 cloud_infra.add_themis_data_reader(
-                    resolved.settings.data_service_account,
+                    resolved.settings.sandbox_service_account,
                     environment=environment,
                     namespace=resolved.settings.namespace,
                 )

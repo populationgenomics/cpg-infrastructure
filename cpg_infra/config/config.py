@@ -51,7 +51,7 @@ ThemisEnvironment = Annotated[
     str,
     StringConstraints(pattern=r'^[a-z0-9][a-z0-9-]*$'),
 ]
-# the dataset namespace a Themis environment's data service account reads
+# the dataset namespace a Themis environment's sandbox service account reads
 ThemisNamespace = Literal['main', 'test']
 
 
@@ -357,8 +357,9 @@ class CPGInfrastructureConfig(ConfigModel):
 
         # service account that reads the ACL file
         auth_service_account: str = Field(pattern=SERVICE_ACCOUNT_PATTERN)
-        # service account that reads the datasets in the ACL file
-        data_service_account: str = Field(pattern=SERVICE_ACCOUNT_PATTERN)
+        # Themis's sandbox job account: reads the datasets in the ACL file and
+        # mounts their files into the agent's sandbox
+        sandbox_service_account: str = Field(pattern=SERVICE_ACCOUNT_PATTERN)
         # which namespace of those datasets it reads
         namespace: ThemisNamespace
         # the datasets whose Themis role lists the ACL file is built from
@@ -467,13 +468,15 @@ class CPGInfrastructureConfig(ConfigModel):
     )
 
     @model_validator(mode='after')
-    def _themis_data_service_accounts_differ(self) -> 'CPGInfrastructureConfig':
-        # one service account as two environments' data reader would join each
+    def _themis_sandbox_service_accounts_differ(self) -> 'CPGInfrastructureConfig':
+        # one service account as two environments' dataset reader would join each
         # dataset group twice
-        data_service_accounts = [t.data_service_account for t in self.themis.values()]
-        if len(set(data_service_accounts)) != len(data_service_accounts):
+        sandbox_service_accounts = [
+            t.sandbox_service_account for t in self.themis.values()
+        ]
+        if len(set(sandbox_service_accounts)) != len(sandbox_service_accounts):
             raise ValueError(
-                'Themis environments must not share a data service account'
+                'Themis environments must not share a sandbox service account'
             )
         return self
 
