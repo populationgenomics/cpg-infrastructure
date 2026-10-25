@@ -51,6 +51,8 @@ ThemisEnvironment = Annotated[
     str,
     StringConstraints(pattern=r'^[a-z0-9][a-z0-9-]*$'),
 ]
+# the dataset namespace a Themis environment's data service account reads
+ThemisNamespace = Literal['main', 'test']
 
 
 def _no_duplicates(value: list[str]) -> list[str]:
@@ -357,6 +359,8 @@ class CPGInfrastructureConfig(ConfigModel):
         auth_service_account: str = Field(pattern=SERVICE_ACCOUNT_PATTERN)
         # service account that reads the datasets in the ACL file
         data_service_account: str = Field(pattern=SERVICE_ACCOUNT_PATTERN)
+        # which namespace of those datasets it reads
+        namespace: ThemisNamespace
         # the datasets whose Themis role lists the ACL file is built from
         allowed_datasets: list[str] = Field(min_length=1)
 

@@ -37,6 +37,7 @@ from cpg_infra.config import (
     CPGInfrastructureConfig,
     HailAccount,
     SeqeraAccount,
+    ThemisNamespace,
 )
 from cpg_infra.driver.constants import (
     IGV_DESKTOP_ACCESS,
@@ -1923,39 +1924,63 @@ class CPGDatasetCloudInfrastructure:
     # endregion SAMPLE METADATA
     # region THEMIS
 
-    def check_themis_data_readable(self):
-        """Raise unless add_themis_data_reader can grant read on this dataset."""
-        if not (
-            self.should_setup_storage
-            and self.should_setup_metamist
-            and self.dataset_config.enable_metamist_project
-        ):
+    def check_themis_data_readable(self, namespace: ThemisNamespace):
+        """Raise unless add_themis_data_reader can grant read on `namespace`."""
+        needs = {
+            'the storage component': self.should_setup_storage,
+            'the metamist component': self.should_setup_metamist,
+            'enable_metamist_project': self.dataset_config.enable_metamist_project,
+        }
+        if namespace == 'test':
+            needs['setup_test'] = self.dataset_config.setup_test
+        if missing := [need for need, present in needs.items() if not present]:
             raise ValueError(
-                f'{self.dataset_config.dataset}: Themis reads the main bucket and '
-                'the main metamist project, so a dataset in a Themis ACL file '
-                'needs the storage and metamist components and '
-                'enable_metamist_project',
+                f'{self.dataset_config.dataset}: Themis reads its {namespace} '
+                f'bucket and {namespace} metamist project, which needs '
+                f'{", ".join(missing)}',
             )
 
-    def add_themis_data_reader(self, member: str, *, environment: str):
-        """Give a Themis environment's data service account read of main data.
+    def add_themis_data_reader(
+        self,
+        member: str,
+        *,
+        environment: str,
+        namespace: ThemisNamespace,
+    ):
+        """Give a Themis environment's data service account read of one namespace.
 
-        Adds it to the two narrowest existing groups that cover this:
+        main: the two narrowest existing groups that cover this.
         external-repository-reader reads the main bucket and nothing else, and
         sample-metadata-main-read reads the main metamist project and nothing
         else (it is also among the metamist Cloud Run invokers).
-        """
-        self.check_themis_data_readable()
 
-        self.external_repository_reader_group.add_member(
+        test: sample-metadata-test-read is the test counterpart of
+        sample-metadata-main-read. No group reads the test bucket alone (test-read
+        also reads the other test buckets and the main metamist project, writes
+        the test metamist project, and joins the common dataset's test-read), so
+        the account is bound to the test bucket directly.
+        """
+        self.check_themis_data_readable(namespace)
+
+        if namespace == 'main':
+            self.external_repository_reader_group.add_member(
+                self.infra.get_pulumi_name(
+                    f'themis-{environment}-data-in-external-repository-reader',
+                ),
+                member=member,
+            )
+        else:
+            self.infra.add_member_to_bucket(
+                f'themis-{environment}-data-test-bucket-read',
+                bucket=self.test_bucket,
+                member=member,
+                membership=BucketMembership.READ,
+            )
+
+        metamist_read = SM_MAIN_READ if namespace == 'main' else SM_TEST_READ
+        self.metamist_groups[metamist_read].add_member(
             self.infra.get_pulumi_name(
-                f'themis-{environment}-data-in-external-repository-reader',
-            ),
-            member=member,
-        )
-        self.metamist_groups[SM_MAIN_READ].add_member(
-            self.infra.get_pulumi_name(
-                f'themis-{environment}-data-in-sample-metadata-main-read',
+                f'themis-{environment}-data-in-sample-metadata-{metamist_read}',
             ),
             member=member,
         )

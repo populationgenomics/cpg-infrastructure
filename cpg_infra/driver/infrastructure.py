@@ -868,8 +868,8 @@ class CPGInfrastructure:
         """Per Themis environment, write its ACL file and grant its service accounts.
 
         Each environment gets its own ACL file bucket. Its auth service account
-        reads that bucket, and its data service account reads every dataset in
-        that ACL file, and no other.
+        reads that bucket, and its data service account reads the environment's
+        namespace of every dataset in that ACL file, and no other.
         """
         for environment, resolved in self._resolve_themis().items():
             bucket = self._create_themis_acls_bucket(resolved.bucket_name)
@@ -890,6 +890,7 @@ class CPGInfrastructure:
                 cloud_infra.add_themis_data_reader(
                     resolved.settings.data_service_account,
                     environment=environment,
+                    namespace=resolved.settings.namespace,
                 )
 
     def _create_themis_acls_bucket(self, name: str) -> gcp.storage.Bucket:
@@ -958,7 +959,7 @@ class CPGInfrastructure:
                         f'Themis reads dataset {dataset!r}, which has no '
                         f'{GcpInfrastructure.name()!r} deploy location',
                     )
-                cloud_infra.check_themis_data_readable()
+                cloud_infra.check_themis_data_readable(settings.namespace)
                 dataset_infras.append(cloud_infra)
 
             resolved[environment] = ResolvedThemisEnvironment(

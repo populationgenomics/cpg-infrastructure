@@ -16,8 +16,9 @@ from cpg_infra.config import (
     CPGDatasetConfig,
     CPGInfrastructureConfig,
     CPGInfrastructureUser,
+    ThemisNamespace,
 )
-from cpg_infra.driver.constants import SM_MAIN_READ
+from cpg_infra.driver.constants import SM_MAIN_READ, SM_TEST_READ
 from cpg_infra.driver.dataset_cloud_infrastructure import (
     CPGDatasetCloudInfrastructure,
 )
@@ -86,6 +87,7 @@ def _settings(environment: str, **overrides: Any) -> dict[str, Any]:
     return {
         'auth_service_account': _sa(f'auth-{environment}'),
         'data_service_account': _sa(f'data-{environment}'),
+        'namespace': 'test' if environment == 'dev' else 'main',
         'allowed_datasets': ALL_DATASETS,
         **overrides,
     }
@@ -149,6 +151,8 @@ def test_environment_must_be_a_slug(environment: str):
             'string_pattern',
         ),
         ({'allowed_datasets': []}, 'too_short'),
+        ({'namespace': 'main-upload'}, 'literal_error'),
+        ({'namespace': 'Main'}, 'literal_error'),
         ({'allowed_datasets': ['ds-a', 'ds-a']}, 'duplicate'),
         # the site resolves its allowlist into allowed_datasets
         ({'project_allowlist': ['p1']}, 'extra_forbidden'),
@@ -165,9 +169,10 @@ def test_invalid_environment_settings_are_rejected(
         )
 
 
-def test_allowed_datasets_are_required():
+@pytest.mark.parametrize('field', ['allowed_datasets', 'namespace'])
+def test_settings_without_a_default_are_required(field: str):
     settings = _settings('prod')
-    del settings['allowed_datasets']
+    del settings[field]
     with pytest.raises(ValidationError, match='missing'):
         _config(themis={'prod': settings})
 
@@ -372,6 +377,16 @@ def test_setup_themis_writes_each_environments_acls_and_grants_access(
         'ds-c': set(),
         'ds-d': set(),
     }
+    # each environment's data service account reads its own namespace
+    namespaces = {
+        (call.args[0], call.kwargs['environment'], call.kwargs['namespace'])
+        for cloud_infra in cloud_infras.values()
+        for call in cast('MagicMock', cloud_infra.add_themis_data_reader).call_args_list
+    }
+    assert namespaces == {
+        (_sa('data-dev'), 'dev', 'test'),
+        (_sa('data-prod'), 'prod', 'main'),
+    }
 
 
 @pytest.mark.usefixtures('created_buckets')
@@ -523,70 +538,153 @@ def _direct_members(group: Any) -> set[str]:
     return {m.cloud_id for m in group.members.values() if isinstance(m, GroupMember)}
 
 
-def test_data_reader_joins_the_main_bucket_and_main_metamist_read_groups():
+@pytest.mark.parametrize(
+    ('namespace', 'groups'),
+    [
+        (
+            'main',
+            {'ds-a-external-repository-reader', f'ds-a-sample-metadata-{SM_MAIN_READ}'},
+        ),
+        ('test', {f'ds-a-sample-metadata-{SM_TEST_READ}'}),
+    ],
+)
+def test_data_reader_joins_only_its_namespaces_read_groups(
+    namespace: ThemisNamespace,
+    groups: set[str],
+):
     driver = _dataset_cloud_infra(
         _dataset('ds-a', components={'gcp': ['storage', 'metamist']}),
     )
-    for environment in ('dev', 'prod'):
-        driver.add_themis_data_reader(
-            _sa(f'data-{environment}'), environment=environment
-        )
+    driver.add_themis_data_reader(_sa('data-x'), environment='x', namespace=namespace)
 
-    groups = driver.group_provider.groups['gcp']
-    for environment in ('dev', 'prod'):
-        sa = _sa(f'data-{environment}')
-        joined = {name for name, g in groups.items() if sa in _direct_members(g)}
-        assert joined == {
-            'ds-a-external-repository-reader',
-            f'ds-a-sample-metadata-{SM_MAIN_READ}',
-        }
+    provider_groups = driver.group_provider.groups['gcp']
+    joined = {
+        name
+        for name, g in provider_groups.items()
+        if _sa('data-x') in _direct_members(g)
+    }
+    assert joined == groups
 
 
-def test_data_reader_reads_the_main_bucket_and_may_invoke_metamist():
-    driver = _dataset_cloud_infra(
-        _dataset('ds-a', components={'gcp': ['storage', 'metamist']}),
-    )
-    provider = driver.group_provider
-    invokers = provider.create_group(driver.infra, 'invokers', cache_members=False)
-    cast('MagicMock', driver.root).gcp_metamist_invoker_group = invokers
-    data_sa = _sa('data-prod')
-
-    driver.add_themis_data_reader(data_sa, environment='prod')
-    driver.setup_storage_main_bucket_permissions()
-    driver.setup_metamist_cloudrun_permissions()
-
-    def resolved(group: Any) -> set[str]:
-        return {m.cloud_id for m in provider.resolve_group_members(group)}
-
+def _bucket_readers(
+    driver: CPGDatasetCloudInfrastructure,
+    bucket: Any,
+) -> set[str]:
+    """The accounts with read on `bucket`, directly or through a group."""
+    readers = set()
     infra = cast('MagicMock', driver.infra)
-    main_bucket_readers = [
-        call.args[2]
-        for call in infra.add_member_to_bucket.call_args_list
-        if call.args[1] is driver.main_bucket
-        and call.args[3] == BucketMembership.READ
-        and hasattr(call.args[2], 'is_group')
-    ]
-    assert any(data_sa in resolved(g) for g in main_bucket_readers)
-    # update_metamist_members sends this group's members as the project's readers
-    assert data_sa in resolved(driver.metamist_groups[SM_MAIN_READ])
-    assert data_sa in resolved(invokers)
+    for call in infra.add_member_to_bucket.call_args_list:
+        args = dict(
+            zip(
+                ('resource_key', 'bucket', 'member', 'membership'),
+                call.args,
+                strict=False,
+            )
+        )
+        args.update(call.kwargs)
+        if args['bucket'] is not bucket or args['membership'] != BucketMembership.READ:
+            continue
+        member = args['member']
+        if hasattr(member, 'is_group'):
+            readers |= {
+                m.cloud_id for m in driver.group_provider.resolve_group_members(member)
+            }
+        else:
+            readers.add(member)
+    return readers
 
 
 @pytest.mark.parametrize(
-    'extra',
+    ('namespace', 'bucket_name', 'metamist_read'),
+    [('main', 'main', SM_MAIN_READ), ('test', 'test', SM_TEST_READ)],
+)
+def test_data_reader_reads_its_namespaces_bucket_and_may_invoke_metamist(
+    namespace: ThemisNamespace,
+    bucket_name: str,
+    metamist_read: str,
+):
+    driver = _dataset_cloud_infra(
+        _dataset('ds-a', components={'gcp': ['storage', 'metamist']}),
+    )
+    # a distinct mock per bucket, so the bucket a grant targets can be told apart
+    cast('MagicMock', driver.infra).create_bucket.side_effect = (
+        lambda name, **_: MagicMock(name=f'bucket-{name}')
+    )
+    cast('MagicMock', driver.config).web_service = None
+    provider = driver.group_provider
+    invokers = provider.create_group(driver.infra, 'invokers', cache_members=False)
+    cast('MagicMock', driver.root).gcp_metamist_invoker_group = invokers
+    data_sa = _sa('data-x')
+
+    driver.add_themis_data_reader(data_sa, environment='x', namespace=namespace)
+    driver.setup_storage_main_bucket_permissions()
+    driver.setup_storage_test_buckets_permissions()
+    driver.setup_metamist_cloudrun_permissions()
+
+    buckets = {
+        'main': driver.main_bucket,
+        'test': driver.test_bucket,
+        'test-analysis': driver.test_analysis_bucket,
+        'test-tmp': driver.test_tmp_bucket,
+    }
+    read = {
+        name for name, b in buckets.items() if data_sa in _bucket_readers(driver, b)
+    }
+    assert read == {bucket_name}
+    # update_metamist_members sends this group's members as the project's readers
+    resolved = {
+        kind: {m.cloud_id for m in provider.resolve_group_members(group)}
+        for kind, group in driver.metamist_groups.items()
+    }
+    assert {kind for kind, members in resolved.items() if data_sa in members} == {
+        metamist_read,
+    }
+    assert data_sa in {m.cloud_id for m in provider.resolve_group_members(invokers)}
+
+
+@pytest.mark.parametrize(
+    ('namespace', 'extra', 'missing'),
     [
-        {'components': {'gcp': ['metamist']}},
-        {'components': {'gcp': ['storage']}},
-        {
-            'components': {'gcp': ['storage', 'metamist']},
-            'enable_metamist_project': False,
-        },
+        ('main', {'components': {'gcp': ['metamist']}}, 'the storage component'),
+        ('main', {'components': {'gcp': ['storage']}}, 'the metamist component'),
+        (
+            'main',
+            {
+                'components': {'gcp': ['storage', 'metamist']},
+                'enable_metamist_project': False,
+            },
+            'enable_metamist_project',
+        ),
+        (
+            'test',
+            {'components': {'gcp': ['storage', 'metamist']}, 'setup_test': False},
+            'setup_test',
+        ),
     ],
 )
-def test_data_reader_needs_storage_and_metamist(extra: dict[str, Any]):
+def test_data_reader_needs_its_namespaces_storage_and_metamist(
+    namespace: ThemisNamespace,
+    extra: dict[str, Any],
+    missing: str,
+):
     driver = _dataset_cloud_infra(_dataset('ds-a', **extra))
-    with pytest.raises(ValueError, match='ds-a: Themis reads'):
-        driver.add_themis_data_reader(_sa('data-prod'), environment='prod')
+    with pytest.raises(
+        ValueError, match=f'ds-a: Themis reads its {namespace} .*{missing}'
+    ):
+        driver.add_themis_data_reader(
+            _sa('data-x'), environment='x', namespace=namespace
+        )
+
+
+def test_main_namespace_does_not_need_setup_test():
+    driver = _dataset_cloud_infra(
+        _dataset(
+            'ds-a',
+            components={'gcp': ['storage', 'metamist']},
+            setup_test=False,
+        ),
+    )
+    driver.check_themis_data_readable('main')
 
 
 def test_themis_role_members_join_no_group():
