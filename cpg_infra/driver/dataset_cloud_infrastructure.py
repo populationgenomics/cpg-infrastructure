@@ -1428,7 +1428,7 @@ class CPGDatasetCloudInfrastructure:
                         'analysis-runner-dev-hail-bucket-viewer',
                         bucket=self.hail_bucket,
                         member=dev_account,
-                        membership=BucketMembership.MUTATE,
+                        membership=BucketMembership.READ,
                     )
 
     def setup_hail_wheels_bucket_permissions(self):
