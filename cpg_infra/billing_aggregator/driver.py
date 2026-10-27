@@ -358,8 +358,8 @@ class BillingAggregator(CpgInfrastructurePlugin):
                 start_minute = 1
 
             if function in ['hail', 'seqr', 'seqr24', 'gcp']:
-                # keep under the hourly interval so runs can't overlap
-                timeout = 3600
+                # finish 5 minutes before the next scheduled run so runs can't overlap
+                timeout = self.config.billing.aggregator.interval_hours * 3600 - 300
 
             if function == 'hail':
                 # hail specific aggreg function needs over 4GB of memory
@@ -389,8 +389,9 @@ class BillingAggregator(CpgInfrastructurePlugin):
                     'ICA_API_SECRET_NAME': self.config.billing.aggregator.ica_api_secret_name,
                 },
             )
-            # The scheduler only starts the execution, so it gets a quick response
-            # instead of waiting on the whole aggregation
+            # :run only starts the execution and returns straight away. No retries:
+            # if the response were lost, a retry would start a second execution
+            # alongside the first, and concurrent runs can insert duplicates
             _ = gcp.cloudscheduler.Job(
                 f'billing-aggregator-scheduler-job-{function}',
                 http_target=gcp.cloudscheduler.JobHttpTargetArgs(
@@ -408,10 +409,8 @@ class BillingAggregator(CpgInfrastructurePlugin):
                     ),
                 ),
                 schedule=f'{start_minute} */{self.config.billing.aggregator.interval_hours} * * *',
-                retry_config=gcp.cloudscheduler.JobRetryConfigArgs(
-                    retry_count=3,
-                    min_backoff_duration='30s',
-                ),
+                retry_config=gcp.cloudscheduler.JobRetryConfigArgs(retry_count=0),
+                attempt_deadline='30s',
                 project=project,
                 region=region,
                 time_zone='Australia/Sydney',
