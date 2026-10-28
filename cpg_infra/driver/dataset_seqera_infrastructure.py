@@ -195,15 +195,13 @@ class DatasetSeqeraInfrastructure:
         # Make display_name and pool_id short so it does fit within the 32-char cap
         # `sqwif` stands for "Seqera Workload Identity Federation"
         pool_id = f'{self._dataset_config.dataset}-sqwif'
-        return gcp.iam.WorkloadIdentityPool(
+        return self._infra.create_workload_identity_pool(
             pool_id,
-            workload_identity_pool_id=pool_id,
             display_name=pool_id,
             description=(
                 'Federates Seqera Cloud OIDC tokens to per-dataset GCP '
                 'service accounts.'
             ),
-            project=self._infra.project_id,
         )
 
     @cached_property

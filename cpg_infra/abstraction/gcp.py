@@ -930,6 +930,21 @@ class GcpInfrastructure(CloudInfraBase):
 
     # region GCP SPECIFIC
 
+    def create_workload_identity_pool(
+        self,
+        pool_id: str,
+        display_name: str,
+        description: str,
+    ) -> gcp.iam.WorkloadIdentityPool:
+        return gcp.iam.WorkloadIdentityPool(
+            pool_id,
+            workload_identity_pool_id=pool_id,
+            display_name=display_name,
+            description=description,
+            project=self.project_id,
+            opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_iam]),
+        )
+
     def add_batch_agent_reporter_role(self, resource_key: str, account):
         gcp.projects.IAMMember(
             self.get_pulumi_name(resource_key),
