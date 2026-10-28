@@ -148,7 +148,6 @@ class HailBatchUserProvider(pulumi.dynamic.ResourceProvider):
                 {
                     'user': username,
                     'login_id': None,
-                    'is_developer': False,
                     'is_service_account': True,
                 },
             ),
