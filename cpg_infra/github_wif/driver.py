@@ -40,6 +40,7 @@ class GitHubWIFEnvironment(ConfigModel):
     name: str
     push_registry: str | None = None
     read_registries: list[str] = Field(default_factory=list)
+    sa_overwrite: str | None = None
     project_roles: list[str] = Field(default_factory=list)
 
 
@@ -88,7 +89,22 @@ class GitHubWIFConfig(ConfigModel):
     pam_broker: PAMBrokerConfig | None = None
 
 
-def sanitize_sa_name(
+def sanitize_sa_name(sa_name: str) -> str:
+    """
+    Sanitizes the given string to conform to the following rules of service account names:
+    - Must contain only lowercase letters, digits and hyphens
+    - Must start with lowercase letter
+
+    Args:
+        sa_name: The string to sanitize
+    
+    Returns:
+        Sanitized string
+    """
+    return re.sub(r'[^a-z0-9-]', '-', sa_name.lower())
+
+
+def construct_sa_name(
     repo_name: str, environment: str, max_length: int = SA_NAME_MAX_LENGTH
 ) -> str:
     """
@@ -108,8 +124,8 @@ def sanitize_sa_name(
         Sanitized service account name
     """
     # Remove any non-alphanumeric characters and convert to lowercase
-    clean_repo = re.sub(r'[^a-z0-9-]', '-', repo_name.lower())
-    clean_env = re.sub(r'[^a-z0-9-]', '-', environment.lower())
+    clean_repo = sanitize_sa_name(repo_name)
+    clean_env = sanitize_sa_name(environment)
 
     # Shorten environment name if needed
     env_short = clean_env
@@ -214,6 +230,7 @@ def create_github_service_account(
     repo_name: str,
     environment: str,
     github_repo: str,
+    sa_name_overwrite: str | None,
 ) -> gcp.serviceaccount.Account:
     """
     Create a service account for a GitHub repository environment.
@@ -227,12 +244,20 @@ def create_github_service_account(
     Returns:
         Service account resource
     """
-    sa_name = sanitize_sa_name(repo_name, environment)
+    if sa_name_overwrite:
+        sa_name_overwrite = sanitize_sa_name(sa_name_overwrite)
+
+    sa_name = sa_name_overwrite or construct_sa_name(repo_name, environment)
+    if len(sa_name) < 6 and len(sa_name) > 30:
+        raise ValueError(
+            f"Invalid service account name overwrite: '{sa_name}'. "
+            "Service account names must be between 6 and 30 characters (inclusive)."
+        )
 
     return gcp.serviceaccount.Account(
         f'{project_id}-{sa_name}',
         account_id=sa_name,
-        display_name=f'Deploy {github_repo} {environment} images',
+        display_name=f'Deploy {github_repo} {environment} resources',
         project=project_id,
         create_ignore_already_exists=True,
     )
@@ -505,6 +530,7 @@ def setup_github_wif_infrastructure(
                 env_name = env_config.name
                 push_registry = env_config.push_registry
                 read_registries = env_config.read_registries
+                sa_overwrite = env_config.sa_overwrite
                 project_roles = env_config.project_roles
 
                 # Create service account
@@ -513,6 +539,7 @@ def setup_github_wif_infrastructure(
                     repo_name,
                     env_name,
                     github_repo,
+                    sa_overwrite,
                 )
 
                 # Grant WIF impersonation permission
@@ -547,7 +574,7 @@ def setup_github_wif_infrastructure(
                     )
 
                 # Grant project-level roles
-                for role in env_config.project_roles:
+                for role in project_roles:
                     grant_project_role(
                         f'{project_id}-{repo_name}-{env_name}-{role.removeprefix("roles/")}',
                         sa,
