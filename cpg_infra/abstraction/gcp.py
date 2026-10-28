@@ -936,8 +936,6 @@ class GcpInfrastructure(CloudInfraBase):
         display_name: str,
         description: str,
     ) -> gcp.iam.WorkloadIdentityPool:
-        # The pool ID is also the Pulumi resource name. Changing it would replace
-        # existing pools, and a deleted pool's ID stays reserved for 30 days.
         return gcp.iam.WorkloadIdentityPool(
             pool_id,
             workload_identity_pool_id=pool_id,
