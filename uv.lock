@@ -354,6 +354,7 @@ dependencies = [
     { name = "metamist" },
     { name = "metamist-infrastructure" },
     { name = "pulumi" },
+    { name = "pulumi-command" },
     { name = "pulumi-gcp" },
     { name = "pulumi-github" },
     { name = "pydantic" },
@@ -383,6 +384,7 @@ requires-dist = [
     { name = "metamist" },
     { name = "metamist-infrastructure", git = "https://github.com/populationgenomics/metamist.git?subdirectory=metamist_infrastructure&rev=main" },
     { name = "pulumi", specifier = "==3.268.0" },
+    { name = "pulumi-command", specifier = "~=1.2" },
     { name = "pulumi-gcp", specifier = "~=7.6" },
     { name = "pulumi-github", specifier = ">=6.0.0" },
     { name = "pydantic", specifier = ">=2" },
@@ -1380,6 +1382,20 @@ dependencies = [
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ca/81/afc7585aa7b395f87565817644c1c840fdd06400134eef64610d515e7ec3/pulumi-3.268.0-py3-none-any.whl", hash = "sha256:0a6d0e85fb3b60eb4d8e1bbf07528fff1b45cd2b45d92cc8ac8bb6703f520325", size = 427519, upload-time = "2026-10-07T10:26:17.592Z" },
+]
+
+[[package]]
+name = "pulumi-command"
+version = "1.2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "parver" },
+    { name = "pulumi" },
+    { name = "semver" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/cf/56/b7f66c9d2e4536b24a5bbe4e743093c7cdd689343d86f020419f4897a88d/pulumi_command-1.2.1.tar.gz", hash = "sha256:cbc9281a6571701ac5db598dac0246a058875b62f28c40c7cc0fcdc36898918d", size = 33022, upload-time = "2026-03-04T00:23:25.84Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fa/ce/1e5f30f868ba0827ca3311b0b171b12606e30c05e864714764d8d943fef1/pulumi_command-1.2.1-py3-none-any.whl", hash = "sha256:c7e465338e4363f114ddff99ee249260c7770ef4451b970ab51f7e8a37c9b030", size = 36861, upload-time = "2026-03-04T00:23:24.571Z" },
 ]
 
 [[package]]
