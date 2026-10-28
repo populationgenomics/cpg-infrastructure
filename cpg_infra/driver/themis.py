@@ -1,10 +1,10 @@
 """
-Resolve the Themis ACL file from config.
+Resolve Themis's ACL from config.
 
-Themis reads one JSON object, the ACL file, and nothing else from this
-infrastructure. It holds Themis's access control lists: `projects` maps each
-Project's id to the emails of its `managers` and its `curators`. A Themis
-Project is one dataset, and its id is the dataset's name. Themis owns the format: it rejects a file whose
+Themis reads one JSON object, Themis's ACL (access control list), and nothing
+else from this infrastructure: `projects` maps each Project's id to the emails
+of its `managers` and its `curators`. A Themis Project is one dataset, and its
+id is the dataset's name. Themis owns the format: it rejects an ACL whose
 `format` it does not know, that has keys it does not know, or whose emails are
 not lowercase. `CPGInfrastructure.setup_themis` writes the result.
 """
@@ -27,9 +27,8 @@ if TYPE_CHECKING:
         MemberKey,
     )
 
-ACLS_FORMAT = 1
-ACLS_OBJECT_NAME = 'acls.json'
-# each role in an ACL file Project, and the members.yaml list that fills it
+ACL_FORMAT = 1
+# each role in a Project of the ACL, and the members.yaml list that fills it
 ROLE_LISTS: dict[str, GroupName] = {
     'managers': THEMIS_MANAGER,
     'curators': THEMIS_CURATOR,
@@ -66,18 +65,18 @@ def _member_email(
     return email.lower()
 
 
-def build_acls(
+def build_acl(
     allowed_datasets: Iterable[str],
     dataset_configs: Mapping[str, CPGDatasetConfig],
     users: Mapping[MemberKey, CPGInfrastructureUser],
 ) -> dict[str, Any]:
-    """Resolve one environment's ACL file.
+    """Resolve one environment's ACL.
 
     Each allowed dataset with a non-empty `themis-manager` or `themis-curator`
     list becomes a Project: the dataset's name, mapped to the sorted lowercase
     emails of its `managers` and its `curators`. Both keys are always present;
-    one of them may be empty. With no such dataset, the ACL file has no
-    Projects, which Themis accepts.
+    one of them may be empty. With no such dataset, the ACL has no Projects,
+    which Themis accepts.
 
     Raises:
         ValueError: on an allowed dataset that is not configured, an unknown
@@ -103,9 +102,13 @@ def build_acls(
         if any(roles.values()):
             projects[dataset] = roles
 
-    return {'format': ACLS_FORMAT, 'projects': projects}
+    return {'format': ACL_FORMAT, 'projects': projects}
 
 
-def serialise_acls(acls: dict[str, Any]) -> str:
-    """Serialise deterministically, so an unchanged config writes no new object."""
-    return json.dumps(acls, indent=2, sort_keys=True) + '\n'
+def serialise_acl(acl: dict[str, Any]) -> str:
+    """Serialise compactly and deterministically.
+
+    An unchanged config gives the same payload, so it writes no new secret
+    version.
+    """
+    return json.dumps(acl, sort_keys=True, separators=(',', ':'))

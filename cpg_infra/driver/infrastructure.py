@@ -44,11 +44,7 @@ from cpg_infra.driver.groups import GroupMember, GroupProvider
 from cpg_infra.driver.standalone_project_infrastructure import (
     CPGStandaloneProjectInfrastructure,
 )
-from cpg_infra.driver.themis import (
-    ACLS_OBJECT_NAME,
-    build_acls,
-    serialise_acls,
-)
+from cpg_infra.driver.themis import build_acl, serialise_acl
 from cpg_infra.github_wif.driver import PAM_BROKER_SA_NAME
 from cpg_infra.plugin import get_plugins
 
@@ -68,14 +64,15 @@ if TYPE_CHECKING:
     from cpg_infra.driver.groups import Group
 
 
-MAX_BUCKET_NAME_LENGTH = 63
+# Secret Manager's limit on the payload of one secret version
+MAX_SECRET_VERSION_BYTES = 65536
 
 
 class ResolvedThemisEnvironment(NamedTuple):
     settings: CPGInfrastructureConfig.Themis
-    bucket_name: str
-    acls: dict[str, Any]
-    # the GCP infrastructure of each dataset in the ACL file
+    # Themis's ACL, serialised as the payload of a secret version
+    acl_payload: str
+    # the GCP infrastructure of each dataset in the ACL
     dataset_infras: list[CPGDatasetCloudInfrastructure]
 
 
@@ -223,7 +220,7 @@ class CPGInfrastructure:
         # Deploy managed adhoc assets that are not associated with datasets.
         self.deploy_adhoc()
 
-        # Write the Themis ACL files and grant Themis's service accounts access.
+        # Write each Themis environment's ACL and grant its sandbox account access.
         # Adds group members, so must run before finalize_groups.
         self.setup_themis()
 
@@ -865,25 +862,26 @@ class CPGInfrastructure:
     # region THEMIS
 
     def setup_themis(self):
-        """Per Themis environment, write its ACL file and grant its service accounts.
+        """Per Themis environment, write Themis's ACL and grant its sandbox account.
 
-        Each environment gets its own ACL file bucket. Its auth service account
-        reads that bucket, and its sandbox service account reads the environment's
-        namespace of every dataset in that ACL file, and no other.
+        Themis's ACL (access control list) names the people in each role on
+        each of the environment's Projects. It is written as a new version of
+        the environment's `acl_secret`. Themis's own deploy creates that
+        secret in its project, grants Themis read on it, and lets this
+        deploy's service account add versions and read them back (the
+        provider reads each version after adding it); this deploy creates no
+        secret and grants nothing on it. The environment's sandbox
+        service account reads the environment's namespace of every dataset in
+        the ACL, and no other.
         """
         for environment, resolved in self._resolve_themis().items():
-            bucket = self._create_themis_acls_bucket(resolved.bucket_name)
-            self.common_gcp_infra.add_blob_to_bucket(
-                f'themis-{environment}-acls-blob',
-                bucket=bucket,
-                contents=serialise_acls(resolved.acls),
-                output_name=ACLS_OBJECT_NAME,
-            )
-            self.common_gcp_infra.add_member_to_bucket(
-                f'themis-{environment}-auth-acls-reader',
-                bucket=bucket,
-                member=resolved.settings.auth_service_account,
-                membership=BucketMembership.READ,
+            # `secret` is a full resource name, so the version lands in Themis's
+            # project, not the provider's. A changed payload replaces the
+            # version: the new one is added, then the old one destroyed.
+            self.common_gcp_infra.add_secret_version(
+                f'themis-{environment}-acl',
+                secret=resolved.settings.acl_secret,
+                contents=resolved.acl_payload,
             )
 
             for cloud_infra in resolved.dataset_infras:
@@ -893,64 +891,35 @@ class CPGInfrastructure:
                     namespace=resolved.settings.namespace,
                 )
 
-    def _create_themis_acls_bucket(self, name: str) -> gcp.storage.Bucket:
-        """A private, versioned bucket in the common project for one ACL file.
-
-        Built directly, like the other one-off resources in this class, because
-        create_bucket leaves public access prevention to organisation policy.
-        The other settings match what create_bucket gives the members cache.
-        """
-        infra = self.common_gcp_infra
-        return gcp.storage.Bucket(
-            infra.get_pulumi_name(name + '-bucket'),
-            name=name,
-            location=infra.region,
-            uniform_bucket_level_access=True,
-            public_access_prevention='enforced',
-            versioning=gcp.storage.BucketVersioningArgs(enabled=True),
-            labels={'bucket': name},
-            lifecycle_rules=[infra.bucket_rule_abort_incomplete_multipart_upload()],
-            project=infra.project_id,
-        )
-
     def validate_themis(self):
         """Raise on Themis config that setup_themis cannot honour."""
         self._resolve_themis()
 
     def _resolve_themis(self) -> dict[str, ResolvedThemisEnvironment]:
-        """Each Themis environment's ACLs and the datasets it reads.
+        """Each Themis environment's ACL payload and the datasets it reads.
 
         Registers no resources, and raises on anything setup_themis would
         otherwise fail on part way.
         """
-        if not self.config.themis:
-            return {}
-        gcp_config = self.config.gcp
-        if gcp_config is None:
-            raise ValueError('Themis ACL files live in GCS, which needs the gcp config')
-
         resolved = {}
         for environment, settings in sorted(self.config.themis.items()):
-            bucket_name = (
-                f'{gcp_config.dataset_storage_prefix}themis-{environment}-acls'
-            )
-            # the name is also the bucket's label value, which has the same limit
-            if len(bucket_name) > MAX_BUCKET_NAME_LENGTH:
-                raise ValueError(
-                    f'Themis environment {environment!r} makes the ACL file bucket '
-                    f'name {bucket_name!r} longer than {MAX_BUCKET_NAME_LENGTH} '
-                    'characters',
-                )
-
-            acls = build_acls(
+            acl = build_acl(
                 settings.allowed_datasets,
                 self.dataset_configs,
                 self.config.users,
             )
+            acl_payload = serialise_acl(acl)
+            size = len(acl_payload.encode('utf-8'))
+            if size > MAX_SECRET_VERSION_BYTES:
+                raise ValueError(
+                    f'Themis environment {environment!r}: its ACL is {size} bytes, '
+                    f'over the {MAX_SECRET_VERSION_BYTES} bytes a secret version '
+                    'holds',
+                )
 
             dataset_infras = []
-            # a Project is one dataset, so these are exactly the file's datasets
-            for dataset in sorted(acls['projects']):
+            # a Project is one dataset, so these are exactly the ACL's datasets
+            for dataset in sorted(acl['projects']):
                 cloud_infra = self.dataset_infrastructures[dataset].clouds.get(
                     GcpInfrastructure.name(),
                 )
@@ -964,8 +933,7 @@ class CPGInfrastructure:
 
             resolved[environment] = ResolvedThemisEnvironment(
                 settings=settings,
-                bucket_name=bucket_name,
-                acls=acls,
+                acl_payload=acl_payload,
                 dataset_infras=dataset_infras,
             )
 

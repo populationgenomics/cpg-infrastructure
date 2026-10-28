@@ -92,19 +92,19 @@ To do this:
 - a user config must have `can_access_internal_dataset_logs = True`, and
 - the dataset config must have `is_internal_dataset = True`.
 
-### Themis ACL files
+### Themis's ACL
 
 [Themis](https://github.com/populationgenomics/themis) is CPG's variant-curation app. It needs two things from this repository: a list of who may work on which dataset, and read access to those datasets' files. The deploy provides both, separately for each Themis environment, such as `dev` and `prod`.
 
-In Themis, each dataset is a Project, and the Project's id is the dataset's name. A Project's people hold one or both of two roles, manager and curator. Each environment learns who holds which role from a JSON object that Themis calls its ACL file, for access control lists. It maps each Project to the emails of the people in each role:
+In Themis, each dataset is a Project, and the Project's id is the dataset's name. A Project's people hold one or both of two roles, manager and curator. Each environment learns who holds which role from one JSON object, Themis's ACL (access control list), which has nothing to do with Cloud Storage's object ACLs. It maps each Project to the emails of the people in each role:
 
 ```json
 {"format": 1, "projects": {"validation": {"managers": ["<email>", ...], "curators": ["<email>", ...]}}}
 ```
 
-Themis owns this format and rejects a file that breaks any of its rules, which [`cpg_infra/driver/themis.py`](cpg_infra/driver/themis.py) lists.
+Themis owns this format and rejects an ACL that breaks any of its rules, which [`cpg_infra/driver/themis.py`](cpg_infra/driver/themis.py) lists.
 
-Two settings decide which datasets become Projects. `CPGInfrastructureConfig.themis` maps each environment to its settings, and one of them, `allowed_datasets`, lists the datasets that environment may serve. Each dataset's `themis-manager` and `themis-curator` member lists name the people in each role. Unlike most member lists, these two create no group, so they grant nothing outside Themis. An allowed dataset becomes a Project when at least one of its two lists is non-empty. For example, if `dev` allows `validation` and `validation`'s `themis-curator` list names one user, dev's ACL file has a Project `validation` with that user's email under `curators` and an empty `managers` list.
+Two settings decide which datasets become Projects. `CPGInfrastructureConfig.themis` maps each environment to its settings, and one of them, `allowed_datasets`, lists the datasets that environment may serve. Each dataset's `themis-manager` and `themis-curator` member lists name the people in each role. Unlike most member lists, these two create no group, so they grant nothing outside Themis. An allowed dataset becomes a Project when at least one of its two lists is non-empty. For example, if `dev` allows `validation` and `validation`'s `themis-curator` list names one user, dev's ACL has a Project `validation` with that user's email under `curators` and an empty `managers` list.
 
 #### The namespace an environment reads
 
@@ -117,9 +117,9 @@ As [Dataset infrastructure](#dataset-infrastructure) describes, a dataset's reso
 
 The namespace's other buckets, such as `cpg-validation-main-analysis`, are not part of Themis's read access.
 
-Each environment's `namespace` setting, `main` or `test`, picks the namespace that its sandbox service account reads. That account belongs to Themis's sandbox job, which mounts a sample's files into the sandbox where Themis's agent runs. The environment reads the same namespace of every dataset in its ACL file. The setting has no default, because neither namespace is safe to assume.
+Each environment's `namespace` setting, `main` or `test`, picks the namespace that its sandbox service account reads. That account belongs to Themis's sandbox job, which mounts a sample's files into the sandbox where Themis's agent runs. The environment reads the same namespace of every dataset in its ACL. The setting has no default, because neither namespace is safe to assume.
 
-The namespace changes which data a Project refers to, but it does not change the ACL file. In an environment that reads `test`, Project `validation` is backed by `cpg-validation-test` and the metamist project `validation-test`. In one that reads `main`, the same Project is backed by `cpg-validation-main` and `validation`. The people and their roles are the same either way.
+The namespace changes which data a Project refers to, but it does not change the ACL. In an environment that reads `test`, Project `validation` is backed by `cpg-validation-test` and the metamist project `validation-test`. In one that reads `main`, the same Project is backed by `cpg-validation-main` and `validation`. The people and their roles are the same either way.
 
 A test namespace holds data for testing pipelines, often a subset of the main data, and that subset can include real participants. So reading `test` does not keep participant data out of an environment. Only `allowed_datasets` does: an environment that must hold no participant data, such as a development environment, should allow only datasets that contain none.
 
@@ -127,22 +127,25 @@ A test namespace holds data for testing pipelines, often a subset of the main da
 
 For each environment, `CPGInfrastructure.setup_themis`:
 
-- builds the ACL file, where each Project's `managers` and `curators` are the sorted, lowercase emails (`gcp.id`) of the users on the matching member list; both keys are always present, and one may be empty,
-- writes it as `acls.json` to the versioned bucket `<dataset_storage_prefix>themis-<environment>-acls` in the common dataset's project,
-- gives the environment's auth service account read on that bucket, and
-- gives the environment's sandbox service account read on the bucket and metamist project of its namespace, for every dataset in the ACL file and no other.
+- builds the ACL, where each Project's `managers` and `curators` are the sorted, lowercase emails (`gcp.id`) of the users on the matching member list; both keys are always present, and one may be empty,
+- writes it as compact JSON to a new version of the environment's `acl_secret`, a Secret Manager secret in the Themis deployment's own GCP project, given by its full resource name `projects/<project-id>/secrets/<secret-id>`, and
+- gives the environment's sandbox service account read on the bucket and metamist project of its namespace, for every dataset in the ACL and no other.
+
+Themis's own deploy creates the secret, gives Themis's auth service read on it, and gives the service account this deploy runs as the Secret Manager Secret Version Manager and Secret Accessor roles on that one secret. This deploy only adds versions to it, but the Pulumi provider reads each version back after adding it, which needs the accessor role. With the provider's `user_project_override` set, as in CPG's stack, that read is billed to the secret's project, so the account also needs `serviceusage.services.use` there. Themis's deploy has to create the secret and these grants before this deploy first writes an environment's ACL; otherwise this deploy fails with a not-found or permission-denied error. When an environment's ACL changes, the deploy adds a new version and then destroys the old one. The JSON is deterministic, so an unchanged ACL adds no version.
 
 The sandbox account's read access reuses the narrowest existing grants. In `main`, the account joins the dataset's `external-repository-reader` group, which reads the main bucket and nothing else, and its `sample-metadata-main-read` group, which reads the main metamist project. In `test`, it joins `sample-metadata-test-read`, which reads the test metamist project. No existing group reads the test bucket alone, so the account gets a direct read binding on that bucket.
 
 The deploy checks the Themis configuration before it creates any resource, and fails on any of these:
 
-- an environment name that is not a slug, or that makes the ACL file bucket's name longer than GCS's 63 characters,
-- two environments that share a sandbox service account,
+- an environment name that is not a slug,
+- an `acl_secret` that is not a secret's full resource name,
+- two environments that share a sandbox service account or an `acl_secret`,
 - an allowed dataset that is not configured,
 - an unknown user key on a role list, a user without a Google account, or a service account, because Themis roles are for people,
-- a dataset in the ACL file that lacks the storage or metamist component, or that does not set `setup_test` in an environment reading `test`.
+- a dataset in the ACL that lacks the storage or metamist component, or that does not set `setup_test` in an environment reading `test`,
+- an ACL larger than 65,536 bytes, the most a secret version holds.
 
-An environment where no allowed dataset has anyone on a role list gets an ACL file with no Projects.
+An environment where no allowed dataset has anyone on a role list gets an ACL with no Projects.
 
 ## Infrastructure
 
@@ -177,7 +180,7 @@ Members have different roles within a dataset, those roles include:
   - Read access to data in main. This is distinct from the `data-manager` role as it only grants read access to main and no additional access to any other buckets or services.
   - Developed to support Terra Data Repository service account access to self-hosted production data in CPG buckets. Do not assign this role to a human user.
 - themis-manager, themis-curator
-  - The manager and curator roles on the dataset's Themis Project, in each Themis environment that allows the dataset (see [Themis ACL files](#themis-acl-files)). Neither creates a group, so they grant no access outside Themis.
+  - The manager and curator roles on the dataset's Themis Project, in each Themis environment that allows the dataset (see [Themis's ACL](#themiss-acl)). Neither creates a group, so they grant no access outside Themis.
 
 ## Setup
 

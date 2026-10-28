@@ -1,16 +1,17 @@
-"""Tests for the Themis ACL files and the access the driver grants Themis."""
+"""Tests for Themis's ACL and the access the driver grants Themis."""
 
 from __future__ import annotations
 
 import json
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import MagicMock
 
-import pulumi_gcp as gcp
+import pulumi
 import pytest
 from pydantic import ValidationError
 
 from cpg_infra.abstraction.base import BucketMembership
+from cpg_infra.abstraction.context import InfraContext
 from cpg_infra.abstraction.gcp import GcpInfrastructure
 from cpg_infra.config import (
     CPGDatasetConfig,
@@ -24,7 +25,10 @@ from cpg_infra.driver.dataset_cloud_infrastructure import (
 )
 from cpg_infra.driver.groups import GroupMember, GroupProvider
 from cpg_infra.driver.infrastructure import CPGInfrastructure
-from cpg_infra.driver.themis import build_acls, serialise_acls
+from cpg_infra.driver.themis import build_acl, serialise_acl
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 # Deliberately fictitious; the real accounts live in cpg-infrastructure-private.
@@ -32,10 +36,18 @@ def _sa(name: str) -> str:
     return f'not-a-real-{name}@nonexistent-project.iam.gserviceaccount.com'
 
 
-USERS = {
-    key: CPGInfrastructureUser.model_validate(
+def _acl_secret(environment: str) -> str:
+    return f'projects/not-a-real-themis-{environment}/secrets/acl'
+
+
+def _user(key: str, gcp_id: str | None) -> CPGInfrastructureUser:
+    return CPGInfrastructureUser.model_validate(
         {'id': key, 'clouds': {'gcp': {'id': gcp_id}} if gcp_id else {}},
     )
+
+
+USERS = {
+    key: _user(key, gcp_id)
     for key, gcp_id in {
         'alice': 'Alice.Smith@Example.org',
         'bob': 'bob@example.com',
@@ -85,7 +97,7 @@ ALL_DATASETS = sorted(DATASETS)
 
 def _settings(environment: str, **overrides: Any) -> dict[str, Any]:
     return {
-        'auth_service_account': _sa(f'auth-{environment}'),
+        'acl_secret': _acl_secret(environment),
         'sandbox_service_account': _sa(f'sandbox-{environment}'),
         'namespace': 'test' if environment == 'dev' else 'main',
         'allowed_datasets': ALL_DATASETS,
@@ -93,7 +105,10 @@ def _settings(environment: str, **overrides: Any) -> dict[str, Any]:
     }
 
 
-def _config(themis: dict[str, Any] | None = None) -> CPGInfrastructureConfig:
+def _config(
+    themis: dict[str, Any] | None = None,
+    users: dict[str, CPGInfrastructureUser] | None = None,
+) -> CPGInfrastructureConfig:
     """An infrastructure config with the given Themis environments."""
     return CPGInfrastructureConfig.model_validate(
         {
@@ -101,7 +116,7 @@ def _config(themis: dict[str, Any] | None = None) -> CPGInfrastructureConfig:
             'budget_currency': 'AUD',
             'common_dataset': 'common',
             'config_destination': 'gs://nonexistent-config/',
-            'users': USERS,
+            'users': USERS if users is None else users,
             'plugins_enabled': [],
             'gcp': {
                 'customer_id': 'C0',
@@ -118,11 +133,11 @@ def _config(themis: dict[str, Any] | None = None) -> CPGInfrastructureConfig:
     )
 
 
-def _acls(
+def _acl(
     allowed_datasets: list[str],
     datasets: dict[str, CPGDatasetConfig] | None = None,
 ) -> dict[str, Any]:
-    return build_acls(
+    return build_acl(
         allowed_datasets,
         DATASETS if datasets is None else datasets,
         USERS,
@@ -143,9 +158,45 @@ def test_environment_must_be_a_slug(environment: str):
 
 
 @pytest.mark.parametrize(
+    'acl_secret',
+    [
+        'acl',
+        'not-a-real-themis-prod/acl',
+        'projects/not-a-real-themis-prod/secrets/acl/versions/1',
+        'projects/not-a-real-themis-prod/secrets/',
+        'projects/not-a-real-themis-prod/secrets/acl.json',
+        'projects/not-a-real-themis-prod/secrets/' + 'a' * 256,
+        # project ids: 6 to 30 characters, lowercase, starting with a letter,
+        # not ending with a hyphen
+        'projects/Not-A-Real-Themis-Prod/secrets/acl',
+        'projects/abcde/secrets/acl',
+        'projects/' + 'a' * 31 + '/secrets/acl',
+        'projects/1-themis-prod/secrets/acl',
+        'projects/themis-prod-/secrets/acl',
+        'projects/themis_prod/secrets/acl',
+    ],
+)
+def test_acl_secret_must_be_a_secret_resource_name(acl_secret: str):
+    with pytest.raises(ValidationError, match='string_pattern'):
+        _config(themis={'prod': _settings('prod', acl_secret=acl_secret)})
+
+
+@pytest.mark.parametrize(
+    'acl_secret',
+    [
+        'projects/abcdef/secrets/acl',
+        'projects/' + 'a' * 30 + '/secrets/acl',
+        'projects/themis-prod-1/secrets/' + 'Az09_-' * 42 + 'abc',
+    ],
+)
+def test_acl_secret_accepts_any_secret_resource_name(acl_secret: str):
+    config = _config(themis={'prod': _settings('prod', acl_secret=acl_secret)})
+    assert config.themis['prod'].acl_secret == acl_secret
+
+
+@pytest.mark.parametrize(
     ('overrides', 'message'),
     [
-        ({'auth_service_account': 'someone@example.com'}, 'string_pattern'),
         (
             {'sandbox_service_account': 'sandbox@project.iam.gserviceaccount.com.evil'},
             'string_pattern',
@@ -154,6 +205,8 @@ def test_environment_must_be_a_slug(environment: str):
         ({'namespace': 'main-upload'}, 'literal_error'),
         ({'namespace': 'Main'}, 'literal_error'),
         ({'allowed_datasets': ['ds-a', 'ds-a']}, 'duplicate'),
+        # Themis's deploy grants its own auth service account read on the ACL
+        ({'auth_service_account': _sa('auth-prod')}, 'extra_forbidden'),
         # the site resolves its allowlist into allowed_datasets
         ({'project_allowlist': ['p1']}, 'extra_forbidden'),
         ({'operators': ['carol']}, 'extra_forbidden'),
@@ -169,7 +222,10 @@ def test_invalid_environment_settings_are_rejected(
         )
 
 
-@pytest.mark.parametrize('field', ['allowed_datasets', 'namespace'])
+@pytest.mark.parametrize(
+    'field',
+    ['acl_secret', 'sandbox_service_account', 'allowed_datasets', 'namespace'],
+)
 def test_settings_without_a_default_are_required(field: str):
     settings = _settings('prod')
     del settings[field]
@@ -188,17 +244,28 @@ def test_environments_may_not_share_a_sandbox_service_account():
         )
 
 
+def test_environments_may_not_share_an_acl_secret():
+    shared = {'acl_secret': _acl_secret('shared')}
+    with pytest.raises(ValidationError, match='share an ACL secret'):
+        _config(
+            themis={
+                'dev': _settings('dev', **shared),
+                'prod': _settings('prod', **shared),
+            },
+        )
+
+
 def test_datasets_may_list_themis_role_members():
     assert DATASETS['ds-a'].members['themis-manager'] == ['bob', 'alice']
     assert DATASETS['ds-a'].members['themis-curator'] == ['alice']
 
 
 # endregion
-# region ACLs
+# region ACL
 
 
-def test_acls_have_one_project_per_dataset_with_both_roles_as_lowercase_emails():
-    assert _acls(['ds-a', 'ds-b']) == {
+def test_acl_has_one_project_per_dataset_with_both_roles_as_lowercase_emails():
+    assert _acl(['ds-a', 'ds-b']) == {
         'format': 1,
         'projects': {
             'ds-a': {
@@ -226,22 +293,23 @@ def test_a_dataset_is_a_project_when_either_role_list_is_non_empty(
     members: dict[str, list[str]],
     is_project: bool,
 ):
-    acls = _acls(['ds-x'], {'ds-x': _dataset('ds-x', members=members)})
-    assert ('ds-x' in acls['projects']) is is_project
+    acl = _acl(['ds-x'], {'ds-x': _dataset('ds-x', members=members)})
+    assert ('ds-x' in acl['projects']) is is_project
 
 
 def test_only_allowed_datasets_are_projects():
-    assert set(_acls(ALL_DATASETS)['projects']) == {'ds-a', 'ds-b'}
-    assert set(_acls(['ds-b', 'ds-c'])['projects']) == {'ds-b'}
+    assert set(_acl(ALL_DATASETS)['projects']) == {'ds-a', 'ds-b'}
+    assert set(_acl(['ds-b', 'ds-c'])['projects']) == {'ds-b'}
 
 
-def test_acls_without_projects_have_an_empty_projects_map():
-    """Themis accepts an ACL file with no Projects."""
-    assert _acls(['ds-c', 'ds-d']) == {'format': 1, 'projects': {}}
+def test_acl_without_projects_has_an_empty_projects_map():
+    """Themis accepts an ACL with no Projects."""
+    assert _acl(['ds-c', 'ds-d']) == {'format': 1, 'projects': {}}
 
 
-def test_serialised_acls_are_deterministic():
-    """Config order does not reach the output, so an unchanged config writes no diff."""
+def test_serialised_acl_is_deterministic_and_compact():
+    """Config order does not reach the payload, so an unchanged config writes no
+    new secret version."""
     reordered = {
         'ds-a': _dataset(
             'ds-a',
@@ -249,10 +317,11 @@ def test_serialised_acls_are_deterministic():
         ),
         'ds-b': _dataset('ds-b', members={'themis-curator': ['bob', 'carol']}),
     }
-    serialised = serialise_acls(_acls(['ds-a', 'ds-b']))
-    assert serialised == serialise_acls(_acls(['ds-b', 'ds-a'], reordered))
-    assert serialised.endswith('}\n')
-    assert json.loads(serialised) == _acls(['ds-a', 'ds-b'])
+    serialised = serialise_acl(_acl(['ds-a', 'ds-b']))
+    assert serialised == serialise_acl(_acl(['ds-b', 'ds-a'], reordered))
+    assert json.loads(serialised) == _acl(['ds-a', 'ds-b'])
+    # none of the ACL's keys or values contain whitespace
+    assert not any(c.isspace() for c in serialised)
 
 
 @pytest.mark.parametrize(
@@ -270,62 +339,101 @@ def test_serialised_acls_are_deterministic():
 def test_unresolvable_member_raises(list_name: str, member: str, message: str):
     datasets = {'ds-x': _dataset('ds-x', members={list_name: [member]})}
     with pytest.raises(ValueError, match=f'ds-x {list_name}: .*{message}'):
-        _acls(['ds-x'], datasets)
+        _acl(['ds-x'], datasets)
 
 
 def test_unconfigured_allowed_dataset_raises():
     with pytest.raises(ValueError, match="dataset 'ds-z', which is not configured"):
-        _acls(['ds-a', 'ds-z'])
+        _acl(['ds-a', 'ds-z'])
 
 
 # endregion
 # region driver
 
+SECRET_VERSION_TYPE = 'gcp:secretmanager/secretVersion:SecretVersion'  # noqa: S105
+# Secret Manager's limit on the payload of one secret version, in bytes
+SECRET_VERSION_LIMIT = 65536
+
+
+class _RecordingMocks(pulumi.runtime.Mocks):
+    """Records each resource the program registers, as (type, inputs)."""
+
+    def __init__(self) -> None:
+        self.registered: list[tuple[str, dict[str, Any]]] = []
+
+    def new_resource(
+        self, args: pulumi.runtime.MockResourceArgs
+    ) -> tuple[str | None, dict[str, Any]]:
+        self.registered.append((args.typ, dict(args.inputs)))
+        return f'{args.name}-id', dict(args.inputs)
+
+    def call(self, args: pulumi.runtime.MockCallArgs) -> dict[str, Any]:  # noqa: ARG002
+        return {}
+
+
+@pytest.fixture
+def registered() -> list[tuple[str, dict[str, Any]]]:
+    """The resources registered with pulumi during the test, as (type, inputs)."""
+    mocks = _RecordingMocks()
+    pulumi.runtime.set_mocks(mocks, preview=False)
+    return mocks.registered
+
 
 def _make_root(
     config: CPGInfrastructureConfig,
-) -> tuple[CPGInfrastructure, MagicMock, dict[str, MagicMock]]:
+    datasets: dict[str, CPGDatasetConfig] | None = None,
+) -> tuple[CPGInfrastructure, dict[str, MagicMock]]:
     """A CPGInfrastructure with only what setup_themis touches.
 
-    Constructing a real one walks the whole plugin and group machinery.
+    Constructing a real one walks the whole plugin and group machinery. The
+    common infrastructure is real, so the resources it registers reach the
+    `registered` fixture; the dataset infrastructures are mocks.
     """
+    datasets = DATASETS if datasets is None else datasets
     root = CPGInfrastructure.__new__(CPGInfrastructure)
     root.config = config
-    root.dataset_configs = DATASETS
+    root.dataset_configs = datasets
 
-    common_gcp_infra = MagicMock(spec=GcpInfrastructure)
-    common_gcp_infra.region = 'australia-southeast1'
-    # common_gcp_infra is a cached_property; seed the cache with the mock
-    root.__dict__['common_gcp_infra'] = common_gcp_infra
+    # common_gcp_infra is a cached_property; seed the cache
+    root.__dict__['common_gcp_infra'] = GcpInfrastructure(
+        config=config,
+        context=InfraContext(name_prefix='common', gcp_project_id='common-1234'),
+    )
 
-    cloud_infras = {d: MagicMock(spec=CPGDatasetCloudInfrastructure) for d in DATASETS}
+    cloud_infras = {d: MagicMock(spec=CPGDatasetCloudInfrastructure) for d in datasets}
     root.dataset_infrastructures = {
         d: MagicMock(clouds={'gcp': cloud_infra})
         for d, cloud_infra in cloud_infras.items()
     }
-    return root, common_gcp_infra, cloud_infras
+    return root, cloud_infras
 
 
-@pytest.fixture
-def created_buckets(monkeypatch: pytest.MonkeyPatch) -> dict[str, dict[str, Any]]:
-    """Bucket name -> its arguments, for the buckets created without registering."""
-    created: dict[str, dict[str, Any]] = {}
+@pulumi.runtime.test
+def _run(step: Callable[[], object]) -> None:
+    """Run a step and wait until pulumi has registered its resources.
 
-    def bucket(_resource_name: str, **kwargs: Any) -> str:
-        created[kwargs['name']] = kwargs
-        return f'bucket:{kwargs["name"]}'
-
-    monkeypatch.setattr(gcp.storage, 'Bucket', bucket)
-    return created
+    Outside this, the mocks never see a registration, so `registered` stays
+    empty whatever the step does.
+    """
+    step()
 
 
-def _written(common_gcp_infra: MagicMock) -> dict[str, dict[str, Any]]:
-    """Bucket name -> the ACL file written to it."""
+def _setup_themis(root: CPGInfrastructure) -> None:
+    _run(root.setup_themis)
+
+
+def _written(registered: list[tuple[str, dict[str, Any]]]) -> dict[str, Any]:
+    """Secret resource name -> the ACL written to it as a new version.
+
+    Fails on any other resource: the deploy only adds versions to secrets that
+    Themis's deploy creates and grants on.
+    """
+    assert {typ for typ, _ in registered} <= {SECRET_VERSION_TYPE}
     written = {}
-    for call in common_gcp_infra.add_blob_to_bucket.call_args_list:
-        assert call.kwargs['output_name'] == 'acls.json'
-        bucket = call.kwargs['bucket'].removeprefix('bucket:')
-        written[bucket] = json.loads(call.kwargs['contents'])
+    for _, inputs in registered:
+        assert inputs['secret'] not in written
+        # secret_data is a secret input: pulumi wraps its value
+        written[inputs['secret']] = json.loads(inputs['secretData']['value'])
     return written
 
 
@@ -343,30 +451,18 @@ def _data_readers(cloud_infras: dict[str, MagicMock]) -> dict[str, set[str]]:
     }
 
 
-def test_setup_themis_writes_each_environments_acls_and_grants_access(
-    created_buckets: dict[str, dict[str, Any]],
+def test_setup_themis_writes_each_environments_acl_and_grants_access(
+    registered: list[tuple[str, dict[str, Any]]],
 ):
-    root, common_gcp_infra, cloud_infras = _make_root(_config())
-    root.setup_themis()
+    root, cloud_infras = _make_root(_config())
+    _setup_themis(root)
 
-    assert set(created_buckets) == {'cpg-themis-dev-acls', 'cpg-themis-prod-acls'}
-    for kwargs in created_buckets.values():
-        assert kwargs['public_access_prevention'] == 'enforced'
-        assert kwargs['uniform_bucket_level_access']
-        assert kwargs['versioning'].enabled
-
-    assert _written(common_gcp_infra) == {
-        'cpg-themis-dev-acls': _acls(ALL_DATASETS),
-        'cpg-themis-prod-acls': _acls(ALL_DATASETS),
-    }
-
-    grants = {
-        (call.kwargs['bucket'], call.kwargs['member'], call.kwargs['membership'])
-        for call in common_gcp_infra.add_member_to_bucket.call_args_list
-    }
-    assert grants == {
-        ('bucket:cpg-themis-dev-acls', _sa('auth-dev'), BucketMembership.READ),
-        ('bucket:cpg-themis-prod-acls', _sa('auth-prod'), BucketMembership.READ),
+    # one secret version per environment, in the secret it configures, and no
+    # bucket, secret or IAM binding
+    assert [typ for typ, _ in registered] == [SECRET_VERSION_TYPE] * 2
+    assert _written(registered) == {
+        _acl_secret('dev'): _acl(ALL_DATASETS),
+        _acl_secret('prod'): _acl(ALL_DATASETS),
     }
 
     # ds-c and ds-d are allowed, but no Project is built from them
@@ -389,42 +485,42 @@ def test_setup_themis_writes_each_environments_acls_and_grants_access(
     }
 
 
-@pytest.mark.usefixtures('created_buckets')
-def test_sandbox_service_account_reads_exactly_the_acl_files_datasets():
+def test_sandbox_service_account_reads_exactly_the_acl_datasets(
+    registered: list[tuple[str, dict[str, Any]]],
+):
     config = _config(
         themis={
             'dev': _settings('dev', allowed_datasets=['ds-a', 'ds-c']),
             'prod': _settings('prod', allowed_datasets=['ds-b', 'ds-d']),
         },
     )
-    root, common_gcp_infra, cloud_infras = _make_root(config)
-    root.setup_themis()
+    root, cloud_infras = _make_root(config)
+    _setup_themis(root)
 
     readers = _data_readers(cloud_infras)
-    for bucket, acls in _written(common_gcp_infra).items():
-        environment = bucket.removeprefix('cpg-themis-').removesuffix('-acls')
+    for environment in ('dev', 'prod'):
+        acl = _written(registered)[_acl_secret(environment)]
         assert {
             dataset
             for dataset, sas in readers.items()
             if _sa(f'sandbox-{environment}') in sas
-        } == set(acls['projects'])
+        } == set(acl['projects'])
 
 
-@pytest.mark.usefixtures('created_buckets')
-def test_environments_are_separate():
-    """A dataset allowed in one environment reaches neither the other's ACL file
-    nor the other's sandbox service account."""
+def test_environments_are_separate(registered: list[tuple[str, dict[str, Any]]]):
+    """A dataset allowed in one environment reaches neither the other's ACL nor
+    the other's sandbox service account."""
     config = _config(
         themis={
             'dev': _settings('dev', allowed_datasets=['ds-a']),
             'prod': _settings('prod', allowed_datasets=['ds-b']),
         },
     )
-    root, common_gcp_infra, cloud_infras = _make_root(config)
-    root.setup_themis()
+    root, cloud_infras = _make_root(config)
+    _setup_themis(root)
 
-    written = _written(common_gcp_infra)
-    dev, prod = written['cpg-themis-dev-acls'], written['cpg-themis-prod-acls']
+    written = _written(registered)
+    dev, prod = written[_acl_secret('dev')], written[_acl_secret('prod')]
     assert dev['projects'] == {
         'ds-a': {
             'managers': ['alice.smith@example.org', 'bob@example.com'],
@@ -447,69 +543,89 @@ def test_environments_are_separate():
 
 
 def test_setup_themis_is_a_no_op_without_themis_config(
-    created_buckets: dict[str, dict[str, Any]],
+    registered: list[tuple[str, dict[str, Any]]],
 ):
-    root, common_gcp_infra, cloud_infras = _make_root(_config(themis={}))
+    root, cloud_infras = _make_root(_config(themis={}))
     root.validate_themis()
-    root.setup_themis()
+    _setup_themis(root)
 
-    assert not created_buckets
-    assert not common_gcp_infra.method_calls
+    assert not registered
     for cloud_infra in cloud_infras.values():
         assert not cloud_infra.method_calls
 
 
-def test_bucket_name_over_the_gcs_limit_fails_validation(
-    created_buckets: dict[str, dict[str, Any]],
+DS_X = {'ds-x': _dataset('ds-x', members={'themis-curator': ['curator']})}
+
+
+def _config_with_acl_of(size: int) -> CPGInfrastructureConfig:
+    """A config whose one environment's ACL payload is `size` bytes: one
+    Project, ds-x, whose one curator's email is padded to fit."""
+
+    def users(local_part: str) -> dict[str, CPGInfrastructureUser]:
+        return {'curator': _user('curator', f'{local_part}@example.com')}
+
+    unpadded = len(serialise_acl(build_acl(['ds-x'], DS_X, users('c'))))
+    padded = users('c' * (1 + size - unpadded))
+    assert len(serialise_acl(build_acl(['ds-x'], DS_X, padded))) == size
+    return _config(
+        themis={'dev': _settings('dev', allowed_datasets=['ds-x'])},
+        users=padded,
+    )
+
+
+def test_acl_at_the_secret_version_limit_is_written(
+    registered: list[tuple[str, dict[str, Any]]],
 ):
-    # 'cpg-themis-' + environment + '-acls' is 63 characters at the limit
-    at_limit, over_limit = 'e' * 47, 'e' * 48
-    root, _, _ = _make_root(_config(themis={at_limit: _settings('x')}))
-    root.validate_themis()
-
-    root, common_gcp_infra, _ = _make_root(_config(themis={over_limit: _settings('x')}))
-    with pytest.raises(ValueError, match='longer than 63 characters'):
-        root.validate_themis()
-    with pytest.raises(ValueError, match='longer than 63 characters'):
-        root.setup_themis()
-    assert not created_buckets
-    assert not common_gcp_infra.method_calls
+    root, _ = _make_root(_config_with_acl_of(SECRET_VERSION_LIMIT), DS_X)
+    _setup_themis(root)
+    [(_, inputs)] = registered
+    assert len(inputs['secretData']['value'].encode('utf-8')) == SECRET_VERSION_LIMIT
 
 
-def test_themis_without_gcp_config_fails_validation():
-    root, _, _ = _make_root(_config().model_copy(update={'gcp': None}))
-    with pytest.raises(ValueError, match='needs the gcp config'):
-        root.validate_themis()
+def test_acl_over_the_secret_version_limit_fails_before_any_resource_is_registered(
+    registered: list[tuple[str, dict[str, Any]]],
+):
+    root, cloud_infras = _make_root(_config_with_acl_of(SECRET_VERSION_LIMIT + 1), DS_X)
+    for step in (root.validate_themis, root.setup_themis):
+        with pytest.raises(
+            ValueError,
+            match=(
+                f"environment 'dev': its ACL is {SECRET_VERSION_LIMIT + 1} bytes, "
+                f'over the {SECRET_VERSION_LIMIT}'
+            ),
+        ):
+            _run(step)
+    assert not registered
+    cast('MagicMock', cloud_infras['ds-x'].add_themis_data_reader).assert_not_called()
 
 
 def test_dataset_without_a_gcp_deploy_location_raises():
-    root, _, _ = _make_root(_config())
+    root, _ = _make_root(_config())
     root.dataset_infrastructures['ds-b'].clouds = {}
     with pytest.raises(ValueError, match="'ds-b', which has no 'gcp' deploy location"):
         root.validate_themis()
 
 
 def test_unreadable_dataset_fails_before_any_resource_is_registered(
-    created_buckets: dict[str, dict[str, Any]],
+    registered: list[tuple[str, dict[str, Any]]],
 ):
-    """A partial deploy would publish ACLs whose data grants never landed."""
-    root, common_gcp_infra, cloud_infras = _make_root(_config())
+    """A partial deploy would publish an ACL whose data grants never landed."""
+    root, cloud_infras = _make_root(_config())
     cast(
         'MagicMock', cloud_infras['ds-b'].check_themis_data_readable
     ).side_effect = ValueError('ds-b: Themis reads')
 
     for step in (root.validate_themis, root.setup_themis):
         with pytest.raises(ValueError, match='ds-b: Themis reads'):
-            step()
-    assert not created_buckets
-    assert not common_gcp_infra.method_calls
+            _run(step)
+    assert not registered
     for cloud_infra in cloud_infras.values():
         cast('MagicMock', cloud_infra.add_themis_data_reader).assert_not_called()
 
 
-def test_allowed_dataset_outside_the_acl_file_needs_no_themis_prerequisites():
+def test_allowed_dataset_outside_the_acl_needs_no_themis_prerequisites():
     """Only the datasets Themis reads must be readable by it."""
-    root, _, cloud_infras = _make_root(_config())
+    root, cloud_infras = _make_root(_config())
     root.dataset_infrastructures['ds-c'].clouds = {}
     cast(
         'MagicMock', cloud_infras['ds-d'].check_themis_data_readable
