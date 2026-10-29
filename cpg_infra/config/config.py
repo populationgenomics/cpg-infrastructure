@@ -490,11 +490,9 @@ class SeqeraAccount(ConfigModel):
     cloud_id: str | pulumi.Output[str]
 
 
-# GCP IDs built from a dataset name have length limits. The tightest is the Seqera
-# workload identity provider, `seqera-{dataset}-oidc`, at 32 characters.
+# seqera-{dataset}-oidc, max 32
 MAX_DATASET_NAME_LENGTH = 20
-# Hail names a user's service account `{name}-{access_level}-{3 digits}`, at most
-# 30 characters, where `name` is the dataset or its Hail name override.
+# Hail SA {name}-standard-NNN, max 30
 MAX_HAIL_NAME_LENGTH = 17
 
 
