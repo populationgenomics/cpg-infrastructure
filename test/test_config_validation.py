@@ -143,6 +143,37 @@ class TestConfigValidation(TestCase):
         )
         self.assertEqual(100, config.budgets['dry-run'].monthly_budget)
 
+    def test_dataset_name_too_long(self):
+        """A dataset name over the limit is rejected"""
+        with self.assertRaisesRegex(ValidationError, 'Dataset name'):
+            CPGDatasetConfig(
+                dataset='a' * 21,
+                gcp=CPGDatasetConfig.Gcp(
+                    project='test-project',
+                    hail_service_account_dataset_name_override='short',
+                ),
+                budgets={'gcp': CPGDatasetConfig.Budget(monthly_budget=100)},
+            )
+
+    def test_hail_name_too_long(self):
+        """A dataset name too long for Hail needs an override"""
+        with self.assertRaisesRegex(ValidationError, 'Hail name'):
+            CPGDatasetConfig(
+                dataset='a' * 18,
+                gcp=CPGDatasetConfig.Gcp(project='test-project'),
+                budgets={'gcp': CPGDatasetConfig.Budget(monthly_budget=100)},
+            )
+
+        config = CPGDatasetConfig(
+            dataset='a' * 18,
+            gcp=CPGDatasetConfig.Gcp(
+                project='test-project',
+                hail_service_account_dataset_name_override='a' * 17,
+            ),
+            budgets={'gcp': CPGDatasetConfig.Budget(monthly_budget=100)},
+        )
+        self.assertEqual('a' * 18, config.dataset)
+
     def test_seqera_account_model_parses(self):
         """SeqeraAccount round-trips minimal valid input"""
         from cpg_infra.config import SeqeraAccount

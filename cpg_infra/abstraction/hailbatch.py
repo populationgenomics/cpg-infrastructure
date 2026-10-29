@@ -66,6 +66,14 @@ def get_hail_batch_auth_token(token_category: str) -> str:
     )
 
 
+def raise_for_status_with_body(resp: requests.Response) -> None:
+    """resp.raise_for_status(), keeping the response body in the error"""
+    try:
+        resp.raise_for_status()
+    except requests.HTTPError as e:
+        raise requests.HTTPError(f'{e}: {resp.text}', response=resp) from e
+
+
 def get_hail_batch_user(
     username: str,
     token_category: str,
@@ -83,7 +91,7 @@ def get_hail_batch_user(
     if resp.status_code == 404:
         return None
 
-    resp.raise_for_status()
+    raise_for_status_with_body(resp)
 
     return resp.json()
 
@@ -106,7 +114,7 @@ def get_hail_batch_billing_project(name: str, token_category: str, batch_uri: st
         # Ignore 403: Unknown Hail Batch billing project <project>
         return None
 
-    resp.raise_for_status()
+    raise_for_status_with_body(resp)
 
     return resp.json()
 
@@ -148,13 +156,12 @@ class HailBatchUserProvider(pulumi.dynamic.ResourceProvider):
                 {
                     'user': username,
                     'login_id': None,
-                    'is_developer': False,
                     'is_service_account': True,
                 },
             ),
         )
 
-        resp.raise_for_status()
+        raise_for_status_with_body(resp)
 
         cloud_id = None
         # now we have to wait for the user to be created
@@ -255,7 +262,7 @@ class HailBatchBillingProjectProvider(pulumi.dynamic.ResourceProvider):
                 headers=hail_auth_headers,
                 timeout=60,
             )
-            resp.raise_for_status()
+            raise_for_status_with_body(resp)
         else:
             url = HAIL_CREATE_BILLING_PROJECT_PATH.format(
                 hail_batch_url=batch_uri,
@@ -266,7 +273,7 @@ class HailBatchBillingProjectProvider(pulumi.dynamic.ResourceProvider):
                 headers=hail_auth_headers,
                 timeout=60,
             )
-            resp.raise_for_status()
+            raise_for_status_with_body(resp)
 
         return pulumi.dynamic.CreateResult(
             id_=f'{token_category}::{batch_uri}::{name}',
@@ -353,7 +360,7 @@ class HailBatchBillingProjectMembershipProvider(pulumi.dynamic.ResourceProvider)
             headers=hail_auth_headers,
             timeout=60,
         )
-        resp.raise_for_status()
+        raise_for_status_with_body(resp)
 
         return pulumi.dynamic.CreateResult(
             id_=f'{token_category}::{batch_uri}::{billing_project_name}::{user}',

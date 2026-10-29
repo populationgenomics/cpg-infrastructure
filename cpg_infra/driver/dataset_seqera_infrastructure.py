@@ -72,8 +72,12 @@ _TASK_JOB_ROLES: tuple[str, ...] = (
     'roles/logging.logWriter',
     'roles/logging.viewer',  # Read Batch job logs from Nextflow tail-follow
     'roles/dataproc.editor',  # Create/manage Dataproc clusters (Includes dataproc.autoscalingPolicies.use)
-    'roles/dataproc.worker',  # Cluster SA (same SA) acts as Dataproc worker
 )
+
+# This role grants similar permissions to the dataproc.worker role, but avoids the broad
+# storage access that dataproc.worker grants.
+# https://docs.cloud.google.com/iam/docs/roles-permissions/dataproc#dataproc.worker
+_DATAPROC_WORKER_ROLE = 'roles/DataprocWorkerWithoutStorageAccess'
 
 # Maps each access level to the workspace type that holds it.
 _WORKSPACE_TYPE_FOR_LEVEL: dict[str, str] = {
@@ -191,15 +195,13 @@ class DatasetSeqeraInfrastructure:
         # Make display_name and pool_id short so it does fit within the 32-char cap
         # `sqwif` stands for "Seqera Workload Identity Federation"
         pool_id = f'{self._dataset_config.dataset}-sqwif'
-        return gcp.iam.WorkloadIdentityPool(
+        return self._infra.create_workload_identity_pool(
             pool_id,
-            workload_identity_pool_id=pool_id,
             display_name=pool_id,
             description=(
                 'Federates Seqera Cloud OIDC tokens to per-dataset GCP '
                 'service accounts.'
             ),
-            project=self._infra.project_id,
         )
 
     @cached_property
@@ -287,6 +289,12 @@ class DatasetSeqeraInfrastructure:
                     member=sa,
                     role=role,
                 )
+
+            self._infra.add_project_role(
+                f'seqera-{level}-dataproc-worker-no-storage',
+                member=sa,
+                role=f'{self._infra.organization.id}/{_DATAPROC_WORKER_ROLE}',
+            )
         # Grant HEAD SA roles/iam.serviceAccountUser on TASK SAs per access level
         for level, head_sa in self._head_sas.items():
             task_sa = self._service_accounts[level]
@@ -364,6 +372,20 @@ class DatasetSeqeraInfrastructure:
                 f'seqera-{level}-head-work-bucket-viewer',
                 self._work_bucket_for_access_level(level),
                 head_sa,
+                BucketMembership.READ,
+            )
+
+        # Allow members of the analysis group to read the nf work bucket so that they
+        # can view logs and intermediate outputs.
+        work_buckets = [('main', self._parent.nf_main_work_bucket)]
+        if self._dataset_config.setup_test:
+            work_buckets.append(('test', self._parent.nf_test_work_bucket))
+
+        for name, bucket in work_buckets:
+            self._infra.add_member_to_bucket(
+                f'analysis-group-{name}-nfwork-bucket-viewer',
+                bucket,
+                self._parent.analysis_group,
                 BucketMembership.READ,
             )
 

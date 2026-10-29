@@ -6,7 +6,7 @@ specific dataset.
 """
 
 from enum import Enum
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, Self
 
 import pulumi
 from pydantic import (
@@ -564,6 +564,12 @@ class SeqeraAccount(ConfigModel):
     cloud_id: str | pulumi.Output[str]
 
 
+# seqera-{dataset}-oidc, max 32
+MAX_DATASET_NAME_LENGTH = 20
+# Hail SA {name}-standard-NNN, max 30
+MAX_HAIL_NAME_LENGTH = 17
+
+
 class CPGDatasetConfig(ConfigModel):
     """
     Configuration that describes the minimum information
@@ -697,6 +703,21 @@ class CPGDatasetConfig(ConfigModel):
     members: dict[GroupName, list[MemberKey]] = Field(default_factory=dict)
 
     upload_config: UploadConfig | None = None
+
+    @model_validator(mode='after')
+    def _check_name_lengths(self) -> Self:
+        if len(self.dataset) > MAX_DATASET_NAME_LENGTH:
+            raise ValueError(
+                f'Dataset name {self.dataset!r} is longer than '
+                f'{MAX_DATASET_NAME_LENGTH} characters',
+            )
+        hail_name = self.gcp.hail_service_account_dataset_name_override or self.dataset
+        if len(hail_name) > MAX_HAIL_NAME_LENGTH:
+            raise ValueError(
+                f'Hail name {hail_name!r} is longer than {MAX_HAIL_NAME_LENGTH} '
+                'characters, set gcp.hail_service_account_dataset_name_override',
+            )
+        return self
 
     def metamist_project_meta(self, suffix: str = '') -> dict[str, str | list[str]]:
         """Build the metamist project meta dict from this config.
