@@ -15,6 +15,7 @@ from cpg_infra.config.config import (
     MemberKey,
     SeqeraAccount,
     TeamOwnership,
+    ThemisNamespace,
     infra_context_from_dataset_config,
     infra_context_from_standalone_config,
 )

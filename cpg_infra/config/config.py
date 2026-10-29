@@ -6,14 +6,16 @@ specific dataset.
 """
 
 from enum import Enum
-from typing import Any, Literal, Self
+from typing import Annotated, Any, Literal, Self
 
 import pulumi
 from pydantic import (
     AliasGenerator,
     ConfigDict,
     Field,
+    StringConstraints,
     field_serializer,
+    field_validator,
     model_validator,
 )
 from pydantic.alias_generators import to_camel
@@ -36,7 +38,31 @@ GroupName = Literal[
     'tmp-main-read-access',
     'external-repository-reader',
     'igv-desktop-access',
+    # the dataset's Themis Project roles; neither creates a group
+    'themis-manager',
+    'themis-curator',
 ]
+
+
+# get_member_key binds anything else as a `user:` principal
+SERVICE_ACCOUNT_PATTERN = r'^[^@\s]+@[^@\s]+\.iam\.gserviceaccount\.com$'
+# a Secret Manager secret's resource name: a GCP project id, then a secret id
+SECRET_RESOURCE_NAME_PATTERN = (
+    r'^projects/[a-z][a-z0-9-]{4,28}[a-z0-9]/secrets/[A-Za-z0-9_-]{1,255}$'  # noqa: S105
+)
+# a Themis deployment, e.g. dev or prod; part of its Pulumi resource names
+ThemisEnvironment = Annotated[
+    str,
+    StringConstraints(pattern=r'^[a-z0-9][a-z0-9-]*$'),
+]
+# the dataset namespace a Themis environment's sandbox service account reads
+ThemisNamespace = Literal['main', 'test']
+
+
+def _no_duplicates(value: list[str]) -> list[str]:
+    if len(set(value)) != len(value):
+        raise ValueError(f'duplicate entries in {value}')
+    return value
 
 
 class CPGInfrastructureUser(ConfigModel):
@@ -321,6 +347,35 @@ class CPGInfrastructureConfig(ConfigModel):
         github_auth_token_username: str
         github_auth_token_base_url: str
 
+    class Themis(ConfigModel):
+        """One Themis environment: its ACL secret, sandbox account and datasets.
+
+        Each Themis environment reads one JSON object, Themis's ACL (access
+        control list): its Projects with the people in each role. Themis owns
+        the format. A Themis Project is one dataset: each allowed dataset whose
+        `themis-manager` or `themis-curator` member list is non-empty becomes a
+        Project with those managers and curators. The driver resolves the ACL
+        from these settings and the datasets' member lists, and writes it as a
+        new version of `acl_secret`, a secret that Themis's own deploy creates
+        in its project.
+        """
+
+        # resource name of the secret that holds the ACL,
+        # projects/<project-id>/secrets/<secret-id>
+        acl_secret: str = Field(pattern=SECRET_RESOURCE_NAME_PATTERN)
+        # Themis's sandbox job account: reads the datasets in the ACL and
+        # mounts their files into the agent's sandbox
+        sandbox_service_account: str = Field(pattern=SERVICE_ACCOUNT_PATTERN)
+        # which namespace of those datasets it reads
+        namespace: ThemisNamespace
+        # the datasets whose Themis role lists the ACL is built from
+        allowed_datasets: list[str] = Field(min_length=1)
+
+        @field_validator('allowed_datasets')
+        @classmethod
+        def _no_duplicate_datasets(cls, value: list[str]) -> list[str]:
+            return _no_duplicates(value)
+
     class Billing(ConfigModel):
         class GCP(ConfigModel):
             """Details of the BILLING account"""
@@ -399,6 +454,8 @@ class CPGInfrastructureConfig(ConfigModel):
     seqera: Seqera | None = None
     # configuration options for billing + billing aggregation
     billing: Billing | None = None
+    # configuration options for Themis: its ACL and its data access
+    themis: dict[ThemisEnvironment, Themis] = Field(default_factory=dict)
     # list of additional adhoc groups under infrastructure management
     adhoc_groups: list[CPGInfrastructureGroup] | None = None
 
@@ -415,6 +472,23 @@ class CPGInfrastructureConfig(ConfigModel):
     budget_notification_thresholds: list[float] = Field(
         default_factory=lambda: [0.5, 0.9, 1.0],
     )
+
+    @model_validator(mode='after')
+    def _themis_environments_differ(self) -> 'CPGInfrastructureConfig':
+        # one service account as two environments' dataset reader would join each
+        # dataset group twice
+        sandbox_service_accounts = [
+            t.sandbox_service_account for t in self.themis.values()
+        ]
+        if len(set(sandbox_service_accounts)) != len(sandbox_service_accounts):
+            raise ValueError(
+                'Themis environments must not share a sandbox service account'
+            )
+        # each environment's version would replace the other's as the latest
+        acl_secrets = [t.acl_secret for t in self.themis.values()]
+        if len(set(acl_secrets)) != len(acl_secrets):
+            raise ValueError('Themis environments must not share an ACL secret')
+        return self
 
 
 class DataprocAutoscalingPolicySpec(ConfigModel):

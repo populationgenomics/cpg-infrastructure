@@ -887,7 +887,7 @@ class GcpInfrastructure(CloudInfraBase):
     ):
         return gcp.secretmanager.SecretVersion(
             self.get_pulumi_name(resource_key),
-            secret=secret.id,
+            secret=self.get_secret_key(secret),
             secret_data=contents,
         )
 
