@@ -67,10 +67,7 @@ def get_hail_batch_auth_token(token_category: str) -> str:
 
 
 def raise_for_status_with_body(resp: requests.Response) -> None:
-    """
-    Like resp.raise_for_status(), but keeps the response body in the error:
-    Hail states why it rejected a request only in the body.
-    """
+    """resp.raise_for_status(), keeping the response body in the error"""
     try:
         resp.raise_for_status()
     except requests.HTTPError as e:
