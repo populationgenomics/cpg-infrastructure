@@ -24,7 +24,6 @@ SM_MAIN_READ = 'main-read'
 SM_MAIN_WRITE = 'main-write'
 SM_MAIN_CONTRIBUTE = 'main-contribute'
 IGV_DESKTOP_ACCESS = 'igv-desktop-access'
-# Final keeps the Literal type, so they index CPGDatasetConfig.members
 THEMIS_MANAGER: Final = 'themis-manager'
 THEMIS_CURATOR: Final = 'themis-curator'
 

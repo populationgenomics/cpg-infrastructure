@@ -1947,18 +1947,11 @@ class CPGDatasetCloudInfrastructure:
         environment: str,
         namespace: ThemisNamespace,
     ):
-        """Give a Themis environment's sandbox service account read of one namespace.
+        """Give a Themis sandbox account read on one namespace's data.
 
-        main: the two narrowest existing groups that cover this.
-        external-repository-reader reads the main bucket and nothing else, and
-        sample-metadata-main-read reads the main metamist project and nothing
-        else (it is also among the metamist Cloud Run invokers).
-
-        test: sample-metadata-test-read is the test counterpart of
-        sample-metadata-main-read. No group reads the test bucket alone (test-read
-        also reads the other test buckets and the main metamist project, writes
-        the test metamist project, and joins the common dataset's test-read), so
-        the account is bound to the test bucket directly.
+        main: through external-repository-reader and sample-metadata-main-read.
+        test: through sample-metadata-test-read, plus a direct binding on the
+        test bucket, as no group reads only that bucket.
         """
         self.check_themis_data_readable(namespace)
 

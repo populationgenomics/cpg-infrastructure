@@ -70,9 +70,7 @@ MAX_SECRET_VERSION_BYTES = 65536
 
 class ResolvedThemisEnvironment(NamedTuple):
     settings: CPGInfrastructureConfig.Themis
-    # Themis's ACL, serialised as the payload of a secret version
     acl_payload: str
-    # the GCP infrastructure of each dataset in the ACL
     dataset_infras: list[CPGDatasetCloudInfrastructure]
 
 
@@ -187,8 +185,7 @@ class CPGInfrastructure:
         self.setup_datasets()
         self.setup_standalone_projects()
 
-        # Fail on bad Themis config before any resource is registered, as pulumi
-        # starts applying resources while the program still runs
+        # fail on bad Themis config before any resource is registered
         self.validate_themis()
 
         # create a bucket and attach accessor members to it. The bucket itself is
@@ -220,8 +217,7 @@ class CPGInfrastructure:
         # Deploy managed adhoc assets that are not associated with datasets.
         self.deploy_adhoc()
 
-        # Write each Themis environment's ACL and grant its sandbox account access.
-        # Adds group members, so must run before finalize_groups.
+        # adds group members, so must run before finalize_groups
         self.setup_themis()
 
         plugins = get_plugins()
@@ -862,33 +858,37 @@ class CPGInfrastructure:
     # region THEMIS
 
     def setup_themis(self):
-        """Per Themis environment, write Themis's ACL and grant its sandbox account.
-
-        Themis's ACL (access control list) names the people in each role on
-        each of the environment's Projects. It is written as a new version of
-        the environment's `acl_secret`. Themis's own deploy creates that
-        secret in its project, grants Themis read on it, and lets this
-        deploy's service account add versions and read them back (the
-        provider reads each version after adding it); this deploy creates no
-        secret and grants nothing on it. The environment's sandbox
-        service account reads the environment's namespace of every dataset in
-        the ACL, and no other.
-        """
+        """Write each Themis environment's ACL to a secret, and grant access."""
         for environment, resolved in self._resolve_themis().items():
-            # `secret` is a full resource name, so the version lands in Themis's
-            # project, not the provider's. A changed payload replaces the
-            # version: the new one is added, then the old one destroyed.
+            settings = resolved.settings
+            _, project, _, secret_id = settings.acl_secret.split('/')
+            secret = self.common_gcp_infra.create_secret(
+                name=secret_id,
+                project=project,
+                resource_key=self.common_gcp_infra.get_pulumi_name(
+                    f'themis-{environment}-acl',
+                ),
+            )
+
             self.common_gcp_infra.add_secret_version(
-                f'themis-{environment}-acl',
-                secret=resolved.settings.acl_secret,
+                f'themis-{environment}-acl-latest',
+                secret=secret,
                 contents=resolved.acl_payload,
+            )
+
+            self.common_gcp_infra.add_secret_member(
+                f'themis-{environment}-acl-accessor',
+                secret=secret,
+                project=project,
+                member=settings.auth_service_account,
+                membership=SecretMembership.ACCESSOR,
             )
 
             for cloud_infra in resolved.dataset_infras:
                 cloud_infra.add_themis_data_reader(
-                    resolved.settings.sandbox_service_account,
+                    settings.sandbox_service_account,
                     environment=environment,
-                    namespace=resolved.settings.namespace,
+                    namespace=settings.namespace,
                 )
 
     def validate_themis(self):
@@ -896,11 +896,7 @@ class CPGInfrastructure:
         self._resolve_themis()
 
     def _resolve_themis(self) -> dict[str, ResolvedThemisEnvironment]:
-        """Each Themis environment's ACL payload and the datasets it reads.
-
-        Registers no resources, and raises on anything setup_themis would
-        otherwise fail on part way.
-        """
+        """Each Themis environment's ACL payload and datasets; registers nothing."""
         resolved = {}
         for environment, settings in sorted(self.config.themis.items()):
             acl = build_acl(
@@ -918,7 +914,6 @@ class CPGInfrastructure:
                 )
 
             dataset_infras = []
-            # a Project is one dataset, so these are exactly the ACL's datasets
             for dataset in sorted(acl['projects']):
                 cloud_infra = self.dataset_infrastructures[dataset].clouds.get(
                     GcpInfrastructure.name(),

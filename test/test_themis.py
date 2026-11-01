@@ -98,6 +98,7 @@ ALL_DATASETS = sorted(DATASETS)
 def _settings(environment: str, **overrides: Any) -> dict[str, Any]:
     return {
         'acl_secret': _acl_secret(environment),
+        'auth_service_account': _sa(f'auth-{environment}'),
         'sandbox_service_account': _sa(f'sandbox-{environment}'),
         'namespace': 'test' if environment == 'dev' else 'main',
         'allowed_datasets': ALL_DATASETS,
@@ -201,12 +202,11 @@ def test_acl_secret_accepts_any_secret_resource_name(acl_secret: str):
             {'sandbox_service_account': 'sandbox@project.iam.gserviceaccount.com.evil'},
             'string_pattern',
         ),
+        ({'auth_service_account': 'auth@example.com'}, 'string_pattern'),
         ({'allowed_datasets': []}, 'too_short'),
         ({'namespace': 'main-upload'}, 'literal_error'),
         ({'namespace': 'Main'}, 'literal_error'),
         ({'allowed_datasets': ['ds-a', 'ds-a']}, 'duplicate'),
-        # Themis's deploy grants its own auth service account read on the ACL
-        ({'auth_service_account': _sa('auth-prod')}, 'extra_forbidden'),
         # the site resolves its allowlist into allowed_datasets
         ({'project_allowlist': ['p1']}, 'extra_forbidden'),
         ({'operators': ['carol']}, 'extra_forbidden'),
@@ -224,7 +224,13 @@ def test_invalid_environment_settings_are_rejected(
 
 @pytest.mark.parametrize(
     'field',
-    ['acl_secret', 'sandbox_service_account', 'allowed_datasets', 'namespace'],
+    [
+        'acl_secret',
+        'auth_service_account',
+        'sandbox_service_account',
+        'allowed_datasets',
+        'namespace',
+    ],
 )
 def test_settings_without_a_default_are_required(field: str):
     settings = _settings('prod')
@@ -350,7 +356,11 @@ def test_unconfigured_allowed_dataset_raises():
 # endregion
 # region driver
 
+SECRET_TYPE = 'gcp:secretmanager/secret:Secret'  # noqa: S105
 SECRET_VERSION_TYPE = 'gcp:secretmanager/secretVersion:SecretVersion'  # noqa: S105
+SECRET_IAM_MEMBER_TYPE = 'gcp:secretmanager/secretIamMember:SecretIamMember'  # noqa: S105
+SERVICE_TYPE = 'gcp:projects/service:Service'
+SECRET_ACCESSOR = 'roles/secretmanager.secretAccessor'  # noqa: S105
 # Secret Manager's limit on the payload of one secret version, in bytes
 SECRET_VERSION_LIMIT = 65536
 
@@ -365,6 +375,10 @@ class _RecordingMocks(pulumi.runtime.Mocks):
         self, args: pulumi.runtime.MockResourceArgs
     ) -> tuple[str | None, dict[str, Any]]:
         self.registered.append((args.typ, dict(args.inputs)))
+        if args.typ == SECRET_TYPE:
+            # a Secret's id is its resource name
+            inputs = args.inputs
+            return f'projects/{inputs["project"]}/secrets/{inputs["secretId"]}', inputs
         return f'{args.name}-id', dict(args.inputs)
 
     def call(self, args: pulumi.runtime.MockCallArgs) -> dict[str, Any]:  # noqa: ARG002
@@ -394,11 +408,13 @@ def _make_root(
     root.config = config
     root.dataset_configs = datasets
 
-    # common_gcp_infra is a cached_property; seed the cache
-    root.__dict__['common_gcp_infra'] = GcpInfrastructure(
+    # common_gcp_infra and project_id are cached_properties; seed the caches
+    common_gcp_infra = GcpInfrastructure(
         config=config,
         context=InfraContext(name_prefix='common', gcp_project_id='common-1234'),
     )
+    common_gcp_infra.__dict__['project_id'] = 'common-1234'
+    root.__dict__['common_gcp_infra'] = common_gcp_infra
 
     cloud_infras = {d: MagicMock(spec=CPGDatasetCloudInfrastructure) for d in datasets}
     root.dataset_infrastructures = {
@@ -422,18 +438,46 @@ def _setup_themis(root: CPGInfrastructure) -> None:
     _run(root.setup_themis)
 
 
-def _written(registered: list[tuple[str, dict[str, Any]]]) -> dict[str, Any]:
-    """Secret resource name -> the ACL written to it as a new version.
+def _acl_secrets(
+    registered: list[tuple[str, dict[str, Any]]],
+) -> dict[str, dict[str, Any]]:
+    """Each created secret's resource name -> its versions and IAM grants.
 
-    Fails on any other resource: the deploy only adds versions to secrets that
-    Themis's deploy creates and grants on.
+    Fails on a version or grant on a secret the deploy did not create, and on
+    any resource other than secrets, their versions and grants, and the API
+    services a secret depends on.
     """
-    assert {typ for typ, _ in registered} <= {SECRET_VERSION_TYPE}
+    assert {typ for typ, _ in registered} <= {
+        SECRET_TYPE,
+        SECRET_VERSION_TYPE,
+        SECRET_IAM_MEMBER_TYPE,
+        SERVICE_TYPE,
+    }
+    secrets: dict[str, dict[str, Any]] = {}
+    for typ, inputs in registered:
+        if typ == SECRET_TYPE:
+            name = f'projects/{inputs["project"]}/secrets/{inputs["secretId"]}'
+            assert name not in secrets
+            secrets[name] = {'versions': [], 'grants': set()}
+    for typ, inputs in registered:
+        if typ == SECRET_VERSION_TYPE:
+            # secret_data is a secret input: pulumi wraps its value
+            secrets[inputs['secret']]['versions'].append(
+                json.loads(inputs['secretData']['value']),
+            )
+        elif typ == SECRET_IAM_MEMBER_TYPE:
+            assert inputs['secretId'].split('/')[1] == inputs['project']
+            secrets[inputs['secretId']]['grants'].add(
+                (inputs['role'], inputs['member']),
+            )
+    return secrets
+
+
+def _written(registered: list[tuple[str, dict[str, Any]]]) -> dict[str, Any]:
+    """Secret resource name -> the ACL in its one version."""
     written = {}
-    for _, inputs in registered:
-        assert inputs['secret'] not in written
-        # secret_data is a secret input: pulumi wraps its value
-        written[inputs['secret']] = json.loads(inputs['secretData']['value'])
+    for name, secret in _acl_secrets(registered).items():
+        [written[name]] = secret['versions']
     return written
 
 
@@ -457,12 +501,16 @@ def test_setup_themis_writes_each_environments_acl_and_grants_access(
     root, cloud_infras = _make_root(_config())
     _setup_themis(root)
 
-    # one secret version per environment, in the secret it configures, and no
-    # bucket, secret or IAM binding
-    assert [typ for typ, _ in registered] == [SECRET_VERSION_TYPE] * 2
-    assert _written(registered) == {
-        _acl_secret('dev'): _acl(ALL_DATASETS),
-        _acl_secret('prod'): _acl(ALL_DATASETS),
+    # each environment's secret, in the project its acl_secret names, holds its
+    # ACL, and only its auth service account may read it
+    assert _acl_secrets(registered) == {
+        _acl_secret(environment): {
+            'versions': [_acl(ALL_DATASETS)],
+            'grants': {
+                (SECRET_ACCESSOR, f'serviceAccount:{_sa(f"auth-{environment}")}'),
+            },
+        }
+        for environment in ('dev', 'prod')
     }
 
     # ds-c and ds-d are allowed, but no Project is built from them
@@ -578,8 +626,12 @@ def test_acl_at_the_secret_version_limit_is_written(
 ):
     root, _ = _make_root(_config_with_acl_of(SECRET_VERSION_LIMIT), DS_X)
     _setup_themis(root)
-    [(_, inputs)] = registered
-    assert len(inputs['secretData']['value'].encode('utf-8')) == SECRET_VERSION_LIMIT
+    [payload] = [
+        inputs['secretData']['value']
+        for typ, inputs in registered
+        if typ == SECRET_VERSION_TYPE
+    ]
+    assert len(payload.encode('utf-8')) == SECRET_VERSION_LIMIT
 
 
 def test_acl_over_the_secret_version_limit_fails_before_any_resource_is_registered(

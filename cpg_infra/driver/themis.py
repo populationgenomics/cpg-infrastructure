@@ -1,12 +1,6 @@
 """
-Resolve Themis's ACL from config.
-
-Themis reads one JSON object, Themis's ACL (access control list), and nothing
-else from this infrastructure: `projects` maps each Project's id to the emails
-of its `managers` and its `curators`. A Themis Project is one dataset, and its
-id is the dataset's name. Themis owns the format: it rejects an ACL whose
-`format` it does not know, that has keys it does not know, or whose emails are
-not lowercase. `CPGInfrastructure.setup_themis` writes the result.
+Build Themis's ACL, which maps each Themis Project (a dataset) to the emails of
+its managers and curators.
 """
 
 from __future__ import annotations
@@ -28,7 +22,6 @@ if TYPE_CHECKING:
     )
 
 ACL_FORMAT = 1
-# each role in a Project of the ACL, and the members.yaml list that fills it
 ROLE_LISTS: dict[str, GroupName] = {
     'managers': THEMIS_MANAGER,
     'curators': THEMIS_CURATOR,
@@ -61,7 +54,6 @@ def _member_email(
             f'{context}: member {member_key!r} is the service account {email!r}; '
             'Themis roles are for people',
         )
-    # ASCII only, so this is the ASCII lowercase Themis compares against
     return email.lower()
 
 
@@ -70,18 +62,10 @@ def build_acl(
     dataset_configs: Mapping[str, CPGDatasetConfig],
     users: Mapping[MemberKey, CPGInfrastructureUser],
 ) -> dict[str, Any]:
-    """Resolve one environment's ACL.
+    """One environment's ACL.
 
-    Each allowed dataset with a non-empty `themis-manager` or `themis-curator`
-    list becomes a Project: the dataset's name, mapped to the sorted lowercase
-    emails of its `managers` and its `curators`. Both keys are always present;
-    one of them may be empty. With no such dataset, the ACL has no Projects,
-    which Themis accepts.
-
-    Raises:
-        ValueError: on an allowed dataset that is not configured, an unknown
-            member key, a member without the email of a Google account, or a
-            service account.
+    Each allowed dataset with a non-empty themis-manager or themis-curator list
+    becomes a Project, with both roles as sorted lowercase emails.
     """
     projects = {}
     for dataset in allowed_datasets:
@@ -106,9 +90,5 @@ def build_acl(
 
 
 def serialise_acl(acl: dict[str, Any]) -> str:
-    """Serialise compactly and deterministically.
-
-    An unchanged config gives the same payload, so it writes no new secret
-    version.
-    """
+    """Compact, deterministic JSON, so an unchanged ACL adds no secret version."""
     return json.dumps(acl, sort_keys=True, separators=(',', ':'))
