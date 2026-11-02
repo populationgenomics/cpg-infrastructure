@@ -94,35 +94,40 @@ To do this:
 
 ### Themis
 
-[Themis](https://github.com/populationgenomics/themis) is CPG's variant-curation app. In Themis, each dataset is a Project, and a person can be a manager or a curator on a Project, or both. `CPGInfrastructureConfig.themis` configures each Themis environment, such as `dev` or `prod`.
+[Themis](https://github.com/populationgenomics/themis) is CPG's variant-curation app. In Themis, a Project is one dataset. A person on a Project is a manager, a curator, or both. `CPGInfrastructureConfig.themis` configures each Themis environment, for example `dev` or `prod`.
 
 For each environment, the deploy:
 
-- builds Themis's ACL (access control list), which lists the people in each role on each Project,
+- makes the ACL (access control list), which lists the managers and curators of each Project,
 - creates the Secret Manager secret `acl` in the environment's `project`, and writes the ACL to it as a new version,
-- gives `auth_service_account` read access to that secret, and
+- gives `auth_service_account` read access to the secret, and
 - gives `sandbox_service_account` read access to each dataset in the ACL, in the environment's `namespace`.
 
-A dataset becomes a Project when it is in the environment's `allowed_datasets` and its `themis-manager` or `themis-curator` member list names at least one user. The ACL holds each user's `gcp.id`, in lowercase:
+A dataset is a Project when two conditions are true:
+
+- The dataset is in the environment's `allowed_datasets`.
+- Its `themis-manager` or `themis-curator` list has at least one user.
+
+The ACL contains the `gcp.id` of each user, in lowercase:
 
 ```json
 {"format": 1, "projects": {"validation": {"managers": ["<email>", ...], "curators": ["<email>", ...]}}}
 ```
 
-Add an environment here only after Themis's targeted first `up` has created its auth and sandbox service accounts, because this deploy grants them access. This deploy's service account needs to create secrets and set their IAM policy in the environment's project, and with `user_project_override` it also needs `serviceusage.services.use` there.
+The auth and sandbox service accounts must exist before you add an environment, because the deploy gives them access.
 
-#### The namespace an environment reads
+#### Namespace
 
-As [Dataset infrastructure](#dataset-infrastructure) describes, a dataset has a `main` namespace and an optional `test` namespace. The environment's `namespace` setting picks which one the sandbox service account reads, which is one bucket and one metamist project per dataset. For the dataset `validation`, with CPG's storage prefix `cpg-`, those are:
+A dataset has a `main` namespace, and it can also have a `test` namespace (see [Dataset infrastructure](#dataset-infrastructure)). The `namespace` setting selects the namespace that the sandbox service account reads. In this namespace, the account reads one bucket and one metamist project for each dataset. For the dataset `validation`, these are:
 
-| Namespace | Bucket | Metamist project |
-| --------- | ------ | ---------------- |
+| `namespace` | Bucket | Metamist project |
+| ----------- | ------ | ---------------- |
 | `main` | `cpg-validation-main` | `validation` |
 | `test` | `cpg-validation-test` | `validation-test` |
 
-So in an environment that reads `test`, the Project `validation` is backed by `cpg-validation-test` and the metamist project `validation-test`. The people in the ACL are the same in either namespace.
+The ACL is the same for each namespace.
 
-A test namespace often holds a subset of the main data, which can include real participants. Reading `test` therefore does not keep participant data out of an environment; only `allowed_datasets` does that.
+A test namespace can contain data from real participants. Thus the `test` namespace does not keep participant data out of an environment. Only `allowed_datasets` does that.
 
 ## Infrastructure
 
@@ -157,7 +162,7 @@ Members have different roles within a dataset, those roles include:
   - Read access to data in main. This is distinct from the `data-manager` role as it only grants read access to main and no additional access to any other buckets or services.
   - Developed to support Terra Data Repository service account access to self-hosted production data in CPG buckets. Do not assign this role to a human user.
 - themis-manager, themis-curator
-  - The manager and curator roles on the dataset's Project in each Themis environment that allows the dataset (see [Themis](#themis)). They create no group, so they grant no access outside Themis.
+  - The manager and curator roles on the dataset's Project in Themis (see [Themis](#themis)). These lists do not create a group, and they give no access outside Themis.
 
 ## Setup
 
