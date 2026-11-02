@@ -328,18 +328,15 @@ class CPGInfrastructureConfig(ConfigModel):
         github_auth_token_base_url: str
 
     class Themis(ConfigModel):
-        """Configuration of one Themis environment, for example dev or prod.
+        """One Themis environment, e.g. dev or prod"""
 
-        A dataset is in the environment's ACL if it is in `allowed_datasets`
-        and has Themis role members. The deploy writes the ACL to a secret in
-        `project`, which `auth_service_account` can read.
-        `sandbox_service_account` can read the `namespace` of each dataset in
-        the ACL.
-        """
-
+        # the Themis deployment's GCP project, which holds the ACL secret
         project: str
+        # reads the ACL secret
         auth_service_account: str
+        # reads the datasets in the ACL
         sandbox_service_account: str
+        # the dataset namespace that sandbox_service_account reads
         namespace: ThemisNamespace
         allowed_datasets: list[str]
 
