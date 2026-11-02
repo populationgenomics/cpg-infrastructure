@@ -36,8 +36,12 @@ def _sa(name: str) -> str:
     return f'not-a-real-{name}@nonexistent-project.iam.gserviceaccount.com'
 
 
+def _project(environment: str) -> str:
+    return f'not-a-real-themis-{environment}'
+
+
 def _acl_secret(environment: str) -> str:
-    return f'projects/not-a-real-themis-{environment}/secrets/acl'
+    return f'projects/{_project(environment)}/secrets/acl'
 
 
 def _user(key: str, gcp_id: str | None) -> CPGInfrastructureUser:
@@ -97,7 +101,7 @@ ALL_DATASETS = sorted(DATASETS)
 
 def _settings(environment: str, **overrides: Any) -> dict[str, Any]:
     return {
-        'acl_secret': _acl_secret(environment),
+        'project': _project(environment),
         'auth_service_account': _sa(f'auth-{environment}'),
         'sandbox_service_account': _sa(f'sandbox-{environment}'),
         'namespace': 'test' if environment == 'dev' else 'main',
@@ -155,43 +159,6 @@ def test_environment_must_be_a_slug(environment: str):
 
 
 @pytest.mark.parametrize(
-    'acl_secret',
-    [
-        'acl',
-        'not-a-real-themis-prod/acl',
-        'projects/not-a-real-themis-prod/secrets/acl/versions/1',
-        'projects/not-a-real-themis-prod/secrets/',
-        'projects/not-a-real-themis-prod/secrets/acl.json',
-        'projects/not-a-real-themis-prod/secrets/' + 'a' * 256,
-        # project ids: 6 to 30 characters, lowercase, starting with a letter,
-        # not ending with a hyphen
-        'projects/Not-A-Real-Themis-Prod/secrets/acl',
-        'projects/abcde/secrets/acl',
-        'projects/' + 'a' * 31 + '/secrets/acl',
-        'projects/1-themis-prod/secrets/acl',
-        'projects/themis-prod-/secrets/acl',
-        'projects/themis_prod/secrets/acl',
-    ],
-)
-def test_acl_secret_must_be_a_secret_resource_name(acl_secret: str):
-    with pytest.raises(ValidationError, match='string_pattern'):
-        _config(themis={'prod': _settings('prod', acl_secret=acl_secret)})
-
-
-@pytest.mark.parametrize(
-    'acl_secret',
-    [
-        'projects/abcdef/secrets/acl',
-        'projects/' + 'a' * 30 + '/secrets/acl',
-        'projects/themis-prod-1/secrets/' + 'Az09_-' * 42 + 'abc',
-    ],
-)
-def test_acl_secret_accepts_any_secret_resource_name(acl_secret: str):
-    config = _config(themis={'prod': _settings('prod', acl_secret=acl_secret)})
-    assert config.themis['prod'].acl_secret == acl_secret
-
-
-@pytest.mark.parametrize(
     ('overrides', 'message'),
     [
         (
@@ -205,6 +172,7 @@ def test_acl_secret_accepts_any_secret_resource_name(acl_secret: str):
         ({'allowed_datasets': ['ds-a', 'ds-a']}, 'duplicate'),
         # the site resolves its allowlist into allowed_datasets
         ({'project_allowlist': ['p1']}, 'extra_forbidden'),
+        ({'acl_secret': _acl_secret('prod')}, 'extra_forbidden'),
         ({'operators': ['carol']}, 'extra_forbidden'),
     ],
 )
@@ -221,7 +189,7 @@ def test_invalid_environment_settings_are_rejected(
 @pytest.mark.parametrize(
     'field',
     [
-        'acl_secret',
+        'project',
         'auth_service_account',
         'sandbox_service_account',
         'allowed_datasets',
@@ -246,9 +214,9 @@ def test_environments_may_not_share_a_sandbox_service_account():
         )
 
 
-def test_environments_may_not_share_an_acl_secret():
-    shared = {'acl_secret': _acl_secret('shared')}
-    with pytest.raises(ValidationError, match='share an ACL secret'):
+def test_environments_may_not_share_a_project():
+    shared = {'project': _project('shared')}
+    with pytest.raises(ValidationError, match='share a project'):
         _config(
             themis={
                 'dev': _settings('dev', **shared),
@@ -492,8 +460,8 @@ def test_setup_themis_writes_each_environments_acl_and_grants_access(
     root, cloud_infras = _make_root(_config())
     _setup_themis(root)
 
-    # each environment's secret, in the project its acl_secret names, holds its
-    # ACL, and only its auth service account may read it
+    # each environment's secret, `acl` in its project, holds its ACL, and only
+    # its auth service account may read it
     assert _acl_secrets(registered) == {
         _acl_secret(environment): {
             'versions': [_acl(ALL_DATASETS)],

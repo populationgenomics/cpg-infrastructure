@@ -45,9 +45,6 @@ GroupName = Literal[
 
 
 SERVICE_ACCOUNT_PATTERN = r'^[^@\s]+@[^@\s]+\.iam\.gserviceaccount\.com$'
-SECRET_RESOURCE_NAME_PATTERN = (
-    r'^projects/[a-z][a-z0-9-]{4,28}[a-z0-9]/secrets/[A-Za-z0-9_-]{1,255}$'  # noqa: S105
-)
 ThemisEnvironment = Annotated[
     str,
     StringConstraints(pattern=r'^[a-z0-9][a-z0-9-]*$'),
@@ -344,9 +341,9 @@ class CPGInfrastructureConfig(ConfigModel):
         becomes a Project in the environment's ACL.
         """
 
-        # the secret this deploy creates and writes the ACL to
-        acl_secret: str = Field(pattern=SECRET_RESOURCE_NAME_PATTERN)
-        # reads acl_secret
+        # the Themis deployment's project, where this deploy creates the ACL's secret
+        project: str
+        # reads the ACL's secret
         auth_service_account: str = Field(pattern=SERVICE_ACCOUNT_PATTERN)
         # reads the datasets in the ACL
         sandbox_service_account: str = Field(pattern=SERVICE_ACCOUNT_PATTERN)
@@ -460,9 +457,9 @@ class CPGInfrastructureConfig(ConfigModel):
 
     @model_validator(mode='after')
     def _themis_environments_differ(self) -> 'CPGInfrastructureConfig':
-        # ensure that each sandbox service account and ACL secret is unique across
-        # all themis environments, otherwise the service account would be added
-        # twice to each dataset, and the secret would be created twice
+        # ensure that each sandbox service account and project is unique across all
+        # themis environments, otherwise the service account would be added twice
+        # to each dataset, and the ACL's secret would be created twice
         sandbox_service_accounts = [
             t.sandbox_service_account for t in self.themis.values()
         ]
@@ -470,9 +467,9 @@ class CPGInfrastructureConfig(ConfigModel):
             raise ValueError(
                 'Themis environments must not share a sandbox service account'
             )
-        acl_secrets = [t.acl_secret for t in self.themis.values()]
-        if len(set(acl_secrets)) != len(acl_secrets):
-            raise ValueError('Themis environments must not share an ACL secret')
+        projects = [t.project for t in self.themis.values()]
+        if len(set(projects)) != len(projects):
+            raise ValueError('Themis environments must not share a project')
         return self
 
 

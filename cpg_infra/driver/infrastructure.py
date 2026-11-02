@@ -44,7 +44,7 @@ from cpg_infra.driver.groups import GroupMember, GroupProvider
 from cpg_infra.driver.standalone_project_infrastructure import (
     CPGStandaloneProjectInfrastructure,
 )
-from cpg_infra.driver.themis import build_acl, serialise_acl
+from cpg_infra.driver.themis import ACL_SECRET_ID, build_acl, serialise_acl
 from cpg_infra.github_wif.driver import PAM_BROKER_SA_NAME
 from cpg_infra.plugin import get_plugins
 
@@ -861,10 +861,9 @@ class CPGInfrastructure:
         """Write each Themis environment's ACL to a secret, and grant access."""
         for environment, resolved in self._resolve_themis().items():
             settings = resolved.settings
-            _, project, _, secret_id = settings.acl_secret.split('/')
             secret = self.common_gcp_infra.create_secret(
-                name=secret_id,
-                project=project,
+                name=ACL_SECRET_ID,
+                project=settings.project,
                 resource_key=self.common_gcp_infra.get_pulumi_name(
                     f'themis-{environment}-acl',
                 ),
@@ -879,7 +878,7 @@ class CPGInfrastructure:
             self.common_gcp_infra.add_secret_member(
                 f'themis-{environment}-acl-accessor',
                 secret=secret,
-                project=project,
+                project=settings.project,
                 member=settings.auth_service_account,
                 membership=SecretMembership.ACCESSOR,
             )

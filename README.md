@@ -99,7 +99,7 @@ To do this:
 For each environment, the deploy:
 
 - builds Themis's ACL (access control list), which lists the people in each role on each Project,
-- creates the Secret Manager secret named by `acl_secret`, in the project it names, and writes the ACL to it as a new version,
+- creates the Secret Manager secret `acl` in the environment's `project`, and writes the ACL to it as a new version,
 - gives `auth_service_account` read access to that secret, and
 - gives `sandbox_service_account` read access to each dataset in the ACL, in the environment's `namespace`.
 

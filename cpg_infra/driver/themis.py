@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     )
 
 ACL_FORMAT = 1
+ACL_SECRET_ID = 'acl'  # noqa: S105
 ROLE_LISTS: dict[str, GroupName] = {
     'managers': THEMIS_MANAGER,
     'curators': THEMIS_CURATOR,
