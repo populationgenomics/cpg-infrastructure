@@ -109,7 +109,7 @@ A dataset becomes a Project when it is in the environment's `allowed_datasets` a
 {"format": 1, "projects": {"validation": {"managers": ["<email>", ...], "curators": ["<email>", ...]}}}
 ```
 
-Themis's own deploy creates the auth and sandbox service accounts. Both must exist before this deploy grants them access, so add an environment here only after Themis has deployed it. This deploy's service account also needs permission to create secrets and grant access to them in the environment's project.
+Add an environment here only after Themis's targeted first `up` has created its auth and sandbox service accounts, because this deploy grants them access. This deploy's service account needs to create secrets and set their IAM policy in the environment's project, and with `user_project_override` it also needs `serviceusage.services.use` there.
 
 #### The namespace an environment reads
 

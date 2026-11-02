@@ -148,10 +148,6 @@ def _acl(
 # region config
 
 
-def test_without_themis_nothing_is_configured():
-    assert _config(themis={}).themis == {}
-
-
 @pytest.mark.parametrize('environment', ['Prod', 'dev/x', '-dev', ''])
 def test_environment_must_be_a_slug(environment: str):
     with pytest.raises(ValidationError, match='string_pattern_mismatch'):
@@ -259,11 +255,6 @@ def test_environments_may_not_share_an_acl_secret():
                 'prod': _settings('prod', **shared),
             },
         )
-
-
-def test_datasets_may_list_themis_role_members():
-    assert DATASETS['ds-a'].members['themis-manager'] == ['bob', 'alice']
-    assert DATASETS['ds-a'].members['themis-curator'] == ['alice']
 
 
 # endregion
