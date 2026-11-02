@@ -263,7 +263,6 @@ class DatasetSeqeraInfrastructure:
         create compute environments and add participants to workspaces
         Idempotent — cached_properties gate resource creation.
         """
-        self._infra.enable_logging_api()
         self._grant_project_roles()
         self._bind_wif_principals()
         self._grant_work_bucket_access()
