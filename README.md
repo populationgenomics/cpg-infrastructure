@@ -94,7 +94,7 @@ To do this:
 
 ### Themis
 
-[Themis](https://github.com/populationgenomics/themis) is CPG's variant-curation app. In Themis, a Project is one dataset. A person on a Project is a manager, a curator, or both. `CPGInfrastructureConfig.themis` configures each Themis environment, for example `dev` or `prod`.
+[Themis](https://github.com/populationgenomics/themis) is CPG's rare disease curation platform. In Themis, a Project is one dataset. A person on a Project is a manager, a curator, or both. `CPGInfrastructureConfig.themis` configures each Themis environment, for example `dev` or `prod`.
 
 For each environment, the deploy:
 
