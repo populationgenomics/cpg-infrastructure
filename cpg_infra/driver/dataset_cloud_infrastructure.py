@@ -562,6 +562,8 @@ class CPGDatasetCloudInfrastructure:
     def setup_gcp_monitoring_access(self):
         assert isinstance(self.infra, GcpInfrastructure)
 
+        self.infra.enable_logging_api()
+
         self.infra.add_project_role(
             'project-compute-viewer',
             role='roles/compute.viewer',
