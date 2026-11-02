@@ -215,6 +215,16 @@ class GcpInfrastructure(CloudInfraBase):
         )
 
     @cached_property
+    def _svc_logging(self):
+        return gcp.projects.Service(
+            self.get_pulumi_name('logging-service'),
+            service='logging.googleapis.com',
+            disable_on_destroy=False,
+            project=self.project_id,
+            opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_serviceusage]),
+        )
+
+    @cached_property
     def _svc_cloudbilling(self):
         return gcp.projects.Service(
             self.get_pulumi_name('cloudbilling-service'),
@@ -944,6 +954,9 @@ class GcpInfrastructure(CloudInfraBase):
             project=self.project_id,
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_iam]),
         )
+
+    def enable_logging_api(self) -> gcp.projects.Service:
+        return self._svc_logging
 
     def add_batch_agent_reporter_role(self, resource_key: str, account):
         gcp.projects.IAMMember(
