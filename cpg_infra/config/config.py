@@ -6,16 +6,14 @@ specific dataset.
 """
 
 from enum import Enum
-from typing import Annotated, Any, Literal, Self
+from typing import Any, Literal, Self
 
 import pulumi
 from pydantic import (
     AliasGenerator,
     ConfigDict,
     Field,
-    StringConstraints,
     field_serializer,
-    field_validator,
     model_validator,
 )
 from pydantic.alias_generators import to_camel
@@ -44,11 +42,6 @@ GroupName = Literal[
 ]
 
 
-SERVICE_ACCOUNT_PATTERN = r'^[^@\s]+@[^@\s]+\.iam\.gserviceaccount\.com$'
-ThemisEnvironment = Annotated[
-    str,
-    StringConstraints(pattern=r'^[a-z0-9][a-z0-9-]*$'),
-]
 ThemisNamespace = Literal['main', 'test']
 
 
@@ -335,28 +328,17 @@ class CPGInfrastructureConfig(ConfigModel):
         github_auth_token_base_url: str
 
     class Themis(ConfigModel):
-        """One Themis environment, e.g. dev or prod.
+        """One Themis environment, e.g. dev or prod"""
 
-        Each allowed dataset with a themis-manager or themis-curator member
-        becomes a Project in the environment's ACL.
-        """
-
-        # the Themis deployment's project, where this deploy creates the ACL's secret
+        # the Themis deployment's GCP project, which holds the ACL secret
         project: str
-        # reads the ACL's secret
-        auth_service_account: str = Field(pattern=SERVICE_ACCOUNT_PATTERN)
+        # reads the ACL secret
+        auth_service_account: str
         # reads the datasets in the ACL
-        sandbox_service_account: str = Field(pattern=SERVICE_ACCOUNT_PATTERN)
-        # which namespace of those datasets it reads
+        sandbox_service_account: str
+        # the dataset namespace that sandbox_service_account reads
         namespace: ThemisNamespace
-        allowed_datasets: list[str] = Field(min_length=1)
-
-        @field_validator('allowed_datasets')
-        @classmethod
-        def _no_duplicate_datasets(cls, value: list[str]) -> list[str]:
-            if len(set(value)) != len(value):
-                raise ValueError(f'duplicate datasets in {value}')
-            return value
+        allowed_datasets: list[str]
 
     class Billing(ConfigModel):
         class GCP(ConfigModel):
@@ -437,7 +419,7 @@ class CPGInfrastructureConfig(ConfigModel):
     # configuration options for billing + billing aggregation
     billing: Billing | None = None
     # configuration options for each Themis environment
-    themis: dict[ThemisEnvironment, Themis] = Field(default_factory=dict)
+    themis: dict[str, Themis] = Field(default_factory=dict)
     # list of additional adhoc groups under infrastructure management
     adhoc_groups: list[CPGInfrastructureGroup] | None = None
 

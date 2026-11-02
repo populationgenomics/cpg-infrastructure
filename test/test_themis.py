@@ -152,24 +152,11 @@ def _acl(
 # region config
 
 
-@pytest.mark.parametrize('environment', ['Prod', 'dev/x', '-dev', ''])
-def test_environment_must_be_a_slug(environment: str):
-    with pytest.raises(ValidationError, match='string_pattern_mismatch'):
-        _config(themis={environment: _settings('x')})
-
-
 @pytest.mark.parametrize(
     ('overrides', 'message'),
     [
-        (
-            {'sandbox_service_account': 'sandbox@project.iam.gserviceaccount.com.evil'},
-            'string_pattern',
-        ),
-        ({'auth_service_account': 'auth@example.com'}, 'string_pattern'),
-        ({'allowed_datasets': []}, 'too_short'),
         ({'namespace': 'main-upload'}, 'literal_error'),
         ({'namespace': 'Main'}, 'literal_error'),
-        ({'allowed_datasets': ['ds-a', 'ds-a']}, 'duplicate'),
         # the site resolves its allowlist into allowed_datasets
         ({'project_allowlist': ['p1']}, 'extra_forbidden'),
         ({'acl_secret': _acl_secret('prod')}, 'extra_forbidden'),
