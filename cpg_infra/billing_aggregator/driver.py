@@ -11,7 +11,8 @@ Requires:
 
 Creates the following:
     - Enable Cloud Function / Cloud Run Services
-    - Build the aggregator image with Cloud Build (needs gcloud where pulumi runs)
+    - Build and push the aggregator image with pulumi_docker (needs Docker and
+      `gcloud auth configure-docker` where pulumi runs)
     - Create a Cloud Run job and cloud scheduler for each aggregator
     - Create a bucket for the remaining cloud functions' source code
     - Create a slack notification channel for all functions
@@ -21,33 +22,19 @@ TODO:
     - action monthly billing function
 """
 
-import hashlib
 import os
 from base64 import b64encode
 from functools import cached_property
 
 import pulumi
-import pulumi_command as command
+import pulumi_docker as docker
 import pulumi_gcp as gcp
 
 from cpg_infra.plugin import CpgInfrastructurePlugin
-from cpg_infra.utils import DEFAULT_ALLOWED_EXTENSIONS, archive_folder
+from cpg_infra.utils import archive_folder
 from cpg_utils.cloud import read_secret
 
 PATH_TO_AGGREGATE_SOURCE_CODE = os.path.join(os.path.dirname(__file__), 'aggregate')
-
-
-def hash_folder(path: str) -> str:
-    """Short hash of the files the aggregator Dockerfile copies into the image"""
-    digest = hashlib.sha256()
-    for filename in sorted(os.listdir(path)):
-        if filename == 'Dockerfile' or filename.endswith(
-            tuple(DEFAULT_ALLOWED_EXTENSIONS),
-        ):
-            digest.update(filename.encode())
-            with open(os.path.join(path, filename), 'rb') as file:
-                digest.update(file.read())
-    return digest.hexdigest()[:12]
 
 
 def get_file_content(filename: str) -> str:
@@ -474,8 +461,9 @@ class BillingAggregator(CpgInfrastructurePlugin):
     @cached_property
     def aggregator_image(self) -> pulumi.Output[str]:
         """
-        Build the aggregator image with Cloud Build, tagged with a hash of the
-        source so it's only rebuilt (and the jobs updated) when the code changes
+        Build and push the aggregator image, the same way as our other projects
+        (needs Docker, and `gcloud auth configure-docker` for the registry, where
+        pulumi runs). Returns the digest so the jobs only update when it changes
         """
         project = self.config.billing.gcp.project_id
         region = self.config.gcp.region
@@ -486,26 +474,36 @@ class BillingAggregator(CpgInfrastructurePlugin):
             format='DOCKER',
             location=region,
             project=project,
+            # keeps :latest, drops images replaced more than 30 days ago
+            cleanup_policies=[
+                gcp.artifactregistry.RepositoryCleanupPolicyArgs(
+                    id='delete-untagged',
+                    action='DELETE',
+                    condition=gcp.artifactregistry.RepositoryCleanupPolicyConditionArgs(
+                        tag_state='UNTAGGED',
+                        older_than='30d',
+                    ),
+                ),
+            ],
             opts=pulumi.ResourceOptions(depends_on=[self.artifact_registry_service]),
         )
-        tag = hash_folder(PATH_TO_AGGREGATE_SOURCE_CODE)
-        image = repository.repository_id.apply(
-            lambda repository_id: (
-                f'{region}-docker.pkg.dev/{project}/{repository_id}/aggregator:{tag}'
-            ),
-        )
-        # only runs on `pulumi up` (not preview), and again when the tag changes
-        build = command.local.Command(
-            'billing-aggregator-image-build',
-            create=image.apply(
-                lambda image_name: (
-                    f'gcloud builds submit {PATH_TO_AGGREGATE_SOURCE_CODE} '
-                    f'--tag={image_name} --project={project} --region={region}'
+        image = docker.Image(
+            'billing-aggregator-image',
+            image_name=repository.repository_id.apply(
+                lambda repository_id: (
+                    f'{region}-docker.pkg.dev/{project}/{repository_id}/aggregator:latest'
                 ),
             ),
-            opts=pulumi.ResourceOptions(depends_on=[repository, self.build_service]),
+            build=docker.DockerBuildArgs(
+                context=PATH_TO_AGGREGATE_SOURCE_CODE,
+                dockerfile=os.path.join(PATH_TO_AGGREGATE_SOURCE_CODE, 'Dockerfile'),
+                args={'BUILDKIT_INLINE_CACHE': '1'},
+                builder_version=docker.BuilderVersion.BUILDER_BUILD_KIT,
+                platform='linux/amd64',
+            ),
+            opts=pulumi.ResourceOptions(depends_on=[repository]),
         )
-        return pulumi.Output.all(image, build.id).apply(lambda args: args[0])
+        return image.repo_digest
 
     def create_aggregator_job(
         self,

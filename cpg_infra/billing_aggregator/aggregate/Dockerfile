@@ -9,7 +9,6 @@ WORKDIR /app
 COPY requirements.txt .
 RUN uv pip install --system --no-cache -r requirements.txt
 
-# keep in sync with hash_folder() in ../driver.py, which tags the image
 COPY *.py *.json *.txt ./
 
 # each Cloud Run job passes its aggregator script, e.g. `seqr.py`
