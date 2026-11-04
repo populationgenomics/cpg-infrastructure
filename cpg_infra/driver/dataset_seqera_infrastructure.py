@@ -220,7 +220,10 @@ class DatasetSeqeraInfrastructure:
             oidc=gcp.iam.WorkloadIdentityPoolProviderOidcArgs(
                 issuer_uri=self._config.seqera.wif_issuer_uri,
             ),
-            attribute_mapping={'google.subject': 'assertion.sub'},
+            attribute_mapping={
+                'google.subject': 'assertion.sub',
+                'attribute.workspace': "assertion.sub.extract('wsp:{workspace}:')",
+            },
         )
 
     def _account_id_for(self, level: str) -> str:
@@ -328,15 +331,14 @@ class DatasetSeqeraInfrastructure:
 
     def _bind_wif_principals(self) -> None:
         assert self._config.seqera is not None
-        org_id = self._config.seqera.org_id
         # Ensure the provider is materialised so pool exists before bindings.
         _ = self._wif_provider
 
         def _make_principal(workspace_id: int) -> pulumi.Output[str]:
-            wif_subject = f'org:{org_id}:wsp:{workspace_id}:workflow'
             return self._wif_pool.name.apply(
                 lambda pool_name: (
-                    f'principal://iam.googleapis.com/{pool_name}/subject/{wif_subject}'
+                    f'principalSet://iam.googleapis.com/{pool_name}'
+                    f'/attribute.workspace/{workspace_id}'
                 ),
             )
 
