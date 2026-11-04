@@ -601,6 +601,7 @@ class CPGDatasetCloudInfrastructure:
         self.setup_storage_main_analysis_bucket()
         self.setup_storage_main_web_bucket_permissions()
         self.setup_storage_main_upload_buckets_permissions()
+        self.setup_notebook_outputs_bucket_permissions()
 
         if self.dataset_config.setup_test:
             self.setup_storage_common_test_access()  # extra access for common dataset
@@ -2258,6 +2259,38 @@ class CPGDatasetCloudInfrastructure:
         return self.infra.create_machine_account(
             f'notebook-{self.dataset_config.dataset}',
             project=self.config.notebooks.gcp.project,
+        )
+
+    def setup_notebook_outputs_bucket_permissions(self):
+        self.infra.add_member_to_bucket(
+            'notebook-outputs-bucket-read',
+            self.notebook_outputs_bucket,
+            self.notebook_account,
+            BucketMembership.READ,
+        )
+
+        self.infra.add_member_to_bucket(
+            'notebook-outputs-bucket-view-create',
+            self.notebook_outputs_bucket,
+            self.notebook_account,
+            BucketMembership.APPEND,
+        )
+
+        self.infra.add_member_to_bucket(
+            'notebook-outputs-bucket-admin',
+            self.notebook_outputs_bucket,
+            self.notebook_account,
+            BucketMembership.MUTATE,
+        )
+
+    @cached_property
+    def notebook_outputs_bucket(self):
+        return self.infra.create_bucket(
+            'notebook-outputs',
+            lifecycle_rules=[self.infra.bucket_rule_temporary()],
+            versioning=False,
+            autoclass=self.dataset_config.autoclass,
+            soft_delete_protection=False,
         )
 
     # endregion NOTEBOOKS
