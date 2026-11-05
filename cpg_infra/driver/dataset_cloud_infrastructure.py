@@ -1947,28 +1947,17 @@ class CPGDatasetCloudInfrastructure:
         environment: str,
         namespace: ThemisNamespace,
     ):
-        """Give a Themis sandbox account read on one namespace's data.
-
-        main: through external-repository-reader and sample-metadata-main-read.
-        test: through sample-metadata-test-read, plus a direct binding on the
-        test bucket, as no group reads only that bucket.
-        """
+        """Give a Themis sandbox account read on one namespace's bucket and metamist project."""
         self.check_themis_data_readable(namespace)
 
-        if namespace == 'main':
-            self.external_repository_reader_group.add_member(
-                self.infra.get_pulumi_name(
-                    f'themis-{environment}-sandbox-in-external-repository-reader',
-                ),
-                member=member,
-            )
-        else:
-            self.infra.add_member_to_bucket(
-                f'themis-{environment}-sandbox-test-bucket-read',
-                bucket=self.test_bucket,
-                member=member,
-                membership=BucketMembership.READ,
-            )
+        # Bind directly rather than through main_read_group or test_read_group,
+        # which also cover the namespace's -tmp and -analysis buckets.
+        self.infra.add_member_to_bucket(
+            f'themis-{environment}-sandbox-{namespace}-bucket-read',
+            bucket=self.main_bucket if namespace == 'main' else self.test_bucket,
+            member=member,
+            membership=BucketMembership.READ,
+        )
 
         metamist_read = SM_MAIN_READ if namespace == 'main' else SM_TEST_READ
         self.metamist_groups[metamist_read].add_member(
