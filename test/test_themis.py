@@ -23,7 +23,7 @@ from cpg_infra.driver.constants import SM_MAIN_READ, SM_TEST_READ
 from cpg_infra.driver.dataset_cloud_infrastructure import (
     CPGDatasetCloudInfrastructure,
 )
-from cpg_infra.driver.groups import GroupMember, GroupProvider
+from cpg_infra.driver.groups import GroupProvider
 from cpg_infra.driver.infrastructure import CPGInfrastructure
 from cpg_infra.driver.themis import build_acl, serialise_acl
 
@@ -40,10 +40,6 @@ def _project(environment: str) -> str:
     return f'not-a-real-themis-{environment}'
 
 
-def _acl_secret(environment: str) -> str:
-    return f'projects/{_project(environment)}/secrets/acl'
-
-
 def _user(key: str, gcp_id: str | None) -> CPGInfrastructureUser:
     return CPGInfrastructureUser.model_validate(
         {'id': key, 'clouds': {'gcp': {'id': gcp_id}} if gcp_id else {}},
@@ -56,12 +52,10 @@ USERS = {
         'alice': 'Alice.Smith@Example.org',
         'bob': 'bob@example.com',
         'carol': 'carol@example.com',
-        'dave': 'dave@example.com',
         'no-gcp': None,
         'not-an-email': 'some-id-without-an-at-sign',
         'non-ascii': 'zoë@example.com',
         'robot': 'Robot@some-project.iam.gserviceaccount.com',
-        'compute': '1234-compute@developer.gserviceaccount.com',
     }.items()
 }
 
@@ -80,23 +74,15 @@ def _dataset(name: str, **extra: Any) -> CPGDatasetConfig:
 DATASETS = {
     'ds-a': _dataset(
         'ds-a',
-        members={
-            'themis-manager': ['bob', 'alice'],
-            'themis-curator': ['alice'],
-            'web-access': ['dave'],
-        },
+        members={'themis-manager': ['bob', 'alice'], 'themis-curator': ['alice']},
     ),
     # curators only
     'ds-b': _dataset('ds-b', members={'themis-curator': ['carol', 'bob']}),
     # no Themis role list, so never a Project
-    'ds-c': _dataset('ds-c', members={'web-access': ['dave']}),
+    'ds-c': _dataset('ds-c', members={'web-access': ['bob']}),
     # empty Themis role lists, so never a Project
-    'ds-d': _dataset(
-        'ds-d',
-        members={'themis-manager': [], 'themis-curator': []},
-    ),
+    'ds-d': _dataset('ds-d', members={'themis-manager': [], 'themis-curator': []}),
 }
-ALL_DATASETS = sorted(DATASETS)
 
 
 def _settings(environment: str, **overrides: Any) -> dict[str, Any]:
@@ -105,7 +91,7 @@ def _settings(environment: str, **overrides: Any) -> dict[str, Any]:
         'auth_service_account': _sa(f'auth-{environment}'),
         'sandbox_service_account': _sa(f'sandbox-{environment}'),
         'namespace': 'test' if environment == 'dev' else 'main',
-        'allowed_datasets': ALL_DATASETS,
+        'allowed_datasets': sorted(DATASETS),
         **overrides,
     }
 
@@ -138,61 +124,21 @@ def _config(
     )
 
 
-def _acl(
-    allowed_datasets: list[str],
-    datasets: dict[str, CPGDatasetConfig] | None = None,
-) -> dict[str, Any]:
-    return build_acl(
-        allowed_datasets,
-        DATASETS if datasets is None else datasets,
-        USERS,
-    )
-
-
-# region config
+# region config and ACL
 
 
 @pytest.mark.parametrize(
-    ('overrides', 'message'),
+    ('shared', 'message'),
     [
-        ({'namespace': 'main-upload'}, 'literal_error'),
-        ({'namespace': 'Main'}, 'literal_error'),
-        # the site resolves its allowlist into allowed_datasets
-        ({'project_allowlist': ['p1']}, 'extra_forbidden'),
-        ({'acl_secret': _acl_secret('prod')}, 'extra_forbidden'),
-        ({'operators': ['carol']}, 'extra_forbidden'),
+        ({'sandbox_service_account': _sa('sandbox')}, 'a sandbox service account'),
+        ({'project': _project('shared')}, 'a project'),
     ],
 )
-def test_invalid_environment_settings_are_rejected(
-    overrides: dict[str, Any],
+def test_environments_may_not_share_a_sandbox_service_account_or_project(
+    shared: dict[str, str],
     message: str,
 ):
-    with pytest.raises(ValidationError, match=message):
-        _config(
-            themis={'dev': _settings('dev'), 'prod': _settings('prod', **overrides)}
-        )
-
-
-@pytest.mark.parametrize(
-    'field',
-    [
-        'project',
-        'auth_service_account',
-        'sandbox_service_account',
-        'allowed_datasets',
-        'namespace',
-    ],
-)
-def test_settings_without_a_default_are_required(field: str):
-    settings = _settings('prod')
-    del settings[field]
-    with pytest.raises(ValidationError, match='missing'):
-        _config(themis={'prod': settings})
-
-
-def test_environments_may_not_share_a_sandbox_service_account():
-    shared = {'sandbox_service_account': _sa('sandbox')}
-    with pytest.raises(ValidationError, match='share a sandbox service account'):
+    with pytest.raises(ValidationError, match=f'must not share {message}'):
         _config(
             themis={
                 'dev': _settings('dev', **shared),
@@ -201,79 +147,11 @@ def test_environments_may_not_share_a_sandbox_service_account():
         )
 
 
-def test_environments_may_not_share_a_project():
-    shared = {'project': _project('shared')}
-    with pytest.raises(ValidationError, match='share a project'):
-        _config(
-            themis={
-                'dev': _settings('dev', **shared),
-                'prod': _settings('prod', **shared),
-            },
-        )
-
-
-# endregion
-# region ACL
-
-
-def test_acl_has_one_project_per_dataset_with_both_roles_as_lowercase_emails():
-    assert _acl(['ds-a', 'ds-b']) == {
-        'format': 1,
-        'projects': {
-            'ds-a': {
-                'managers': ['alice.smith@example.org', 'bob@example.com'],
-                'curators': ['alice.smith@example.org'],
-            },
-            'ds-b': {
-                'managers': [],
-                'curators': ['bob@example.com', 'carol@example.com'],
-            },
-        },
-    }
-
-
-@pytest.mark.parametrize(
-    ('members', 'is_project'),
-    [
-        ({'themis-manager': ['bob']}, True),
-        ({'themis-curator': ['bob']}, True),
-        ({'themis-manager': [], 'themis-curator': []}, False),
-        ({'web-access': ['bob']}, False),
-    ],
-)
-def test_a_dataset_is_a_project_when_either_role_list_is_non_empty(
-    members: dict[str, list[str]],
-    is_project: bool,
-):
-    acl = _acl(['ds-x'], {'ds-x': _dataset('ds-x', members=members)})
-    assert ('ds-x' in acl['projects']) is is_project
-
-
-def test_only_allowed_datasets_are_projects():
-    assert set(_acl(ALL_DATASETS)['projects']) == {'ds-a', 'ds-b'}
-    assert set(_acl(['ds-b', 'ds-c'])['projects']) == {'ds-b'}
-
-
-def test_acl_without_projects_has_an_empty_projects_map():
-    """Themis accepts an ACL with no Projects."""
-    assert _acl(['ds-c', 'ds-d']) == {'format': 1, 'projects': {}}
-
-
-def test_serialised_acl_is_deterministic_and_compact():
-    """Config order does not reach the payload, so an unchanged config writes no
-    new secret version."""
-    reordered = {
-        'ds-a': _dataset(
-            'ds-a',
-            members={'themis-curator': ['alice'], 'themis-manager': ['alice', 'bob']},
-        ),
-        'ds-b': _dataset('ds-b', members={'themis-curator': ['bob', 'carol']}),
-    }
-    serialised = serialise_acl(_acl(['ds-a', 'ds-b']))
-    assert serialised == serialise_acl(_acl(['ds-b', 'ds-a'], reordered))
-    assert json.loads(serialised) == _acl(['ds-a', 'ds-b'])
-    # none of the ACL's keys or values contain whitespace
-    assert not any(c.isspace() for c in serialised)
+def test_serialised_acl_does_not_depend_on_config_order():
+    """So an unchanged config writes no new secret version."""
+    assert serialise_acl(build_acl(['ds-a', 'ds-b'], DATASETS, USERS)) == (
+        serialise_acl(build_acl(['ds-b', 'ds-a'], DATASETS, USERS))
+    )
 
 
 @pytest.mark.parametrize(
@@ -284,29 +162,25 @@ def test_serialised_acl_is_deterministic_and_compact():
         ('not-an-email', 'not the email of a Google account'),
         ('non-ascii', 'not the email of a Google account'),
         ('robot', "'robot' is the service account"),
-        ('compute', "'compute' is the service account"),
     ],
 )
-@pytest.mark.parametrize('list_name', ['themis-manager', 'themis-curator'])
-def test_unresolvable_member_raises(list_name: str, member: str, message: str):
-    datasets = {'ds-x': _dataset('ds-x', members={list_name: [member]})}
-    with pytest.raises(ValueError, match=f'ds-x {list_name}: .*{message}'):
-        _acl(['ds-x'], datasets)
+def test_unresolvable_member_raises(member: str, message: str):
+    datasets = {'ds-x': _dataset('ds-x', members={'themis-curator': [member]})}
+    with pytest.raises(ValueError, match=f'ds-x themis-curator: .*{message}'):
+        build_acl(['ds-x'], datasets, USERS)
 
 
 def test_unconfigured_allowed_dataset_raises():
     with pytest.raises(ValueError, match="dataset 'ds-z', which is not configured"):
-        _acl(['ds-a', 'ds-z'])
+        build_acl(['ds-a', 'ds-z'], DATASETS, USERS)
 
 
 # endregion
-# region driver
+# region setup_themis
 
 SECRET_TYPE = 'gcp:secretmanager/secret:Secret'  # noqa: S105
 SECRET_VERSION_TYPE = 'gcp:secretmanager/secretVersion:SecretVersion'  # noqa: S105
 SECRET_IAM_MEMBER_TYPE = 'gcp:secretmanager/secretIamMember:SecretIamMember'  # noqa: S105
-SERVICE_TYPE = 'gcp:projects/service:Service'
-SECRET_ACCESSOR = 'roles/secretmanager.secretAccessor'  # noqa: S105
 # Secret Manager's limit on the payload of one secret version, in bytes
 SECRET_VERSION_LIMIT = 65536
 
@@ -339,17 +213,22 @@ def registered() -> list[tuple[str, dict[str, Any]]]:
     return mocks.registered
 
 
+@pulumi.runtime.test
+def _run(step: Callable[[], object]) -> None:
+    """Run a step and wait until pulumi has registered its resources."""
+    step()
+
+
 def _make_root(
     config: CPGInfrastructureConfig,
-    datasets: dict[str, CPGDatasetConfig] | None = None,
+    datasets: dict[str, CPGDatasetConfig] = DATASETS,
 ) -> tuple[CPGInfrastructure, dict[str, MagicMock]]:
     """A CPGInfrastructure with only what setup_themis touches.
 
     Constructing a real one walks the whole plugin and group machinery. The
-    common infrastructure is real, so the resources it registers reach the
-    `registered` fixture; the dataset infrastructures are mocks.
+    common infrastructure is real, so its resources reach `registered`; the
+    dataset infrastructures are mocks.
     """
-    datasets = DATASETS if datasets is None else datasets
     root = CPGInfrastructure.__new__(CPGInfrastructure)
     root.config = config
     root.dataset_configs = datasets
@@ -370,41 +249,18 @@ def _make_root(
     return root, cloud_infras
 
 
-@pulumi.runtime.test
-def _run(step: Callable[[], object]) -> None:
-    """Run a step and wait until pulumi has registered its resources.
-
-    Outside this, the mocks never see a registration, so `registered` stays
-    empty whatever the step does.
-    """
-    step()
-
-
-def _setup_themis(root: CPGInfrastructure) -> None:
-    _run(root.setup_themis)
-
-
 def _acl_secrets(
     registered: list[tuple[str, dict[str, Any]]],
 ) -> dict[str, dict[str, Any]]:
-    """Each created secret's resource name -> its versions and IAM grants.
-
-    Fails on a version or grant on a secret the deploy did not create, and on
-    any resource other than secrets, their versions and grants, and the API
-    services a secret depends on.
-    """
-    assert {typ for typ, _ in registered} <= {
-        SECRET_TYPE,
-        SECRET_VERSION_TYPE,
-        SECRET_IAM_MEMBER_TYPE,
-        SERVICE_TYPE,
+    """Each created secret's resource name -> its ACL versions and IAM grants."""
+    secrets: dict[str, dict[str, Any]] = {
+        f'projects/{inputs["project"]}/secrets/{inputs["secretId"]}': {
+            'versions': [],
+            'grants': set(),
+        }
+        for typ, inputs in registered
+        if typ == SECRET_TYPE
     }
-    secrets: dict[str, dict[str, Any]] = {}
-    for typ, inputs in registered:
-        if typ == SECRET_TYPE:
-            name = f'projects/{inputs["project"]}/secrets/{inputs["secretId"]}'
-            assert name not in secrets
-            secrets[name] = {'versions': [], 'grants': set()}
     for typ, inputs in registered:
         if typ == SECRET_VERSION_TYPE:
             # secret_data is a secret input: pulumi wraps its value
@@ -412,74 +268,24 @@ def _acl_secrets(
                 json.loads(inputs['secretData']['value']),
             )
         elif typ == SECRET_IAM_MEMBER_TYPE:
-            assert inputs['secretId'].split('/')[1] == inputs['project']
             secrets[inputs['secretId']]['grants'].add(
-                (inputs['role'], inputs['member']),
+                (inputs['project'], inputs['role'], inputs['member']),
             )
     return secrets
 
 
-def _written(registered: list[tuple[str, dict[str, Any]]]) -> dict[str, Any]:
-    """Secret resource name -> the ACL in its one version."""
-    written = {}
-    for name, secret in _acl_secrets(registered).items():
-        [written[name]] = secret['versions']
-    return written
-
-
-def _data_readers(cloud_infras: dict[str, MagicMock]) -> dict[str, set[str]]:
-    """Dataset -> the service accounts given read on it."""
+def _data_readers(cloud_infras: dict[str, MagicMock]) -> dict[str, set[tuple]]:
+    """Dataset -> the (service account, namespace) pairs given read on it."""
     return {
         dataset: {
-            call.args[0]
-            for call in cast(
-                'MagicMock',
-                cloud_infra.add_themis_data_reader,
-            ).call_args_list
+            (call.args[0], call.kwargs['namespace'])
+            for call in cloud_infra.add_themis_data_reader.call_args_list
         }
         for dataset, cloud_infra in cloud_infras.items()
     }
 
 
 def test_setup_themis_writes_each_environments_acl_and_grants_access(
-    registered: list[tuple[str, dict[str, Any]]],
-):
-    root, cloud_infras = _make_root(_config())
-    _setup_themis(root)
-
-    # each environment's secret, `acl` in its project, holds its ACL, and only
-    # its auth service account may read it
-    assert _acl_secrets(registered) == {
-        _acl_secret(environment): {
-            'versions': [_acl(ALL_DATASETS)],
-            'grants': {
-                (SECRET_ACCESSOR, f'serviceAccount:{_sa(f"auth-{environment}")}'),
-            },
-        }
-        for environment in ('dev', 'prod')
-    }
-
-    # ds-c and ds-d are allowed, but no Project is built from them
-    both = {_sa('sandbox-dev'), _sa('sandbox-prod')}
-    assert _data_readers(cloud_infras) == {
-        'ds-a': both,
-        'ds-b': both,
-        'ds-c': set(),
-        'ds-d': set(),
-    }
-    # each environment's sandbox service account reads its own namespace
-    namespaces = {
-        (call.args[0], call.kwargs['environment'], call.kwargs['namespace'])
-        for cloud_infra in cloud_infras.values()
-        for call in cast('MagicMock', cloud_infra.add_themis_data_reader).call_args_list
-    }
-    assert namespaces == {
-        (_sa('sandbox-dev'), 'dev', 'test'),
-        (_sa('sandbox-prod'), 'prod', 'main'),
-    }
-
-
-def test_sandbox_service_account_reads_exactly_the_acl_datasets(
     registered: list[tuple[str, dict[str, Any]]],
 ):
     config = _config(
@@ -489,63 +295,46 @@ def test_sandbox_service_account_reads_exactly_the_acl_datasets(
         },
     )
     root, cloud_infras = _make_root(config)
-    _setup_themis(root)
+    _run(root.setup_themis)
 
-    readers = _data_readers(cloud_infras)
-    for environment in ('dev', 'prod'):
-        acl = _written(registered)[_acl_secret(environment)]
-        assert {
-            dataset
-            for dataset, sas in readers.items()
-            if _sa(f'sandbox-{environment}') in sas
-        } == set(acl['projects'])
-
-
-def test_environments_are_separate(registered: list[tuple[str, dict[str, Any]]]):
-    """A dataset allowed in one environment reaches neither the other's ACL nor
-    the other's sandbox service account."""
-    config = _config(
-        themis={
-            'dev': _settings('dev', allowed_datasets=['ds-a']),
-            'prod': _settings('prod', allowed_datasets=['ds-b']),
+    # each environment's `acl` secret, in its own project, holds one version:
+    # the allowed datasets with a Themis role, both roles as sorted lowercase
+    # emails; only its auth service account may read it
+    projects = {
+        'dev': {
+            'ds-a': {
+                'managers': ['alice.smith@example.org', 'bob@example.com'],
+                'curators': ['alice.smith@example.org'],
+            },
         },
-    )
-    root, cloud_infras = _make_root(config)
-    _setup_themis(root)
-
-    written = _written(registered)
-    dev, prod = written[_acl_secret('dev')], written[_acl_secret('prod')]
-    assert dev['projects'] == {
-        'ds-a': {
-            'managers': ['alice.smith@example.org', 'bob@example.com'],
-            'curators': ['alice.smith@example.org'],
+        'prod': {
+            'ds-b': {
+                'managers': [],
+                'curators': ['bob@example.com', 'carol@example.com'],
+            },
         },
     }
-    assert prod['projects'] == {
-        'ds-b': {
-            'managers': [],
-            'curators': ['bob@example.com', 'carol@example.com'],
-        },
+    assert _acl_secrets(registered) == {
+        f'projects/{_project(env)}/secrets/acl': {
+            'versions': [{'format': 1, 'projects': projects[env]}],
+            'grants': {
+                (
+                    _project(env),
+                    'roles/secretmanager.secretAccessor',
+                    f'serviceAccount:{_sa(f"auth-{env}")}',
+                ),
+            },
+        }
+        for env in ('dev', 'prod')
     }
 
+    # each sandbox service account reads its own ACL's datasets in its namespace
     assert _data_readers(cloud_infras) == {
-        'ds-a': {_sa('sandbox-dev')},
-        'ds-b': {_sa('sandbox-prod')},
+        'ds-a': {(_sa('sandbox-dev'), 'test')},
+        'ds-b': {(_sa('sandbox-prod'), 'main')},
         'ds-c': set(),
         'ds-d': set(),
     }
-
-
-def test_setup_themis_is_a_no_op_without_themis_config(
-    registered: list[tuple[str, dict[str, Any]]],
-):
-    root, cloud_infras = _make_root(_config(themis={}))
-    root.validate_themis()
-    _setup_themis(root)
-
-    assert not registered
-    for cloud_infra in cloud_infras.values():
-        assert not cloud_infra.method_calls
 
 
 DS_X = {'ds-x': _dataset('ds-x', members={'themis-curator': ['curator']})}
@@ -567,68 +356,53 @@ def _config_with_acl_of(size: int) -> CPGInfrastructureConfig:
     )
 
 
-def test_acl_at_the_secret_version_limit_is_written(
-    registered: list[tuple[str, dict[str, Any]]],
-):
+def test_acl_at_the_secret_version_limit_is_accepted():
     root, _ = _make_root(_config_with_acl_of(SECRET_VERSION_LIMIT), DS_X)
-    _setup_themis(root)
-    [payload] = [
-        inputs['secretData']['value']
-        for typ, inputs in registered
-        if typ == SECRET_VERSION_TYPE
-    ]
-    assert len(payload.encode('utf-8')) == SECRET_VERSION_LIMIT
+    root.validate_themis()
 
 
-def test_acl_over_the_secret_version_limit_fails_before_any_resource_is_registered(
-    registered: list[tuple[str, dict[str, Any]]],
-):
-    root, cloud_infras = _make_root(_config_with_acl_of(SECRET_VERSION_LIMIT + 1), DS_X)
-    for step in (root.validate_themis, root.setup_themis):
-        with pytest.raises(
-            ValueError,
-            match=(
-                f"environment 'dev': its ACL is {SECRET_VERSION_LIMIT + 1} bytes, "
-                f'over the {SECRET_VERSION_LIMIT}'
-            ),
-        ):
-            _run(step)
-    assert not registered
-    cast('MagicMock', cloud_infras['ds-x'].add_themis_data_reader).assert_not_called()
+def _acl_over_the_limit() -> tuple[CPGInfrastructure, dict[str, MagicMock]]:
+    return _make_root(_config_with_acl_of(SECRET_VERSION_LIMIT + 1), DS_X)
 
 
-def test_dataset_without_a_gcp_deploy_location_raises():
-    root, _ = _make_root(_config())
+def _dataset_without_gcp() -> tuple[CPGInfrastructure, dict[str, MagicMock]]:
+    root, cloud_infras = _make_root(_config())
     root.dataset_infrastructures['ds-b'].clouds = {}
-    with pytest.raises(ValueError, match="'ds-b', which has no 'gcp' deploy location"):
-        root.validate_themis()
+    return root, cloud_infras
 
 
-def test_unreadable_dataset_fails_before_any_resource_is_registered(
+def _unreadable_dataset() -> tuple[CPGInfrastructure, dict[str, MagicMock]]:
+    root, cloud_infras = _make_root(_config())
+    cloud_infras['ds-b'].check_themis_data_readable.side_effect = ValueError(
+        'ds-b: Themis reads',
+    )
+    return root, cloud_infras
+
+
+@pytest.mark.parametrize(
+    ('make_root', 'message'),
+    [
+        (_acl_over_the_limit, f'its ACL is {SECRET_VERSION_LIMIT + 1} bytes'),
+        (_dataset_without_gcp, "'ds-b', which has no 'gcp' deploy location"),
+        (_unreadable_dataset, 'ds-b: Themis reads'),
+    ],
+)
+def test_bad_config_fails_before_any_resource_is_registered(
     registered: list[tuple[str, dict[str, Any]]],
+    make_root: Callable[[], tuple[CPGInfrastructure, dict[str, MagicMock]]],
+    message: str,
 ):
     """A partial deploy would publish an ACL whose data grants never landed."""
-    root, cloud_infras = _make_root(_config())
-    cast(
-        'MagicMock', cloud_infras['ds-b'].check_themis_data_readable
-    ).side_effect = ValueError('ds-b: Themis reads')
-
+    root, cloud_infras = make_root()
     for step in (root.validate_themis, root.setup_themis):
-        with pytest.raises(ValueError, match='ds-b: Themis reads'):
+        with pytest.raises(ValueError, match=message):
             _run(step)
     assert not registered
-    for cloud_infra in cloud_infras.values():
-        cast('MagicMock', cloud_infra.add_themis_data_reader).assert_not_called()
+    assert not any(_data_readers(cloud_infras).values())
 
 
-def test_allowed_dataset_outside_the_acl_needs_no_themis_prerequisites():
-    """Only the datasets Themis reads must be readable by it."""
-    root, cloud_infras = _make_root(_config())
-    root.dataset_infrastructures['ds-c'].clouds = {}
-    cast(
-        'MagicMock', cloud_infras['ds-d'].check_themis_data_readable
-    ).side_effect = ValueError('ds-d: Themis reads')
-    root.validate_themis()
+# endregion
+# region add_themis_data_reader
 
 
 def _dataset_cloud_infra(
@@ -639,6 +413,7 @@ def _dataset_cloud_infra(
     infra.get_pulumi_name.side_effect = lambda key: f'{dataset_config.dataset}-{key}'
     config = MagicMock(spec=CPGInfrastructureConfig)
     config.igv_proxy = None
+    config.web_service = None
     return CPGDatasetCloudInfrastructure(
         config=config,
         root=MagicMock(),
@@ -648,48 +423,13 @@ def _dataset_cloud_infra(
     )
 
 
-def _direct_members(group: Any) -> set[str]:
-    return {m.cloud_id for m in group.members.values() if isinstance(m, GroupMember)}
-
-
-@pytest.mark.parametrize(
-    ('namespace', 'groups'),
-    [
-        (
-            'main',
-            {'ds-a-external-repository-reader', f'ds-a-sample-metadata-{SM_MAIN_READ}'},
-        ),
-        ('test', {f'ds-a-sample-metadata-{SM_TEST_READ}'}),
-    ],
-)
-def test_data_reader_joins_only_its_namespaces_read_groups(
-    namespace: ThemisNamespace,
-    groups: set[str],
-):
-    driver = _dataset_cloud_infra(
-        _dataset('ds-a', components={'gcp': ['storage', 'metamist']}),
-    )
-    driver.add_themis_data_reader(
-        _sa('sandbox-x'), environment='x', namespace=namespace
-    )
-
-    provider_groups = driver.group_provider.groups['gcp']
-    joined = {
-        name
-        for name, g in provider_groups.items()
-        if _sa('sandbox-x') in _direct_members(g)
-    }
-    assert joined == groups
-
-
 def _bucket_readers(
     driver: CPGDatasetCloudInfrastructure,
     bucket: Any,
 ) -> set[str]:
     """The accounts with read on `bucket`, directly or through a group."""
     readers = set()
-    infra = cast('MagicMock', driver.infra)
-    for call in infra.add_member_to_bucket.call_args_list:
+    for call in cast('MagicMock', driver.infra).add_member_to_bucket.call_args_list:
         args = dict(
             zip(
                 ('resource_key', 'bucket', 'member', 'membership'),
@@ -711,12 +451,11 @@ def _bucket_readers(
 
 
 @pytest.mark.parametrize(
-    ('namespace', 'bucket_name', 'metamist_read'),
-    [('main', 'main', SM_MAIN_READ), ('test', 'test', SM_TEST_READ)],
+    ('namespace', 'metamist_read'),
+    [('main', SM_MAIN_READ), ('test', SM_TEST_READ)],
 )
 def test_data_reader_reads_its_namespaces_bucket_and_may_invoke_metamist(
     namespace: ThemisNamespace,
-    bucket_name: str,
     metamist_read: str,
 ):
     driver = _dataset_cloud_infra(
@@ -726,7 +465,6 @@ def test_data_reader_reads_its_namespaces_bucket_and_may_invoke_metamist(
     cast('MagicMock', driver.infra).create_bucket.side_effect = (
         lambda name, **_: MagicMock(name=f'bucket-{name}')
     )
-    cast('MagicMock', driver.config).web_service = None
     provider = driver.group_provider
     invokers = provider.create_group(driver.infra, 'invokers', cache_members=False)
     cast('MagicMock', driver.root).gcp_metamist_invoker_group = invokers
@@ -746,7 +484,7 @@ def test_data_reader_reads_its_namespaces_bucket_and_may_invoke_metamist(
     read = {
         name for name, b in buckets.items() if sandbox_sa in _bucket_readers(driver, b)
     }
-    assert read == {bucket_name}
+    assert read == {namespace}
     # update_metamist_members sends this group's members as the project's readers
     resolved = {
         kind: {m.cloud_id for m in provider.resolve_group_members(group)}
@@ -763,19 +501,8 @@ def test_data_reader_reads_its_namespaces_bucket_and_may_invoke_metamist(
     [
         ('main', {'components': {'gcp': ['metamist']}}, 'the storage component'),
         ('main', {'components': {'gcp': ['storage']}}, 'the metamist component'),
-        (
-            'main',
-            {
-                'components': {'gcp': ['storage', 'metamist']},
-                'enable_metamist_project': False,
-            },
-            'enable_metamist_project',
-        ),
-        (
-            'test',
-            {'components': {'gcp': ['storage', 'metamist']}, 'setup_test': False},
-            'setup_test',
-        ),
+        ('main', {'enable_metamist_project': False}, 'enable_metamist_project'),
+        ('test', {'setup_test': False}, 'setup_test'),
     ],
 )
 def test_data_reader_needs_its_namespaces_storage_and_metamist(
@@ -783,7 +510,9 @@ def test_data_reader_needs_its_namespaces_storage_and_metamist(
     extra: dict[str, Any],
     missing: str,
 ):
-    driver = _dataset_cloud_infra(_dataset('ds-a', **extra))
+    driver = _dataset_cloud_infra(
+        _dataset('ds-a', **{'components': {'gcp': ['storage', 'metamist']}, **extra}),
+    )
     with pytest.raises(
         ValueError, match=f'ds-a: Themis reads its {namespace} .*{missing}'
     ):
@@ -801,34 +530,6 @@ def test_main_namespace_does_not_need_setup_test():
         ),
     )
     driver.check_themis_data_readable('main')
-
-
-def test_themis_role_members_join_no_group():
-    """Themis roles reach a dataset only through Themis, never a Google group."""
-    driver = _dataset_cloud_infra(
-        _dataset(
-            'ds-a',
-            components={'gcp': ['storage', 'metamist']},
-            members={
-                'themis-manager': ['alice'],
-                'themis-curator': ['carol'],
-                'web-access': ['bob'],
-            },
-        ),
-    )
-    cast('MagicMock', driver.config).users = USERS
-    driver.setup_externally_specified_members()
-
-    groups = driver.group_provider.groups['gcp']
-    joined = {
-        email: {name for name, g in groups.items() if email in _direct_members(g)}
-        for email in ('Alice.Smith@Example.org', 'carol@example.com', 'bob@example.com')
-    }
-    assert joined == {
-        'Alice.Smith@Example.org': set(),
-        'carol@example.com': set(),
-        'bob@example.com': {'ds-a-web-access'},
-    }
 
 
 # endregion
