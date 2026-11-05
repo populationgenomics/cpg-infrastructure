@@ -36,7 +36,13 @@ GroupName = Literal[
     'tmp-main-read-access',
     'external-repository-reader',
     'igv-desktop-access',
+    # Themis roles; these create no group
+    'themis-manager',
+    'themis-curator',
 ]
+
+
+ThemisNamespace = Literal['main', 'test']
 
 
 class CPGInfrastructureUser(ConfigModel):
@@ -321,6 +327,19 @@ class CPGInfrastructureConfig(ConfigModel):
         github_auth_token_username: str
         github_auth_token_base_url: str
 
+    class Themis(ConfigModel):
+        """One Themis environment, e.g. dev or prod"""
+
+        # the Themis deployment's GCP project, which holds the ACL secret
+        project: str
+        # reads the ACL secret
+        auth_service_account: str
+        # reads the datasets in the ACL
+        sandbox_service_account: str
+        # the dataset namespace that sandbox_service_account reads
+        namespace: ThemisNamespace
+        allowed_datasets: list[str]
+
     class Billing(ConfigModel):
         class GCP(ConfigModel):
             """Details of the BILLING account"""
@@ -399,6 +418,8 @@ class CPGInfrastructureConfig(ConfigModel):
     seqera: Seqera | None = None
     # configuration options for billing + billing aggregation
     billing: Billing | None = None
+    # configuration options for each Themis environment
+    themis: dict[str, Themis] = Field(default_factory=dict)
     # list of additional adhoc groups under infrastructure management
     adhoc_groups: list[CPGInfrastructureGroup] | None = None
 
@@ -415,6 +436,23 @@ class CPGInfrastructureConfig(ConfigModel):
     budget_notification_thresholds: list[float] = Field(
         default_factory=lambda: [0.5, 0.9, 1.0],
     )
+
+    @model_validator(mode='after')
+    def _themis_environments_differ(self) -> 'CPGInfrastructureConfig':
+        # ensure that each sandbox service account and project is unique across all
+        # themis environments, otherwise the service account would be added twice
+        # to each dataset, and the ACL's secret would be created twice
+        sandbox_service_accounts = [
+            t.sandbox_service_account for t in self.themis.values()
+        ]
+        if len(set(sandbox_service_accounts)) != len(sandbox_service_accounts):
+            raise ValueError(
+                'Themis environments must not share a sandbox service account'
+            )
+        projects = [t.project for t in self.themis.values()]
+        if len(set(projects)) != len(projects):
+            raise ValueError('Themis environments must not share a project')
+        return self
 
 
 class DataprocAutoscalingPolicySpec(ConfigModel):

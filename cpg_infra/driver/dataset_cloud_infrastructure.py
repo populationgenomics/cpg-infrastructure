@@ -37,6 +37,7 @@ from cpg_infra.config import (
     CPGInfrastructureConfig,
     HailAccount,
     SeqeraAccount,
+    ThemisNamespace,
 )
 from cpg_infra.driver.constants import (
     IGV_DESKTOP_ACCESS,
@@ -1923,6 +1924,52 @@ class CPGDatasetCloudInfrastructure:
                 )
 
     # endregion SAMPLE METADATA
+    # region THEMIS
+
+    def check_themis_data_readable(self, namespace: ThemisNamespace):
+        """Raise unless add_themis_data_reader can grant read on `namespace`."""
+        needs = {
+            'the storage component': self.should_setup_storage,
+            'the metamist component': self.should_setup_metamist,
+            'enable_metamist_project': self.dataset_config.enable_metamist_project,
+        }
+        if namespace == 'test':
+            needs['setup_test'] = self.dataset_config.setup_test
+        if missing := [need for need, present in needs.items() if not present]:
+            raise ValueError(
+                f'{self.dataset_config.dataset}: Themis reads its {namespace} '
+                f'bucket and {namespace} metamist project, which needs '
+                f'{", ".join(missing)}',
+            )
+
+    def add_themis_data_reader(
+        self,
+        member: str,
+        *,
+        environment: str,
+        namespace: ThemisNamespace,
+    ):
+        """Give a Themis sandbox account read on one namespace's bucket and metamist project."""
+        self.check_themis_data_readable(namespace)
+
+        # Bind directly rather than through main_read_group or test_read_group,
+        # which also cover the namespace's -tmp and -analysis buckets.
+        self.infra.add_member_to_bucket(
+            f'themis-{environment}-sandbox-{namespace}-bucket-read',
+            bucket=self.main_bucket if namespace == 'main' else self.test_bucket,
+            member=member,
+            membership=BucketMembership.READ,
+        )
+
+        metamist_read = SM_MAIN_READ if namespace == 'main' else SM_TEST_READ
+        self.metamist_groups[metamist_read].add_member(
+            self.infra.get_pulumi_name(
+                f'themis-{environment}-sandbox-in-sample-metadata-{metamist_read}',
+            ),
+            member=member,
+        )
+
+    # endregion THEMIS
     # region CONTAINER REGISTRY
 
     def setup_container_registry(self):

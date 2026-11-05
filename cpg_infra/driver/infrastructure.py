@@ -10,7 +10,7 @@ import json
 import os.path
 from collections import defaultdict
 from functools import cached_property
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import pulumi
 import pulumi_gcp as gcp
@@ -44,6 +44,7 @@ from cpg_infra.driver.groups import GroupMember, GroupProvider
 from cpg_infra.driver.standalone_project_infrastructure import (
     CPGStandaloneProjectInfrastructure,
 )
+from cpg_infra.driver.themis import ACL_SECRET_ID, build_acl, serialise_acl
 from cpg_infra.github_wif.driver import PAM_BROKER_SA_NAME
 from cpg_infra.plugin import get_plugins
 
@@ -61,6 +62,16 @@ if TYPE_CHECKING:
         CPGDatasetCloudInfrastructure,
     )
     from cpg_infra.driver.groups import Group
+
+
+# Secret Manager's limit on the payload of one secret version
+MAX_SECRET_VERSION_BYTES = 65536
+
+
+class ResolvedThemisEnvironment(NamedTuple):
+    settings: CPGInfrastructureConfig.Themis
+    acl_payload: str
+    dataset_infras: list[CPGDatasetCloudInfrastructure]
 
 
 def get_formatted_ws_name(is_test: bool, team: str) -> str:
@@ -174,6 +185,9 @@ class CPGInfrastructure:
         self.setup_datasets()
         self.setup_standalone_projects()
 
+        # fail on bad Themis config before any resource is registered
+        self.validate_themis()
+
         # create a bucket and attach accessor members to it. The bucket itself is
         # created by accessing the property `self.gcp_members_cache_bucket`
         # This will also have the side effect of creating a cloud resource manager and
@@ -202,6 +216,9 @@ class CPGInfrastructure:
 
         # Deploy managed adhoc assets that are not associated with datasets.
         self.deploy_adhoc()
+
+        # adds group members, so must run before finalize_groups
+        self.setup_themis()
 
         plugins = get_plugins()
         initialised_plugins = []
@@ -837,6 +854,86 @@ class CPGInfrastructure:
             )
 
     # endregion ACCESS_CACHE
+
+    # region THEMIS
+
+    def setup_themis(self):
+        """Write each Themis environment's ACL to a secret, and grant access."""
+        for environment, resolved in self._resolve_themis().items():
+            settings = resolved.settings
+            secret = self.common_gcp_infra.create_secret(
+                name=ACL_SECRET_ID,
+                project=settings.project,
+                resource_key=self.common_gcp_infra.get_pulumi_name(
+                    f'themis-{environment}-acl',
+                ),
+            )
+
+            self.common_gcp_infra.add_secret_version(
+                f'themis-{environment}-acl-latest',
+                secret=secret,
+                contents=resolved.acl_payload,
+            )
+
+            self.common_gcp_infra.add_secret_member(
+                f'themis-{environment}-acl-accessor',
+                secret=secret,
+                project=settings.project,
+                member=settings.auth_service_account,
+                membership=SecretMembership.ACCESSOR,
+            )
+
+            for cloud_infra in resolved.dataset_infras:
+                cloud_infra.add_themis_data_reader(
+                    settings.sandbox_service_account,
+                    environment=environment,
+                    namespace=settings.namespace,
+                )
+
+    def validate_themis(self):
+        """Raise on Themis config that setup_themis cannot honour."""
+        self._resolve_themis()
+
+    def _resolve_themis(self) -> dict[str, ResolvedThemisEnvironment]:
+        """Each Themis environment's ACL payload and datasets; registers nothing."""
+        resolved = {}
+        for environment, settings in sorted(self.config.themis.items()):
+            acl = build_acl(
+                settings.allowed_datasets,
+                self.dataset_configs,
+                self.config.users,
+            )
+            acl_payload = serialise_acl(acl)
+            size = len(acl_payload.encode('utf-8'))
+            if size > MAX_SECRET_VERSION_BYTES:
+                raise ValueError(
+                    f'Themis environment {environment!r}: its ACL is {size} bytes, '
+                    f'over the {MAX_SECRET_VERSION_BYTES} bytes a secret version '
+                    'holds',
+                )
+
+            dataset_infras = []
+            for dataset in sorted(acl['projects']):
+                cloud_infra = self.dataset_infrastructures[dataset].clouds.get(
+                    GcpInfrastructure.name(),
+                )
+                if cloud_infra is None:
+                    raise ValueError(
+                        f'Themis reads dataset {dataset!r}, which has no '
+                        f'{GcpInfrastructure.name()!r} deploy location',
+                    )
+                cloud_infra.check_themis_data_readable(settings.namespace)
+                dataset_infras.append(cloud_infra)
+
+            resolved[environment] = ResolvedThemisEnvironment(
+                settings=settings,
+                acl_payload=acl_payload,
+                dataset_infras=dataset_infras,
+            )
+
+        return resolved
+
+    # endregion THEMIS
 
     @cached_property
     def config_viewer_group(self):

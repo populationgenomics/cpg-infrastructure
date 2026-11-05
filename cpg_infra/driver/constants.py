@@ -6,7 +6,7 @@ Constants and helper functions used across the driver package.
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 import toml
 import xxhash
@@ -24,6 +24,8 @@ SM_MAIN_READ = 'main-read'
 SM_MAIN_WRITE = 'main-write'
 SM_MAIN_CONTRIBUTE = 'main-contribute'
 IGV_DESKTOP_ACCESS = 'igv-desktop-access'
+THEMIS_MANAGER: Final = 'themis-manager'
+THEMIS_CURATOR: Final = 'themis-curator'
 
 METAMIST_PERMISSIONS = [
     SM_TEST_READ,

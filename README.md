@@ -92,6 +92,43 @@ To do this:
 - a user config must have `can_access_internal_dataset_logs = True`, and
 - the dataset config must have `is_internal_dataset = True`.
 
+### Themis
+
+[Themis](https://github.com/populationgenomics/themis) is CPG's rare disease curation platform. In Themis, a Project is one dataset. A person on a Project is a manager, a curator, or both. `CPGInfrastructureConfig.themis` configures each Themis environment, for example `dev` or `prod`.
+
+For each environment, the deploy:
+
+- makes the ACL (access control list), which lists the managers and curators of each Project,
+- creates the Secret Manager secret `acl` in the environment's `project`, and writes the ACL to it as a new version,
+- gives `auth_service_account` read access to the secret, and
+- gives `sandbox_service_account` read access to each dataset in the ACL, in the environment's `namespace`.
+
+A dataset is a Project when two conditions are true:
+
+- The dataset is in the environment's `allowed_datasets`.
+- Its `themis-manager` or `themis-curator` list has at least one user.
+
+The ACL contains the `gcp.id` of each user, in lowercase:
+
+```json
+{"format": 1, "projects": {"validation": {"managers": ["<email>", ...], "curators": ["<email>", ...]}}}
+```
+
+The auth and sandbox service accounts must exist before you add an environment, because the deploy gives them access.
+
+#### Namespace
+
+A dataset has a `main` namespace, and it can also have a `test` namespace (see [Dataset infrastructure](#dataset-infrastructure)). The `namespace` setting selects the namespace that the sandbox service account reads. In this namespace, the account reads one bucket and one metamist project for each dataset. For the dataset `validation`, these are:
+
+| `namespace` | Bucket | Metamist project |
+| ----------- | ------ | ---------------- |
+| `main` | `cpg-validation-main` | `validation` |
+| `test` | `cpg-validation-test` | `validation-test` |
+
+The ACL is the same for each namespace.
+
+A test namespace can contain data from real participants. Thus the `test` namespace does not keep participant data out of an environment. Only `allowed_datasets` does that.
+
 ## Infrastructure
 
 ### Dataset infrastructure
@@ -124,6 +161,8 @@ Members have different roles within a dataset, those roles include:
 - external-repository-reader
   - Read access to data in main. This is distinct from the `data-manager` role as it only grants read access to main and no additional access to any other buckets or services.
   - Developed to support Terra Data Repository service account access to self-hosted production data in CPG buckets. Do not assign this role to a human user.
+- themis-manager, themis-curator
+  - The manager and curator roles on the dataset's Project in Themis (see [Themis](#themis)). These lists do not create a group, and they give no access outside Themis.
 
 ## Setup
 
