@@ -61,6 +61,10 @@ _HEAD_JOB_ROLES: tuple[str, ...] = (
     'roles/batch.jobsEditor',
     'roles/logging.viewer',
     'roles/iam.workloadIdentityUser',
+    # When seqera validates credentials, it does so with a cheap call to list the
+    # buckets in a project. This role grants buckets.list and buckets.get, and doesn't
+    # give any access to objects within buckets. Without it, seqera can't validate creds
+    'roles/storage.bucketViewer',
 )
 
 # Task Job SA runs the actual compute tasks and can spawn nested subtasks
@@ -207,6 +211,19 @@ class DatasetSeqeraInfrastructure:
     @cached_property
     def _wif_provider(self) -> gcp.iam.WorkloadIdentityPoolProvider:
         assert self._config.seqera is not None
+        # Workspace ids are unique within seqera, but for an extra piece of safety,
+        # also add assertion that includes the org id.
+        org_id = self._config.seqera.org_id
+        workspace_ids = sorted(
+            {
+                self._workspace_ids[_WORKSPACE_TYPE_FOR_LEVEL[level]]
+                for level in self._access_levels
+            }
+        )
+        attribute_condition = ' || '.join(
+            f"assertion.sub.startsWith('org:{org_id}:wsp:{ws_id}:')"
+            for ws_id in workspace_ids
+        )
         return gcp.iam.WorkloadIdentityPoolProvider(
             self._infra.get_pulumi_name(
                 f'seqera-wif-provider-{self._dataset_config.dataset}',
@@ -220,7 +237,11 @@ class DatasetSeqeraInfrastructure:
             oidc=gcp.iam.WorkloadIdentityPoolProviderOidcArgs(
                 issuer_uri=self._config.seqera.wif_issuer_uri,
             ),
-            attribute_mapping={'google.subject': 'assertion.sub'},
+            attribute_mapping={
+                'google.subject': 'assertion.sub',
+                'attribute.workspace': "assertion.sub.extract('wsp:{workspace}:')",
+            },
+            attribute_condition=attribute_condition,
         )
 
     def _account_id_for(self, level: str) -> str:
@@ -328,15 +349,14 @@ class DatasetSeqeraInfrastructure:
 
     def _bind_wif_principals(self) -> None:
         assert self._config.seqera is not None
-        org_id = self._config.seqera.org_id
         # Ensure the provider is materialised so pool exists before bindings.
         _ = self._wif_provider
 
         def _make_principal(workspace_id: int) -> pulumi.Output[str]:
-            wif_subject = f'org:{org_id}:wsp:{workspace_id}:workflow'
             return self._wif_pool.name.apply(
                 lambda pool_name: (
-                    f'principal://iam.googleapis.com/{pool_name}/subject/{wif_subject}'
+                    f'principalSet://iam.googleapis.com/{pool_name}'
+                    f'/attribute.workspace/{workspace_id}'
                 ),
             )
 
