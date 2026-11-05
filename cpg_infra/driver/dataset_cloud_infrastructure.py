@@ -601,7 +601,6 @@ class CPGDatasetCloudInfrastructure:
         self.setup_storage_main_analysis_bucket()
         self.setup_storage_main_web_bucket_permissions()
         self.setup_storage_main_upload_buckets_permissions()
-        self.setup_notebook_outputs_bucket_permissions()
 
         if self.dataset_config.setup_test:
             self.setup_storage_common_test_access()  # extra access for common dataset
@@ -2078,6 +2077,9 @@ class CPGDatasetCloudInfrastructure:
 
     def setup_notebooks(self):
         self.setup_notebooks_account_permissions()
+
+        if self.should_setup_storage:
+            self.setup_notebook_outputs_bucket_permissions()
 
     def setup_notebooks_account_permissions(self):
         # allow access group to use notebook account
