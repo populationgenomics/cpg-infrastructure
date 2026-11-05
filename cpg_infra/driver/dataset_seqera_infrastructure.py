@@ -61,6 +61,10 @@ _HEAD_JOB_ROLES: tuple[str, ...] = (
     'roles/batch.jobsEditor',
     'roles/logging.viewer',
     'roles/iam.workloadIdentityUser',
+    # When seqera validates credentials, it does so with a cheap call to list the
+    # buckets in a project. This role grants buckets.list and buckets.get, and doesn't
+    # give any access to objects within buckets. Without it, seqera can't validate creds
+    'roles/storage.bucketViewer',
 )
 
 # Task Job SA runs the actual compute tasks and can spawn nested subtasks
