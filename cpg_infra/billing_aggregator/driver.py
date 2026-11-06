@@ -476,7 +476,8 @@ class BillingAggregator(CpgInfrastructurePlugin):
                     action='DELETE',
                     condition=gcp.artifactregistry.RepositoryCleanupPolicyConditionArgs(
                         tag_state='UNTAGGED',
-                        older_than='30d',
+                        # 30 days; with pulumi-gcp 7 the API needs seconds ('30d' is rejected)
+                        older_than='2592000s',
                     ),
                 ),
             ],
