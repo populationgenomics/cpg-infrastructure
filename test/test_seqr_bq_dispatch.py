@@ -129,6 +129,37 @@ class SeqrBqDispatchTestBase(TestCase):
 
 class TestSeqeraDispatch(SeqrBqDispatchTestBase):
 
+    def test_seqera_row_emits_exactly_one_entry(self):
+        """Dataset-labelled rows (Seqera) emit only the distributed entry.
+
+        No original-on-topic=seqr, no credit — mirroring the Hail
+        dataset-attributed pattern. This is what prevents costByAnalysis
+        from double-counting the ar_guid.
+        """
+        entries = self._run([_seqera_row(cost=10.0, dataset='fewgenomes')])
+        self.assertEqual(
+            1, len(entries),
+            msg=f'expected 1 entry (distributed), got {len(entries)}: '
+                f'{[(e["topic"], e["cost"], e["id"][-10:]) for e in entries]}',
+        )
+        self.assertEqual('fewgenomes', entries[0]['topic'])
+        self.assertAlmostEqual(10.0, entries[0]['cost'])
+        self.assertFalse(entries[0]['id'].endswith('-credit'))
+
+    def test_seqera_row_emits_no_credit_entry(self):
+        """No credit is emitted for a dataset-labelled row — matches Hail."""
+        entries = self._run([_seqera_row(cost=10.0, dataset='fewgenomes')])
+        credits_ = [e for e in entries if e['id'].endswith('-credit')]
+        self.assertEqual(0, len(credits_))
+
+    def test_seqera_row_emits_no_original_on_seqr_topic(self):
+        """No 'topic=seqr' pre-distribution entry — the source of the
+        ar_guid double-count in costByAnalysis under the old pattern.
+        """
+        entries = self._run([_seqera_row(cost=10.0, dataset='fewgenomes')])
+        seqr_topic_entries = [e for e in entries if e['topic'] == 'seqr']
+        self.assertEqual(0, len(seqr_topic_entries))
+
     def test_seqera_test_namespace_dataset_folds_to_production_topic(self):
         entries = self._run([_seqera_row(cost=10.0, dataset='fewgenomes-test')])
         topics = self._by_topic(entries)
@@ -136,65 +167,56 @@ class TestSeqeraDispatch(SeqrBqDispatchTestBase):
         # distributed entry should be on 'fewgenomes', not 'fewgenomes-test'
         self.assertIn('fewgenomes', topics)
         self.assertNotIn('fewgenomes-test', topics)
-
-        distributed = [
-            e for e in topics['fewgenomes']
-            if not e['id'].endswith('-credit')
-        ]
-        self.assertEqual(1, len(distributed))
-        self.assertAlmostEqual(10.0, distributed[0]['cost'])
+        self.assertEqual(1, len(topics['fewgenomes']))
+        self.assertAlmostEqual(10.0, topics['fewgenomes'][0]['cost'])
 
     def test_seqera_production_dataset_attributes_full_cost(self):
         entries = self._run([_seqera_row(cost=10.0, dataset='fewgenomes')])
         topics = self._by_topic(entries)
 
-        self.assertIn('fewgenomes', topics)
-        distributed = [
-            e for e in topics['fewgenomes']
-            if not e['id'].endswith('-credit')
-        ]
-        self.assertEqual(1, len(distributed))
-        self.assertAlmostEqual(10.0, distributed[0]['cost'])
+        self.assertEqual({'fewgenomes'}, set(topics.keys()))
+        self.assertEqual(1, len(topics['fewgenomes']))
+        self.assertAlmostEqual(10.0, topics['fewgenomes'][0]['cost'])
 
     def test_seqera_seqr_dataset_attributes_to_seqr_topic(self):
-        # When labels['dataset'] == 'seqr', the strip is a no-op and the
-        # distributed entry lands on topic 'seqr' (alongside the original
-        # seqr-topic entry and the seqr credit).
+        """When labels['dataset'] == 'seqr' the strip is a no-op and the
+        single distributed entry lands on topic 'seqr'. No credit, no
+        separate pre-distribution entry.
+        """
         entries = self._run([_seqera_row(cost=7.0, dataset='seqr')])
-        topics = self._by_topic(entries)
-
-        # all entries from one dataset='seqr' row must be on topic 'seqr'
-        self.assertEqual({'seqr'}, set(topics.keys()))
-        # exactly one credit entry
-        credits_ = [e for e in topics['seqr'] if e['id'].endswith('-credit')]
-        self.assertEqual(1, len(credits_))
-
-    def test_seqera_row_emits_matching_seqr_credit(self):
-        entries = self._run([_seqera_row(cost=10.0, dataset='fewgenomes')])
-        credits_ = [e for e in entries if e['id'].endswith('-credit')]
-        self.assertEqual(1, len(credits_))
-        self.assertEqual('seqr', credits_[0]['topic'])
-        self.assertAlmostEqual(-10.0, credits_[0]['cost'])
+        self.assertEqual(1, len(entries))
+        self.assertEqual('seqr', entries[0]['topic'])
+        self.assertAlmostEqual(7.0, entries[0]['cost'])
+        self.assertFalse(entries[0]['id'].endswith('-credit'))
 
     def test_seqera_distributed_entry_preserves_compute_category_label(self):
         import rapidjson
         entries = self._run([_seqera_row(cost=10.0, dataset='fewgenomes')])
-        distributed = [
-            e for e in entries
-            if e['topic'] == 'fewgenomes' and not e['id'].endswith('-credit')
-        ]
-        self.assertEqual(1, len(distributed))
-        labels = rapidjson.loads(distributed[0]['labels'])
+        self.assertEqual(1, len(entries))
+        labels = rapidjson.loads(entries[0]['labels'])
         self.assertEqual('nextflow', labels.get('compute_category'))
 
-    def test_non_seqera_row_still_uses_hosting_prop_map(self):
-        # usage_end_time is 2026-11-07, HOSTING_MAP has an entry at 2026-01-01 → matches.
+    def test_non_seqera_row_emits_original_credit_and_distributed(self):
+        """ES / seqr-hosting rows keep the three-row pattern so topic='seqr'
+        remains visible with seqr's own hosting cost (the view filters the
+        credit by service.description).
+        """
         entries = self._run([_hosting_row(cost=5.0)])
-        topics = self._by_topic(entries)
+        self.assertEqual(3, len(entries))
 
-        # Hosting map routes to 'dsH' at 100%
-        self.assertIn('dsH', topics)
-        distributed = [e for e in topics['dsH'] if not e['id'].endswith('-credit')]
+        by_topic = self._by_topic(entries)
+        # Original + credit on seqr; distributed on dsH
+        self.assertIn('seqr', by_topic)
+        self.assertIn('dsH', by_topic)
+
+        seqr_entries = by_topic['seqr']
+        self.assertEqual(2, len(seqr_entries))
+        credit = next(e for e in seqr_entries if e['id'].endswith('-credit'))
+        original = next(e for e in seqr_entries if not e['id'].endswith('-credit'))
+        self.assertAlmostEqual(5.0, original['cost'])
+        self.assertAlmostEqual(-5.0, credit['cost'])
+
+        distributed = by_topic['dsH']
         self.assertEqual(1, len(distributed))
         self.assertAlmostEqual(5.0, distributed[0]['cost'])
 
@@ -205,17 +227,12 @@ class TestSeqeraDispatch(SeqrBqDispatchTestBase):
         ])
         topics = self._by_topic(entries)
 
-        self.assertIn('fewgenomes', topics)
-        self.assertIn('acute-care', topics)
+        # One entry per row, each on its own dataset topic. No credits.
+        self.assertEqual({'fewgenomes', 'acute-care'}, set(topics.keys()))
+        self.assertEqual(1, len(topics['fewgenomes']))
+        self.assertEqual(1, len(topics['acute-care']))
+        self.assertAlmostEqual(10.0, topics['fewgenomes'][0]['cost'])
+        self.assertAlmostEqual(4.0, topics['acute-care'][0]['cost'])
 
-        fg = [e for e in topics['fewgenomes'] if not e['id'].endswith('-credit')]
-        ac = [e for e in topics['acute-care'] if not e['id'].endswith('-credit')]
-        self.assertEqual(1, len(fg))
-        self.assertEqual(1, len(ac))
-        self.assertAlmostEqual(10.0, fg[0]['cost'])
-        self.assertAlmostEqual(4.0, ac[0]['cost'])
-
-        # Two seqr credits, one per original row
         credits_ = [e for e in entries if e['id'].endswith('-credit')]
-        self.assertEqual(2, len(credits_))
-        self.assertEqual({'seqr'}, {c['topic'] for c in credits_})
+        self.assertEqual(0, len(credits_))
