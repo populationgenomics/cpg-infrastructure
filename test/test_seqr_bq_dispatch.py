@@ -11,9 +11,9 @@ os.environ.setdefault('GCP_BILLING_SOURCE_TABLE', 'project.dataset.billing_test'
 os.environ.setdefault('GCP_AGGREGATE_DEST_TABLE', 'project.dataset.aggregate_test')
 os.environ.setdefault('BILLING_PROJECT_ID', 'project-test')
 
-import importlib  # noqa: E402
+import importlib
 
-import pandas as pd  # noqa: E402
+import pandas as pd
 
 # The aggregate package's __init__.py shadows the submodule attribute `seqr`
 # with the from_pubsub function (`from .seqr import from_pubsub as seqr`),
@@ -59,8 +59,12 @@ def _row(
     }
 
 
-def _seqera_row(cost: float = 10.0, dataset: str = 'fewgenomes', ar_guid: str = 'arg-1',
-                resource_id: str = 'res-1') -> dict:
+def _seqera_row(
+    cost: float = 10.0,
+    dataset: str = 'fewgenomes',
+    ar_guid: str = 'arg-1',
+    resource_id: str = 'res-1',
+) -> dict:
     return _row(
         cost=cost,
         labels=[
@@ -84,9 +88,14 @@ class SeqrBqDispatchTestBase(TestCase):
     def _run(self, rows: list[dict]) -> list[dict]:
         captured: list[dict] = []
 
-        def _fake_upsert(table, objs, existing_ids, dry_run):
-            captured.extend(objs)
-            return len(objs)
+        def _fake_upsert(*_args: object, **kwargs: object) -> int:
+            objs = kwargs.get('objs')
+            if objs is None:
+                # upsert_rows_into_bigquery is called with kwargs in seqr.py,
+                # so this positional path is a safety net.
+                objs = _args[1]
+            captured.extend(objs)  # type: ignore[arg-type]
+            return len(objs)  # type: ignore[arg-type]
 
         # Mock BQ chain: get_bigquery_client().query(...).result().to_dataframe_iterable()
         fake_df = pd.DataFrame(rows)
@@ -97,18 +106,22 @@ class SeqrBqDispatchTestBase(TestCase):
         fake_client = MagicMock()
         fake_client.query.return_value = fake_query
 
-        with patch.object(seqr_module.utils, 'get_bigquery_client', return_value=fake_client), \
-             patch.object(seqr_module.utils, 'retrieve_stored_ids', return_value=set()), \
-             patch.object(
-                 seqr_module.utils,
-                 'get_currency_conversion_rate_for_time',
-                 return_value=1.0,
-             ), \
-             patch.object(
-                 seqr_module.utils,
-                 'upsert_rows_into_bigquery',
-                 side_effect=_fake_upsert,
-             ):
+        with (
+            patch.object(
+                seqr_module.utils, 'get_bigquery_client', return_value=fake_client
+            ),
+            patch.object(seqr_module.utils, 'retrieve_stored_ids', return_value=set()),
+            patch.object(
+                seqr_module.utils,
+                'get_currency_conversion_rate_for_time',
+                return_value=1.0,
+            ),
+            patch.object(
+                seqr_module.utils,
+                'upsert_rows_into_bigquery',
+                side_effect=_fake_upsert,
+            ),
+        ):
             seqr_module.migrate_entries_from_bq(
                 start=_START,
                 end=_END,
@@ -128,7 +141,6 @@ class SeqrBqDispatchTestBase(TestCase):
 
 
 class TestSeqeraDispatch(SeqrBqDispatchTestBase):
-
     def test_seqera_row_emits_exactly_one_entry(self):
         """Dataset-labelled rows (Seqera) emit only the distributed entry.
 
@@ -138,9 +150,10 @@ class TestSeqeraDispatch(SeqrBqDispatchTestBase):
         """
         entries = self._run([_seqera_row(cost=10.0, dataset='fewgenomes')])
         self.assertEqual(
-            1, len(entries),
+            1,
+            len(entries),
             msg=f'expected 1 entry (distributed), got {len(entries)}: '
-                f'{[(e["topic"], e["cost"], e["id"][-10:]) for e in entries]}',
+            f'{[(e["topic"], e["cost"], e["id"][-10:]) for e in entries]}',
         )
         self.assertEqual('fewgenomes', entries[0]['topic'])
         self.assertAlmostEqual(10.0, entries[0]['cost'])
@@ -191,6 +204,7 @@ class TestSeqeraDispatch(SeqrBqDispatchTestBase):
 
     def test_seqera_distributed_entry_preserves_compute_category_label(self):
         import rapidjson
+
         entries = self._run([_seqera_row(cost=10.0, dataset='fewgenomes')])
         self.assertEqual(1, len(entries))
         labels = rapidjson.loads(entries[0]['labels'])
@@ -221,10 +235,16 @@ class TestSeqeraDispatch(SeqrBqDispatchTestBase):
         self.assertAlmostEqual(5.0, distributed[0]['cost'])
 
     def test_two_rows_same_ar_guid_different_datasets_route_independently(self):
-        entries = self._run([
-            _seqera_row(cost=10.0, dataset='fewgenomes', ar_guid='shared', resource_id='r1'),
-            _seqera_row(cost=4.0, dataset='acute-care', ar_guid='shared', resource_id='r2'),
-        ])
+        entries = self._run(
+            [
+                _seqera_row(
+                    cost=10.0, dataset='fewgenomes', ar_guid='shared', resource_id='r1'
+                ),
+                _seqera_row(
+                    cost=4.0, dataset='acute-care', ar_guid='shared', resource_id='r2'
+                ),
+            ]
+        )
         topics = self._by_topic(entries)
 
         # One entry per row, each on its own dataset topic. No credits.

@@ -444,6 +444,7 @@ def migrate_entries_from_bq(
             _obj_param_map = seqr_wide_param_map
             has_explicit_dataset = 'dataset' in labels
             if has_explicit_dataset:
+                # specific override where 'dataset' is specified in GCP resource
                 # Strip '-test' so test-namespace datasets
                 # (e.g. 'fewgenomes-test') fold into the production dataset
                 # topic, matching the Hail path.
