@@ -443,8 +443,11 @@ def migrate_entries_from_bq(
 
             _obj_param_map = seqr_wide_param_map
             if 'dataset' in labels:
-                # specific override where 'dataset' is specified in GCP resource
-                _obj_param_map = {labels['dataset']: (1.0, 1)}
+                # Specific override where 'dataset' is specified in the GCP
+                # resource labels. Strip '-test' so test-namespace datasets
+                # (e.g. 'fewgenomes-test') fold into the production dataset
+                # topic, matching the Hail path.
+                _obj_param_map = {labels['dataset'].replace('-test', ''): (1.0, 1)}
 
             # Data transforms and key changes
             obj['topic'] = 'seqr'
