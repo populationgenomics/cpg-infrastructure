@@ -90,6 +90,7 @@ def _settings(environment: str, **overrides: Any) -> dict[str, Any]:
         'project': _project(environment),
         'auth_service_account': _sa(f'auth-{environment}'),
         'sandbox_service_account': _sa(f'sandbox-{environment}'),
+        'sample_metadata_service_account': _sa(f'sample-metadata-{environment}'),
         'namespace': 'test' if environment == 'dev' else 'main',
         'allowed_datasets': sorted(DATASETS),
         **overrides,
@@ -131,10 +132,14 @@ def _config(
     ('shared', 'message'),
     [
         ({'sandbox_service_account': _sa('sandbox')}, 'a sandbox service account'),
+        (
+            {'sample_metadata_service_account': _sa('sample-metadata')},
+            'a sample metadata service account',
+        ),
         ({'project': _project('shared')}, 'a project'),
     ],
 )
-def test_environments_may_not_share_a_sandbox_service_account_or_project(
+def test_environments_may_not_share_a_data_reading_service_account_or_project(
     shared: dict[str, str],
     message: str,
 ):
@@ -275,11 +280,15 @@ def _acl_secrets(
 
 
 def _data_readers(cloud_infras: dict[str, MagicMock]) -> dict[str, set[tuple]]:
-    """Dataset -> the (service account, namespace) pairs given read on it."""
+    """Dataset -> the (data, service account, namespace) triples given read on it."""
     return {
         dataset: {
-            (call.args[0], call.kwargs['namespace'])
-            for call in cloud_infra.add_themis_data_reader.call_args_list
+            (data, call.args[0], call.kwargs['namespace'])
+            for data, add_reader in (
+                ('bucket', cloud_infra.add_themis_bucket_reader),
+                ('metamist', cloud_infra.add_themis_metamist_reader),
+            )
+            for call in add_reader.call_args_list
         }
         for dataset, cloud_infra in cloud_infras.items()
     }
@@ -328,10 +337,18 @@ def test_setup_themis_writes_each_environments_acl_and_grants_access(
         for env in ('dev', 'prod')
     }
 
-    # each sandbox service account reads its own ACL's datasets in its namespace
+    # for its own ACL's datasets in its namespace, each sandbox service account
+    # reads only the bucket, and each sample metadata service account reads only
+    # the metamist project
     assert _data_readers(cloud_infras) == {
-        'ds-a': {(_sa('sandbox-dev'), 'test')},
-        'ds-b': {(_sa('sandbox-prod'), 'main')},
+        'ds-a': {
+            ('bucket', _sa('sandbox-dev'), 'test'),
+            ('metamist', _sa('sample-metadata-dev'), 'test'),
+        },
+        'ds-b': {
+            ('bucket', _sa('sandbox-prod'), 'main'),
+            ('metamist', _sa('sample-metadata-prod'), 'main'),
+        },
         'ds-c': set(),
         'ds-d': set(),
     }
@@ -402,7 +419,7 @@ def test_bad_config_fails_before_any_resource_is_registered(
 
 
 # endregion
-# region add_themis_data_reader
+# region add_themis_bucket_reader and add_themis_metamist_reader
 
 
 def _dataset_cloud_infra(
@@ -454,7 +471,7 @@ def _bucket_readers(
     ('namespace', 'metamist_read'),
     [('main', SM_MAIN_READ), ('test', SM_TEST_READ)],
 )
-def test_data_reader_reads_its_namespaces_bucket_and_may_invoke_metamist(
+def test_sandbox_reads_its_namespaces_bucket_and_sample_metadata_its_metamist(
     namespace: ThemisNamespace,
     metamist_read: str,
 ):
@@ -469,8 +486,12 @@ def test_data_reader_reads_its_namespaces_bucket_and_may_invoke_metamist(
     invokers = provider.create_group(driver.infra, 'invokers', cache_members=False)
     cast('MagicMock', driver.root).gcp_metamist_invoker_group = invokers
     sandbox_sa = _sa('sandbox-x')
+    sample_metadata_sa = _sa('sample-metadata-x')
 
-    driver.add_themis_data_reader(sandbox_sa, environment='x', namespace=namespace)
+    driver.add_themis_bucket_reader(sandbox_sa, environment='x', namespace=namespace)
+    driver.add_themis_metamist_reader(
+        sample_metadata_sa, environment='x', namespace=namespace
+    )
     driver.setup_storage_main_bucket_permissions()
     driver.setup_storage_test_buckets_permissions()
     driver.setup_metamist_cloudrun_permissions()
@@ -482,18 +503,26 @@ def test_data_reader_reads_its_namespaces_bucket_and_may_invoke_metamist(
         'test-tmp': driver.test_tmp_bucket,
     }
     read = {
-        name for name, b in buckets.items() if sandbox_sa in _bucket_readers(driver, b)
+        sa: {name for name, b in buckets.items() if sa in _bucket_readers(driver, b)}
+        for sa in (sandbox_sa, sample_metadata_sa)
     }
-    assert read == {namespace}
+    assert read == {sandbox_sa: {namespace}, sample_metadata_sa: set()}
     # update_metamist_members sends this group's members as the project's readers
     resolved = {
         kind: {m.cloud_id for m in provider.resolve_group_members(group)}
         for kind, group in driver.metamist_groups.items()
     }
-    assert {kind for kind, members in resolved.items() if sandbox_sa in members} == {
-        metamist_read,
+    in_metamist_groups = {
+        sa: {kind for kind, members in resolved.items() if sa in members}
+        for sa in (sandbox_sa, sample_metadata_sa)
     }
-    assert sandbox_sa in {m.cloud_id for m in provider.resolve_group_members(invokers)}
+    assert in_metamist_groups == {
+        sandbox_sa: set(),
+        sample_metadata_sa: {metamist_read},
+    }
+    may_invoke = {m.cloud_id for m in provider.resolve_group_members(invokers)}
+    assert sample_metadata_sa in may_invoke
+    assert sandbox_sa not in may_invoke
 
 
 @pytest.mark.parametrize(
@@ -505,7 +534,7 @@ def test_data_reader_reads_its_namespaces_bucket_and_may_invoke_metamist(
         ('test', {'setup_test': False}, 'setup_test'),
     ],
 )
-def test_data_reader_needs_its_namespaces_storage_and_metamist(
+def test_data_readers_need_their_namespaces_storage_and_metamist(
     namespace: ThemisNamespace,
     extra: dict[str, Any],
     missing: str,
@@ -513,12 +542,14 @@ def test_data_reader_needs_its_namespaces_storage_and_metamist(
     driver = _dataset_cloud_infra(
         _dataset('ds-a', **{'components': {'gcp': ['storage', 'metamist']}, **extra}),
     )
-    with pytest.raises(
-        ValueError, match=f'ds-a: Themis reads its {namespace} .*{missing}'
+    for add_reader in (
+        driver.add_themis_bucket_reader,
+        driver.add_themis_metamist_reader,
     ):
-        driver.add_themis_data_reader(
-            _sa('sandbox-x'), environment='x', namespace=namespace
-        )
+        with pytest.raises(
+            ValueError, match=f'ds-a: Themis reads its {namespace} .*{missing}'
+        ):
+            add_reader(_sa('reader-x'), environment='x', namespace=namespace)
 
 
 def test_main_namespace_does_not_need_setup_test():

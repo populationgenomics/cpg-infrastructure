@@ -100,8 +100,9 @@ For each environment, the deploy:
 
 - makes the ACL (access control list), which lists the managers and curators of each Project,
 - creates the Secret Manager secret `acl` in the environment's `project`, and writes the ACL to it as a new version,
-- gives `auth_service_account` read access to the secret, and
-- gives `sandbox_service_account` read access to each dataset in the ACL, in the environment's `namespace`.
+- gives `auth_service_account` read access to the secret,
+- gives `sandbox_service_account` read access to the bucket of each dataset in the ACL, in the environment's `namespace`, and
+- gives `sample_metadata_service_account` read access to the metamist project of each dataset in the ACL, in the environment's `namespace`.
 
 A dataset is a Project when two conditions are true:
 
@@ -114,11 +115,30 @@ The ACL contains the `gcp.id` of each user, in lowercase:
 {"format": 1, "projects": {"validation": {"managers": ["<email>", ...], "curators": ["<email>", ...]}}}
 ```
 
-The auth and sandbox service accounts must exist before you add an environment, because the deploy gives them access.
+The auth, sandbox and sample metadata service accounts must exist before you add an environment, because the deploy gives them access.
+
+#### Data access
+
+The sandbox worker runs code that a model writes, so the deploy gives `sandbox_service_account` no metamist access. The sample metadata service makes all metamist queries.
+
+```mermaid
+flowchart LR
+    subgraph themis["Themis environment"]
+        worker["Sandbox worker<br/>sandbox_service_account"]
+        service["Sample metadata service<br/>sample_metadata_service_account"]
+    end
+    subgraph dataset["Dataset, in the environment's namespace"]
+        bucket[("Bucket<br/>cpg-#lt;dataset#gt;-#lt;namespace#gt;")]
+        metamist[("Metamist project<br/>#lt;dataset#gt; or #lt;dataset#gt;-test")]
+    end
+    worker -- "asks which files to read" --> service
+    worker -- "reads files" --> bucket
+    service -- "queries" --> metamist
+```
 
 #### Namespace
 
-A dataset has a `main` namespace, and it can also have a `test` namespace (see [Dataset infrastructure](#dataset-infrastructure)). The `namespace` setting selects the namespace that the sandbox service account reads. In this namespace, the account reads one bucket and one metamist project for each dataset. For the dataset `validation`, these are:
+A dataset has a `main` namespace, and it can also have a `test` namespace (see [Dataset infrastructure](#dataset-infrastructure)). The `namespace` setting selects the namespace that Themis reads. In this namespace, the sandbox service account reads one bucket for each dataset. The sample metadata service account reads one metamist project for each dataset. For the dataset `validation`, these are:
 
 | `namespace` | Bucket | Metamist project |
 | ----------- | ------ | ---------------- |

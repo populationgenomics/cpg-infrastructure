@@ -334,9 +334,11 @@ class CPGInfrastructureConfig(ConfigModel):
         project: str
         # reads the ACL secret
         auth_service_account: str
-        # reads the datasets in the ACL
+        # reads the buckets of the datasets in the ACL
         sandbox_service_account: str
-        # the dataset namespace that sandbox_service_account reads
+        # reads the metamist projects of the datasets in the ACL
+        sample_metadata_service_account: str
+        # the dataset namespace that these two service accounts read
         namespace: ThemisNamespace
         allowed_datasets: list[str]
 
@@ -439,15 +441,25 @@ class CPGInfrastructureConfig(ConfigModel):
 
     @model_validator(mode='after')
     def _themis_environments_differ(self) -> 'CPGInfrastructureConfig':
-        # ensure that each sandbox service account and project is unique across all
-        # themis environments, otherwise the service account would be added twice
-        # to each dataset, and the ACL's secret would be created twice
+        # ensure that each sandbox service account, sample metadata service account
+        # and project is unique across all themis environments, otherwise a service
+        # account would be added twice to each dataset, and the ACL's secret would
+        # be created twice
         sandbox_service_accounts = [
             t.sandbox_service_account for t in self.themis.values()
         ]
         if len(set(sandbox_service_accounts)) != len(sandbox_service_accounts):
             raise ValueError(
                 'Themis environments must not share a sandbox service account'
+            )
+        sample_metadata_service_accounts = [
+            t.sample_metadata_service_account for t in self.themis.values()
+        ]
+        if len(set(sample_metadata_service_accounts)) != len(
+            sample_metadata_service_accounts
+        ):
+            raise ValueError(
+                'Themis environments must not share a sample metadata service account'
             )
         projects = [t.project for t in self.themis.values()]
         if len(set(projects)) != len(projects):

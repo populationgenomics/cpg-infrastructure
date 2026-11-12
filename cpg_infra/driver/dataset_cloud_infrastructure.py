@@ -1927,7 +1927,8 @@ class CPGDatasetCloudInfrastructure:
     # region THEMIS
 
     def check_themis_data_readable(self, namespace: ThemisNamespace):
-        """Raise unless add_themis_data_reader can grant read on `namespace`."""
+        """Raise unless add_themis_bucket_reader and add_themis_metamist_reader
+        can grant read on `namespace`."""
         needs = {
             'the storage component': self.should_setup_storage,
             'the metamist component': self.should_setup_metamist,
@@ -1942,14 +1943,14 @@ class CPGDatasetCloudInfrastructure:
                 f'{", ".join(missing)}',
             )
 
-    def add_themis_data_reader(
+    def add_themis_bucket_reader(
         self,
         member: str,
         *,
         environment: str,
         namespace: ThemisNamespace,
     ):
-        """Give a Themis sandbox account read on one namespace's bucket and metamist project."""
+        """Give a Themis sandbox account read on one namespace's bucket."""
         self.check_themis_data_readable(namespace)
 
         # Bind directly rather than through main_read_group or test_read_group,
@@ -1961,10 +1962,20 @@ class CPGDatasetCloudInfrastructure:
             membership=BucketMembership.READ,
         )
 
+    def add_themis_metamist_reader(
+        self,
+        member: str,
+        *,
+        environment: str,
+        namespace: ThemisNamespace,
+    ):
+        """Give a Themis sample metadata account read on one namespace's metamist project."""
+        self.check_themis_data_readable(namespace)
+
         metamist_read = SM_MAIN_READ if namespace == 'main' else SM_TEST_READ
         self.metamist_groups[metamist_read].add_member(
             self.infra.get_pulumi_name(
-                f'themis-{environment}-sandbox-in-sample-metadata-{metamist_read}',
+                f'themis-{environment}-sample-metadata-in-sample-metadata-{metamist_read}',
             ),
             member=member,
         )
