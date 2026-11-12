@@ -442,9 +442,13 @@ def migrate_entries_from_bq(
                 )
 
             _obj_param_map = seqr_wide_param_map
-            if 'dataset' in labels:
+            has_explicit_dataset = 'dataset' in labels
+            if has_explicit_dataset:
                 # specific override where 'dataset' is specified in GCP resource
-                _obj_param_map = {labels['dataset']: (1.0, 1)}
+                # Strip '-test' so test-namespace datasets
+                # (e.g. 'fewgenomes-test') fold into the production dataset
+                # topic, matching the Hail path.
+                _obj_param_map = {labels['dataset'].replace('-test', ''): (1.0, 1)}
 
             # Data transforms and key changes
             obj['topic'] = 'seqr'
@@ -460,18 +464,24 @@ def migrate_entries_from_bq(
             nid = '-'.join([SERVICE_ID, 'seqr', billing_obj_to_key(obj)])
             obj['id'] = nid
 
-            # For every seqr billing entry migrate it over
-            if obj['id'] not in existing_ids:
-                entries.append(obj)
+            # Rows with an explicit 'dataset' label are already attributed
+            # to a dataset (Seqera) — follow the Hail dataset path and
+            # emit ONLY the distributed entry below. Writing an original
+            # on topic='seqr' here would lead to double-count.
+            # Rows without a 'dataset' label (ES / seqr hosting)
+            # keep the original + credit pattern so topic='seqr'
+            # remains visible as seqr's own hosting cost.
+            if not has_explicit_dataset:
+                if obj['id'] not in existing_ids:
+                    entries.append(obj)
 
-            # For every seqr billing entry, add credit entry
-            obj_credit = utils.get_credit(
-                entry=obj,
-                topic='seqr',
-                project=utils.SEQR_PROJECT_FIELD,
-            )
-            if obj_credit['id'] not in existing_ids:
-                entries.append(obj_credit)
+                obj_credit = utils.get_credit(
+                    entry=obj,
+                    topic='seqr',
+                    project=utils.SEQR_PROJECT_FIELD,
+                )
+                if obj_credit['id'] not in existing_ids:
+                    entries.append(obj_credit)
 
             for dataset, (ratio, dataset_size) in _obj_param_map.items():
                 new_entry = copy.deepcopy(obj)
@@ -811,7 +821,7 @@ if __name__ == '__main__':
 
         # iterate over the period if start_date/end_date is not none
         for period in utils.date_range_iterator(start_date, end_date):
-            (start, end) = period
+            start, end = period
             asyncio.new_event_loop().run_until_complete(
                 main(start=start, end=end, mode='prod')
             )
