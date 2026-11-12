@@ -884,8 +884,13 @@ class CPGInfrastructure:
             )
 
             for cloud_infra in resolved.dataset_infras:
-                cloud_infra.add_themis_data_reader(
+                cloud_infra.add_themis_bucket_reader(
                     settings.sandbox_service_account,
+                    environment=environment,
+                    namespace=settings.namespace,
+                )
+                cloud_infra.add_themis_metamist_reader(
+                    settings.sample_metadata_service_account,
                     environment=environment,
                     namespace=settings.namespace,
                 )
