@@ -19,6 +19,7 @@ from cpg_infra.config import CloudName, CPGInfrastructureConfig
 
 UNDELETE_PERIOD_IN_DAYS = 30
 TMP_BUCKET_PERIOD_IN_DAYS = 8  # tmp content gets deleted afterwards.
+NFWORK_BUCKET_PERIOD_IN_DAYS = 30
 ARCHIVE_PERIOD_IN_DAYS = 30
 BUCKET_DELETE_INCOMPLETE_UPLOAD_PERIOD_IN_DAYS = 7
 

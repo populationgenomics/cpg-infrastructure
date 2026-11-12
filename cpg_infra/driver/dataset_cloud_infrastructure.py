@@ -18,6 +18,7 @@ import toml
 
 import cpg_utils.config
 from cpg_infra.abstraction.base import (
+    NFWORK_BUCKET_PERIOD_IN_DAYS,
     BucketMembership,
     CloudInfraBase,
     ContainerRegistryMembership,
@@ -1279,7 +1280,9 @@ class CPGDatasetCloudInfrastructure:
     def nf_main_work_bucket(self):
         return self.infra.create_bucket(
             'main-nfwork',
-            lifecycle_rules=[],  # lifecycle policy to be decided later
+            lifecycle_rules=[
+                self.infra.bucket_rule_temporary(days=NFWORK_BUCKET_PERIOD_IN_DAYS),
+            ],
             versioning=False,
             autoclass=False,
             soft_delete_protection=False,
@@ -1289,7 +1292,9 @@ class CPGDatasetCloudInfrastructure:
     def nf_test_work_bucket(self):
         return self.infra.create_bucket(
             'test-nfwork',
-            lifecycle_rules=[],  # lifecycle policy to be decided later
+            lifecycle_rules=[
+                self.infra.bucket_rule_temporary(days=NFWORK_BUCKET_PERIOD_IN_DAYS),
+            ],
             versioning=False,
             autoclass=False,
             soft_delete_protection=False,
