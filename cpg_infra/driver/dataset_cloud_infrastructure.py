@@ -1233,6 +1233,15 @@ class CPGDatasetCloudInfrastructure:
                 membership=BucketMembership.READ,
             )
 
+            dev_account = self.config.web_service.gcp.dev_server_machine_account
+            if dev_account and self.dataset_config.enable_analysis_runner_dev:
+                self.infra.add_member_to_bucket(
+                    'web-server-dev-test-web-bucket-viewer',
+                    bucket=self.test_web_bucket,
+                    member=dev_account,
+                    membership=BucketMembership.READ,
+                )
+
     @cached_property
     def test_bucket(self):
         return self.infra.create_bucket(
@@ -1415,6 +1424,15 @@ class CPGDatasetCloudInfrastructure:
                     member=self.config.analysis_runner.gcp.server_machine_account,
                     membership=BucketMembership.MUTATE,
                 )
+
+                dev_account = self.config.analysis_runner.gcp.dev_server_machine_account
+                if dev_account and self.dataset_config.enable_analysis_runner_dev:
+                    self.infra.add_member_to_bucket(
+                        'analysis-runner-dev-hail-bucket-viewer',
+                        bucket=self.hail_bucket,
+                        member=dev_account,
+                        membership=BucketMembership.READ,
+                    )
 
     def setup_hail_wheels_bucket_permissions(self):
         keys = {'analysis-group': self.analysis_group, **self.access_level_groups}
@@ -1885,10 +1903,19 @@ class CPGDatasetCloudInfrastructure:
 
         if self.config.analysis_runner:
             # allow the analysis-runner logging cloud function to update the sample-metadata project
+            # TODO: remove once the analysis-runner server logs to metamist directly ([SET-1320])
             sm_access_levels.append(
                 SampleMetadataAccessorMembership(
                     name='analysis-runner-logger',
                     member=self.config.analysis_runner.gcp.logger_machine_account,
+                    permissions=METAMIST_PERMISSIONS,
+                ),
+            )
+            # allow the analysis-runner to update the sample-metadata project
+            sm_access_levels.append(
+                SampleMetadataAccessorMembership(
+                    name='analysis-runner-server',
+                    member=self.config.analysis_runner.gcp.server_machine_account,
                     permissions=METAMIST_PERMISSIONS,
                 ),
             )
