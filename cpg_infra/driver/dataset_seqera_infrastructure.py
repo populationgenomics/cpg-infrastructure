@@ -287,6 +287,7 @@ class DatasetSeqeraInfrastructure:
         self._grant_project_roles()
         self._bind_wif_principals()
         self._grant_work_bucket_access()
+        self._grant_main_tmp_bucket_access()
         self._create_dataproc_autoscaling_policies()
         self._setup_seqera_compute_environments()
         self._setup_workspace_participants()
@@ -408,6 +409,20 @@ class DatasetSeqeraInfrastructure:
                 self._parent.analysis_group,
                 BucketMembership.READ,
             )
+
+    def _grant_main_tmp_bucket_access(self) -> None:
+        # Seqera Dataproc clusters use main-tmp as their staging/temp bucket
+        # seqera-full already has MUTATE transitively via full_group;
+        # seqera-standard needs an explicit grant
+        standard_sa = self._service_accounts.get('standard')
+        if standard_sa is None:
+            return
+        self._infra.add_member_to_bucket(
+            'seqera-standard-main-tmp-bucket-admin',
+            self._parent.main_tmp_bucket,
+            standard_sa,
+            BucketMembership.MUTATE,
+        )
 
     def _work_dir_for_access_level(self, level: str) -> pulumi.Output[str]:
         """
