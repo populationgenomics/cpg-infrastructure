@@ -90,6 +90,13 @@ _WORKSPACE_TYPE_FOR_LEVEL: dict[str, str] = {
     'test': 'test',
 }
 
+# Default regional Preemptible Local SSD quota (GB) applied to every
+# Seqera-integrated dataset. Nextflow/Google Batch pipelines run on spot
+# (preemptible) VMs backed by Local SSD scratch, and the default regional
+# quota is 0 GB which blocks job startup. Override per-dataset via
+# `CPGDatasetConfig.preemptible_local_ssd_gb`.
+SEQERA_DEFAULT_PREEMPTIBLE_LOCAL_SSD_GB = 7500
+
 # Dataproc autoscaling policy definitions for Seqera-integrated datasets
 # Policy specification : https://cpg-populationanalysis.atlassian.net/wiki/spaces/ST/pages/1563688973/Dataproc+Autoscaling+Policies
 SEQERA_DATAPROC_ASP_SPECS: tuple[DataprocAutoscalingPolicySpec, ...] = (
@@ -289,6 +296,7 @@ class DatasetSeqeraInfrastructure:
         self._grant_work_bucket_access()
         self._grant_main_tmp_bucket_access()
         self._create_dataproc_autoscaling_policies()
+        self._set_quota_preferences()
         self._setup_seqera_compute_environments()
         self._setup_workspace_participants()
 
@@ -347,6 +355,26 @@ class DatasetSeqeraInfrastructure:
                     spec,
                 )
             )
+
+    def _set_quota_preferences(self) -> None:
+        """Raise the Preemptible Local SSD quota for the dataset's project.
+
+        Uses ``CPGDatasetConfig.preemptible_local_ssd_gb`` when set, otherwise
+        falls back to ``SEQERA_DEFAULT_PREEMPTIBLE_LOCAL_SSD_GB``. The
+        preference targets ``self._infra.region``.
+        """
+        gb = (
+            self._dataset_config.preemptible_local_ssd_gb
+            if self._dataset_config.preemptible_local_ssd_gb is not None
+            else SEQERA_DEFAULT_PREEMPTIBLE_LOCAL_SSD_GB
+        )
+        self._infra.create_quota_preference(
+            'seqera-quota-preemptible-local-ssd',
+            service='compute.googleapis.com',
+            quota_id='PREEMPTIBLE-LOCAL-SSD-GB-per-project-region',
+            preferred_value=str(gb),
+            dimensions={'region': self._infra.region},
+        )
 
     def _bind_wif_principals(self) -> None:
         assert self._config.seqera is not None
