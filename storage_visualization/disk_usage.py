@@ -3,6 +3,7 @@
 """Computes aggregate bucket disk usage stats."""
 
 import gzip
+import hashlib
 import json
 import logging
 import sys
@@ -36,6 +37,22 @@ STORAGE_COST_MONTHLY_PER_GB_SYDNEY = {
     'COLDLINE': 0.006,
     'ARCHIVE': 0.0025,
 }
+
+# Balance hash size and collision risk, 128 bits is a reasonable compromise
+CONTENT_HASH_BYTES = 16  # 128 bits
+CONTENT_HASH_MODULUS = 2 ** (8 * CONTENT_HASH_BYTES)
+
+
+def content_hash(blob: storage.Blob) -> int:
+    """
+    Generate 128-bit number identifying the blob's contents
+
+    This uses the GCS CRC32C hash as that will always exist. MD5 hash won't be there
+    if file was part of a multipart upload. Also includes the blob size in the
+    hash to avoid the chance of a collision.
+    """
+    digest = hashlib.sha256(f'{blob.size}:{blob.crc32c}'.encode()).digest()
+    return int.from_bytes(digest[:CONTENT_HASH_BYTES], 'big')
 
 
 def aggregate_level(name: str) -> str:
@@ -93,6 +110,12 @@ def main():
             bucket_name=bucket_name,
         )
 
+    # Store content has as hex, as a 128 bit number in JSON would cause
+    # problems for JSON parsers that expect max 53 bits (ie, javascript)
+    for stats in aggregate_stats.values():
+        hash_bytes = stats['content_hash'].to_bytes(CONTENT_HASH_BYTES, 'big')
+        stats['content_hash'] = hash_bytes.hex()  # type: ignore[assignment]
+
     output = sys.argv[2]
     logging.info(f'Writing results to {output}...')
     with AnyPath(output).open('wb') as f, gzip.open(f, 'wt') as gzf:
@@ -118,12 +141,31 @@ def count_stats_for_bucket(
                 s = naturalsize(sys.getsizeof(aggregate_stats_container))
                 logging.info(f'{count // 10**6} M blobs... aggregate dict is using {s}')
             folder = f'/{aggregate_level(blob.name)}'
+            # Don't compute blob hash for empty files/folders
+            blob_hash = content_hash(blob) if blob.size else 0
             while True:
                 path = f'gs://{bucket_name}{folder}'
                 stats = aggregate_stats_container[path]
                 stats['size'] += blob.size
                 stats[f'{blob.storage_class}_bytes'] += blob.size
                 stats['num_blobs'] += 1
+
+                # Files aren't in any partcular order, so to get a consistent
+                # hash, we add the 128 bit hash numbers together. In the same
+                # way that 1 + 2 is the same as 2 + 1, the same holds true for
+                # these large hash numbers. They are modulo 2^128 so that the
+                # hash size doesn't continue to grow as more hashes are added
+                # This increases collision risk but should remain very low
+                #
+                # This approach is outlined in this article:
+                # https://www.jeremykun.com/2021/10/14/group-actions-and-hashing-unordered-multisets/
+                # Which identifies the downside that empty files can't be included
+                # in the hash. That isn't too much of a problem for this solution
+                # as we primiarly want to be able to use the has to find large
+                # folders that exist in multiple places.
+                stats['content_hash'] = (
+                    stats['content_hash'] + blob_hash
+                ) % CONTENT_HASH_MODULUS
                 size_in_gb = blob.size / 2**30
                 stats['monthly_storage_cost'] += (  # Assumes the bucket is in Sydney.
                     size_in_gb * STORAGE_COST_MONTHLY_PER_GB_SYDNEY[blob.storage_class]

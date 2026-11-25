@@ -244,6 +244,8 @@ def prepare_rows_from_input_paths(  # noqa: C901
                 size = vals['size']
                 if not size:
                     continue
+                # Remove content_hash as it isn't a number
+                vals.pop('content_hash', None)
                 # Strip one folder for the parent name. Map `gs://` to the
                 # predefined treemap root node label.
                 slash_index = name.rfind('/')
