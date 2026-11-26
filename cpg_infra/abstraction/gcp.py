@@ -271,6 +271,18 @@ class GcpInfrastructure(CloudInfraBase):
         )
 
     @cached_property
+    def _svc_cloudquotas(self):
+        return gcp.projects.Service(
+            self.get_pulumi_name('cloudquotas-service'),
+            service='cloudquotas.googleapis.com',
+            disable_on_destroy=False,
+            project=self.project_id,
+            opts=pulumi.resource.ResourceOptions(
+                depends_on=[self._svc_serviceusage],
+            ),
+        )
+
+    @cached_property
     def _pam_service_agent_binding(self):
         """
         Grant the PAM Service Agent role to the PAM service agent.
@@ -986,6 +998,28 @@ class GcpInfrastructure(CloudInfraBase):
             member=get_member_key(account),
             project=self.project_id,
             opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_dataproc]),
+        )
+
+    def create_quota_preference(
+        self,
+        resource_key: str,
+        *,
+        service: str,
+        quota_id: str,
+        preferred_value: str,
+        dimensions: dict[str, str],
+    ) -> gcp.cloudquota.SQuotaPreference:
+        """Create a GCP Cloud Quotas preference in this dataset's project."""
+        return gcp.cloudquota.SQuotaPreference(
+            self.get_pulumi_name(resource_key),
+            parent=pulumi.Output.concat('projects/', self.project_id),
+            service=service,
+            quota_id=quota_id,
+            dimensions=dimensions,
+            quota_config=gcp.cloudquota.SQuotaPreferenceQuotaConfigArgs(
+                preferred_value=preferred_value,
+            ),
+            opts=pulumi.resource.ResourceOptions(depends_on=[self._svc_cloudquotas]),
         )
 
     def create_dataproc_autoscaling_policy(

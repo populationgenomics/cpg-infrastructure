@@ -680,6 +680,12 @@ class CPGDatasetConfig(ConfigModel):
 
     upload_config: UploadConfig | None = None
 
+    # Regional Preemptible Local SSD quota (GB) applied to Seqera-enabled
+    # datasets. Overrides the Seqera default
+    # (dataset_seqera_infrastructure.SEQERA_DEFAULT_PREEMPTIBLE_LOCAL_SSD_GB).
+    # Datasets without a Seqera component ignore this.
+    preemptible_local_ssd_gb: int | None = None
+
     @model_validator(mode='after')
     def _check_name_lengths(self) -> Self:
         if len(self.dataset) > MAX_DATASET_NAME_LENGTH:
